@@ -90,6 +90,8 @@ Deliverables, filled in after scoring: per-sample × per-modality table, a gener
 
 ## Results
 
+The scored results are at the end of this file.
+
 (not yet available)
 
 ### Note on GPU sizing (2026-11-01)
@@ -183,3 +185,79 @@ Open items:
 - souporcell `consensus.py` works with a conda gcc 11 (micromamba env `envs/gcc11` under `$WORK`, bound into the sif); ambient-RNA and genotype VCF outputs are produced and stay private in the store.
 - New dataset rows: 15 public 10x datasets, Xi & Li aliases (Kang batches, hgmm 6k/12k, Stoeckius PBMC) and GEX runs for mixed-role libraries (Stoeckius, Norman, GSE145370, MULTI-seq); `fetch_note` documents each `alias` / `later`.
 - Not routed yet (reasons in `fetch_note`): Drop-seq, inDrops, Seq-Well, CEL-Seq2, Smart-seq2 (need protocol-specific STARsolo/kb setups and whitelists), GEM-X v4 (kb 0.29.1 has no 10XV4 preset, list not available locally), Multiome ATAC (chromap/MACS2 not set up), companion tag/guide/VDJ libraries (HTO, ADT, MULTI-seq, guides: no counting tools queued), Visium, Singlet runs for store datasets (the engine stages `.1fq` from SRA runs only; no FASTQ staging path).
+
+## Results (scored 2026-11-06, Singlet 0ea48783)
+
+Singlet runs above 100 M pairs are scored on the matched 100 M-pair prefix that STARsolo saw. Agreement metrics have no truth, so they show how far Singlet sits from the reference tool. Sex has GEO truth for seven samples. Scores come from `ops/s15/score_pilot.py`. Raw numbers: `ops/s15/pilot_scores.tsv`.
+
+### Cell calling (Singlet against STARsolo EmptyDrops_CR)
+
+| Sample | Singlet cells | STARsolo cells | Jaccard | Precision | Recall |
+|---|---|---|---|---|---|
+| GSM5682562 | 7,555 | 8,930 | 0.824 | 0.986 | 0.834 |
+| GSM8141311 | 12,008 | 13,560 | 0.884 | 0.999 | 0.885 |
+| GSM9038586 | 8,645 | 8,701 | 0.980 | 0.993 | 0.987 |
+| GSM5130155 | 8,241 | 8,391 | 0.939 | 0.977 | 0.960 |
+| GSM5130163 | 103,993 | 103,876 | 0.998 | 0.999 | 1.000 |
+| GSM8183378 | 7,548 | 7,544 | 0.961 | 0.980 | 0.980 |
+| GSM4987144 | - | 3,520 | - | - | - |
+| GSM8164511 | 7,827 | 8,092 | 0.906 | 0.967 | 0.935 |
+| GSM4987148 | 8,017 | 6,494 | 0.485 | 0.591 | 0.730 |
+| GSM5171610 | 48,341 | 48,426 | 0.974 | 0.987 | 0.986 |
+| GSM7064234 | 46,880 | 45,447 | 0.958 | 0.964 | 0.994 |
+| GSM7884577 | 57,055 | 16,033 | 0.276 | 0.277 | 0.986 |
+| GSM8085472 | 14,146 | 15,067 | 0.926 | 0.993 | 0.932 |
+
+### Sex, ambient RNA, doublets
+
+| Sample | Singlet sex | GEO sex | Singlet ambient | SoupX rho | decontX rho | Singlet doublet rate | scDblFinder rate |
+|---|---|---|---|---|---|---|---|
+| GSM5682562 | male | - | 0.427 | 0.039 | 0.124 | 0.056 | 0.101 |
+| GSM8141311 | male | - | 0.337 | 0.130 | 0.197 | 0.080 | 0.121 |
+| GSM9038586 | unknown | female | 0.305 | 0.258 | 0.330 | 0.051 | 0.103 |
+| GSM5130155 | female | female | 0.563 | - | 0.107 | 0.065 | 0.085 |
+| GSM5130163 | male | male | 0.204 | - | 0.021 | 0.250 | 0.362 |
+| GSM8183378 | female | female | 0.064 | 0.050 | 0.282 | 0.043 | 0.081 |
+| GSM4987144 | unknown | - | 0.033 | 0.004 | 0.020 | 0.024 | 0.052 |
+| GSM8164511 | male | - | 0.179 | 0.014 | 0.036 | 0.049 | 0.105 |
+| GSM4987148 | unknown | - | 0.030 | 0.037 | 0.054 | 0.063 | 0.077 |
+| GSM5171610 | female | female | 0.082 | 0.032 | 0.037 | 0.219 | 0.185 |
+| GSM7064234 | male | male | - | 0.066 | 0.052 | 0.248 | 0.131 |
+| GSM7884577 | female | female | 0.132 | 0.262 | 0.080 | 0.249 | 0.121 |
+| GSM8085472 | male | - | 0.069 | 0.059 | 0.122 | 0.114 | 0.151 |
+
+### Donor and line demultiplexing (adjusted Rand index on shared singlet cells)
+
+| Sample | Singlet vs souporcell | Singlet vs vireo | souporcell vs vireo | Singlet donors |
+|---|---|---|---|---|
+| GSM4987144 | - | - | 0.799 | - |
+| GSM4987148 | 0.072 | 0.138 | 0.548 | 2 |
+| GSM8085472 | 0.997 | 0.997 | 0.999 | 10 |
+
+### Run time and memory (full runs; minutes and GB)
+
+| Sample | Singlet CPU | Singlet GPU | STARsolo (100 M prefix) | CPU RSS | STARsolo RSS | CPU vs GPU differing files |
+|---|---|---|---|---|---|---|
+| GSM5682562 | 12 | 11 | 8 | 28 | 20 | 3 |
+| GSM8141311 | 13 | 11 | 8 | 28 | 21 | 3 |
+| GSM9038586 | 13 | 13 | 16 | 28 | 20 | 3 |
+| GSM5130155 | 34 | 31 | 14 | 30 | 21 | 3 |
+| GSM5130163 | 45 | 38 | 10 | 56 | 20 | 3 |
+| GSM8183378 | 32 | 27 | 15 | 28 | 22 | 3 |
+| GSM4987144 | 13 | 12 | 21 | 37 | 21 | 2 |
+| GSM8164511 | 44 | 37 | 16 | 31 | 22 | 3 |
+| GSM4987148 | 95 | 78 | 34 | 65 | 22 | 3 |
+| GSM5171610 | 102 | 87 | 19 | 68 | 21 | 3 |
+| GSM7064234 | 199 | 23 | 24 | 85 | 22 | 1 |
+| GSM7884577 | 211 | 25 | 20 | 104 | 22 | 1 |
+| GSM8085472 | 176 | 141 | 17 | 43 | 21 | 3 |
+
+### Verdict per modality
+
+- **Cell calls.** Singlet matches STARsolo closely on 10 of the 12 scored samples (Jaccard 0.82 to 1.00). GSM4987144 has no matched Singlet run to score. It differs on GSM7884577 (single-nucleus multiome: 57 k cells against 16 k, Jaccard 0.28) and on GSM4987148 (deep line mixture: 8.0 k against 6.5 k, Jaccard 0.49). Both fall outside the range seen on the other samples, so cell calling does not generalize to these two sample types yet. Owner: Singlet cell-calling track.
+- **Sex.** Six of the seven samples with a GEO sex are called correctly. GSM9038586 (xenograft with mouse stroma) returns unknown. Owner: sex-call track.
+- **Ambient RNA.** Singlet's contamination estimate sits far from SoupX and decontX on most samples (for example 0.43 against 0.04 and 0.12 on GSM5682562). The tools disagree among themselves too, so none of the three has truth here. Needs a spike-in or species-mixture sample before a verdict.
+- **Doublets.** Rates are of the same order as scDblFinder. Singlet flags more on the deep T-cell samples (0.22 to 0.25 against 0.13 to 0.18). No truth.
+- **Demultiplexing.** On GSM8085472 (hashed PBMC, 10 donors) Singlet agrees with souporcell and vireo (ARI 0.997 and 0.997). On GSM4987148 (known line mixture) agreement is low (0.07 and 0.14) while souporcell and vireo agree with each other at 0.55. GSM4987144 has no matched Singlet run to score.
+- **Speed and memory.** Singlet GPU is faster than CPU on every sample that completed both. CPU and GPU outputs differ in 1 to 3 files per sample. In the case I read (GSM5682562) the differences are a byte count and timing fields. I did not inspect the others. Singlet CPU uses 1.4 to 5 times the memory of STARsolo.
+- **Not scored.** V(D)J, HTO calls, mtDNA heteroplasmy and splice outputs have no scoring script yet. The 13 samples were not re-run after the Kang and v1 fixes, since those are store datasets.
