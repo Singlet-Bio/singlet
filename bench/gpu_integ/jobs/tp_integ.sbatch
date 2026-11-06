@@ -115,6 +115,7 @@ cfg_set() {
     base) ;;
     b0) ARM_BIN=$REFBIN ;;                                                               # the reference binary, no switches
     wshrink) CFG_ENV="SINGLET_BOLD_WSHRINK=1" ;;
+    ulreset) CFG_ENV="SINGLET_BOLD_WSHRINK=1 SINGLET_GPU_PILEUP_UNLOCK=reset" ;;      # PR-2 diagnostic: the pileup resets its context before it unlocks (E20 default: unlock first)
     mpsbase) start_mps ;;
     mpswshrink) CFG_ENV="SINGLET_BOLD_WSHRINK=1"; start_mps ;;
     nodemux) CFG_ARGS="--n-donors 1" ;;                                                  # auto-K and VB skipped (K=1 synthesized)
