@@ -260,6 +260,8 @@ class Run(threading.Thread):
             sc = C.species_check(os.path.join(scr, "singlet.log"))
             if sc and sc["verdict"] == "DISAGREE":
                 log("[multi] WARNING %s: %s" % (gsm, sc["line"]))
+            import genotype_keep as GK   # D-52: every genotype output under $WORK/genotypes/ before the scratch goes
+            GK.keep(os.path.join(scr, "out"), man.get("gse"), gsm, self.ccfg.get("genotype_dir"))
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
