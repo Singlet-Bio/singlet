@@ -44,11 +44,16 @@ def main(root):
                 spread[k] = max(spread[k], max(v) - min(v))
     S["truth_metric_spread_k_given"] = spread
 
-    worst_dis = 1.0 - min([v["min_agreement"] for v in var.values()] or [1.0])
-    worst_dp99 = max([v["max_dprob_p99"] for v in var.values()] or [0.0])
-    worst_dpm = max([v["max_dprob_mean"] for v in var.values()] or [0.0])
+    # agreement and probability bands use repeats and thread counts (same optimum, different float order).
+    # Seed changes can reach another optimum, so seed variation only widens the bands against truth.
+    rt = [v for k, v in var.items() if k in ("repeat", "threads")]
+    worst_dis = 1.0 - min([v["min_agreement"] for v in rt] or [1.0])
+    worst_dp99 = max([v["max_dprob_p99"] for v in rt] or [0.0])
+    worst_dpm = max([v["max_dprob_mean"] for v in rt] or [0.0])
     S["tolerance_proposal"] = {
-        "basis": "2x the largest variation seen across repeats, thread counts (4/8/16) and seeds (42 vs 7), with a floor",
+        "basis": "2x the largest variation seen across repeats and thread counts (4/8/16) for agreement and probabilities, "
+                 "and across repeats, threads and seeds (42 vs 7) for metrics against truth, with a floor",
+        "seed_assignment_agreement_min_observed": var.get("seed", {}).get("min_agreement"),
         "k_given_assignment_agreement_min": round(1.0 - max(0.01, 2 * worst_dis), 4),
         "ari_vs_truth_drop_max": round(max(0.01, 2 * spread["ari_singlets"]), 4),
         "accuracy_vs_truth_drop_max": round(max(0.01, 2 * spread["accuracy_singlets"]), 4),
