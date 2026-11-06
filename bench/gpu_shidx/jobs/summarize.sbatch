@@ -9,7 +9,7 @@
 # Writes results/overnight/summary.md of the shared-index chain from the logs and result directories of its jobs.
 # Parameters: BUILD_ID IDENT_ID PATHS_ID TIMING_ID (job ids). Reads files only.
 set -uo pipefail
-W=/mnt/projects/debruinz_project/debruinz/singlet; O=$W/jobs/gpu-shidx/results/overnight; M=$O/summary.md
+W=/mnt/projects/debruinz_project/debruinz/singlet; O=$W/jobs/gpu-shidx/results/overnight; M=${SUMMARY_OUT:-$O/summary.md}
 L=$W/logs
 {
 echo "# Shared resident genome index: overnight summary"
@@ -35,7 +35,7 @@ echo '```'
 echo
 echo "## Timing (job ${TIMING_ID:-?}) on g050: k=8, T=7, r3. A b0 2 slots, B shared 2 slots, C shared 3 slots, Bm and Cm the same under MPS"
 echo
-for a in A B C Bm Cm; do
+for a in ${ARMS:-A B C Bm Cm}; do
   F=$O/timing-${TIMING_ID:-0}/$a/arm.txt
   echo "### Arm $a"; echo '```'; [ -f $F ] && cut -c1-300 $F || echo "no arm record"; echo '```'
 done

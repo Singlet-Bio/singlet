@@ -71,9 +71,12 @@ arm() {
     [ "$imp" -ge 1 ] || { echo "IMPORT FAIL arm $name: SINGLET_GPU_SHARED_INDEX=1 but imported=0; the later arms are not run" | tee -a $S; exit 1; }
   fi
 }
-arm A  $B0 $B0_COMMIT k8t7s2r3 0 0
-arm B  $SH $SH_COMMIT k8t7s2r3 1 0
-arm C  $SH $SH_COMMIT k8t7s3r3 1 0
-arm Bm $SH $SH_COMMIT k8t7s2r3 1 1
-arm Cm $SH $SH_COMMIT k8t7s3r3 1 1
+ARMS=${ARMS:-A B C Bm Cm}   # ARMS selects and orders the arms
+for a in $ARMS; do case $a in
+  A)  arm A  $B0 $B0_COMMIT k8t7s2r3 0 0 ;;
+  B)  arm B  $SH $SH_COMMIT k8t7s2r3 1 0 ;;
+  C)  arm C  $SH $SH_COMMIT k8t7s3r3 1 0 ;;
+  Bm) arm Bm $SH $SH_COMMIT k8t7s2r3 1 1 ;;
+  Cm) arm Cm $SH $SH_COMMIT k8t7s3r3 1 1 ;;
+esac; done
 echo done $(date -Is) | tee -a $S

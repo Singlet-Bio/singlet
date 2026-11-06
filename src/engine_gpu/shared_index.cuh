@@ -267,8 +267,7 @@ int holderMain(int argc, char** argv) {
     const u64 allocG = nGen + 2 * SH_PAD + 8, allocSA = saB + 64 + 8, allocSAi = saiB + 64 + 8;
     cudaFree(0);   // the primary context, current for the driver calls
     ShDrv& DV = shDrv();
-    if (!DV.ok) { fprintf(stderr, "gpu-holder: the driver has no virtual memory management functions
-"); return 1; }
+    if (!DV.ok) { fprintf(stderr, "gpu-holder: the driver has no virtual memory management functions\n"); return 1; }
     struct VB { CUmemGenericAllocationHandle h = 0; CUdeviceptr va = 0; u64 sz = 0; int fd = -1; };
     VB vb[3];
     auto vbFree = [&](VB& v) {
@@ -286,6 +285,8 @@ int holderMain(int argc, char** argv) {
         if (DV.exportH(&v.fd, v.h, CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0) != CUDA_SUCCESS) { v.fd = -1; vbFree(v); return false; }
         return true;
     };
+    { const CUmemAllocationProp pr = shProp(device); size_t gr = 0, gm = 0; DV.gran(&gr, &pr, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED); DV.gran(&gm, &pr, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+      fprintf(stderr, "gpu-holder: allocation granularity recommended %zu, minimum %zu bytes (the allocations are rounded up to the recommended one)\n", gr, gm); }
     const u64 want[3] = {allocG, allocSA, allocSAi};
     bool allOk = false;
     for (int tries = 0; tries < 40 && !allOk; tries++) {   // another genome's holder may be leaving the device (SIGUSR1)
@@ -293,8 +294,7 @@ int holderMain(int argc, char** argv) {
         if (!allOk) { for (auto& v : vb) vbFree(v); sleep(1); }
     }
     void* const dG = (void*) vb[0].va; void* const dSA = (void*) vb[1].va; void* const dSAi = (void*) vb[2].va;
-    if (!allOk) { size_t fr = 0, tt = 0; cudaMemGetInfo(&fr, &tt); fprintf(stderr, "gpu-holder: cannot allocate the index (%.2f GB); device free %.1f of %.1f GB
-", b2gb(allocG + allocSA + allocSAi), b2gb(fr), b2gb(tt)); return 1; }
+    if (!allOk) { size_t fr = 0, tt = 0; cudaMemGetInfo(&fr, &tt); fprintf(stderr, "gpu-holder: cannot allocate the index (%.2f GB); device free %.1f of %.1f GB\n", b2gb(allocG + allocSA + allocSAi), b2gb(fr), b2gb(tt)); return 1; }
     cudaMemset(dG, 0, allocG); cudaMemset(dSA, 0, allocSA); cudaMemset(dSAi, 0, allocSAi);
     cudaMemset(dG, 5, SH_PAD); cudaMemset((char*) dG + SH_PAD + nGen, 5, SH_PAD);   // STAR's tail of the largest symbol (GENOME_spacingChar) around G
     const u64 CH = 256ull << 20; char* pin = nullptr;
