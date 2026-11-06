@@ -310,6 +310,8 @@ inline ExportStats export_results(const PileupEngine& engine,
     const bool use_h5ad = (export_cfg.output_format == "h5ad" || export_cfg.output_format == "all");
     const bool use_loom = (export_cfg.output_format == "loom");
     const auto& out_prefix = export_cfg.out_prefix;
+    // D-52: private/ (genotypes, chrM alleles) is created owner-only before anything is written into it
+    if (!pileup_cfg.snp_path.empty() || pileup_cfg.count_mt) genotype::make_private_dir(out_prefix + "/private");
 
     // ── Phase 1: COO → CSC (parallel) ──
     nvexp.next("export: Phase 1: COO  CSC (parallel)");
@@ -2203,6 +2205,10 @@ inline ExportStats export_results(const PileupEngine& engine,
 
         std::cerr << "[export] Standardization stubs written for any missing files\n";
     }
+
+    // D-52: every directory below private/ 0700, every file 0600 (owner-only also after a mode-keeping copy)
+    if (const size_t n = genotype::secure_private_tree(out_prefix + "/private"))
+        std::cerr << "[genotype] private/: " << n << " entries owner-only\n";
 
     // ── Post-export validation ──
     nvexp.next("export: Post-export validation");
