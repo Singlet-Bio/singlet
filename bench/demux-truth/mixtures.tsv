@@ -1,0 +1,14 @@
+# id	donors	rate	mix_seed
+# S1,S2 = GSE246624 H1,H2 and S5,S6 = GSE167363 HC1,HC2: 10x 3' v3 PBMC. S3 is 5' sorted CD45+ cells and S4 is 3' v2.
+# The x rows keep the earlier donors for continuity. They mix chemistries, so read them with the sample QC.
+m2_r02	S1,S2	0.02	11
+m2_r05	S1,S2	0.05	12
+m2_r08	S1,S2	0.08	13
+m3_r02	S1,S2,S5	0.02	21
+m3_r05	S1,S2,S5	0.05	22
+m3_r08	S1,S2,S5	0.08	23
+m4_r02	S1,S2,S5,S6	0.02	31
+m4_r05	S1,S2,S5,S6	0.05	32
+m4_r08	S1,S2,S5,S6	0.08	33
+m3x_r05	S1,S2,S3	0.05	42
+m4x_r05	S1,S2,S3,S4	0.05	52
