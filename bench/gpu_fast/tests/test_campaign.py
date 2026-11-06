@@ -156,3 +156,22 @@ def test_the_example_campaign_loads_and_dry_runs(capsys):
     assert ab.main(["--campaign", p, "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert out.count("######## step") == 3 and "ARMS=ABCD" in out and "ORDER=ABCDDCBA" in out
+
+
+def test_external_after_and_a_final_summary_job(tmp_path):
+    cfg = {"name": "on", "defaults": {"node": "g050"},
+           "steps": [{"id": "s1", "tier": 2, "a": S3, "b": S3 + ",env=X=1", "opts": {"after": "777"}},
+                     {"id": "s2", "tier": 2, "a": S3, "b": S3 + ",env=Y=1"}],
+           "summary": {"outdir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/results/overnight", "alone": [], "loaded": []}}
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps(cfg))
+    f = Chain()
+    assert ab.main(["--campaign", str(p), "--out", str(tmp_path / "o")], remote=f, out_fn=lambda x: None) == 0
+    subs = [c for c in f.cmds if "sbatch --parsable" in c]
+    assert len(subs) == 3
+    assert "--dependency=afterany:777" in subs[0] and "-w g050" in subs[0]
+    assert "--dependency=afterany:100" in subs[1]
+    assert "--dependency=afterany:101" in subs[2] and "gf-summary" in subs[2] and "PIN_SCRIPTS=" + "a" * 40 in subs[2] and "OUTDIR=/mnt/projects" in subs[2]
+    m = json.load(open(tmp_path / "o" / "campaign.json"))
+    assert m["steps"][0]["run"].endswith("/runs/on-s1-t2-" + m["created"]) or "/runs/on-s1-t2-" in m["steps"][0]["run"]
+    assert m["summary_job"] == "102" and m["steps"][0]["rule_params"]["rate_gain"] == 0.09

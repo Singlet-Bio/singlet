@@ -134,7 +134,7 @@ def run(ab, a, remote, out_fn=print):
     for st, plan in plans:
         after = st.get("after")
         dep_ids = after if after is not None else ([prev] if prev else [])
-        deps = [jobs[i] for i in dep_ids if jobs.get(i)]
+        deps = [jobs[i] for i in dep_ids if jobs.get(i)] + (ab.after_ids(plan["a"]) or [])   # chain steps, then job ids given with the step's "after" option
         out = os.path.join(camp_dir, "steps", st["id"])
         state = dict(plan["state"], dir=os.path.relpath(out, camp_dir).replace(os.sep, "/"))
         try:
@@ -148,19 +148,48 @@ def run(ab, a, remote, out_fn=print):
             return 3
         state["submitted"] = True
         ab.save_state(out, state)
-        manifest["steps"].append({"id": st["id"], "job": state["job"], "dir": state["dir"], "tier": plan["a"].tier, "after": deps})
+        manifest["steps"].append({"id": st["id"], "job": state["job"], "dir": state["dir"], "tier": plan["a"].tier, "after": deps, "run": state["run"],
+                                  "rule_params": state["rule_params"], "rule_kind": state["rule_kind"], "intended": state["intended"], "predict": state.get("predict"),
+                                  "scripts": head, "notes": state["notes"]})
         out_fn(f"step {st['id']}: job {state['job']} after {deps or 'nothing'}")
         prev = st["id"]
     mpath = os.path.join(camp_dir, "campaign.json")
+    manifest["summary"] = cfg.get("summary")
     json.dump(manifest, open(mpath, "w"), indent=1)
+    rdir = f"{ab.W}/jobs/gpu-fast/campaigns/{camp}"
     try:
-        rdir = f"{ab.W}/jobs/gpu-fast/campaigns/{camp}"
         remote.run(f"mkdir -p {rdir}")
         remote.put(mpath, f"{rdir}/campaign.json")
-    except (ab.BridgeDown, ab.Fatal):
-        pass   # the chain is queued. The manifest is on the laptop
+        if cfg.get("summary") is not None:
+            sj = submit_summary(ab, remote, cfg["summary"], rdir, head, [jobs[st["id"]] for st, _ in plans][-1:])
+            manifest["summary_job"] = sj
+            json.dump(manifest, open(mpath, "w"), indent=1)
+            remote.put(mpath, f"{rdir}/campaign.json")
+            out_fn(f"summary job {sj} after {jobs[plans[-1][0]['id']]}. It writes {summary_outdir(ab, cfg['summary'], camp)}/summary.md")
+    except (ab.BridgeDown, ab.Fatal) as e:
+        print(f"the summary job was not queued: {e}. The steps are queued. Run summarize.sbatch by hand or use --collect.", file=sys.stderr)
     out_fn(f"\nCampaign {camp} queued. Nothing more is needed from the laptop. Read it later with:\n  python bench/gpu_fast/ab.py --collect {camp_dir}")
     return 0
+
+
+def summary_outdir(ab, summary, camp):
+    return summary.get("outdir") or f"{ab.W}/jobs/gpu-fast/results/{camp}"
+
+
+def submit_summary(ab, remote, summary, rdir, head, after):
+    """The last job of a campaign: a short-cpu job that runs summarize.py inside in_runtime."""
+    local = os.path.join(HERE, "jobs", "summarize.sbatch")
+    remote.put(local, f"{rdir}/summarize.sbatch")
+    camp = os.path.basename(rdir)
+    out = summary_outdir(ab, summary, camp)
+    dep = f"--dependency=afterany:{':'.join(after)} " if after else ""
+    cmd = (f"cd {rdir} && sbatch --parsable {dep}--job-name=gf-summary-{camp[:20]} "
+           f"--export=ALL,CAMPAIGN_MANIFEST={rdir}/campaign.json,OUTDIR={out},PIN_SCRIPTS={head} {rdir}/summarize.sbatch")
+    rc, so, se = remote.run(cmd)
+    m = re.search(r"^(\d+)", so.strip())
+    if not m:
+        raise ab.Fatal(f"sbatch of the summary job failed: {so.strip()[:200]} {se.strip()[:200]}")
+    return m.group(1)
 
 
 def summary_row(step_dir, state):

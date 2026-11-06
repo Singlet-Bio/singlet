@@ -450,8 +450,9 @@ def run_loadfit(a):
     print("efficiency per loaded leg: " + " ".join(f"{x:.3f}" for x in f["efficiency_per_leg"]))
     if a.write:
         import demand
-        json.dump(f, open(demand.LOAD_FIT_FILE, "w"), indent=1)
-        print(f"wrote {demand.LOAD_FIT_FILE}")
+        path = a.out or demand.LOAD_FIT_FILE
+        json.dump(f, open(path, "w"), indent=1)
+        print(f"wrote {path}")
     return 0
 
 
@@ -510,6 +511,7 @@ def main(argv=None):
     lf.add_argument("--slots", type=int, default=2)
     lf.add_argument("--device-gb", type=float, default=93.6)
     lf.add_argument("--write", action="store_true", help="write model_data/load_fit.json, which demand.py reads")
+    lf.add_argument("--out", help="with --write: write this file instead")
     lm = sub.add_parser("limits", help="demand vector and node rate limits of a fast lane out directory, for both arms")
     lm.add_argument("out_dirs", nargs="+")
     lm.add_argument("--cores", type=float, default=28.0)

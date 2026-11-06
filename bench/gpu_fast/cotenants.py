@@ -50,13 +50,15 @@ def leg_window(leg_dir):
     return min(float(r[3]) for r in rows), max(float(r[4]) for r in rows)
 
 
-def report(out_dir, tz_hours=-5):
-    st = json.load(open(os.path.join(out_dir, "state.json")))
-    own = str(st.get("job"))
+def report(out_dir, tz_hours=-5, own=None, legs_root=None):
+    """out_dir holds state.json and legs/ on the laptop. On Clipper pass legs_root=<run>/res and own=<job id>."""
+    if own is None:
+        own = str(json.load(open(os.path.join(out_dir, "state.json"))).get("job"))
+    legs_root = legs_root or os.path.join(out_dir, "legs")
     tz = dt.timezone(dt.timedelta(hours=tz_hours))
     fmt = lambda x: dt.datetime.fromtimestamp(x, tz).strftime("%H:%M:%S")  # noqa: E731
     rows = []
-    for leg in sorted(glob.glob(os.path.join(out_dir, "legs", "leg*")), key=lambda p: int(re.findall(r"\d+", os.path.basename(p))[0])):
+    for leg in sorted(glob.glob(os.path.join(legs_root, "leg*")), key=lambda p: int(re.findall(r"\d+", os.path.basename(p))[0])):
         name = os.path.basename(leg)
         w = leg_window(leg)
         cp = os.path.join(leg, "cotenants.log")

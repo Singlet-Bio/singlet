@@ -89,6 +89,7 @@ python bench/gpu_fast/ab.py --collect bench/gpu_fast/out/campaign-<name>-<time>
 - The file format is in `campaign.py`. Each step is a tier 1 pair or a tier 2 batch check. A step can name tier 1 steps whose demand gives its predicted change.
 - `--campaign` submits every step in one session as one Slurm chain. A step starts after the previous one ends, in any end state, or after the steps it names. The queue does not need the laptop.
 - Each job writes its own `result.json` on Clipper and uses the scripts commit it was submitted with. Pushing later does not disturb queued steps.
+- An optional `"summary"` block adds a last short-cpu job (`jobs/summarize.sbatch`). It runs `summarize.py` inside in_runtime on Clipper and writes `summary.md` to the `outdir` you give: verdicts with and without the co-tenant legs, co-tenants per leg, demand limits of the tier 1 runs listed in `limits_for`, and a refit of the load factors on clean legs. A step can take external job ids with `"opts": {"after": "<id>"}`.
 - `--collect` reads the results later, writes each step's table and `verdict.json` and prints one summary. Run it again to see steps that had not finished. If the bridge is down it says so and exits.
 
 ## Run

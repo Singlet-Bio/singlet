@@ -177,9 +177,12 @@ def load_result(out_dir):
     """result.json of a fast lane out directory. Demand vectors are rebuilt from the saved raw legs (legs/<leg>/point.json) when they are there."""
     import json
     import os
-    res = json.load(open(os.path.join(out_dir, "result.json")))
+    res_dir = out_dir if os.path.exists(os.path.join(out_dir, "result.json")) else os.path.join(out_dir, "res")   # a laptop out directory, or a run directory on Clipper
+    res = json.load(open(os.path.join(res_dir, "result.json")))
     for l in res.get("legs", []):
-        pj = os.path.join(out_dir, "legs", l.get("dir", ""), "point.json")
+        pj = os.path.join(res_dir, l.get("dir", ""), "point.json")
+        if not os.path.exists(pj):
+            pj = os.path.join(out_dir, "legs", l.get("dir", ""), "point.json")
         if os.path.exists(pj) and os.path.getsize(pj) > 10:
             l["demand"] = leg_demand(json.load(open(pj)), l.get("metrics"))
     return res
