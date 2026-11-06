@@ -2158,6 +2158,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         });
         nGpuMapped += repc.size() - cr.repH.size();
         chunksDone++;
+        if (lean) for (Lane* L : {&cr.A, &cr.M, &cr.B}) {   // P3-MEM-03: lean keeps no result on the device, and out.blob now holds the chunk's results
+            decltype(L->out)().swap(L->out); decltype(L->off)().swap(L->off); std::vector<uint16_t>().swap(L->len); std::vector<uint8_t>().swap(L->status);
+        }
         std::vector<std::vector<uint8_t>>().swap(cr.hout); std::vector<uint8_t>().swap(cr.hst); std::vector<uint8_t>().swap(cr.okv);
         std::vector<u64>().swap(cr.sOff); std::vector<u64>().swap(cr.bOff); std::vector<uint32_t>().swap(cr.rank); std::vector<uint32_t>().swap(cr.repc);
         stepAdd("records.copy", now() - tC);
@@ -2187,6 +2190,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!gpuPart(repc, c0)) { return budFail ? failBudget(err) : fail(err); }
     }
     if (!drainB()) return fail(err);
+    if (lean) { decltype(leanSeq)().swap(leanSeq); decltype(leanOff)().swap(leanOff); }   // P3-MEM-03: the lanes are done; the records copy from the reads
     tS = now();
     // E8: the pileup's records built on the device (E6 buildRecords) from the device-resident results and copied into the shared region
     // (in.e2e). Runs after hostPart (the host lane's results and the record order exist). false: the region is left without magic and the
