@@ -2428,6 +2428,11 @@ inline int snp_species_of(const std::string& name) {
     return -1;
 }
 
+inline DemuxResult make_single_donor_result(
+    uint32_t n_snps, uint32_t n_cells,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data);
+
 inline DemuxResult run_demux_by_species(
     uint32_t n_snps, uint32_t n_cells,
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data, uint64_t ad_nnz,
