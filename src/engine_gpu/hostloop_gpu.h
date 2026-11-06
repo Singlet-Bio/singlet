@@ -18,7 +18,7 @@ namespace singlet_hostloop_gpu {
 // dSeq/dOff: the original reads (before clipping); dCs/dCl: per read the clipped span (absolute start, length), or null (no clipping);
 // dAux: per read 2 + nw words (cr3, ur3, quality bits); dEnt: 24 bytes per read; dMask: 8 * singlet_qmask::words() bytes per read or null
 bool entries(const char* dSeq, const uint64_t* dOff, const uint64_t* dCs, const uint64_t* dCl, uint64_t n, const uint64_t* dAux, uint32_t nw,
-             bool hook, e6::ReadEntry* dEnt, uint64_t* dMask, float& ms, std::string& err);
+             bool hook, e6::ReadEntry* dEnt, uint64_t* dMask, float& ms, std::string& err, uint64_t i0 = 0);   // i0: the first read's index in the sample (P3-MEM-03 chunks; the hook's sample hashes it)
 
 // R11's exact CB histogram over every read (bench/fable/records/r11_hist.cpp's rule on the CR/UR keys of dAux): hist[nWL] (zeroed here) per
 // whitelist entry (dWL: STAR's cbWL, sorted)

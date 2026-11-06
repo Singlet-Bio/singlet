@@ -39,7 +39,7 @@ __device__ inline uint64_t hashR(uint64_t i) {
 // Qual0[0][j] - 33 < minQ = bit j of the read's quality words (host decode); Read0[0][j] == 'N' = code 4 (the host checked that every base
 // of code 4 is an 'N'); (Read0[0][j] | 32) == 'a' = code 0; clipMates' clippedN = the GPU clip (readLoad takes g_handoffClip5/3, uint16).
 __global__ void k_entries(const char* seq, const uint64_t* off, const uint64_t* cs, const uint64_t* cl, uint64_t n, const uint64_t* aux, uint32_t nw,
-                          bool hook, e6::ReadEntry* E, uint64_t* M, uint32_t qw) {
+                          bool hook, e6::ReadEntry* E, uint64_t* M, uint32_t qw, uint64_t i0) {
     const uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     if (i >= n) return;
     const uint64_t o = off[i], L = off[i + 1] - o;
@@ -74,7 +74,7 @@ __global__ void k_entries(const char* seq, const uint64_t* off, const uint64_t* 
         if (c5 > 255 || c3 > 255) fl |= 32;
         fl |= ((uint32_t)(c5 < 255 ? c5 : 255) << 8) | ((uint32_t)(c3 < 255 ? c3 : 255) << 16) | ((nA < 255 ? nA : 255u) << 24);
         if (c3 > 0 && s[L - c3] == 0) fl |= 2;
-        if (hook && L >= 21 && (hashR(i) & 63) == 0) fl |= 4;   // in the sample; the host adds the detector's verdict (bits 3, 4)
+        if (hook && L >= 21 && (hashR(i0 + i) & 63) == 0) fl |= 4;   // in the sample; the host adds the detector's verdict (bits 3, 4)
     }
     e.flags = fl;
     E[i] = e;
@@ -270,11 +270,11 @@ struct DevBufs { std::vector<void*> p; ~DevBufs() { for (void* x : p) cudaFree(x
 namespace singlet_hostloop_gpu {
 
 bool entries(const char* dSeq, const uint64_t* dOff, const uint64_t* dCs, const uint64_t* dCl, uint64_t n, const uint64_t* dAux, uint32_t nw,
-             bool hook, e6::ReadEntry* dEnt, uint64_t* dMask, float& ms, std::string& err) {
+             bool hook, e6::ReadEntry* dEnt, uint64_t* dMask, float& ms, std::string& err, uint64_t i0) {
     if (n == 0) { ms = 0; return true; }
     cudaEvent_t a, b; cudaEventCreate(&a); cudaEventCreate(&b);
     cudaEventRecord(a);
-    k_entries<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dCs, dCl, n, dAux, nw, hook, dEnt, dMask, singlet_qmask::words());
+    k_entries<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, dCs, dCl, n, dAux, nw, hook, dEnt, dMask, singlet_qmask::words(), i0);
     cudaEventRecord(b);
     HL_CK(cudaEventSynchronize(b));
     HL_CK(cudaGetLastError());
