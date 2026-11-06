@@ -1,0 +1,9 @@
+c0	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c1	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c2	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c3	FALLBACK	level 5 NO
+c4	FALLBACK	level 5 NO | run.log: [nonhost] engine_gpu: engine_gpu nonhost: cudaMalloc(&p, std::max<size_t>(bytes, 16)): out of memory; screening on the CPU | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c5	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c6	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c7	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read
+c8	FALLBACK	level 5 NO | star_Log.out: ENGINE_GPU: not used (GPU mapping failed): STAR maps every read

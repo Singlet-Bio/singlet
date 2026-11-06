@@ -1,0 +1,43 @@
+{
+ "name": "cal-s3-e21w",
+ "tier": 2,
+ "run": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-e21w-t2-20261105T195354Z",
+ "jobname": "gf2-cal-s3-e21w",
+ "job": "800420",
+ "scripts": "a4fab6dc2ca022371c49cdadee4658683b9b9192",
+ "notes": [
+  "tier 2 uses the provisional rule {\"core_gain\": 0.02, \"rate_gain\": 0.09, \"lock_held_gain\": 0.1}. Span rate is shown but never decides."
+ ],
+ "submitted": 1793908438.1193297,
+ "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+ "intended": false,
+ "rule_params": {
+  "core_gain": 0.02,
+  "rate_gain": 0.09,
+  "lock_held_gain": 0.1
+ },
+ "rule_kind": "tier2",
+ "arms": [
+  "A",
+  "B"
+ ],
+ "predict": {},
+ "args": [
+  "--tier",
+  "2",
+  "--name",
+  "cal-s3-e21w",
+  "--a",
+  "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+  "--b",
+  "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e21w,commit=eb9ebf9f",
+  "--node",
+  "g051",
+  "--after",
+  "800408",
+  "--bridge-grace",
+  "180",
+  "--max-wait",
+  "600"
+ ]
+}

@@ -1,0 +1,8 @@
+{
+ "verdict": "INCONCLUSIVE",
+ "rule": "J1",
+ "why": "job 800300 ended as FAILED and left no result.json",
+ "tier": 1,
+ "params": {},
+ "log_tail": "REFUSED: no binary /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3\n/singlet-gpu"
+}

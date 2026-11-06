@@ -1,0 +1,107 @@
+{
+ "verdict": "PROMOTE",
+ "rule": "T2-4",
+ "why": "core-s/M falls -19.0%, past 2%. Identity kept, no fallback",
+ "tier": 2,
+ "params": {
+  "core_gain": 0.02,
+  "rate_gain": 0.09,
+  "lock_held_gain": 0.1,
+  "intended_change": true
+ },
+ "gain": {
+  "progress_rate": 0.17972886458088277,
+  "core_s_per_M": 0.1895854398382204,
+  "lock_held_s": -0.010321100917431094,
+  "lock_wait_s": 0.054199569274946235
+ },
+ "spread": {
+  "progress_rate_A": null,
+  "progress_rate_B": 0.08474486127641341
+ },
+ "name": "cal-s3-ndonors1",
+ "job": "800381",
+ "run_dir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-ndonors1-t2-20261105T192334Z",
+ "scripts": "b73b24359ba2828148707635e5a704f337291dd5",
+ "job_state": "COMPLETED",
+ "A": {
+  "legs": 1,
+  "wall_s": 309.3,
+  "wall_s_spread": null,
+  "core_s_per_M": 9.89,
+  "core_s_per_M_spread": null,
+  "lock_held_s": 43.6,
+  "lock_held_s_spread": null,
+  "lock_wait_s": 139.3,
+  "lock_wait_s_spread": null,
+  "win_rate": 1.701,
+  "win_rate_spread": null,
+  "span_rate": 1.69,
+  "span_rate_spread": null,
+  "progress_rate": 1.8257880296418174,
+  "progress_rate_spread": null,
+  "dev_peak_gb": 89.3,
+  "host_peak_gb": 346.0,
+  "ident_checked": 2,
+  "ident_identical": 2,
+  "fallback_runs": 0,
+  "failed_runs": 0,
+  "stage_core_s": {
+   "start": 1.6125,
+   "scan": 28.979166666666668,
+   "refs": 89.82083333333333,
+   "STAR": 91.72083333333335,
+   "stream": 171.58333333333334,
+   "handoff": 28.52916666666667,
+   "pileup": 0.7041666666666666,
+   "pileupfin": 1.9375,
+   "nonhost": 42.11666666666667,
+   "export": 36.8125,
+   "demux": 143.05416666666667
+  }
+ },
+ "B": {
+  "legs": 2,
+  "wall_s": 255.3,
+  "wall_s_spread": 0.03760282021151595,
+  "core_s_per_M": 8.015,
+  "core_s_per_M_spread": 0.008733624454148506,
+  "lock_held_s": 44.05,
+  "lock_held_s_spread": 0.05675368898978434,
+  "lock_wait_s": 131.75,
+  "lock_wait_s_spread": 0.022011385199240813,
+  "win_rate": 1.918,
+  "win_rate_spread": 0.24608967674661106,
+  "span_rate": 1.995,
+  "span_rate_spread": 0.022055137844611435,
+  "progress_rate": 2.1539348391747084,
+  "progress_rate_spread": 0.08474486127641341,
+  "dev_peak_gb": 89.5,
+  "host_peak_gb": 343.0,
+  "ident_checked": 4,
+  "ident_identical": 0,
+  "fallback_runs": 0,
+  "failed_runs": 0,
+  "stage_core_s": {
+   "start": 0.9874999999999999,
+   "scan": 29.68958333333333,
+   "refs": 90.46666666666667,
+   "STAR": 93.05833333333334,
+   "stream": 169.17916666666667,
+   "handoff": 23.889583333333334,
+   "pileup": 1.0229166666666667,
+   "pileupfin": 7.020833333333334,
+   "nonhost": 43.577083333333334,
+   "export": 0.0,
+   "demux": 55.19583333333333
+  }
+ },
+ "without_contaminated": {
+  "verdict": "INCONCLUSIVE",
+  "rule": "V1",
+  "why": "an arm has no leg in the result",
+  "legs_left": [
+   3
+  ]
+ }
+}

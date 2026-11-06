@@ -1,0 +1,27 @@
+# written by ab.py. Do not edit.
+NAME=overnight-e20w-rerun
+RUN=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/overnight-e20w-rerun-t2-20261106T003957Z
+SAMPLE=pbmc1k_v3
+T=7
+SLOTS=2
+ORDER=ABBA
+ARMS=AB
+REFDIR=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3
+INTENDED=0
+SBATCH_SHA=a975d94968ef22aa307af958fe2a9deffd49494197e0011cbf0988258040e270
+SCRIPTS_BRANCH=bench/gpu-fast
+EXPECT_SCRIPTS=317c142d7a07
+PIN_SCRIPTS=317c142d7a07beeacd0f3913e6e2ada463058089
+K=8
+NRUNS=24
+IDENT_N=4
+STOP_ON_FALLBACK=1
+SEP_RATE=0.09
+BIN_A=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3
+COMMIT_A=e42c0636
+ENV_A=()
+ARGS_A=()
+BIN_B=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w
+COMMIT_B=aeef7a5e
+ENV_B=()
+ARGS_B=()

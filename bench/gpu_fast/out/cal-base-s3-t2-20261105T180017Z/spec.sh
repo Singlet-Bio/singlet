@@ -1,0 +1,25 @@
+# written by ab.py. Do not edit.
+NAME=cal-base-s3
+RUN=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-base-s3-t2-20261105T180017Z
+SAMPLE=pbmc1k_v3
+T=7
+SLOTS=2
+ORDER=ABBA
+REFDIR=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3
+INTENDED=0
+SBATCH_SHA=95ddff6e47698db08ee599ff1faffa7144c46a5c8ce6c0054db177a548301d94
+SCRIPTS_BRANCH=bench/gpu-fast
+EXPECT_SCRIPTS=95b617e666d7
+K=8
+NRUNS=24
+IDENT_N=4
+STOP_ON_FALLBACK=1
+SEP_RATE=0.09
+BIN_A=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/base
+COMMIT_A=0a6de829
+ENV_A=()
+ARGS_A=()
+BIN_B=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3
+COMMIT_B=e42c0636
+ENV_B=()
+ARGS_B=()

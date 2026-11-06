@@ -1,0 +1,31 @@
+{
+ "name": "cal-s3-e20w",
+ "tier": 1,
+ "run": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-e20w-t1-20261105T183824Z",
+ "jobname": "gf1-cal-s3-e20w",
+ "job": "800360",
+ "scripts": "95b617e666d7f56f5f60d19fcfd14b67e5335b00",
+ "args": [
+  "--tier",
+  "1",
+  "--name",
+  "cal-s3-e20w",
+  "--a",
+  "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+  "--b",
+  "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w,commit=aeef7a5e",
+  "--node",
+  "g051",
+  "--bridge-grace",
+  "120"
+ ],
+ "notes": [],
+ "submitted": 1793903906.949875,
+ "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+ "intended": false,
+ "rule_params": {
+  "promote_gain": 0.05,
+  "respect_spread": true,
+  "regress_guard": null
+ }
+}

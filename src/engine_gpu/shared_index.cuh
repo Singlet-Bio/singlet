@@ -30,14 +30,15 @@ static bool shVerify(const char* d, u64 len, const std::function<bool(u64, u64, 
     }
     return true;
 }
-struct ShClient { int fd = -1; void* p[3] = {nullptr, nullptr, nullptr}; u64 bytes = 0; bool on = false; };
+struct ShClient { int fd = -1; void* p[3] = {nullptr, nullptr, nullptr}; u64 bytes = 0; bool on = false, priv = false; };   // priv: SINGLET_GPU_SHARED_INDEX_COPY=1, p are private copies (dmal, freed by dfree)
 static void shClose(ShClient& S) {
+    for (int i = 0; i < 3; i++) if (S.p[i] && S.priv) S.p[i] = nullptr;
     for (int i = 0; i < 3; i++) if (S.p[i]) {
         cudaIpcCloseMemHandle(S.p[i]);
         g_ipcPtrs.erase(std::remove(g_ipcPtrs.begin(), g_ipcPtrs.end(), S.p[i]), g_ipcPtrs.end()); S.p[i] = nullptr;
     }
     if (S.fd >= 0) { close(S.fd); S.fd = -1; }
-    S.on = false;
+    S.on = false; S.priv = false;
 }
 static int shConnect(const std::string& path) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0); if (fd < 0) return -1;
@@ -113,11 +114,35 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
         g_ipcPtrs.push_back(S.p[i]);
     }
     const double tImp = now() - t0;
+    {   // where the imported memory lives: type and device of each pointer, this process's device and bus id, the holder's bus id (in the socket name)
+        int cur = -1; cudaGetDevice(&cur); char bus[64] = {0}; cudaDeviceGetPCIBusId(bus, sizeof bus, cur);
+        const char* cv = std::getenv("CUDA_VISIBLE_DEVICES");
+        std::string d = "engine_gpu: shared index diag: device " + std::to_string(cur) + " bus " + bus + " (engine device " + std::to_string(device) + ", CUDA_VISIBLE_DEVICES=" + (cv ? cv : "unset") + "), holder key " + key + ";";
+        for (int i = 0; i < 3; i++) {
+            cudaPointerAttributes at{}; const cudaError_t e = cudaPointerGetAttributes(&at, S.p[i]);
+            d += " p" + std::to_string(i) + "=" + (e == cudaSuccess ? "type " + std::to_string((int) at.type) + " dev " + std::to_string(at.device) : std::string("attr error ") + cudaGetErrorString(e)) + (e == cudaSuccess && at.devicePointer != S.p[i] ? " devptr differs" : "");
+            if (e != cudaSuccess) cudaGetLastError();
+        }
+        log += d + "
+";
+    }
     std::string why;
     const char* hg = H.G - SH_PAD;
     if (!shVerify((const char*) S.p[0], H.nGenome + 2 * SH_PAD, [&](u64 o, u64 n, char* d) { memcpy(d, hg + o, n); return true; }, why)) return no("G differs from this process's genome (" + why + ")");
     if (!shVerify((const char*) S.p[1], saBytes, [&](u64 o, u64 n, char* d) { memcpy(d, (const char*) H.SA + o, n); return true; }, why)) return no("SA differs from this process's suffix array (" + why + ")");
     if (!shVerify((const char*) S.p[2], saiBytes, [&](u64 o, u64 n, char* d) { memcpy(d, (const char*) H.SAi + o, n); return true; }, why)) return no("SAi differs from this process's index (" + why + ")");
+    const char* ce = std::getenv("SINGLET_GPU_SHARED_INDEX_COPY");
+    if (ce && std::string(ce) == "1") {   // control: private copies of the imported index (device to device), the mappings closed
+        const double tc = now(); void* q[3] = {nullptr, nullptr, nullptr};
+        for (int i = 0; i < 3; i++) if (dmalv(&q[i], rp.bytes[i]) != cudaSuccess || cudaMemcpy(q[i], S.p[i], rp.bytes[i], cudaMemcpyDeviceToDevice) != cudaSuccess) {
+            for (int j = 0; j <= i; j++) dfree(q[j]);
+            return no("control copy failed");
+        }
+        cudaDeviceSynchronize();
+        for (int i = 0; i < 3; i++) { cudaIpcCloseMemHandle(S.p[i]); g_ipcPtrs.erase(std::remove(g_ipcPtrs.begin(), g_ipcPtrs.end(), S.p[i]), g_ipcPtrs.end()); S.p[i] = q[i]; }
+        S.priv = true; log += "engine_gpu: shared index: CONTROL private device copy of the imported index in " + std::to_string(now() - tc) + " s
+";
+    }
     S.bytes = budRound(rq.nG) + budRound(rq.saB) + budRound(rq.saiB); S.on = true;
     char l[300]; snprintf(l, sizeof l, "engine_gpu: shared index: imported G, SA, SAi (%.2f GB) from the holder in %.2f s, sampled content check %.2f s: no private upload\n",
                           b2gb(S.bytes), tImp, now() - t0 - tImp);

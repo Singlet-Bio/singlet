@@ -1,0 +1,143 @@
+{
+ "schema": 1,
+ "tier": 2,
+ "name": "cal-s3-e20w",
+ "job": "800365",
+ "node": "g051",
+ "scripts": "95b617e6",
+ "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+ "params": {
+  "tier": 2,
+  "name": "cal-s3-e20w",
+  "job": "800365",
+  "node": "g051",
+  "scripts": "95b617e6",
+  "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+  "T": 7,
+  "slots": 2,
+  "sample": "pbmc1k_v3",
+  "k": 8,
+  "runs": 24,
+  "order": "ABBA",
+  "ident_n": 4,
+  "intended_change": 0,
+  "sep_rate": "0.09"
+ },
+ "legs": [
+  {
+   "leg": 1,
+   "arm": "A",
+   "dir": "leg1A",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 298.8,
+    "core_s_per_M": 9.89,
+    "lock_held_s": 45.0,
+    "lock_wait_s": 132.2,
+    "dev_peak_gb": 89.2,
+    "host_peak_gb": 349.0,
+    "win_rate": 1.692,
+    "span_rate": 1.689,
+    "win_n": 8.0,
+    "win_s": 314.8,
+    "runs": 24,
+    "failed_runs": 0,
+    "cores_win": 16.9,
+    "gpu_util": 41.0,
+    "other_jobs_max": 1.0,
+    "progress_rate": 1.8087994789832849
+   },
+   "stage_core_s": {
+    "start": 0.12083333333333333,
+    "scan": 28.9875,
+    "refs": 92.62916666666666,
+    "STAR": 83.8875,
+    "stream": 180.35416666666666,
+    "handoff": 28.058333333333334,
+    "pileup": 0.7875,
+    "pileupfin": 1.3083333333333333,
+    "nonhost": 41.574999999999996,
+    "export": 36.90833333333333,
+    "demux": 142.5875
+   },
+   "ident": {
+    "checked": 2,
+    "identical": 2,
+    "detail": "leg1A/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 2,
+   "arm": "B",
+   "dir": "leg2B",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w",
+    "sha256": "f40ad295dc8a0e2b27cdbdde2dea6e04e71726df3f9f67b53f34f011dd3418ed",
+    "commit": "aeef7a5e48fd11fba63c27fcf19e97e8bfb3a2f5",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 263.9,
+    "core_s_per_M": 9.92,
+    "lock_held_s": 36.4,
+    "lock_wait_s": 67.8,
+    "dev_peak_gb": 91.9,
+    "host_peak_gb": 298.0,
+    "win_rate": 1.895,
+    "span_rate": 1.939,
+    "win_n": 8.0,
+    "win_s": 281.2,
+    "runs": 24,
+    "failed_runs": 0,
+    "cores_win": 22.7,
+    "gpu_util": 42.0,
+    "other_jobs_max": 1.0,
+    "progress_rate": 2.097735728188581
+   },
+   "stage_core_s": {
+    "start": 0.6583333333333333,
+    "scan": 27.03333333333333,
+    "refs": 94.2375,
+    "STAR": 40.041666666666664,
+    "stream": 133.44166666666666,
+    "handoff": 116.875,
+    "pileup": 4.55,
+    "pileupfin": 5.204166666666667,
+    "nonhost": 40.479166666666664,
+    "export": 37.50416666666667,
+    "demux": 141.37083333333334
+   },
+   "ident": {
+    "checked": 2,
+    "identical": 2,
+    "detail": "leg2B/"
+   },
+   "fallback": {
+    "runs": 1,
+    "lines": [
+     "c12: level 5 NO | run.log: [engine_gpu] fallback: ENGINE_GPU: not used (GPU mapping failed: engine_gpu: dmal(&dBits, bitsCap * 4): out of memory): STAR maps every read | star_Log.out: ENGINE_GPU: not used (GPU mapping failed: engine_gpu: dmal(&dBits, bitsCap * 4): out of memory): STAR maps every read"
+    ]
+   },
+   "stopped": "fallback in run c12: level 5 NO | run.log: [engine_gpu] fallback: ENGINE_GPU: not used (GPU mapping failed: engine_gpu: dmal(&dBits, bitsCap * 4): out of memory): STAR maps every read | star_Log.out: ENGINE_GPU: not used (GPU mapping failed: engine_gpu: dmal(&dBits, bitsCap * 4): out of memory): STAR maps every read",
+   "completed": true
+  }
+ ],
+ "notes": [
+  "STOP fallback in leg 2 (B) after leg 2 of 4"
+ ]
+}

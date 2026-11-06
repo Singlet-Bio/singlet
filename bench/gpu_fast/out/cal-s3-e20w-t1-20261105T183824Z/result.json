@@ -1,0 +1,245 @@
+{
+ "schema": 1,
+ "tier": 1,
+ "name": "cal-s3-e20w",
+ "job": "800360",
+ "node": "g051",
+ "scripts": "95b617e6",
+ "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+ "params": {
+  "tier": 1,
+  "name": "cal-s3-e20w",
+  "job": "800360",
+  "node": "g051",
+  "scripts": "95b617e6",
+  "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+  "T": 7,
+  "slots": 2,
+  "sample": "pbmc1k_v3",
+  "order": "ABBA",
+  "intended_change": 0
+ },
+ "legs": [
+  {
+   "leg": 1,
+   "arm": "A",
+   "dir": "leg1A",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 151.8,
+    "core_s_per_M": 8.93,
+    "lock_held_s": 38.5,
+    "lock_wait_s": 0.0,
+    "dev_peak_gb": 44.0,
+    "host_peak_gb": 49.0,
+    "win_rate": null,
+    "span_rate": 0.439,
+    "win_n": 0.0,
+    "win_s": -151.8,
+    "runs": 1,
+    "failed_runs": 0,
+    "cores_win": null,
+    "gpu_util": 12.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": null
+   },
+   "stage_core_s": {
+    "start": 1.1,
+    "scan": 17.8,
+    "refs": 83.7,
+    "STAR": 87.7,
+    "stream": 147.6,
+    "handoff": 30.0,
+    "pileup": 0.0,
+    "pileupfin": 0.0,
+    "nonhost": 33.7,
+    "export": 34.4,
+    "demux": 131.2
+   },
+   "ident": {
+    "checked": 1,
+    "identical": 1,
+    "detail": "leg1A/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 2,
+   "arm": "B",
+   "dir": "leg2B",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w",
+    "sha256": "f40ad295dc8a0e2b27cdbdde2dea6e04e71726df3f9f67b53f34f011dd3418ed",
+    "commit": "aeef7a5e48fd11fba63c27fcf19e97e8bfb3a2f5",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 143.6,
+    "core_s_per_M": 7.81,
+    "lock_held_s": 27.0,
+    "lock_wait_s": 0.0,
+    "dev_peak_gb": 44.7,
+    "host_peak_gb": 50.0,
+    "win_rate": null,
+    "span_rate": 0.464,
+    "win_n": 0.0,
+    "win_s": -143.6,
+    "runs": 1,
+    "failed_runs": 0,
+    "cores_win": null,
+    "gpu_util": 13.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": null
+   },
+   "stage_core_s": {
+    "start": 0.0,
+    "scan": 19.2,
+    "refs": 83.2,
+    "STAR": 31.6,
+    "stream": 116.5,
+    "handoff": 39.0,
+    "pileup": 3.0,
+    "pileupfin": 0.0,
+    "nonhost": 30.0,
+    "export": 33.9,
+    "demux": 137.0
+   },
+   "ident": {
+    "checked": 1,
+    "identical": 1,
+    "detail": "leg2B/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 3,
+   "arm": "B",
+   "dir": "leg3B",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w",
+    "sha256": "f40ad295dc8a0e2b27cdbdde2dea6e04e71726df3f9f67b53f34f011dd3418ed",
+    "commit": "aeef7a5e48fd11fba63c27fcf19e97e8bfb3a2f5",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 144.8,
+    "core_s_per_M": 7.78,
+    "lock_held_s": 28.2,
+    "lock_wait_s": 0.0,
+    "dev_peak_gb": 44.7,
+    "host_peak_gb": 52.0,
+    "win_rate": null,
+    "span_rate": 0.46,
+    "win_n": 0.0,
+    "win_s": -144.8,
+    "runs": 1,
+    "failed_runs": 0,
+    "cores_win": null,
+    "gpu_util": 11.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": null
+   },
+   "stage_core_s": {
+    "start": 0.0,
+    "scan": 22.6,
+    "refs": 80.3,
+    "STAR": 32.9,
+    "stream": 120.3,
+    "handoff": 35.5,
+    "pileup": 0.8,
+    "pileupfin": 0.0,
+    "nonhost": 30.6,
+    "export": 34.9,
+    "demux": 133.8
+   },
+   "ident": {
+    "checked": 1,
+    "identical": 1,
+    "detail": "leg3B/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 4,
+   "arm": "A",
+   "dir": "leg4A",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 153.9,
+    "core_s_per_M": 8.95,
+    "lock_held_s": 39.7,
+    "lock_wait_s": 0.0,
+    "dev_peak_gb": 44.1,
+    "host_peak_gb": 54.0,
+    "win_rate": null,
+    "span_rate": 0.433,
+    "win_n": 0.0,
+    "win_s": -153.9,
+    "runs": 1,
+    "failed_runs": 0,
+    "cores_win": null,
+    "gpu_util": 11.0,
+    "other_jobs_max": 1.0,
+    "progress_rate": null
+   },
+   "stage_core_s": {
+    "start": 0.0,
+    "scan": 22.1,
+    "refs": 80.5,
+    "STAR": 79.3,
+    "stream": 154.0,
+    "handoff": 33.9,
+    "pileup": 0.0,
+    "pileupfin": 0.0,
+    "nonhost": 32.3,
+    "export": 34.6,
+    "demux": 131.5
+   },
+   "ident": {
+    "checked": 1,
+    "identical": 1,
+    "detail": "leg4A/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  }
+ ],
+ "notes": []
+}

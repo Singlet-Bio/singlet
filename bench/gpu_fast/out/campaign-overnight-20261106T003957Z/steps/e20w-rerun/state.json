@@ -1,0 +1,28 @@
+{
+ "name": "overnight-e20w-rerun",
+ "tier": 2,
+ "run": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/overnight-e20w-rerun-t2-20261106T003957Z",
+ "jobname": "gf2-overnight-e20w-rerun",
+ "job": "800576",
+ "scripts": "317c142d7a07beeacd0f3913e6e2ada463058089",
+ "notes": [
+  "tier 2 uses the provisional rule {\"core_gain\": 0.02, \"rate_gain\": 0.09, \"lock_held_gain\": 0.1}. Span rate is shown but never decides."
+ ],
+ "submitted": true,
+ "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+ "intended": false,
+ "rule_params": {
+  "core_gain": 0.02,
+  "rate_gain": 0.09,
+  "lock_held_gain": 0.1
+ },
+ "rule_kind": "tier2",
+ "arms": [
+  "A",
+  "B"
+ ],
+ "predict": {},
+ "id": "e20w-rerun",
+ "after": null,
+ "dir": "steps/e20w-rerun"
+}

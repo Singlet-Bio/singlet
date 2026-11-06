@@ -969,7 +969,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 SLACK = 1ull << 30;   // what the tally does not see: the modules' temporaries (E8, E10, E11), the driver's local memory for the kernels
     const u64 n0 = in.off.size() - 1, S0 = in.seq.size();
     const bool e10W = in.e10.on && in.e2e != nullptr && in.e2e->base != nullptr && n0 > 0 && in.e10.nw >= 1 && in.e10.aux.size() == n0 * (2 + (u64)in.e10.nw);
-    const u64 IDX = SHC.on ? 0 : budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
+    const u64 IDX = SHC.on && !SHC.priv ? 0 : budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
     const u64 TAB = ((u64)H.nChr * 2 + 1 + H.chrBinN + (u64)H.sjdbN * 4) * 8 + (u64)H.sjdbN * 4 + (24ull << 20);
     const u64 AUX = e10W ? in.e10.aux.size() * 8 : 0, ENT = e10W ? n0 * 24 : 0, QM = e10W && in.e10.wantMask ? n0 * 16 : 0;
     const u64 KEEP = e10W && in.e10.soloModel != nullptr ? n0 * 16 : 0;

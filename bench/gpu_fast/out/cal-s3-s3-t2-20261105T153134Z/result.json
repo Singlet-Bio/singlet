@@ -1,0 +1,249 @@
+{
+ "schema": 1,
+ "tier": 2,
+ "name": "cal-s3-s3",
+ "job": "800309",
+ "node": "g051",
+ "scripts": "95b617e6",
+ "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+ "params": {
+  "tier": 2,
+  "name": "cal-s3-s3",
+  "job": "800309",
+  "node": "g051",
+  "scripts": "95b617e6",
+  "ref": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/ref/e42c0636/T7/pbmc1k_v3",
+  "T": 7,
+  "slots": 2,
+  "sample": "pbmc1k_v3",
+  "k": 8,
+  "runs": 24,
+  "order": "ABBA",
+  "ident_n": 4,
+  "intended_change": 0,
+  "sep_rate": "0.09"
+ },
+ "legs": [
+  {
+   "leg": 1,
+   "arm": "A",
+   "dir": "leg1A",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 291.2,
+    "core_s_per_M": 9.81,
+    "lock_held_s": 40.0,
+    "lock_wait_s": 121.7,
+    "dev_peak_gb": 88.7,
+    "host_peak_gb": 345.0,
+    "win_rate": 1.946,
+    "span_rate": 1.749,
+    "win_n": 8.0,
+    "win_s": 273.7,
+    "runs": 24,
+    "failed_runs": 0,
+    "cores_win": 16.9,
+    "gpu_util": 38.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": 1.831702719025442
+   },
+   "stage_core_s": {
+    "start": 0.37083333333333335,
+    "scan": 28.96666666666667,
+    "refs": 90.625,
+    "STAR": 86.57916666666667,
+    "stream": 172.65833333333333,
+    "handoff": 25.170833333333334,
+    "pileup": 0.9291666666666667,
+    "pileupfin": 5.0249999999999995,
+    "nonhost": 43.57083333333333,
+    "export": 36.50416666666667,
+    "demux": 142.42499999999998
+   },
+   "ident": {
+    "checked": 2,
+    "identical": 2,
+    "detail": "leg1A/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 2,
+   "arm": "B",
+   "dir": "leg2B",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 282.8,
+    "core_s_per_M": 9.86,
+    "lock_held_s": 43.0,
+    "lock_wait_s": 103.6,
+    "dev_peak_gb": 89.9,
+    "host_peak_gb": 332.0,
+    "win_rate": 1.751,
+    "span_rate": 1.757,
+    "win_n": 8.0,
+    "win_s": 304.3,
+    "runs": 24,
+    "failed_runs": 0,
+    "cores_win": 18.4,
+    "gpu_util": 45.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": 1.9547391813067088
+   },
+   "stage_core_s": {
+    "start": 1.0041666666666667,
+    "scan": 27.679166666666664,
+    "refs": 92.05416666666667,
+    "STAR": 86.60000000000001,
+    "stream": 175.80416666666667,
+    "handoff": 26.441666666666666,
+    "pileup": 1.8875,
+    "pileupfin": 6.066666666666666,
+    "nonhost": 40.12916666666667,
+    "export": 37.35,
+    "demux": 140.79999999999998
+   },
+   "ident": {
+    "checked": 2,
+    "identical": 2,
+    "detail": "leg2B/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 3,
+   "arm": "B",
+   "dir": "leg3B",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 312.2,
+    "core_s_per_M": 9.89,
+    "lock_held_s": 40.1,
+    "lock_wait_s": 135.7,
+    "dev_peak_gb": 89.2,
+    "host_peak_gb": 317.0,
+    "win_rate": 1.638,
+    "span_rate": 1.662,
+    "win_n": 8.0,
+    "win_s": 325.2,
+    "runs": 24,
+    "failed_runs": 0,
+    "cores_win": 17.2,
+    "gpu_util": 38.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": 1.7198263865165773
+   },
+   "stage_core_s": {
+    "start": 0.3125,
+    "scan": 28.854166666666668,
+    "refs": 91.85833333333333,
+    "STAR": 88.32083333333333,
+    "stream": 170.21666666666667,
+    "handoff": 23.099999999999998,
+    "pileup": 0.6625,
+    "pileupfin": 10.362499999999999,
+    "nonhost": 40.4125,
+    "export": 36.7375,
+    "demux": 145.27083333333334
+   },
+   "ident": {
+    "checked": 2,
+    "identical": 2,
+    "detail": "leg3B/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  },
+  {
+   "leg": 4,
+   "arm": "A",
+   "dir": "leg4A",
+   "prov": {
+    "bin": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3",
+    "sha256": "1772c91f36463b86939c3149eeb604b3f49f9df052cf0a5fd35280ee9cf428f9",
+    "commit": "e42c06362b7584ef5b9f323bfa1eff95a590488c",
+    "embedded": "yes",
+    "env": "",
+    "args": ""
+   },
+   "metrics": {
+    "wall_s": 284.8,
+    "core_s_per_M": 9.87,
+    "lock_held_s": 44.0,
+    "lock_wait_s": 105.1,
+    "dev_peak_gb": 89.2,
+    "host_peak_gb": 317.0,
+    "win_rate": 1.936,
+    "span_rate": 1.752,
+    "win_n": 8.0,
+    "win_s": 275.2,
+    "runs": 24,
+    "failed_runs": 0,
+    "cores_win": 18.7,
+    "gpu_util": 43.0,
+    "other_jobs_max": 0.0,
+    "progress_rate": 2.017064659620522
+   },
+   "stage_core_s": {
+    "start": 0.32083333333333336,
+    "scan": 28.795833333333334,
+    "refs": 91.55833333333334,
+    "STAR": 81.1125,
+    "stream": 181.64583333333334,
+    "handoff": 27.145833333333332,
+    "pileup": 0.6583333333333333,
+    "pileupfin": 3.525,
+    "nonhost": 43.93333333333334,
+    "export": 36.637499999999996,
+    "demux": 141.67083333333332
+   },
+   "ident": {
+    "checked": 2,
+    "identical": 2,
+    "detail": "leg4A/"
+   },
+   "fallback": {
+    "runs": 0,
+    "lines": []
+   },
+   "stopped": "",
+   "completed": true
+  }
+ ],
+ "notes": []
+}

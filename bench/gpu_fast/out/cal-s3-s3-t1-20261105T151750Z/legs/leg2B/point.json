@@ -1,0 +1,121 @@
+{
+ "tag": "leg2B",
+ "k": 1,
+ "T": 7,
+ "slots": 2,
+ "env": "SINGLET_ENGINE_GPU_SLOTS=2 ",
+ "node": "g051.clipper.gvsu.edu",
+ "first_start": 1793892046.3227997,
+ "last_end": 1793892198.5026329,
+ "span": 152.17983317375183,
+ "pairs_M": 66.601887,
+ "pairs_per_s": 437652.51683484943,
+ "cgroup_core_s": 596.041463,
+ "cgroup_core_s_per_M": 8.949317952507862,
+ "runs_core_s_per_M": 8.543751921022897,
+ "lock_wait_mean": 0.0,
+ "lock_held_mean": 36.5,
+ "gpu_held_pct": 23.734986079809712,
+ "gpu_util_mean": 12.18918918918919,
+ "host_peak_gb": 53.23,
+ "anon_peak_gb": 41.25,
+ "shmem_peak_gb": 6.7,
+ "dev_peak_gb": 44.0185546875,
+ "runs": [
+  {
+   "item": 0,
+   "worker": 0,
+   "sample": "pbmc1k_v3",
+   "start": 1793892046.3227997,
+   "end": 1793892198.5026329,
+   "rc": 0,
+   "copy": "c0",
+   "wall": 152.17983317375183,
+   "core_s": 569.03,
+   "maxrss_gb": 45.40510559082031,
+   "pairs": 66601887,
+   "locks": {
+    "prefill": {
+     "dev": 0,
+     "wait": 0.0,
+     "held": 23.1191
+    },
+    "solo": {
+     "wait": 3.7535e-05,
+     "held": 0.551463
+    },
+    "pileup": {
+     "wait": 2.6e-05,
+     "held": 2.4
+    },
+    "nonhost": {
+     "dev": 0,
+     "wait": 3e-05,
+     "held": 3.4
+    }
+   },
+   "engine_mem": "start 0.5, index 16.9, reads+clip 26.4, dedup 23.2, index+distinct 23.2, before-laneA 23.2, before-laneA 23.7, before-laneA 24.0, before-laneA 24.3, before-laneA 24.6, before-laneA 24.9, before-laneA 25.2, before-laneA 25.5, peak (lanes, records) 44.088745",
+   "lanes": "E12 lanes (new): batches 454656 / 393216 / 131072",
+   "prefill_device_s": 23.119168,
+   "h2d": "index 5.3 GB/s (waited 1.41 s), reads 11.2 GB/s",
+   "d2h": "d2h 3.8 GB/s",
+   "steps": {
+    "index": 1.74,
+    "reads": 0.58,
+    "e10": 0.26,
+    "clip": 0.63,
+    "dedup": 0.45,
+    "laneA": 3.54,
+    "laneM": 3.55,
+    "laneB": 5.39,
+    "lanes": 0.67,
+    "hostlane": 0.0,
+    "records": 3.36,
+    "readRecord": 0.6,
+    "e2e": 1.8
+   },
+   "dump_s": null,
+   "pileup_gpu_ms": null,
+   "pileup_peak_gb": null,
+   "level5": true,
+   "gpu_pileup_ok": true,
+   "engine_failed": false,
+   "fallback_lines": [
+    "Shared memory is not used for genomes. Allocated a private copy of the genome."
+   ],
+   "stages": {
+    "start": 0.7,
+    "scan": 3,
+    "refs": 16,
+    "STAR": 14,
+    "stream": 33,
+    "handoff": 6,
+    "pileup": 0,
+    "pileupfin": 0,
+    "nonhost": 18,
+    "export": 18,
+    "demux": 43.5
+   },
+   "stage_core_s": {
+    "start": 1.1,
+    "scan": 18.0,
+    "refs": 83.7,
+    "STAR": 94.7,
+    "stream": 132.6,
+    "handoff": 36.9,
+    "pileup": 0.0,
+    "pileupfin": 0.0,
+    "nonhost": 34.9,
+    "export": 34.6,
+    "demux": 132.1
+   },
+   "sampler_hold_s": 36.5,
+   "sampler_wait_s": 0,
+   "peak_rss_gb": 86.1,
+   "peak_pss_gb": 43.1,
+   "peak_dev_mb": 45066,
+   "log_wait_s": 0.0,
+   "log_held_s": 29.5
+  }
+ ]
+}

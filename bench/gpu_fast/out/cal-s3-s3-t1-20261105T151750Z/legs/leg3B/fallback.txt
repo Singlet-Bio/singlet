@@ -1,0 +1,1 @@
+c0	ok		(allowed info lines: 1)

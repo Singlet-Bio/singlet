@@ -1,0 +1,106 @@
+{
+ "name": "overnight",
+ "camp": "overnight-20261106T003957Z",
+ "created": "20261106T003957Z",
+ "scripts": "317c142d7a07beeacd0f3913e6e2ada463058089",
+ "config": {
+  "name": "overnight",
+  "defaults": {
+   "node": "g050",
+   "T": 7,
+   "slots": 2
+  },
+  "steps": [
+   {
+    "id": "e21w",
+    "tier": 2,
+    "a": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+    "b": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e21w,commit=eb9ebf9f",
+    "opts": {
+     "after": "800574"
+    }
+   },
+   {
+    "id": "e20w-rerun",
+    "tier": 2,
+    "a": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/s3,commit=e42c0636",
+    "b": "bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-next/bin/e20w,commit=aeef7a5e"
+   }
+  ],
+  "summary": {
+   "outdir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/results/overnight",
+   "limits_for": [
+    "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-e20w-t1-20261105T183824Z"
+   ],
+   "alone": [
+    "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-s3-t1-20261105T151750Z",
+    "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-e20w-t1-20261105T183824Z:A"
+   ],
+   "loaded": [
+    "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-s3-t2-20261105T153134Z"
+   ],
+   "loaded_from_steps_arm": "A"
+  }
+ },
+ "steps": [
+  {
+   "id": "e21w",
+   "job": "800575",
+   "dir": "steps/e21w",
+   "tier": 2,
+   "after": [
+    "800574"
+   ],
+   "run": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/overnight-e21w-t2-20261106T003957Z",
+   "rule_params": {
+    "core_gain": 0.02,
+    "rate_gain": 0.09,
+    "lock_held_gain": 0.1
+   },
+   "rule_kind": "tier2",
+   "intended": false,
+   "predict": {},
+   "scripts": "317c142d7a07beeacd0f3913e6e2ada463058089",
+   "notes": [
+    "tier 2 uses the provisional rule {\"core_gain\": 0.02, \"rate_gain\": 0.09, \"lock_held_gain\": 0.1}. Span rate is shown but never decides."
+   ]
+  },
+  {
+   "id": "e20w-rerun",
+   "job": "800576",
+   "dir": "steps/e20w-rerun",
+   "tier": 2,
+   "after": [
+    "800575"
+   ],
+   "run": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/overnight-e20w-rerun-t2-20261106T003957Z",
+   "rule_params": {
+    "core_gain": 0.02,
+    "rate_gain": 0.09,
+    "lock_held_gain": 0.1
+   },
+   "rule_kind": "tier2",
+   "intended": false,
+   "predict": {},
+   "scripts": "317c142d7a07beeacd0f3913e6e2ada463058089",
+   "notes": [
+    "tier 2 uses the provisional rule {\"core_gain\": 0.02, \"rate_gain\": 0.09, \"lock_held_gain\": 0.1}. Span rate is shown but never decides."
+   ]
+  }
+ ],
+ "summary": {
+  "outdir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/results/overnight",
+  "limits_for": [
+   "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-e20w-t1-20261105T183824Z"
+  ],
+  "alone": [
+   "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-s3-t1-20261105T151750Z",
+   "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-e20w-t1-20261105T183824Z:A"
+  ],
+  "loaded": [
+   "/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-fast/runs/cal-s3-s3-t2-20261105T153134Z"
+  ],
+  "loaded_from_steps_arm": "A"
+ },
+ "summary_job": "800577"
+}

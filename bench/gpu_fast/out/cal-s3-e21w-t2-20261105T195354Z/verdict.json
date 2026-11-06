@@ -1,0 +1,8 @@
+{
+ "verdict": "INCONCLUSIVE",
+ "rule": "J1",
+ "why": "job 800420 ended as CANCELLED and left no result.json",
+ "tier": 2,
+ "params": {},
+ "log_tail": ""
+}
