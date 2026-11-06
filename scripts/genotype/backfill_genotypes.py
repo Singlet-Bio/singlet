@@ -31,6 +31,18 @@ ERR = 0.01
 POST = 0.99
 
 
+def read_snp(priv, which):
+    """private/snp_<which> as (SNPs x barcodes CSC, snp names, barcodes), from .1pz or from --output-format mtx files."""
+    p = os.path.join(priv, "snp_%s.1pz" % which)
+    if os.path.exists(p):
+        return read_1pz(p)
+    import scipy.io
+    m = scipy.io.mmread(os.path.join(priv, "snp_%s.mtx.gz" % which)).tocsc()
+    names = [l.rstrip("\n").split("\t")[0] for l in gzip.open(os.path.join(priv, "snp_%s_features.tsv.gz" % which), "rt")]
+    bcs = [l.rstrip("\n").split("\t")[0] for l in gzip.open(os.path.join(priv, "snp_%s_barcodes.tsv.gz" % which), "rt")]
+    return m, names, bcs
+
+
 def read_1pz(path):
     try:
         from singlet._pz import read_1pz as rd
@@ -214,8 +226,8 @@ def main():
     if "/genotypes/" not in os.path.abspath(a.dest) + "/":
         sys.exit("refusing: genotype outputs go only under $WORK/genotypes/")
     priv = os.path.join(a.run, "private")
-    ad, names, barcodes = read_1pz(os.path.join(priv, "snp_ad.1pz"))
-    dp, names2, barcodes2 = read_1pz(os.path.join(priv, "snp_dp.1pz"))
+    ad, names, barcodes = read_snp(priv, "ad")
+    dp, names2, barcodes2 = read_snp(priv, "dp")
     assert names == names2 and barcodes == barcodes2 and ad.shape == dp.shape
     cells = called_columns(a.run, barcodes)
     os.makedirs(a.dest, exist_ok=True)
@@ -223,7 +235,8 @@ def main():
     n_callable = write_cellsnp(os.path.join(a.dest, "cellsnp"), ad, dp, cells, barcodes, names)
     n_sites, K = write_donors(os.path.join(a.dest, "donors.vcf.gz"), a.run, ad, dp, cells, barcodes, names)
     eng = os.path.join(a.dest, "engine")
-    for rel in ("donor", "snp_ad.1pz", "snp_dp.1pz", "ase_counts.tsv"):
+    for rel in ("donor", "snp_ad.1pz", "snp_dp.1pz", "ase_counts.tsv", "snp_ad.mtx.gz", "snp_dp.mtx.gz", "snp_ad_features.tsv.gz",
+                "snp_ad_barcodes.tsv.gz", "snp_dp_features.tsv.gz", "snp_dp_barcodes.tsv.gz"):
         src = os.path.join(priv, rel)
         if os.path.isdir(src):
             shutil.copytree(src, os.path.join(eng, rel), dirs_exist_ok=True)
