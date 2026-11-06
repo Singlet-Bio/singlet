@@ -1344,6 +1344,11 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 nbM = envU("SINGLET_ENGINE_GPU_NBM", NEW ? 393216 : 262144, 4096);
     const bool nbBset = std::getenv("SINGLET_ENGINE_GPU_NBB") != nullptr;
     const u64 nbB0 = envU("SINGLET_ENGINE_GPU_NBB", NEW ? 131072 : 65536, 1024);
+    // SINGLET_ENGINE_GPU_STEPS_B: lane B's stitching step budget (default 2048). SINGLET_ENGINE_GPU_BHOST=1: lane B is skipped and every read
+    // that reaches it goes to the host pool (needs the pool: not with HOSTLANE=after or CFG=old). Results are the same (the host maps with mapRead)
+    const u64 stepsB = envU("SINGLET_ENGINE_GPU_STEPS_B", 2048, 1);
+    const char* bhE = std::getenv("SINGLET_ENGINE_GPU_BHOST");
+    const bool bhostReq = bhE && std::string(bhE) == "1";
     // sequences per chunk: the lanes' device buffers scale with it (SINGLET_ENGINE_GPU_CHUNK, default 16M; E17: smaller when the budget needs it)
     const char* ceE = std::getenv("SINGLET_ENGINE_GPU_CHUNK");
     u64 CHUNK = ceE ? std::max<u64>(1u << 18, std::strtoull(ceE, nullptr, 10)) : 16u << 20;
@@ -1403,6 +1408,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::vector<HostCtx> hctx(poolThreads);
     const char* hlE = std::getenv("SINGLET_ENGINE_GPU_HOSTLANE");
     std::unique_ptr<HostPool> pool;
+    bool bhost = false;   // set below once the pool exists
     if (NEW0 && !(hlE && std::string(hlE) == "after") && nChunks > 0) {
         pool.reset(new HostPool);
         pool->start(poolThreads, nChunks, [&](int t, const HostPool::Task& tk) {
@@ -1413,6 +1419,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             HostRes& R = *hres[tk.c];
             R.st[tk.q] = (uint8_t)s; R.out[tk.q].assign(X.buf.data(), X.buf.data() + bl.n);
         });
+        bhost = bhostReq;
     }
     // E8 (SINGLET_ENGINE_GPU_E2E=1): the lanes keep their packed results on the device; per record its source and read (k_rec_len)
     const bool e2e = in.e2e != nullptr && in.e2e->base != nullptr;
@@ -1478,7 +1485,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         for (u64 k = 0; k < repM.size(); k++) if (M.status[k] != (uint8_t)Status::Ok) { repB.push_back(repM[k]); posB.push_back(posM[k]); ixB.push_back(ixM[k]); }
         stepAdd("lanes.host", now() - th);
         u64 nbB = nbB0, partB = 0;   // the heavy lane's reads in flight: its Work is the largest device allocation of the prefill
-        if (cap && !repB.empty()) {   // E17: up to nbB0, as many as the budget's room holds next to all its slots; else parts
+        if (bhost) {}   // lane B does not run on the device: no batch plan
+        else if (cap && !repB.empty()) {   // E17: up to nbB0, as many as the budget's room holds next to all its slots; else parts
             const u64 av = availNow();
             if (!lanePlan(repB.size(), av, slotB, perB, nbB0, nbBset ? nbB0 : 1024, 1024, nbB, partB)) return noFit("B", repB.size(), av);
         } else if (NEW && !nbBset && !repB.empty()) {   // E12 (no budget): up to nbB0, as many as the free device memory holds (3 GB spare)
@@ -1499,7 +1507,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 pool->push(v);
             };
         }
-        if (!runLaneParts<LaneB>(P, D, dS, dO, ixB, nbB, partB, 2048, B, err, resident, "B", NEW, pool ? &onB : nullptr, nPB)) return false;
+        if (bhost) {   // every lane B read to the host pool, in lane B's order (the order of repH below)
+            B.status.assign(repB.size(), (uint8_t)Status::Overflow); B.len.assign(repB.size(), 0); B.off.assign(repB.size() + 1, 0);
+            std::vector<HostPool::Task> v; v.reserve(repB.size());
+            for (u64 k = 0; k < repB.size(); k++) v.push_back({(uint32_t)ci, (uint32_t)qn++, repB[k]});
+            pool->push(v);
+        } else if (!runLaneParts<LaneB>(P, D, dS, dO, ixB, nbB, partB, stepsB, B, err, resident, "B", NEW, pool ? &onB : nullptr, nPB)) return false;
         if (nPB > 1) { allRes = false; resident = false; }
         {
             char pl[320];
@@ -1508,6 +1521,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                      (unsigned long long)repM.size(), (unsigned long long)nbMc, wM ? "warp" : "thread", nPM > 1 ? (" in " + std::to_string(nPM) + " parts").c_str() : "",
                      (unsigned long long)repB.size(), (unsigned long long)nbB, nPB > 1 ? (" in " + std::to_string(nPB) + " parts").c_str() : "");
             planLog += pl;
+            if (c0 == 0) planLog += "STEPS_B " + std::to_string(stepsB) + ", BHOST " + (bhost ? "1" : bhostReq ? "requested but no host pool (ignored)" : "0") + "; ";
             if (c0 == 0) { nbMlog = nbMc; nbBlog = nbB; wMlog = wM; }
         }
         out.secMapGpu += now() - tc0;

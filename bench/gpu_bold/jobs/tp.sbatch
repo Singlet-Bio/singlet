@@ -49,7 +49,7 @@ EXPECT_COMMIT=${EXPECT_COMMIT:?EXPECT_COMMIT: the commit that BINDIR must hold}
 DATA2=$W/jobs/fable/release/data
 BARE=$W/repos/singlet-py.git; SBR=${SCRIPTS_BRANCH:-bench/gpu-batch1}; EXPECT_SCRIPTS=${EXPECT_SCRIPTS:-0fdec57f}
 POINTS=(${POINTS:-k1t28s1 k2t14s1 k3t9s1 k4t7s1}); SAMPLE=${SAMPLE:-pbmc1k_v3}; MIX=(${MIX:-pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2})
-DUMP=${DUMP:-1}; IDENT=${IDENT:-0}; NRUNS=${NRUNS:-}
+DUMP=${DUMP:-0}; IDENT=${IDENT:-0}; NRUNS=${NRUNS:-}
 RES0=${RES0:-$W/jobs/gpu-bold/results/tp-$SLURM_JOB_ID}
 case $RES0 in $W/jobs/gpu-bold/*) ;; *) echo "RES0 must lie under $W/jobs/gpu-bold"; exit 2 ;; esac
 mkdir -p $RES0; S=$RES0/summary.txt
@@ -98,6 +98,12 @@ cfg_set() {
     nodn) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen" ;;
     alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
     maponly) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
+    s512) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=512" ;;       # gpu/bold-split: lane B step budget
+    s128) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=128" ;;
+    bhost) CFG_ENV="SINGLET_ENGINE_GPU_BHOST=1" ;;           # gpu/bold-split: lane B on the host pool
+    nohc) CFG_ENV="SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
+    nohc_alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
+    nohc_map) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
     *) echo "!! unknown config $1" >&2; return 1 ;;
   esac
 }
@@ -128,8 +134,10 @@ run_item() {   # point item worker sample T
   local CRS=$D/out/star_Solo.out/Gene/CellReads.stats
   ( while [ ! -e $CRS ]; do sleep 0.2; done; ln $CRS $D/CellReads.stats ) 2>/dev/null &
   local WATCH=$!
+  local NS=""
+  case " ${NSYS_ITEMS:-} " in *" $i "*) NS="${NSYS_BIN:-/usr/local/cuda/bin/nsys} profile -o $O/prof --force-overwrite=true --trace=cuda,nvtx --sample=none --cpuctxsw=none --gpu-metrics-devices=all --gpu-metrics-frequency=${NSYS_GM_HZ:-10000}" ;; esac
   local T0; T0=$(date +%s.%N)
-  ( cd $D && env "${XE[@]}" /usr/bin/time -v -o $O/time.txt timeout -k 30 3000 $BIN $SCR/data/$s.1fq --ref-base $REF --genome-dir $G/star_2.7.11b \
+  ( cd $D && env "${XE[@]}" /usr/bin/time -v -o $O/time.txt timeout -k 30 3000 $NS $BIN $SCR/data/$s.1fq --ref-base $REF --genome-dir $G/star_2.7.11b \
       --exons $G/genes/genes.gtf --out-prefix $D/out/ --threads $T --pipeline --output-format 1pz --engine gpu $EXTRA_ARGS 2>&1 \
       | while IFS= read -r l; do printf '%(%s)T %s\n' -1 "$l"; done > $O/run.log.ts )
   local rc=$? T1; T1=$(date +%s.%N); kill $WATCH 2>/dev/null
@@ -279,11 +287,13 @@ for pp in "${POINTS[@]}"; do
   SMP=$!
   nvidia-smi dmon -s pucvmet -d 1 -o T > $RES0/$p/dmon.log 2>&1 &
   DMP=$!
+  nvidia-smi dmon --gpm-metrics 2,3,4,10,12,20,21 -d 1 -o T > $RES0/$p/gpm.log 2>&1 &
+  GMP=$!
   sleep 1
   WP=()
   for ((w = 0; w < K; w++)); do worker $p $w $T & WP+=($!); done
   wait "${WP[@]}"
-  sleep 1; kill $SMP $CTP $DMP 2>/dev/null; wait $SMP 2>/dev/null
+  sleep 1; kill $SMP $CTP $DMP $GMP 2>/dev/null; wait $SMP 2>/dev/null
   ctsnap end
   du -sh $SCR/$p 2>/dev/null | sed 's/^/  \/tmp use of the point before identity: /' | tee -a $S; df -h /tmp | tail -1 | sed 's/^/  /' | tee -a $S
   python3 $TPD/e18_point.py $RES0/$p > $RES0/$p/point.txt 2>&1
@@ -320,5 +330,15 @@ echo "=== mapDistinct records (E6 dumps) per sample" | tee -a $S
 done
 python3 $TPD/e18_point.py --table $RES0 > $RES0/table.md 2>&1; tee -a $S < $RES0/table.md
 echo "=== results.tsv" | tee -a $S; column -t -s $'\t' $RES0/results.tsv 2>/dev/null | tee -a $S
+if [ -n "${NSYS_ITEMS:-}" ]; then
+  echo "=== nsys export and summary" | tee -a $S
+  for r in $RES0/*/c*/prof.nsys-rep; do
+    [ -f $r ] || continue
+    d=$(dirname $r); echo "  $r $(stat -c %s $r) bytes" | tee -a $S
+    ${NSYS_BIN:-/usr/local/cuda/bin/nsys} export --type=sqlite --force-overwrite=true -o $d/prof.sqlite $r > $d/export.log 2>&1
+    python3 $W/jobs/gpu-bold/jobs/nsys_summary.py $d/prof.sqlite --csv-prefix $d/prof > $d/nsys_summary.txt 2>&1
+    echo "  summary: $d/nsys_summary.txt" | tee -a $S
+  done
+fi
 echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT scripts=$SCRIPTS" | tee -a $S
 echo done $(date -Is) | tee -a $S
