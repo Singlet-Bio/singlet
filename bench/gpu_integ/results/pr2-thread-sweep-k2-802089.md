@@ -1,8 +1,10 @@
 # Host-thread sweep at 2 runs in flight (job 802089, candidate c8849bb2)
 
-Requested by the Beta orchestrator (round-3 referee: is the pooled rate thread-starved?). Exclusive node g051 with all 54 schedulable cores, k=2 samples in flight, 2 device slots, WSHRINK on, pbmc1k_v3 (66.6 M pairs), 12 runs per point, single replicate. `ALLOW_NO_EMBED=1`. The runs of this job wrote their results to `$W/jobs/gpu-integ/results/tp-802089/` (script default).
+> **Scope of every rate in this file: per node, 2 GPUs.** The job requested one GPU, but the node is exclusive and the job saw both H100s (`gpus=2` in its log). The runs were unpinned and spread over device 0 and device 1. These are not one-GPU rates. Core-seconds per M read pairs and lock-held seconds per run are per run and do not depend on this. The one-GPU measurement is job 803326 (A/B/B/A) and job 803327 (k by T grid), both with `CUDA_VISIBLE_DEVICES=0`.
 
-| T per sample | Host threads in flight | M pairs/s (span) | core-s per M (cgroup) | core-s per M (clean runs) | Lock held (clean runs) | Wall per run (clean) | Cores busy (mean over span) | Fallback runs |
+Requested by the Beta orchestrator (round-3 referee: is the pooled rate thread-starved?). Exclusive node g051 with all 54 schedulable cores and both GPUs visible, k=2 samples in flight, 2 device slots, WSHRINK on, pbmc1k_v3 (66.6 M pairs), 12 runs per point, single replicate. `ALLOW_NO_EMBED=1`. The runs of this job wrote their results to `$W/jobs/gpu-integ/results/tp-802089/` (script default).
+
+| T per sample | Host threads in flight | M pairs/s (span, per node, 2 GPUs) | core-s per M (cgroup) | core-s per M (clean runs) | Lock held (clean runs) | Wall per run (clean) | Cores busy (mean over span) | Fallback runs |
 |---|---|---|---|---|---|---|---|---|
 | 7 | 14 | 0.911 | 8.54 | 8.15 | 27.5 s | 143 s | 7.8 | 1 of 12 |
 | 14 | 28 | 0.986 | 9.28 | 8.91 | 27.0 s | 133 s | 9.2 | 1 of 12 |
