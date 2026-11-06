@@ -49,7 +49,7 @@ def load_gtf(path):
     cls[ribo] = 2
     cls[mt] = 1
     return dict(chrs=chrs, cid=g.cid.values, skey=(g.cid.values << 32) | g.s.values.astype(np.int64),
-                end=g.e.values.astype(np.int64), names=g.name.values.astype(str), cls=cls)
+                end=g.e.values.astype(np.int64), names=g.name.values.astype('U'), cls=cls)
 
 
 def gene_of(G, chrname, pos):
@@ -266,7 +266,7 @@ def q2_hamming(sub, p_frac):
                 agree_relaxed_simple=float(relax[~multi].mean()) if (~multi).any() else None,
                 agree_relaxed_multi=float(relax[multi].mean()) if multi.any() else None,
                 delta_as_zero_of_relaxed=float((dl[relax] == 0).mean()) if relax.any() else None,
-                delta_as_minus2hd_of_relaxed=float((dl[relax] == -2 * hd[cov][relax]).mean()) if relax.any() else None,
+                delta_as_minus2hd_of_relaxed=float((dl[relax] == -2 * hd[cov][relax].astype(np.int32)).mean()) if relax.any() else None,
                 gross_saving_strict=float(cm[strict].sum() / call), gross_saving_relaxed=float(cm[relax].sum() / call),
                 net_saving_strict_verify10=net(strict), net_saving_relaxed_verify10=net(relax))
         res['schemes'][sname] = sres
