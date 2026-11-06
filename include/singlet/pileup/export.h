@@ -1277,13 +1277,15 @@ inline ExportStats export_results(const PileupEngine& engine,
                 dcfg.n_donors = export_cfg.n_donors;
                 dcfg.threads = export_cfg.threads;
                 dcfg.seed = 42;
-                demux_result = run_demux(
+                // run_demux, or one model per species on a barnyard (human + mouse) panel
+                demux_result = run_demux_by_species(
                     snp_ad_csc.nrows, snp_ad_csc.ncols,
                     snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
                     snp_ad_csc.data.size(),
                     snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data(),
                     snp_dp_csc.data.size(), dcfg,
-                    cc_result.cell_indices); // filter VB to EmptyDrops-called cells only
+                    cc_result.cell_indices, // filter VB to EmptyDrops-called cells only
+                    engine.snp_names());
             }
         });
     }

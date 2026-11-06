@@ -2388,6 +2388,146 @@ inline DemuxResult run_demux(
 }
 
 // ============================================================================
+// Barnyard demux: one model per species.
+//
+// On the human + mouse barnyard reference the SNP panel holds both species (contigs GRCh38___* and GRCm39___*). A human cell
+// covers only human SNPs and a mouse cell only mouse SNPs, so one mixture component can carry a human genotype and a mouse
+// genotype at once and explain a human line and a mouse line together: extra components add no likelihood and the K search
+// cannot see the extra lines (GSM4987148, two human + two mouse lines: 3 donors, each pairing a human with a mouse line).
+// Here each barcode gets a species from its SNP depth, the demux runs once per species on that species' SNPs and called
+// cells, called cells with depth in both species are cross-species doublets, and the donor ids are concatenated (human
+// first). Any other panel goes straight to run_demux, so single-species outputs are unchanged.
+// ============================================================================
+inline int snp_species_of(const std::string& name) {
+    if (name.rfind("GRCh38___", 0) == 0) return 0;
+    if (name.rfind("GRCm39___", 0) == 0) return 1;
+    return -1;
+}
+
+inline DemuxResult run_demux_by_species(
+    uint32_t n_snps, uint32_t n_cells,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data, uint64_t ad_nnz,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data, uint64_t dp_nnz,
+    const DonorDemuxConfig& cfg, const std::vector<uint32_t>& cell_indices,
+    const std::vector<std::string>& snp_names,
+    float species_min_share = 0.9f)    // share of a barcode's SNP depth that names its species; below it in both: mixed
+{
+    std::vector<int8_t> sp_of(n_snps, -1);
+    uint32_t n_sp[2] = {0, 0};
+    if (snp_names.size() == n_snps)
+        for (uint32_t i = 0; i < n_snps; ++i) {
+            sp_of[i] = static_cast<int8_t>(snp_species_of(snp_names[i]));
+            if (sp_of[i] >= 0) ++n_sp[sp_of[i]];
+        }
+    if (n_sp[0] == 0 || n_sp[1] == 0)
+        return run_demux(n_snps, n_cells, ad_indptr, ad_indices, ad_data, ad_nnz,
+                         dp_indptr, dp_indices, dp_data, dp_nnz, cfg, cell_indices);
+
+    // species of each barcode from its SNP depth
+    std::vector<uint64_t> dps[2] = {std::vector<uint64_t>(n_cells, 0), std::vector<uint64_t>(n_cells, 0)};
+    for (uint32_t c = 0; c < n_cells; ++c)
+        for (int32_t k = dp_indptr[c]; k < dp_indptr[c + 1]; ++k) {
+            const int s = sp_of[static_cast<uint32_t>(dp_indices[k])];
+            if (s >= 0) dps[s][c] += dp_data[k];
+        }
+    std::vector<int8_t> cell_sp(n_cells, -1);   // 0 human, 1 mouse, 2 mixed, -1 no depth
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        const double h = static_cast<double>(dps[0][c]), m = static_cast<double>(dps[1][c]);
+        if (h + m <= 0) continue;
+        cell_sp[c] = h >= species_min_share * (h + m) ? 0 : (m >= species_min_share * (h + m) ? 1 : 2);
+    }
+    std::vector<uint8_t> is_called(n_cells, cell_indices.empty() ? 1 : 0);
+    for (uint32_t j : cell_indices) if (j < n_cells) is_called[j] = 1;
+    std::vector<uint32_t> called_sp[2];
+    uint32_t n_mixed_called = 0;
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        if (!is_called[c]) continue;
+        if (cell_sp[c] == 0 || cell_sp[c] == 1) called_sp[cell_sp[c]].push_back(c);
+        else if (cell_sp[c] == 2) ++n_mixed_called;
+    }
+    std::cerr << "[demux] barnyard panel (" << n_sp[0] << " human, " << n_sp[1] << " mouse SNPs): called cells human="
+              << called_sp[0].size() << " mouse=" << called_sp[1].size() << " cross-species=" << n_mixed_called
+              << "; one model per species\n";
+
+    // row subset of a CSC (SNP rows x barcode columns)
+    auto subset = [&](int s, const int32_t* ip, const int32_t* ix, const uint16_t* dt, const std::vector<int32_t>& rmap,
+                      std::vector<int32_t>& oip, std::vector<int32_t>& oix, std::vector<uint16_t>& odt) {
+        oip.assign(n_cells + 1, 0);
+        for (uint32_t c = 0; c < n_cells; ++c) {
+            for (int32_t k = ip[c]; k < ip[c + 1]; ++k) {
+                const uint32_t r = static_cast<uint32_t>(ix[k]);
+                if (sp_of[r] == s) { oix.push_back(rmap[r]); odt.push_back(dt[k]); }
+            }
+            oip[c + 1] = static_cast<int32_t>(oix.size());
+        }
+    };
+    DemuxResult part[2];
+    std::vector<int32_t> sub_to_orig[2];
+    for (int s = 0; s < 2; ++s) {
+        std::vector<int32_t> rmap(n_snps, -1);
+        for (uint32_t r = 0; r < n_snps; ++r)
+            if (sp_of[r] == s) { rmap[r] = static_cast<int32_t>(sub_to_orig[s].size()); sub_to_orig[s].push_back(static_cast<int32_t>(r)); }
+        std::vector<int32_t> aip, aix, dip, dix; std::vector<uint16_t> adt, ddt;
+        subset(s, ad_indptr, ad_indices, ad_data, rmap, aip, aix, adt);
+        subset(s, dp_indptr, dp_indices, dp_data, rmap, dip, dix, ddt);
+        const uint32_t ns = static_cast<uint32_t>(sub_to_orig[s].size());
+        const size_t min_fit = static_cast<size_t>(2 * cfg.min_donor_cells);
+        std::cerr << "[demux] species " << (s == 0 ? "human" : "mouse") << ": " << called_sp[s].size() << " called cells\n";
+        if (called_sp[s].empty()) { part[s].n_donors_k = 0; part[s].assignments.assign(n_cells, {-1, 0.0f, 0.0f, "unassigned", "cell"}); continue; }
+        if (called_sp[s].size() < min_fit || cfg.n_donors == 1)
+            part[s] = make_single_donor_result(ns, n_cells, aip.data(), aix.data(), adt.data(), dip.data(), dix.data(), ddt.data());
+        else
+            part[s] = run_demux(ns, n_cells, aip.data(), aix.data(), adt.data(), aix.size(),
+                                dip.data(), dix.data(), ddt.data(), dix.size(), cfg, called_sp[s]);
+    }
+
+    // merge: human donors 0..Kh-1, mouse donors Kh..Kh+Km-1
+    const int Kh = part[0].n_donors_k, Km = part[1].n_donors_k, K = Kh + Km;
+    DemuxResult out;
+    out.n_donors_k = K;
+    out.assignments.resize(n_cells);
+    int n_dbl = 0, n_asg = 0, n_un = 0;
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        DonorAssignment a{K, 0.0f, 0.0f, "unassigned", is_called[c] ? "cell" : "ambient"};
+        if (cell_sp[c] == 2 && is_called[c]) {
+            a.prob_doublet = 1.0f; a.label = "doublet";
+        } else if (cell_sp[c] == 0 || cell_sp[c] == 1) {
+            const int s = cell_sp[c], off = s == 0 ? 0 : Kh;
+            a = part[s].assignments[c];
+            auto sh = [&](int d) { return d >= 0 && d < part[s].n_donors_k ? d + off : (d >= 0 ? K : d); };
+            a.donor_id = sh(a.donor_id);
+            a.best_singlet = a.best_singlet >= 0 ? a.best_singlet + off : -1;
+            a.doublet_a = a.doublet_a >= 0 ? a.doublet_a + off : -1;
+            a.doublet_b = a.doublet_b >= 0 ? a.doublet_b + off : -1;
+            if (a.donor_id >= 0 && a.donor_id < K) a.label = "donor" + std::to_string(a.donor_id);
+            a.cell_status = is_called[c] ? "cell" : "ambient";
+        } else if (cell_sp[c] < 0) {
+            a.donor_id = -1;
+        }
+        if (is_called[c]) { if (a.label == "doublet") ++n_dbl; else if (a.label == "unassigned") ++n_un; else ++n_asg; }
+        out.assignments[c] = std::move(a);
+    }
+    for (int s = 0; s < 2; ++s) {
+        const int off = s == 0 ? 0 : Kh;
+        for (size_t j = 0; j < part[s].covered_to_original.size(); ++j) {
+            out.covered_to_original.push_back(sub_to_orig[s][static_cast<size_t>(part[s].covered_to_original[j])]);
+            std::vector<float> mu(static_cast<size_t>(K), 0.5f), sm(static_cast<size_t>(K), 0.0f);
+            for (int k = 0; k < part[s].n_donors_k; ++k) {
+                if (j < part[s].beta_mu.size() && k < static_cast<int>(part[s].beta_mu[j].size())) mu[static_cast<size_t>(k + off)] = part[s].beta_mu[j][k];
+                if (j < part[s].beta_sum.size() && k < static_cast<int>(part[s].beta_sum[j].size())) sm[static_cast<size_t>(k + off)] = part[s].beta_sum[j][k];
+            }
+            out.beta_mu.push_back(std::move(mu)); out.beta_sum.push_back(std::move(sm));
+        }
+        for (const auto& row : part[s].k_selection) out.k_selection.push_back(row);
+    }
+    out.n_doublets = n_dbl;
+    out.geno_error = part[0].geno_error > 0 ? part[0].geno_error : part[1].geno_error;
+    std::cerr << "[demux] barnyard merge: K=" << K << " (human " << Kh << ", mouse " << Km << "); called cells " << n_asg
+              << " assigned, " << n_dbl << " doublet (" << n_mixed_called << " cross-species), " << n_un << " unassigned\n";
+    return out;
+}
+
+// ============================================================================
 // Aggregate AD/DP per SNP per donor from the full CSC matrices.
 // Only accumulates reads from confidently assigned barcodes (prob >= min_prob).
 // Output is indexed by COVERED SNP (reduced index, same as beta_mu).
