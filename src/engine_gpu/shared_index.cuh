@@ -1,14 +1,55 @@
 // Shared resident genome index (docs/gpu-engine/bold/SHARED-INDEX.md, SINGLET_GPU_SHARED_INDEX=1).
 // Included by engine_gpu.cu inside namespace singlet_engine_gpu, after deviceCount(). It uses that file's dmal helpers, now() and b2gb().
 //
-// One holder process per device and genome (`singlet gpu-holder`) uploads G, SA and SAi once and exports them with cudaIpcGetMemHandle on a
-// Unix socket. mapDistinct imports them read only (cudaIpcOpenMemHandle) instead of its own upload. Any failure leaves the private upload as it was.
+// One holder process per device and genome (`singlet gpu-holder`) uploads G, SA and SAi once into driver virtual memory (cuMemCreate) and sends
+// the POSIX file descriptors of the three allocations on a Unix socket (SCM_RIGHTS). mapDistinct maps them (cuMemImportFromShareableHandle, cuMemMap) instead of its own upload. Any failure leaves the private upload as it was.
 #pragma once
 namespace {
 static const u64 SH_PAD = 200, SH_BLK = 4096, SH_NB = 512;
 static const uint32_t SH_MAGIC = 0x31495348u;
 struct ShReq { uint32_t magic; uint32_t pad; u64 nG, saB, saiB; };   // allocation sizes of the client's host index
-struct ShRep { uint32_t status; uint32_t pad; u64 bytes[3]; cudaIpcMemHandle_t h[3]; char msg[96]; };
+struct ShRep { uint32_t status; uint32_t pad; u64 bytes[3]; u64 map[3]; char msg[96]; };   // map: the mapped (granularity rounded) sizes; the three file descriptors travel with the reply (SCM_RIGHTS)
+// Driver virtual memory management (cuMemCreate, cuMemMap, POSIX file descriptor handles). The legacy cudaIpcOpenMemHandle mapping made every
+// access of the importer about 25-50 times slower (job 800812: lane A 3.6 s private, 168 s imported, on one process alone on one GPU).
+struct ShDrv {
+    CUresult (*create)(CUmemGenericAllocationHandle*, size_t, const CUmemAllocationProp*, unsigned long long) = nullptr;
+    CUresult (*release)(CUmemGenericAllocationHandle) = nullptr;
+    CUresult (*reserve)(CUdeviceptr*, size_t, size_t, CUdeviceptr, unsigned long long) = nullptr;
+    CUresult (*addrFree)(CUdeviceptr, size_t) = nullptr;
+    CUresult (*map)(CUdeviceptr, size_t, size_t, CUmemGenericAllocationHandle, unsigned long long) = nullptr;
+    CUresult (*unmap)(CUdeviceptr, size_t) = nullptr;
+    CUresult (*access)(CUdeviceptr, size_t, const CUmemAccessDesc*, size_t) = nullptr;
+    CUresult (*exportH)(void*, CUmemGenericAllocationHandle, CUmemAllocationHandleType, unsigned long long) = nullptr;
+    CUresult (*importH)(CUmemGenericAllocationHandle*, void*, CUmemAllocationHandleType) = nullptr;
+    CUresult (*gran)(size_t*, const CUmemAllocationProp*, CUmemAllocationGranularity_flags) = nullptr;
+    bool ok = false;
+};
+static ShDrv& shDrv() {
+    static ShDrv D; static bool done = false;
+    if (done) return D;
+    done = true;
+    auto get = [](const char* n, auto& f) {
+        void* p = nullptr; cudaDriverEntryPointQueryResult q;
+        if (cudaGetDriverEntryPoint(n, &p, cudaEnableDefault, &q) != cudaSuccess || q != cudaDriverEntryPointSuccess || !p) { cudaGetLastError(); return false; }
+        f = reinterpret_cast<std::remove_reference_t<decltype(f)>>(p); return true;
+    };
+    D.ok = get("cuMemCreate", D.create) && get("cuMemRelease", D.release) && get("cuMemAddressReserve", D.reserve) && get("cuMemAddressFree", D.addrFree)
+        && get("cuMemMap", D.map) && get("cuMemUnmap", D.unmap) && get("cuMemSetAccess", D.access) && get("cuMemExportToShareableHandle", D.exportH)
+        && get("cuMemImportFromShareableHandle", D.importH) && get("cuMemGetAllocationGranularity", D.gran);
+    return D;
+}
+static CUmemAllocationProp shProp(int device) {
+    CUmemAllocationProp p{}; p.type = CU_MEM_ALLOCATION_TYPE_PINNED; p.requestedHandleTypes = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
+    p.location.type = CU_MEM_LOCATION_TYPE_DEVICE; p.location.id = device; return p;
+}
+static bool shMapRw(ShDrv& D, int device, CUmemGenericAllocationHandle h, u64 sz, CUdeviceptr& va, std::string& why) {
+    CUmemAccessDesc ad{}; ad.location.type = CU_MEM_LOCATION_TYPE_DEVICE; ad.location.id = device; ad.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    if (D.reserve(&va, sz, 0, 0, 0) != CUDA_SUCCESS) { why = "cuMemAddressReserve failed"; va = 0; return false; }
+    if (D.map(va, sz, 0, h, 0) != CUDA_SUCCESS) { D.addrFree(va, sz); va = 0; why = "cuMemMap failed"; return false; }
+    if (D.access(va, sz, &ad, 1) != CUDA_SUCCESS) { D.unmap(va, sz); D.addrFree(va, sz); va = 0; why = "cuMemSetAccess failed"; return false; }
+    return true;
+}
+static void shUnmap(void* p, u64 sz) { ShDrv& D = shDrv(); if (p && D.ok) { D.unmap((CUdeviceptr) p, sz); D.addrFree((CUdeviceptr) p, sz); } }
 static u64 shFnv(const std::string& s) { u64 h = 1469598103934665603ull; for (unsigned char c : s) { h ^= c; h *= 1099511628211ull; } return h; }
 static std::string shKey(const std::string& genomeDir, const std::string& devId) {
     char rp[4096]; const std::string gd = realpath(genomeDir.c_str(), rp) ? std::string(rp) : genomeDir;
@@ -30,11 +71,11 @@ static bool shVerify(const char* d, u64 len, const std::function<bool(u64, u64, 
     }
     return true;
 }
-struct ShClient { int fd = -1; void* p[3] = {nullptr, nullptr, nullptr}; u64 bytes = 0; bool on = false, priv = false; };   // priv: SINGLET_GPU_SHARED_INDEX_COPY=1, p are private copies (dmal, freed by dfree)
+struct ShClient { int fd = -1; void* p[3] = {nullptr, nullptr, nullptr}; u64 bytes = 0, msz[3] = {0, 0, 0}; bool on = false, priv = false; };   // priv: SINGLET_GPU_SHARED_INDEX_COPY=1, p are private copies (dmal, freed by dfree)
 static void shClose(ShClient& S) {
     for (int i = 0; i < 3; i++) if (S.p[i] && S.priv) S.p[i] = nullptr;
     for (int i = 0; i < 3; i++) if (S.p[i]) {
-        cudaIpcCloseMemHandle(S.p[i]);
+        shUnmap(S.p[i], S.msz[i]);
         g_ipcPtrs.erase(std::remove(g_ipcPtrs.begin(), g_ipcPtrs.end(), S.p[i]), g_ipcPtrs.end()); S.p[i] = nullptr;
     }
     if (S.fd >= 0) { close(S.fd); S.fd = -1; }
@@ -106,11 +147,30 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
     timeval tv{60, 0}; setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
     ShReq rq{SH_MAGIC, 0, H.nGenome + 2 * SH_PAD + 8, saBytes + 64 + 8, saiBytes + 64 + 8};
     ShRep rp{};
-    if (!shWrite(fd, &rq, sizeof rq) || !shRead(fd, &rp, sizeof rp)) return no("the holder did not answer");
-    if (rp.status != 0) return no(std::string("the holder refused: ") + rp.msg);
+    if (!shWrite(fd, &rq, sizeof rq)) return no("the holder did not answer");
+    int fds[3] = {-1, -1, -1};
+    {   // the reply and, with it, three descriptors
+        char cb[CMSG_SPACE(3 * sizeof(int))]; memset(cb, 0, sizeof cb);
+        iovec iov{&rp, sizeof rp}; msghdr mh{}; mh.msg_iov = &iov; mh.msg_iovlen = 1; mh.msg_control = cb; mh.msg_controllen = sizeof cb;
+        ssize_t r; do { r = recvmsg(fd, &mh, MSG_CMSG_CLOEXEC); } while (r < 0 && errno == EINTR);
+        if (r <= 0) return no("the holder did not answer");
+        for (cmsghdr* c = CMSG_FIRSTHDR(&mh); c; c = CMSG_NXTHDR(&mh, c))
+            if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS && c->cmsg_len >= CMSG_LEN(3 * sizeof(int))) memcpy(fds, CMSG_DATA(c), 3 * sizeof(int));
+        if ((size_t) r < sizeof rp && !shRead(fd, (char*) &rp + r, sizeof rp - (size_t) r)) return no("the holder did not answer");
+    }
+    auto closeFds = [&] { for (int i = 0; i < 3; i++) if (fds[i] >= 0) { close(fds[i]); fds[i] = -1; } };
+    if (rp.status != 0) { closeFds(); return no(std::string("the holder refused: ") + rp.msg); }
+    ShDrv& DV = shDrv();
+    if (!DV.ok || fds[0] < 0 || fds[1] < 0 || fds[2] < 0) { closeFds(); return no("no driver virtual memory support or no descriptors from the holder"); }
     for (int i = 0; i < 3; i++) {
-        const cudaError_t e = cudaIpcOpenMemHandle(&S.p[i], rp.h[i], cudaIpcMemLazyEnablePeerAccess);
-        if (e != cudaSuccess) { S.p[i] = nullptr; cudaGetLastError(); return no(std::string("cudaIpcOpenMemHandle failed: ") + cudaGetErrorString(e)); }
+        CUmemGenericAllocationHandle h = 0; CUdeviceptr va = 0; std::string why;
+        const CUresult e = DV.importH(&h, (void*) (intptr_t) fds[i], CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
+        close(fds[i]); fds[i] = -1;
+        if (e != CUDA_SUCCESS) { closeFds(); return no("cuMemImportFromShareableHandle failed (" + std::to_string((int) e) + ")"); }
+        const bool m = shMapRw(DV, device, h, rp.map[i], va, why);
+        DV.release(h);   // the mapping keeps the allocation
+        if (!m) { closeFds(); return no(why); }
+        S.p[i] = (void*) va; S.msz[i] = rp.map[i];
         g_ipcPtrs.push_back(S.p[i]);
     }
     const double tImp = now() - t0;
@@ -138,7 +198,7 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
             return no("control copy failed");
         }
         cudaDeviceSynchronize();
-        for (int i = 0; i < 3; i++) { cudaIpcCloseMemHandle(S.p[i]); g_ipcPtrs.erase(std::remove(g_ipcPtrs.begin(), g_ipcPtrs.end(), S.p[i]), g_ipcPtrs.end()); S.p[i] = q[i]; }
+        for (int i = 0; i < 3; i++) { shUnmap(S.p[i], S.msz[i]); g_ipcPtrs.erase(std::remove(g_ipcPtrs.begin(), g_ipcPtrs.end(), S.p[i]), g_ipcPtrs.end()); S.p[i] = q[i]; }
         S.priv = true; log += "engine_gpu: shared index: CONTROL private device copy of the imported index in " + std::to_string(now() - tc) + " s\n";
     }
     S.bytes = budRound(rq.nG) + budRound(rq.saB) + budRound(rq.saiB); S.on = true;
@@ -205,12 +265,36 @@ int holderMain(int argc, char** argv) {
     if (fG < 0 || fS < 0 || fI < 0 || pread(fI, &nb, 8, 0) != 8 || nb > 64) { fprintf(stderr, "gpu-holder: cannot read the index files\n"); return 1; }
     const u64 hdr = 8 + (nb + 1) * 8, nGen = (u64) sg.st_size, saB = (u64) ss.st_size, saiB = (u64) si.st_size - hdr;
     const u64 allocG = nGen + 2 * SH_PAD + 8, allocSA = saB + 64 + 8, allocSAi = saiB + 64 + 8;
-    void *dG = nullptr, *dSA = nullptr, *dSAi = nullptr;
-    for (int tries = 0; tries < 40; tries++) {   // another genome's holder may be leaving the device (SIGUSR1)
-        if (!cudaMalloc(&dG, allocG) && !cudaMalloc(&dSA, allocSA) && !cudaMalloc(&dSAi, allocSAi)) break;
-        cudaGetLastError(); cudaFree(dG); cudaFree(dSA); cudaFree(dSAi); dG = dSA = dSAi = nullptr; sleep(1);
+    cudaFree(0);   // the primary context, current for the driver calls
+    ShDrv& DV = shDrv();
+    if (!DV.ok) { fprintf(stderr, "gpu-holder: the driver has no virtual memory management functions
+"); return 1; }
+    struct VB { CUmemGenericAllocationHandle h = 0; CUdeviceptr va = 0; u64 sz = 0; int fd = -1; };
+    VB vb[3];
+    auto vbFree = [&](VB& v) {
+        if (v.fd >= 0) close(v.fd);
+        if (v.va) { DV.unmap(v.va, v.sz); DV.addrFree(v.va, v.sz); }
+        if (v.h) DV.release(v.h);
+        v = VB{};
+    };
+    auto vbAlloc = [&](u64 req, VB& v) -> bool {
+        const CUmemAllocationProp pr = shProp(device); size_t g = 0;
+        if (DV.gran(&g, &pr, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED) != CUDA_SUCCESS || !g) return false;
+        v.sz = (req + g - 1) / g * g; std::string why;
+        if (DV.create(&v.h, v.sz, &pr, 0) != CUDA_SUCCESS) { v.h = 0; return false; }
+        if (!shMapRw(DV, device, v.h, v.sz, v.va, why)) { vbFree(v); return false; }
+        if (DV.exportH(&v.fd, v.h, CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0) != CUDA_SUCCESS) { v.fd = -1; vbFree(v); return false; }
+        return true;
+    };
+    const u64 want[3] = {allocG, allocSA, allocSAi};
+    bool allOk = false;
+    for (int tries = 0; tries < 40 && !allOk; tries++) {   // another genome's holder may be leaving the device (SIGUSR1)
+        allOk = vbAlloc(want[0], vb[0]) && vbAlloc(want[1], vb[1]) && vbAlloc(want[2], vb[2]);
+        if (!allOk) { for (auto& v : vb) vbFree(v); sleep(1); }
     }
-    if (!dG || !dSA || !dSAi) { size_t fr = 0, tt = 0; cudaMemGetInfo(&fr, &tt); fprintf(stderr, "gpu-holder: cannot allocate the index (%.2f GB): %s; device free %.1f of %.1f GB\n", b2gb(allocG + allocSA + allocSAi), cudaGetErrorString(cudaGetLastError()), b2gb(fr), b2gb(tt)); return 1; }
+    void* const dG = (void*) vb[0].va; void* const dSA = (void*) vb[1].va; void* const dSAi = (void*) vb[2].va;
+    if (!allOk) { size_t fr = 0, tt = 0; cudaMemGetInfo(&fr, &tt); fprintf(stderr, "gpu-holder: cannot allocate the index (%.2f GB); device free %.1f of %.1f GB
+", b2gb(allocG + allocSA + allocSAi), b2gb(fr), b2gb(tt)); return 1; }
     cudaMemset(dG, 0, allocG); cudaMemset(dSA, 0, allocSA); cudaMemset(dSAi, 0, allocSAi);
     cudaMemset(dG, 5, SH_PAD); cudaMemset((char*) dG + SH_PAD + nGen, 5, SH_PAD);   // STAR's tail of the largest symbol (GENOME_spacingChar) around G
     const u64 CH = 256ull << 20; char* pin = nullptr;
@@ -233,7 +317,7 @@ int holderMain(int argc, char** argv) {
         return hi <= lo || pread(fG, d + (lo - o), hi - lo, (off_t) (lo - SH_PAD)) == (ssize_t) (hi - lo); }, why);
     if (!okG || !shVerify((const char*) dSA, saB, rd(fS, 0), why) || !shVerify((const char*) dSAi, saiB, rd(fI, hdr), why)) { fprintf(stderr, "gpu-holder: upload check failed (%s)\n", why.c_str()); return 1; }
     ShRep rep{}; rep.status = 0; rep.bytes[0] = allocG; rep.bytes[1] = allocSA; rep.bytes[2] = allocSAi;
-    if (cudaIpcGetMemHandle(&rep.h[0], dG) || cudaIpcGetMemHandle(&rep.h[1], dSA) || cudaIpcGetMemHandle(&rep.h[2], dSAi)) { fprintf(stderr, "gpu-holder: cudaIpcGetMemHandle failed: %s\n", cudaGetErrorString(cudaGetLastError())); return 1; }
+    for (int i = 0; i < 3; i++) rep.map[i] = vb[i].sz;
     const u64 held = budRound(allocG) + budRound(allocSA) + budRound(allocSAi);
     const int ls = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     sockaddr_un a{}; a.sun_family = AF_UNIX; snprintf(a.sun_path, sizeof a.sun_path, "%s", sock.c_str());
@@ -261,7 +345,14 @@ int holderMain(int argc, char** argv) {
                     out = ShRep{}; out.status = 1; snprintf(out.msg, sizeof out.msg, "sizes differ (client %llu/%llu/%llu, held %llu/%llu/%llu)", (unsigned long long) rq.nG,
                         (unsigned long long) rq.saB, (unsigned long long) rq.saiB, (unsigned long long) allocG, (unsigned long long) allocSA, (unsigned long long) allocSAi);
                 }
-                shWrite(c, &out, sizeof out);
+                if (out.status == 0) {   // the reply with the three descriptors
+                    char cb[CMSG_SPACE(3 * sizeof(int))]; memset(cb, 0, sizeof cb);
+                    iovec iov{&out, sizeof out}; msghdr mh{}; mh.msg_iov = &iov; mh.msg_iovlen = 1; mh.msg_control = cb; mh.msg_controllen = sizeof cb;
+                    cmsghdr* cm = CMSG_FIRSTHDR(&mh); cm->cmsg_level = SOL_SOCKET; cm->cmsg_type = SCM_RIGHTS; cm->cmsg_len = CMSG_LEN(3 * sizeof(int));
+                    const int sfd[3] = {vb[0].fd, vb[1].fd, vb[2].fd}; memcpy(CMSG_DATA(cm), sfd, sizeof sfd);
+                    ssize_t sr; do { sr = sendmsg(c, &mh, MSG_NOSIGNAL); } while (sr < 0 && errno == EINTR);
+                    if (sr != (ssize_t) sizeof out) { close(c); continue; }
+                } else shWrite(c, &out, sizeof out);
                 if (out.status == 0) { cl.push_back(c); nServed++; } else close(c);
             }
         }
@@ -271,7 +362,7 @@ int holderMain(int argc, char** argv) {
     }
     for (int c : cl) close(c);
     unlink(sock.c_str()); unlink(info.c_str());
-    cudaFree(dG); cudaFree(dSA); cudaFree(dSAi);
+    for (auto& v : vb) vbFree(v);
     fprintf(stderr, "gpu-holder: stopped after %llu clients\n", (unsigned long long) nServed);
     return 0;
 }
