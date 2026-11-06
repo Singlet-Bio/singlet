@@ -4,6 +4,96 @@
 
 Policy (`bench/public/release_gate.py`, PR #79): releasable only when every capability passes on real-data gating metrics; a waiver is explicit and listed. No waivers are set.
 
+## Gate 4: prod/campaign 18eb391c (the rows #164 and #165 move, re-run on the new tip)
+
+Binary: `release-gate/bin/18eb391c/singlet-cpu` and `singlet-gpu`; candidate 18eb391caa5a69444bd8203e1691f5fa7a809fc4 = prod/campaign with #164 (cell calling: EmptyDrops_CR on exon-only counts)
+and #165 (legacy exon/intron split plus spliced, unspliced and ambiguous matrices). Re-measured on it: the counts family, cell-calling, ambient-rna, hto and non-host. Every other row is the gate-3
+document (measured on 2a3b0d61, or carried from earlier) and says so in the `measured` column; those rows are labelled `re-measure`, not counted as blockers. Files: `bench/release_gate/results/gate4_table.md` / `.json`.
+
+| row | gate 3 (2a3b0d61) | gate 4 (18eb391c) |
+|---|---|---|
+| cell-calling | 5/20 | **21/4** (neuron1k_v3 recall 0.979 vs cellbender 0.998; nuclei2k_v2 precision 0.972 vs 0.980; kang2018_ctrl recall and Jaccard within 0.001 of starsolo-edcr) |
+| gex-counts | 38/6 | **41/3** (exonic rows fixed; total UMI-ratio neuron1k_v3 and hgmm1k_v3, ADT correlation remain) |
+| spliced-unspliced | 37/5 (agreement metrics) | **3/0 under the amended contract** (long-read precision, recall, F1, PBMC-E) |
+| junctions-psi | 42/0 | 42/0 |
+| ambient-rna | 9/1 | **8/2** (hgmm1k_v3 bias 0.460 vs SoupX 0.122; low-depth bias 0.845 vs DecontX-background 0.029) |
+| hto | 1/7 | 1/7 |
+| non-host | 8/2 | 8/2 |
+
+- **Spliced-unspliced under the amendment** (draft #172): PBMC-E, 4,855 common cells, unspliced call vs long-read truth (>= 10 intronic bases): Singlet precision 0.4224, recall 0.7119, F1 0.5302; STARsolo Velocyto
+  0.4167, 0.7082, 0.5247; alevin-fry USA 0.4181, 0.6993, 0.5233; match-or-beat on all three. MuSC, 78 dev cells (informational): precision 0.975, recall 0.384, F1 0.551; recall is capped by R2 read length. The long-read
+  scores are S8's, on #165's content (build 0cd56886; merged head 797e78f2 differs by a bench-script commit). The agreement-with-Velocyto metrics (now secondary) got worse on 18eb391c (pbmc1k_v2 unspliced UMI-ratio distance 0.211 vs 0.027
+  between the tools). The stored documents of junctions-psi and spliced-unspliced are draft because two cohort rows (pbmc5k_v4_d1, mouse_brain_nuclei5k_v31) have no run; their status is forced to final in this table.
+- **Ambient got worse.** The ambient tools consume Singlet's cells, so #164 moved the competitors too (SoupX bias on hgmm1k_v3 0.038 -> 0.122). Owner S12 (draft #176). Keep ambient withheld.
+- **Chromosomal sex** (gate-3 run, harness fixed in #167): 131 samples, 373,110 cells, 16 studies, 5/5 pass. GSE145370, GSE209832 and GSE220764 are not served by the atlas (404) and are excluded; no withhold reason is claimed.
+- **Gate-3 only (not re-run here):** genotype, ancestry, atac, multiome (incl. the 3k development library), spatial, the 3k and cell-line runs; see the gate-3 section.
+
+| capability | status | pass/fail | measured | worst gap vs best tool | class | note |
+|---|---|---|---|---|---|---|
+| gex-counts | fail | 41/3 | pin 18eb391c | `umi_ratio_distance.total` neuron1k_v3: 0.05541 vs 0.03132 (starsolo-genefull) | should-fix | gate 4 on 18eb391c (#164, #165): 41/3, was 38/6. Exonic UMI-ratio rows fixed (nuclei2k_v2 0.088 -> 0.018). Remaining: total UMI-ratio neuron1k_v3 0.055 vs 0.031 and hgmm1k_v3 0.018 vs 0.010 (R11), ADT correlation pbmc1k_cite_v3 0.409 vs 0.428 |
+| spliced-unspliced | pass | 3/0 | pin 18eb391c |  |  | AMENDED contract (#172, draft): primary = unspliced precision/recall/F1 vs long-read truth. PBMC-E 4,855 cells: Singlet 0.4224 / 0.7119 / 0.5302 vs STARsolo Velocyto 0.4167 / 0.7082 / 0.5247 and alevin-fry 0.4181 / 0.6993 / 0.5233: 3/3 pass (scored by S8 on #165 content, build 0cd56886; merged head 797e78f2 differs by a bench-script commit). MuSC 78 dev cells (informational): P 0.975, R 0.384, F1 0.551, recall capped by R2 length. Agreement with Velocyto/alevin-fry is secondary and informational: on 18eb391c it is farther than before (pbmc1k_v2 unspliced UMI-ratio distance 0.211 vs 0.027 between the tools). Stored document is draft (two cohort rows have no run); status forced to final here, as for junctions-psi |
+| junctions-psi | pass | 42/0 | pin 18eb391c |  |  | gate 4: 42/0 against the existing STARsolo reference (unique-only default, #140); stored document is draft (cohort gap), status forced to final here; contract amendment #138 not yet re-scored |
+| cell-calling | fail | 21/4 | pin 18eb391c | `recall` neuron1k_v3: 0.9792 vs 0.9977 (cellbender) | should-fix | gate 4 on 18eb391c (#164, EmptyDrops_CR): 21/4, was 5/20. Remaining: neuron1k_v3 recall 0.979 vs cellbender 0.998; nuclei2k_v2 precision 0.972 vs 0.980; kang2018_ctrl recall 0.9975 vs 0.9980 and jaccard 0.9712 vs 0.9721 (starsolo-edcr) |
+| ambient-rna | fail | 8/2 | pin 18eb391c | `bias_low_depth_abs_log2` hgmm1k_v3: 0.8447 vs 0.02885 (DecontX-background) | blocker | gate 4 on 18eb391c: 8/2, was 9/1. hgmm1k_v3 bias_abs_log2 0.460 vs SoupX 0.122 (was 0.276 vs 0.038: SoupX moved too, it uses Singlet cells) and low-depth bias 0.845 vs DecontX-background 0.029. Owner S12 (draft #176). Not published until it passes |
+| doublets | incomplete | 4/0 | carried, 1bcfef0d |  | missing | doublet v2 (#122, in the tip) scored in S11 v2-mode on hgmm1k_v3 only (5 truth doublets, AUPRC not informative); contract harness (17 datasets, old combiner) not run at the tip. S11 research harness: v2 ties scDblFinder, engine score below it. Publish only as comparable to scDblFinder once wired |
+| donor-demux | pass | 15/0 | carried, 2a3b0d61 |  |  | S10, one run on 2a3b0d61 (singlet-gpu, CPU engine), 7 pools; Kang vireo/souporcell outputs from earlier runs |
+| donor-snps | fail | 22/3 | carried, 2a3b0d61 | `genotype_concordance` kang2018_b1_a: 0.9845 vs 0.9866 (cellsnp-pileup) | re-measure | S10 run on 2a3b0d61: 3 of 25 fail, all within 0.002 of cellsnp-pileup, ahead of vireo; Kang truth biased toward cellsnp; tolerances not edited |
+| mtdna | fail | 11/7 | carried, 2a3b0d61 | `haplotype_precision` kang2018_ctrl: 0.7931 vs 0.8938 (mgatk) | re-measure | S10 run on 2a3b0d61: 7 of 18 fail (precision vs mgatk, recall b1_a/b1_b, BPDCN AUROC 0.794289 vs 0.794303 at tolerance 0); no mtDNA release |
+| non-host | fail | 8/2 | pin 18eb391c | `percell_spearman_vs_oracle` ravindra2021_dpi2: 0.93 vs 0.9352 (kraken2-viral) | should-fix | gate 4 on 18eb391c: unchanged 8/2 (ravindra2021_dpi2 vs Kraken2 viral, by 0.002-0.005) |
+| alignment-performance | fail | 3/1 | carried, 02aa9b93 | `thread_count_outputs_identical` pbmc1k_v3: 0 vs 1 (threshold) | stale: failing metric passes at the pin | thread_count_outputs_identical re-measured on 2a3b0d61: 59 of 59 data files identical at 4, 8 and 16 threads (pbmc1k_v3). Exclusive-node timings (Singlet 3 datasets x 2 reps, jobs 796260-796265) were queued and did not start; document and timings carried from 02aa9b9 |
+| download | fail | 3/3 | carried, 02aa9b93 | `aggregate_reads_s` sra_download_set: 6.12e+05 vs 1.133e+06 (singlet-prefetch-local) | re-measure | re-measure (carried from 02aa9b9; S9 measured the Clipper ceiling instead, PR #108); no download harness on the tip |
+| adt | missing |  | - |  | missing |  |
+| hto | fail | 1/7 | pin 18eb391c | `f_score` howitt2023_cl: 0.726 vs 0.8743 (bff-cluster) | blocker | gate 4 on 18eb391c: unchanged 1/7 (F-scores 0.919 / 0.814 / 0.748 / 0.726 on BAL1 / BAL2 / BAL3 / cell lines); owner S11 (fix on Howitt dev split only; match_or_beat may not be reachable) |
+| cell-type | fail | 9/3 | carried, 19caf8cd | `unseen_tissue_depth2` cxg16: 0.5073 vs 0.6147 (scANVI) | re-measure | re-measure (Python model, carried from 19caf8cd; scripts/celltype_nn compete jobs not run in this gate) |
+| vdj | fail | 22/8 | carried, 5d39eb23 | `bcr_correct_pairing` pbmc10k_5p_v2: 0.9511 vs 0.974 (trust4) | re-measure | S11 held-out repro on the tip python (2a3b0d61): TCR pairing 0.9193 vs TRUST4 0.9139 pass; BCR 0.8698 vs 0.9207 fail; wrong lineage 0.0082 vs Cell Ranger 0.0021 fail. Not SOTA; no contract JSON |
+| crispr-guides | incomplete | 21/0 | carried, 34a6f535 |  | missing | re-measure (carried from 34a6f535, Python counter, harness on claude/vdj-crispr-benchmark-721d3a, not on the tip); S16: only 2 campaign samples have a paired guide library |
+| atac | fail | 9/1 | carried, 2a3b0d61 | `peak_f1` pbmc_multiome10k: 0.8298 vs 0.8373 (chromap+snapatac2) | re-measure | gate 3: both libraries on 2a3b0d61. peak_f1 pbmc_multiome10k vs chromap+snapatac2 |
+| multiome | pass | 2/0 | carried, 2a3b0d61 |  |  | gate 3: 10k library on 2a3b0d61; the 3k library was not run (no data found on Clipper) |
+| spatial | fail | 7/3 | carried, 2a3b0d61 | `spot_profile_pearson` visium_mouse_brain_ant: 0.9819 vs 0.9888 (starsolo) | re-measure | gate 3: Visium FFPE completes on the default path; three small gaps to STARsolo on visium_mouse_brain_ant; owner S12 |
+| chromosomal-sex | incomplete | 5/0 | carried, 2a3b0d61 |  | missing | recorded benchmark (171 samples, 472,363 cells), model unchanged; cell accuracy 0.9698 (0.9976 without 5 samples whose GEO label reads dispute); the tip harness no longer imports (annotate_campaign._has_v2) so not re-run |
+| genetic-ancestry | fail | 8/2 | carried, 2a3b0d61 | `accuracy_top.8m` mage150: 0.9329 vs 0.9933 (peddy) | re-measure | re-run from the tip scripts (#146 label rule) on the gate-3 binary, MAGE 150 (150 individuals, reads aligned with 2a3b0d61): accuracy.8m 0.973 (was 0.86), accuracy_top.8m 0.933 vs peddy 0.993; 2m and 0.5m pass. The result document is NOT contract-valid (derived data needs corroborated_by: no gating metric rests on real data); numbers are reported, the row cannot pass until the harness is fixed |
+
+## Every row's status (gate 4 table, with publication)
+
+| capability | status | measured on | publication |
+|---|---|---|---|
+| gex-counts | fail 41/3 | 18eb391c |  |
+| spliced-unspliced | pass 3/0 | 18eb391c |  |
+| junctions-psi | pass 42/0 | 18eb391c |  |
+| cell-calling | fail 21/4 | 18eb391c |  |
+| ambient-rna | fail / withheld 8/2 | 18eb391c | withheld (row fails) |
+| doublets | missing / withheld 4/0 | carried, 1bcfef0d | withheld until v2 is wired; then "comparable to scDblFinder" |
+| donor-demux | pass 15/0 | carried, 2a3b0d61 |  |
+| donor-snps | fail / withheld 22/3 | carried, 2a3b0d61 | genotypes never served |
+| mtdna | fail / withheld 11/7 | carried, 2a3b0d61 | withheld (no mtDNA release) |
+| non-host | fail 8/2 | 18eb391c |  |
+| alignment-performance | fail 3/1 | carried, 02aa9b93 |  |
+| download | fail 3/3 | carried, 02aa9b93 |  |
+| adt | missing  | none |  |
+| hto | fail 1/7 | 18eb391c |  |
+| cell-type | fail 9/3 | carried, 19caf8cd |  |
+| vdj | fail 22/8 | carried, 5d39eb23 | contigs and clonotypes published; BCR pairing below TRUST4 |
+| crispr-guides | missing 21/0 | carried, 34a6f535 |  |
+| atac | fail 9/1 | carried, 2a3b0d61 |  |
+| multiome | pass 2/0 | carried, 2a3b0d61 |  |
+| spatial | fail 7/3 | carried, 2a3b0d61 |  |
+| chromosomal-sex | missing 5/0 | carried, 2a3b0d61 | labels served; legacy sex_call withheld |
+| genetic-ancestry | fail 8/2 | carried, 2a3b0d61 | inferred labels may be served; row cannot pass until corroborated |
+
+Counts: {'fail': 14, 'pass': 4, 'missing': 4}. Rows measured on 18eb391c: counts family, cell-calling, ambient-rna, hto, non-host; the rest are earlier documents.
+
+## Leftovers for Thursday (11-05)
+
+- **GPU vs CPU at 18eb391c:** the GPU runs (SINGLET_GPU_PILEUP=on) and the diff job (797159) were queued behind the kang2018_ctrl GPU run; result file `release-gate4/results/gpu_vs_cpu.json` on Clipper. Gate 3's diff: all 8 datasets identical except `read_stats.tsv`.
+- **Ambient (S12, draft #176):** 8/2; rerun on the merged fix. **Spatial (S12)**, **HTO (S11, may not reach match-or-beat)**, **genotype tail (S10: donor-snps 3 fails, mtdna 7 fails)**.
+- **Ancestry:** the lcl_gse230239 run (job 796946) and `lcl_score.py`, plus S10's `selfreport.sbatch` inputs, give the real-data metrics the contract needs (`corroborated_by`); osorio2019_lcl_mix is done. Then re-score genetic-ancestry. Delete the cell-line reads afterwards.
+- **Doublets:** only S11's v2 mode on hgmm1k_v3 (about 5 truth doublets, uninformative). Needs the contract harness (#159, 17 datasets) run with v2 wired.
+- **No driver or harness on the tip:** adt (S16), crispr-guides (S16), cell-type, download (needs the #168 harness run), vdj contract JSON (S11).
+- **Alignment-performance timings:** exclusive-node jobs 796260-796265 queued (projected 5 Nov); carried from 02aa9b9.
+- **Contract amendments:** #172 (spliced-unspliced long-read metric, draft, stacked on #138) and #138 (junctions-psi STARsolo reference, 8-dataset MODE=reference runs not done).
+- **Chromosomal sex:** 131 samples / 16 studies (3 studies not served: GSE145370, GSE209832, GSE220764); mark complete after the cohort row is redefined.
+- **Gate 5:** a full re-measure of all 22 rows at the freeze SHA.
+
 ## Gate 3: prod/campaign 2a3b0d61 (all 22 attempted on one binary)
 
 Binary: `release-gate/bin/2a3b0d61/singlet-cpu` and `singlet-gpu` (sha256 of singlet-gpu d95c8d30...). Candidate 2a3b0d61c247aa8cc8de5102b16114dbf4c802c8 is prod/campaign with
