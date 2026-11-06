@@ -4,8 +4,8 @@
 #SBATCH --partition=short-gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:2
 #SBATCH --exclusive
-#SBATCH --cpus-per-task=56
-#SBATCH --mem=0
+#SBATCH --cpus-per-task=54
+#SBATCH --mem=700G
 #SBATCH --time=03:55:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Study 2 part 1: the standard throughput point on both GPUs of one node (binary b0, commit c3a6096c, harness of gpu/bold).
@@ -17,7 +17,7 @@
 # The engine spreads processes over both devices by itself (first free slot of the first device, else wait; include/singlet/engine_gpu.h).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet
-export SLURM_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-56}
+export SLURM_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-54}
 OUTD=$W/jobs/tx-first/results/study2; mkdir -p $OUTD
 echo "node $(hostname -s) job $SLURM_JOB_ID gpus $(nvidia-smi -L | wc -l) $(date -Is)"
 python3 - <<'PY'
