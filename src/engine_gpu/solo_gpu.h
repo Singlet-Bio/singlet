@@ -126,6 +126,14 @@ bool soloKeepReads(const u64* dAux, u64 stride, u64 n, std::string& log);
 // per record its Gene annotation (stage (b) on the blobs, while they are on the device) and a copy of the read -> record map (device)
 bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParams& RP, const uint8_t* dBlob, const u64* dBlobOff, const u64* dSeqOff,
                      u64 nRec, const u32* dRec, u64 n, std::string& log);
+// P3-MEM-03 (the records phase by chunks): the same keep in parts. soloKeepReadsPart: reads [i0, i0 + m) of n from their aux slice (the
+// arrays allocated at i0 == 0). soloKeepRecordsBegin: the read -> record map (device, n reads) and room for nRec annotations;
+// soloKeepRecordsPart: records [r0, r0 + m) from their blobs (dBlobOff / dSeqOff relative to the slice). soloKeepRecordsEnd marks it done.
+bool soloKeepReadsPart(const u64* dAux, u64 stride, u64 i0, u64 m, u64 n, std::string& log);
+bool soloKeepRecordsBegin(u64 nRec, const u32* dRec, u64 n, std::string& log);
+bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecParams& RP, const uint8_t* dBlob, const u64* dBlobOff, const u64* dSeqOff,
+                         u64 r0, u64 m, std::string& log);
+void soloKeepRecordsEnd(double ms);
 void soloKeepRelease();   // joins soloKeepToHost's thread first
 // E15: start the thread that moves the kept arrays to page-locked host memory (on `device`); when a step fails they stay on the device
 void soloKeepToHost(int device);
