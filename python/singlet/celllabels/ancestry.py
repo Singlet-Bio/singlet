@@ -223,7 +223,6 @@ def _group(q: np.ndarray, q_min: float, model: Optional[dict] = None) -> str:
     return POPS[k] if q[k] >= q_min else "admixed"
 
 
-
 def infer_ancestry(
     ad: np.ndarray,
     dp: np.ndarray,

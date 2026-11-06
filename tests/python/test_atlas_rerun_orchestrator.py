@@ -4,9 +4,9 @@ No cluster and no binary are needed: job-side events are written with common.emi
 """
 
 import json
-from pathlib import Path
 import os
 import sys
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts", "atlas_rerun"))
@@ -389,7 +389,10 @@ def test_multi_run_sample_gets_its_per_run_files_not_a_pool(tmp_path, monkeypatc
     assert "--run-screen" in cmd and not any(x.endswith("sample.1fq") for x in cmd)
     # the legacy pooled sample (and a single-run sample) is still one positional file
     rc, calls = _compute(tmp_path / "b", monkeypatch, ["sample.1fq", "screen.json"], [0])
-    assert calls[0][calls[0].index("--ref-base") - 1].endswith("sample.1fq") and "--runs-dir" not in calls[0]
+    assert (
+        calls[0][calls[0].index("--ref-base") - 1].endswith("sample.1fq")
+        and "--runs-dir" not in calls[0]
+    )
 
 
 def test_per_run_files_without_a_screen_fail_early(tmp_path, monkeypatch):
@@ -399,7 +402,12 @@ def test_per_run_files_without_a_screen_fail_early(tmp_path, monkeypatch):
 
 def test_exit_8_in_compute_stage_reruns_once_on_the_sorted_path(tmp_path, monkeypatch):
     rc, calls = _compute(tmp_path / "a", monkeypatch, ["sample.1fq"], [8, 0])
-    assert rc == 0 and len(calls) == 2 and "--sorted-bam" in calls[1] and "--sorted-bam" not in calls[0]
+    assert (
+        rc == 0
+        and len(calls) == 2
+        and "--sorted-bam" in calls[1]
+        and "--sorted-bam" not in calls[0]
+    )
     rc, calls = _compute(tmp_path / "b", monkeypatch, ["sample.1fq"], [8, 8])
     assert rc == 1 and len(calls) == 2  # a second exit 8 is not retried again
 
@@ -416,10 +424,20 @@ def test_job_slots_from_node_memory():
 def test_beta_target_guard():
     import beta
 
-    ok = {"base": "https://beta.singlet.bio", "bucket": "singlet-beta-data", "database": "singlet-beta-catalog"}
+    ok = {
+        "base": "https://beta.singlet.bio",
+        "bucket": "singlet-beta-data",
+        "database": "singlet-beta-catalog",
+    }
     assert beta.check_target(ok) == "https://beta.singlet.bio"
-    for bad in ({"base": "https://singlet.bio"}, {"base": "https://data.singlet.bio"}, {"bucket": "singlet-data"},
-                {"database": "singlet-catalog"}, {"bucket": None}, {"base": "https://evil.example@singlet.bio"}):
+    for bad in (
+        {"base": "https://singlet.bio"},
+        {"base": "https://data.singlet.bio"},
+        {"bucket": "singlet-data"},
+        {"database": "singlet-catalog"},
+        {"bucket": None},
+        {"base": "https://evil.example@singlet.bio"},
+    ):
         try:
             beta.check_target({**ok, **bad})
         except beta.BetaRefused:
@@ -432,7 +450,12 @@ def test_beta_manifest_refuses_private_keys():
 
     good = {"samples": [{"key": "s1/s/GSM1/" + "a" * 32 + ".s1"}]}
     assert beta.check_manifest_keys(good) == [good["samples"][0]["key"]]
-    for k in ("private/GSE1/GSM1/snp.tsv", "s1/s/GSM1/private/x.s1", "restricted/GSE1/x.singlet", "GSM1.bam"):
+    for k in (
+        "private/GSE1/GSM1/snp.tsv",
+        "s1/s/GSM1/private/x.s1",
+        "restricted/GSE1/x.singlet",
+        "GSM1.bam",
+    ):
         try:
             beta.check_manifest_keys({"samples": [{"key": k}]})
         except beta.BetaRefused:
@@ -453,14 +476,19 @@ def test_beta_publish_dry_run_and_real_run_with_a_stand_in_uploader(tmp_path):
     body = b"s1-object"
     sha = hashlib.sha256(body).hexdigest()
     key = "s1/s/GSM1/%s.s1" % sha[:32]
-    manifest = {"gse": "GSE1", "rev": "r", "samples": [{"gsm": "GSM1", "key": key, "bytes": len(body), "sha256": sha}]}
+    manifest = {
+        "gse": "GSE1",
+        "rev": "r",
+        "samples": [{"gsm": "GSM1", "key": key, "bytes": len(body), "sha256": sha}],
+    }
     producer = tmp_path / "producer.py"
     producer_src = (
         "import json, os, sys\n"
         "work = sys.argv[1]\n"
         "os.makedirs(os.path.join(work, 's1', 's', 'GSM1'), exist_ok=True)\n"
         "open(os.path.join(work, %r), 'wb').write(BODY)\n"
-        "json.dump(%r, open(os.path.join(work, 'GSE1.manifest.json'), 'w'))\n" % (key, manifest))
+        "json.dump(%r, open(os.path.join(work, 'GSE1.manifest.json'), 'w'))\n" % (key, manifest)
+    )
     producer.write_text("BODY = %r\n" % body + producer_src)
     uploader = tmp_path / "beta_ingest.py"
     uploader.write_text(
@@ -469,9 +497,15 @@ def test_beta_publish_dry_run_and_real_run_with_a_stand_in_uploader(tmp_path):
         "def sha256_file(p):\n    return hashlib.sha256(open(p, 'rb').read()).hexdigest()\n"
         "class Client:\n    def __init__(s, b, t): pass\n    def call(s, *a, **k): return 404, {}\n"
         "if __name__ == '__main__':\n"
-        "    print(json.dumps({'gse': 'GSE1', 'uploaded': 1, 'bytes_sent': 9, 'd1_rows_written': 6})); sys.exit(0)\n")
-    cfg["beta"].update(enabled=True, uploader=str(uploader), retries=2, retry_wait_s=0,
-                       producer=[sys.executable, str(producer), "{work}"])
+        "    print(json.dumps({'gse': 'GSE1', 'uploaded': 1, 'bytes_sent': 9, 'd1_rows_written': 6})); sys.exit(0)\n"
+    )
+    cfg["beta"].update(
+        enabled=True,
+        uploader=str(uploader),
+        retries=2,
+        retry_wait_s=0,
+        producer=[sys.executable, str(producer), "{work}"],
+    )
     # no token: a dry run still verifies the objects locally; a real run refuses to start
     r = beta.publish_study(cfg, ccfg, "GSE1", dry_run=True, env={})
     assert r["status"] == "dry_run_ok" and r["objects"] == 1 and r["present"] is None
@@ -483,11 +517,17 @@ def test_beta_publish_dry_run_and_real_run_with_a_stand_in_uploader(tmp_path):
     cfg["beta"]["producer"] = None
     assert beta.publish_study(cfg, ccfg, "GSE1", env={})["status"] == "no_producer"
     cfg["beta"]["bucket"] = "singlet-data"
-    assert beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"] == "refused"
+    assert (
+        beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"]
+        == "refused"
+    )
     # an object that differs from the manifest is refused locally
     cfg["beta"].update(bucket="singlet-beta-data", producer=keep)
     producer.write_text(producer.read_text().replace(repr(body), repr(b"tampered")))
-    assert beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"] == "refused"
+    assert (
+        beta.publish_study(cfg, ccfg, "GSE1", env={"SINGLET_INGEST_TOKEN": "t"})["status"]
+        == "refused"
+    )
 
 
 def test_s1_producer_copies_only_the_manifest_and_its_objects(tmp_path):
@@ -498,8 +538,16 @@ def test_s1_producer_copies_only_the_manifest_and_its_objects(tmp_path):
     ho = tmp_path / "ho.json"
     out = tmp_path / "o"
     out.mkdir()
-    ho.write_text(json.dumps({"samples": [{"gsm": "GSM1", "state": "done", "out_dir": str(out)},
-                                          {"gsm": "GSM2", "state": "parked", "out_dir": str(out)}]}))
+    ho.write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {"gsm": "GSM1", "state": "done", "out_dir": str(out)},
+                    {"gsm": "GSM2", "state": "parked", "out_dir": str(out)},
+                ]
+            }
+        )
+    )
     res = tmp_path / "res"
     res.mkdir()
     try:
@@ -509,8 +557,27 @@ def test_s1_producer_copies_only_the_manifest_and_its_objects(tmp_path):
     sha = hashlib.sha256(b"x").hexdigest()
     key, lab = "s1/s/GSM1/%s.s1" % sha[:32], "s1/a/GSM1/%s.parquet" % sha[:32]
     store = tmp_path / "store"
-    for k, data in ((key, b"x"), (lab, b"y"), ("m/GSE1.json", json.dumps({"samples": [{"key": key, "labels": lab, "n_columns": 5, "n_called": 2, "stats": {"a": 1}}]}).encode()),
-                    ("s/GSM9/other.s1", b"z")):
+    for k, data in (
+        (key, b"x"),
+        (lab, b"y"),
+        (
+            "m/GSE1.json",
+            json.dumps(
+                {
+                    "samples": [
+                        {
+                            "key": key,
+                            "labels": lab,
+                            "n_columns": 5,
+                            "n_called": 2,
+                            "stats": {"a": 1},
+                        }
+                    ]
+                }
+            ).encode(),
+        ),
+        ("s/GSM9/other.s1", b"z"),
+    ):
         p = store / (k[3:] if k.startswith("s1/") else k)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
@@ -527,20 +594,54 @@ def test_beta_policy_withholds_what_alpha_withholds_and_reaches_s1_publish():
     sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
     from singlet.s1 import policy as POL
 
-    pol = POL.Policy.load(os.path.join(HERE, "..", "..", "scripts", "atlas_rerun", "beta-policy.json"))
-    assert pol.version.startswith("beta-") and pol.manifest_block()["omitted_layers"] == list(POL.OMITTED_LAYERS)
-    for rel in ("mt_heteroplasmy.1pz", "mt_variants.tsv", "mt/mt_summary.tsv", "ancestry_call.json", "donor/snp_counts.tsv",
-                "snp_allele_counts.tsv", "x.vcf.gz", "possorted.bam", "ambient_profile.tsv", "doublet_scores.tsv"):
+    pol = POL.Policy.load(
+        os.path.join(HERE, "..", "..", "scripts", "atlas_rerun", "beta-policy.json")
+    )
+    assert pol.version.startswith("beta-") and pol.manifest_block()["omitted_layers"] == list(
+        POL.OMITTED_LAYERS
+    )
+    for rel in (
+        "mt_heteroplasmy.1pz",
+        "mt_variants.tsv",
+        "mt/mt_summary.tsv",
+        "ancestry_call.json",
+        "donor/snp_counts.tsv",
+        "snp_allele_counts.tsv",
+        "x.vcf.gz",
+        "possorted.bam",
+        "ambient_profile.tsv",
+        "doublet_scores.tsv",
+    ):
         assert POL.omitted_layer(rel), rel
-    assert POL.omitted_layer("exon_counts.1pz") is None and POL.omitted_layer("donor/donor_assignments.tsv") is None
+    assert (
+        POL.omitted_layer("exon_counts.1pz") is None
+        and POL.omitted_layer("donor/donor_assignments.tsv") is None
+    )
     import argparse
 
     import s1_publish as PUB
 
-    ns = argparse.Namespace(apply=True, gse="G", io_threads=1, blas_threads=1, migrate_timeout=1, verify_timeout=1,
-                            rows_dir="r", ledger_dir="l", readback="none", public="b", commit="", policy="/p/beta-policy.json", study_log_dir=None,
-                            migrate_cmd=None, verify_cmd=None, pythonpath=None, local_root="x", part_size_mib=None,
-                            retry_sleep=None)
+    ns = argparse.Namespace(
+        apply=True,
+        gse="G",
+        io_threads=1,
+        blas_threads=1,
+        migrate_timeout=1,
+        verify_timeout=1,
+        rows_dir="r",
+        ledger_dir="l",
+        readback="none",
+        public="b",
+        commit="",
+        policy="/p/beta-policy.json",
+        study_log_dir=None,
+        migrate_cmd=None,
+        verify_cmd=None,
+        pythonpath=None,
+        local_root="x",
+        part_size_mib=None,
+        retry_sleep=None,
+    )
     args = PUB.run_args(ns, "G", Path("/tmp/x"))
     assert args[args.index("--alpha-policy") + 1] == "/p/beta-policy.json"
 
@@ -550,8 +651,21 @@ def test_s1_producer_refuses_a_hollow_object(tmp_path):
 
     store = tmp_path / "s"
     (store / "m").mkdir(parents=True)
-    (store / "m" / "GSE1.json").write_text(json.dumps({"samples": [{"gsm": "GSM1", "key": "s1/s/GSM1/a.s1", "n_columns": 0,
-                                                                   "n_called": 0, "stats": {}}]}))
+    (store / "m" / "GSE1.json").write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {
+                        "gsm": "GSM1",
+                        "key": "s1/s/GSM1/a.s1",
+                        "n_columns": 0,
+                        "n_called": 0,
+                        "stats": {},
+                    }
+                ]
+            }
+        )
+    )
     try:
         P.copy_store(str(store), "GSE1", str(tmp_path / "w"))
     except SystemExit as e:

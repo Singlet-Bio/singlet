@@ -133,7 +133,9 @@ MODALITIES: Dict[str, ModalitySpec] = {
         ModalitySpec("vdj", (VDJ,), "obsm", 'obsm["vdj"]: V(D)J segment usage counts'),
         ModalitySpec("adt", (ADT,), "obsm", 'obsm["adt"]: antibody-derived tag UMI counts per tag'),
         ModalitySpec("hto", (HTO,), "obsm", 'obsm["hto"]: hashtag-oligo UMI counts per hashtag'),
-        ModalitySpec("crispr", (CRISPR,), "obsm", 'obsm["crispr"]: CRISPR guide UMI counts per guide'),
+        ModalitySpec(
+            "crispr", (CRISPR,), "obsm", 'obsm["crispr"]: CRISPR guide UMI counts per guide'
+        ),
         ModalitySpec("atac", (ATAC,), "obsm", 'obsm["atac"]: ATAC cut sites per peak'),
         ModalitySpec(
             "gene_activity", (GENE_ACT,), "obsm", 'obsm["gene_activity"]: ATAC fragments per gene'

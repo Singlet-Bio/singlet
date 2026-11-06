@@ -115,7 +115,12 @@ class Reference:
         # V segments whose reference germline has a stop codon before Cys104 (IMGT pseudogenes and ORFs the annotation
         # rescue keeps, e.g. IGHV4-55, IGLV1-41)
         self.pseudo = np.array(
-            [s.region == "V" and s.anchor >= 0 and "*" in R.translate(s.seq[: s.anchor + 3], s.frame) for s in segs]
+            [
+                s.region == "V"
+                and s.anchor >= 0
+                and "*" in R.translate(s.seq[: s.anchor + 3], s.frame)
+                for s in segs
+            ]
         )
         self.km, self.sg, self.ps = K.build_index([s.seq for s in segs], K_INDEX)
         self.chains = list(R.CHAINS)
@@ -515,7 +520,14 @@ def _best(values: np.ndarray, weights: np.ndarray):
     return int(u[w.argmax()])
 
 
-def _vote(meta: np.ndarray, col: int, tie_bit: int, fallback: bool = True, pseudo=None, pseudo_frac: float = 0.0) -> int:
+def _vote(
+    meta: np.ndarray,
+    col: int,
+    tie_bit: int,
+    fallback: bool = True,
+    pseudo=None,
+    pseudo_frac: float = 0.0,
+) -> int:
     """Gene with the most k-mer hits over reads whose call for that region is not a tie; with ``fallback``, all reads
     when every read ties (identical genes, e.g. over a short read). With ``pseudo`` (a per-segment flag) and
     ``pseudo_frac`` > 0, a winner whose germline has a stop codon gives way to the best open gene that has at least
@@ -609,8 +621,15 @@ def _d_gene(ref: Reference, chain: str, junction: str) -> str:
 
 
 _RECEPTOR = {"TRA": "T", "TRB": "T", "TRG": "T", "TRD": "T", "IGH": "B", "IGK": "B", "IGL": "B"}
-_PARTNERS = {"TRA": ("TRB",), "TRB": ("TRA",), "TRG": ("TRD",), "TRD": ("TRG",), "IGH": ("IGK", "IGL"), "IGK": ("IGH",),
-             "IGL": ("IGH",)}
+_PARTNERS = {
+    "TRA": ("TRB",),
+    "TRB": ("TRA",),
+    "TRG": ("TRD",),
+    "TRD": ("TRG",),
+    "IGH": ("IGK", "IGL"),
+    "IGK": ("IGH",),
+    "IGL": ("IGH",),
+}
 
 
 def _ambient_rescue(df, cand: np.ndarray, mode: str) -> np.ndarray:
@@ -656,7 +675,11 @@ def _ambient_rescue(df, cand: np.ndarray, mode: str) -> np.ndarray:
     for (b, c), i in best_cand.items():
         if mode == "clone":
             # the barcode's own (kept) partner chain and this junction are the pair of a clone seen elsewhere
-            if any((c, nt[i], p, nt[first[(b, p)]]) in known for p in _PARTNERS[c] if p in kept_chains.get(b, ())):
+            if any(
+                (c, nt[i], p, nt[first[(b, p)]]) in known
+                for p in _PARTNERS[c]
+                if p in kept_chains.get(b, ())
+            ):
                 out.append(i)
         elif any(_RECEPTOR[o] == _RECEPTOR[c] for o in kept_chains.get(b, ()) if o != c):
             out.append(i)
@@ -815,4 +838,6 @@ def filter_contigs(df, params: Params):
         orphan = kp & (n_kp == 1) & (df["umis"] <= params.orphan_max_umis)
         df["orphan"] = orphan
         df.loc[orphan, "kept"] = False
-    return df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
+    return df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(
+        drop=True
+    )

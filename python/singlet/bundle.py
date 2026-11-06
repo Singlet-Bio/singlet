@@ -938,7 +938,9 @@ def _reads_member(rel: str, data: bytes, called: Optional[set]) -> Optional[byte
         import gzip
 
         lines = gzip.decompress(data).decode("utf-8").split("\n")
-        keep = [ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)]
+        keep = [
+            ln for i, ln in enumerate(lines) if ln and (i == 0 or ln.split("\t", 1)[0] in called)
+        ]
         return gzip.compress(("\n".join(keep) + "\n").encode("utf-8"), 6, mtime=0)
     return data
 

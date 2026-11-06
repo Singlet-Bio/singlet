@@ -134,7 +134,11 @@ def score(
             return np.nan_to_num(np.column_stack(f).astype(np.float32))
 
         F_ref = feats(Zref, libs_ref, np.r_[ng[sub], ng_a], True)
-        F_rest = feats(P_rest, lib[rest], ng[rest], False) if len(rest) else np.zeros((0, F_ref.shape[1]), np.float32)
+        F_rest = (
+            feats(P_rest, lib[rest], ng[rest], False)
+            if len(rest)
+            else np.zeros((0, F_ref.shape[1]), np.float32)
+        )
         y = isart.astype(int)
         rho = min(0.008 * Ns / 1000, 0.25)
         fold = np.random.default_rng(seed + 2).integers(0, p.folds, len(y))
@@ -149,7 +153,10 @@ def score(
             for f_ in range(p.folds):
                 tr = np.flatnonzero((fold != f_) & keep)
                 clf = HistGradientBoostingClassifier(
-                    max_iter=p.max_iter, learning_rate=p.learning_rate, max_depth=p.max_depth, random_state=seed
+                    max_iter=p.max_iter,
+                    learning_rate=p.learning_rate,
+                    max_depth=p.max_depth,
+                    random_state=seed,
                 ).fit(F_ref[tr], y[tr])
                 te = fold == f_
                 oof[te] = clf.predict_proba(F_ref[te])[:, 1]

@@ -17,7 +17,9 @@ import companions as CP  # noqa: E402
 def _fq(path, length, n=5):
     with gzip.open(path, "wt") if path.endswith(".gz") else open(path, "w") as f:
         for i in range(n):
-            f.write("@r%d\n%s\n+\n%s\n" % (i, "ACGT" * (length // 4) + "A" * (length % 4), "I" * length))
+            f.write(
+                "@r%d\n%s\n+\n%s\n" % (i, "ACGT" * (length // 4) + "A" * (length % 4), "I" * length)
+            )
 
 
 def test_load_table_keeps_companion_types_and_runs(tmp_path):
@@ -30,7 +32,9 @@ def test_load_table_keeps_companion_types_and_runs(tmp_path):
         "GSM5\thto\tGSM6\tGSE2\ty\tSRR3\t2000\n"
     )
     tab = CP.load_table(str(t))
-    assert tab["GSM1"] == [{"lib_type": "adt", "lib_gsm": "GSM2", "runs": ["SRR1", "SRR2"], "reads": 1000}]
+    assert tab["GSM1"] == [
+        {"lib_type": "adt", "lib_gsm": "GSM2", "runs": ["SRR1", "SRR2"], "reads": 1000}
+    ]
     assert tab["GSM5"][0]["lib_type"] == "hto" and "GSM3" not in str(tab)
 
 
@@ -44,8 +48,12 @@ def test_pick_reads_drops_index_and_orders_r1_by_length(tmp_path):
 
 
 def test_fetch_all_records_failures_and_counts_bytes(tmp_path, monkeypatch):
-    tab = {"G": [{"lib_type": "adt", "lib_gsm": "L1", "runs": ["SRRA"], "reads": 10},
-                 {"lib_type": "crispr", "lib_gsm": "L2", "runs": ["SRRB"], "reads": 99}]}
+    tab = {
+        "G": [
+            {"lib_type": "adt", "lib_gsm": "L1", "runs": ["SRRA"], "reads": 10},
+            {"lib_type": "crispr", "lib_gsm": "L2", "runs": ["SRRB"], "reads": 99},
+        ]
+    }
 
     def fake_fetch_run(acc, scr, log=None, **kw):
         if acc == "SRRB":
@@ -61,7 +69,13 @@ def test_fetch_all_records_failures_and_counts_bytes(tmp_path, monkeypatch):
         return [lib["runs"][0] + "_R1.fastq.gz"]
 
     real = CP.fetch_library
-    monkeypatch.setattr(CP, "fetch_library", lambda lib, *a, **k: fake_lib(lib, *a, **k) if lib["lib_type"] == "adt" else real(lib, *a, **k))
+    monkeypatch.setattr(
+        CP,
+        "fetch_library",
+        lambda lib, *a, **k: (
+            fake_lib(lib, *a, **k) if lib["lib_type"] == "adt" else real(lib, *a, **k)
+        ),
+    )
     inc, scr = tmp_path / "inc", tmp_path / "scr"
     inc.mkdir()
     scr.mkdir()

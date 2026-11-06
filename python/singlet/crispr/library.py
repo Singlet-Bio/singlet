@@ -22,8 +22,8 @@ import numpy as np
 from . import assign as AS
 from . import count as CC
 from . import guides as G
-from . import qc as Q
 from . import members as ST
+from . import qc as Q
 
 
 def process_library(

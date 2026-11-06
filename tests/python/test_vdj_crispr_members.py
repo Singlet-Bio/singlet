@@ -8,8 +8,8 @@ from scipy import sparse
 from singlet.crispr import guides as G
 from singlet.crispr import members as CS
 from singlet.vdj import clonotype as CL
-from singlet.vdj import qc as VQ
 from singlet.vdj import members as VS
+from singlet.vdj import qc as VQ
 
 pytest.importorskip("pyarrow")
 

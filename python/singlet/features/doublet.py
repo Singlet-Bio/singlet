@@ -33,8 +33,12 @@ from .registry import Feature
 FEATURE_SET = "doublet"
 SCORE_VERSION = "v2"
 INPUTS = ("umi", "genes", "prod", "sdfl", "sdflc", "atlas_knn", "atlas_entropy")
-HGB_PARAMS = dict(max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=0)
-MIN_CELLS = 200  # fewer called cells: no score (k-means, PCA and the neighbour features need a population)
+HGB_PARAMS = dict(
+    max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=0
+)
+MIN_CELLS = (
+    200  # fewer called cells: no score (k-means, PCA and the neighbour features need a population)
+)
 DATA = Path(__file__).parent / "data"
 MODEL_NPZ = DATA / "doublet_v2_stacker.npz"
 MODEL_JSON = DATA / "doublet_v2_stacker.json"
@@ -121,7 +125,11 @@ class Stacker:
         ptr = a["tree_ptr"]
         for t in range(len(ptr) - 1):
             s, e = int(ptr[t]), int(ptr[t + 1])
-            fi, th, mg = a["feature_idx"][s:e], a["num_threshold"][s:e], a["missing_go_to_left"][s:e]
+            fi, th, mg = (
+                a["feature_idx"][s:e],
+                a["num_threshold"][s:e],
+                a["missing_go_to_left"][s:e],
+            )
             lf, rt, leaf, val = a["left"][s:e], a["right"][s:e], a["is_leaf"][s:e], a["value"][s:e]
             node = np.zeros(n, np.int64)
             active = np.flatnonzero(~leaf[node].astype(bool))
@@ -179,9 +187,7 @@ def atlas():
 
 
 # ---------------------------------------------------------------------------------------------------------------- training
-def fit_hgb(
-    data: Dict[str, "tuple"], train: Sequence[str], cols: Sequence[str] = INPUTS
-):
+def fit_hgb(data: Dict[str, "tuple"], train: Sequence[str], cols: Sequence[str] = INPUTS):
     """The stack.py recipe: rank-normalised inputs of the ``train`` datasets stacked in the given order, each cell weighted
     ``1 / n_dataset`` (so every dataset counts equally) rescaled by ``n_cells / n_datasets``. ``data[name] = (inputs dict, labels)``."""
     from sklearn.ensemble import HistGradientBoostingClassifier
@@ -200,7 +206,9 @@ def loso_scores(
     """Leave-one-study-out score of dataset ``name``: trained on every dataset of another study that has all ``cols``; the
     held-out inputs come from ``test`` (same layout as ``data``) when given, otherwise from ``data``."""
     train = [
-        m for m in STUDY if m in data and STUDY[m] != STUDY[name] and all(c in data[m][0] for c in cols)
+        m
+        for m in STUDY
+        if m in data and STUDY[m] != STUDY[name] and all(c in data[m][0] for c in cols)
     ]
     return fit_hgb(data, train, cols).predict_proba(design((test or data)[name][0], cols))[:, 1]
 
@@ -270,14 +278,20 @@ def read_prod_scores(path, barcodes: Sequence[str]) -> np.ndarray:
     import pandas as pd
 
     df = pd.read_csv(path, sep="\t", usecols=["barcode", "doublet_score"], dtype={"barcode": str})
-    s = pd.Series(pd.to_numeric(df["doublet_score"], errors="coerce").to_numpy(), index=df["barcode"])
+    s = pd.Series(
+        pd.to_numeric(df["doublet_score"], errors="coerce").to_numpy(), index=df["barcode"]
+    )
     s = s[~s.index.duplicated()]
     return s.reindex(list(barcodes)).to_numpy(np.float64)
 
 
 def find_prod_tsv(prod_dir, gse: str, gsm: str) -> Optional[Path]:
     d = Path(prod_dir)
-    for p in (d / gse / gsm / "doublet_scores.tsv", d / gsm / "doublet_scores.tsv", d / f"{gsm}.doublet_scores.tsv"):
+    for p in (
+        d / gse / gsm / "doublet_scores.tsv",
+        d / gsm / "doublet_scores.tsv",
+        d / f"{gsm}.doublet_scores.tsv",
+    ):
         if p.exists():
             return p
     return None
