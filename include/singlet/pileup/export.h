@@ -604,23 +604,50 @@ inline ExportStats export_results(const PileupEngine& engine,
         else if (export_cfg.cell_caller == "called_v2" && export_cfg.forced_cells <= 0) {
             auto t_v2 = std::chrono::high_resolution_clock::now();
             std::vector<int64_t> exon_tot(bc_totals.begin(), bc_totals.end());
-            int64_t knee_umi_min = 0;
-            std::vector<uint8_t> knee_called = calledv2::cellranger22(exon_tot, 3000, 0.99, 10, &knee_umi_min);
             const bool with_introns = intron_csc.ncols == exon_csc.ncols && intron_csc.ncols > 0;
+            // Nuclei libraries: most UMIs are intronic, so exon-only totals put real nuclei and the ambient plateau at
+            // the same depth and the knee falls into the plateau (GSM7884577: 57 k calls at a 350-UMI knee against
+            // 16 k for STARsolo GeneFull). When the top barcodes carry at least kNucleiIntronShare of their UMIs in
+            // introns, the knee and EmptyDrops_CR run on exon + intron counts, as STARsolo GeneFull does. Calibration
+            // (top 1,000 barcodes): nuclei 0.60-0.64 (nuclei2k_v2, GSM7064234, GSM7884577), whole-cell 0.07-0.40.
+            constexpr double kNucleiIntronShare = 0.5;
+            constexpr size_t kNucleiTopBarcodes = 1000;
+            std::vector<int64_t> full_tot = exon_tot;
+            double intron_share = 0.0;
+            bool nuclei_counts = false;
+            if (with_introns) {
+                for (uint32_t j = 0; j < intron_csc.ncols; ++j)
+                    for (int32_t k = intron_csc.indptr[j]; k < intron_csc.indptr[j + 1]; ++k)
+                        full_tot[j] += static_cast<int64_t>(intron_csc.data[k]);
+                std::vector<uint32_t> ord(full_tot.size());
+                for (uint32_t j = 0; j < ord.size(); ++j) ord[j] = j;
+                const size_t ntop = std::min(kNucleiTopBarcodes, ord.size());
+                std::partial_sort(ord.begin(), ord.begin() + static_cast<std::ptrdiff_t>(ntop), ord.end(),
+                                  [&](uint32_t a, uint32_t b) { return full_tot[a] != full_tot[b] ? full_tot[a] > full_tot[b] : a < b; });
+                int64_t s_ex = 0, s_full = 0;
+                for (size_t r = 0; r < ntop; ++r) { s_ex += exon_tot[ord[r]]; s_full += full_tot[ord[r]]; }
+                intron_share = s_full > 0 ? 1.0 - static_cast<double>(s_ex) / static_cast<double>(s_full) : 0.0;
+                nuclei_counts = intron_share >= kNucleiIntronShare;
+            }
+            int64_t knee_umi_min = 0;
+            std::vector<uint8_t> knee_called = calledv2::cellranger22(nuclei_counts ? full_tot : exon_tot, 3000, 0.99, 10, &knee_umi_min);
             calledv2::GeneCounts gx = calledv2::gene_counts(exon_csc, engine.exon_names(),
                                                               with_introns ? &intron_csc : nullptr,
                                                               with_introns ? &engine.intron_names() : nullptr);
-            // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input
-            calledv2::GeneCounts gx_exon = calledv2::gene_counts(
-                exon_csc, engine.exon_names(), static_cast<const decltype(exon_csc)*>(nullptr),
-                static_cast<const std::vector<std::string>*>(nullptr));
+            // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input;
+            // on nuclei libraries on exon + intron counts (STARsolo GeneFull), i.e. gx itself
+            calledv2::GeneCounts gx_exon;
+            if (!nuclei_counts)
+                gx_exon = calledv2::gene_counts(
+                    exon_csc, engine.exon_names(), static_cast<const decltype(exon_csc)*>(nullptr),
+                    static_cast<const std::vector<std::string>*>(nullptr));
             std::string proto = export_cfg.protocol_name;
             if (proto.empty() || proto == "unknown") {
                 auto it = export_cfg.user_meta.find("protocol");
                 if (it != export_cfg.user_meta.end()) proto = it->second;
             }
             calledv2::Result cv = calledv2::call(gx, knee_called, proto, calledv2::Params(),
-                                                 std::max(1, export_cfg.threads), &gx_exon);
+                                                 std::max(1, export_cfg.threads), nuclei_counts ? &gx : &gx_exon);
             cv.seconds = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_v2).count();
             cc_result = CellCallResult{};
             for (uint32_t j = 0; j < cv.is_cell.size(); ++j)
@@ -631,13 +658,18 @@ inline ExportStats export_results(const PileupEngine& engine,
             result.n_knee_called = static_cast<uint64_t>(cv.n_called);
             {
                 std::ostringstream js;
-                js << "{\n    \"knee\": {\"method\": \"CellRanger2.2\", \"counts\": \"pileup exon\", "
+                js << "{\n    \"knee\": {\"method\": \"CellRanger2.2\", \"counts\": \""
+                   << (nuclei_counts ? "pileup exon+intron" : "pileup exon") << "\", "
                    << "\"n_expected\": 3000, \"max_percentile\": 0.99, \"max_min_ratio\": 10, \"umi_min\": "
-                   << knee_umi_min << ", \"n_called\": " << cv.n_called << "},\n    \"called_v2\": "
+                   << knee_umi_min << ", \"n_called\": " << cv.n_called << "},\n    \"nuclei_counts\": {\"intron_share_top\": "
+                   << intron_share << ", \"top_barcodes\": " << kNucleiTopBarcodes << ", \"threshold\": " << kNucleiIntronShare
+                   << ", \"applied\": " << (nuclei_counts ? "true" : "false") << "},\n    \"called_v2\": "
                    << calledv2::params_json(cv, "    ") << "\n  }";
                 result.cell_call_json = js.str();
             }
             calledv2::write_cell_calls_tsv(out_prefix + "/cell_calls.tsv", barcodes, bc_totals, cv, knee_called);
+            std::cerr << "[cell_calling] counts: intron share of top barcodes " << intron_share
+                      << (nuclei_counts ? " (nuclei: knee and EmptyDrops_CR on exon + intron)" : " (exon-only knee and EmptyDrops_CR)") << "\n";
             std::cerr << "[cell_calling] called_v2: knee umi_min=" << knee_umi_min << " called=" << cv.n_called
                       << " lower=" << cv.lower << " retain=" << cv.retain_total << " alpha=" << cv.alpha
                       << " tested=" << cv.n_tested << " is_cell=" << cv.n_is_cell << " lowrna=" << cv.n_lowrna
