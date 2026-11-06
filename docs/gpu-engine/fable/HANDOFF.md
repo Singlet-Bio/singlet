@@ -8,8 +8,8 @@ had already finished.
 - **Not in this branch:** E20 (`gpu/fable/lockclip`) and E21 (`gpu/fable/pool`). Both are pushed and both measured well, but neither has the all-sample gate.
 - **Not mergeable yet:** a trial merge into `prod/campaign` conflicts in 10 files. It needs a staging merge and a full re-gate.
 
-Reading order: this page, `GPU-PATH.md` (operator's page), `E<N>-*.md` (one report per experiment). The north-star study that ordered the program is not in this
-repository. It is on Zach's machine at `singlet-agents/docs/GPU_ALIGNER_STUDY_2026-10-31.md`, uncommitted.
+Reading order: this page, `GPU-PATH.md` (operator's page), `GPU_ALIGNER_STUDY.md` (the north-star study that ordered the program; Part II has every
+result in order), `E<N>-*.md` (one report per experiment). The study stops at E23. Where it and this page disagree, this page is newer.
 
 ## 1. Key results
 
