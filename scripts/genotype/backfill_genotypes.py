@@ -222,18 +222,27 @@ def main():
     ap.add_argument("--dest", required=True)
     ap.add_argument("--sample", required=True)
     ap.add_argument("--source", default="")
+    ap.add_argument("--prewritten", default="", help="stats JSON of genotype_backfill: its outputs are already in --dest")
     a = ap.parse_args()
     if "/genotypes/" not in os.path.abspath(a.dest) + "/":
         sys.exit("refusing: genotype outputs go only under $WORK/genotypes/")
     priv = os.path.join(a.run, "private")
-    ad, names, barcodes = read_snp(priv, "ad")
-    dp, names2, barcodes2 = read_snp(priv, "dp")
-    assert names == names2 and barcodes == barcodes2 and ad.shape == dp.shape
-    cells = called_columns(a.run, barcodes)
     os.makedirs(a.dest, exist_ok=True)
     os.chmod(a.dest, 0o700)
-    n_callable = write_cellsnp(os.path.join(a.dest, "cellsnp"), ad, dp, cells, barcodes, names)
-    n_sites, K = write_donors(os.path.join(a.dest, "donors.vcf.gz"), a.run, ad, dp, cells, barcodes, names)
+    if a.prewritten:   # donors.vcf.gz + cellsnp/ already written by genotype_backfill (the engine's writers): only copy and checksum
+        with open(a.prewritten) as f:
+            st = json.loads(f.read().strip().splitlines()[-1])
+        writer = "scripts/genotype/genotype_backfill.cpp (genotype_export.h)"
+    else:
+        ad, names, barcodes = read_snp(priv, "ad")
+        dp, names2, barcodes2 = read_snp(priv, "dp")
+        assert names == names2 and barcodes == barcodes2 and ad.shape == dp.shape
+        cells = called_columns(a.run, barcodes)
+        n_callable = write_cellsnp(os.path.join(a.dest, "cellsnp"), ad, dp, cells, barcodes, names)
+        n_sites, K = write_donors(os.path.join(a.dest, "donors.vcf.gz"), a.run, ad, dp, cells, barcodes, names)
+        st = {"n_barcodes": len(barcodes), "n_called_cells": len(cells), "n_panel_snps": len(names), "n_callable_sites": n_callable,
+              "n_donors": K, "n_donor_sites": n_sites}
+        writer = "scripts/genotype/backfill_genotypes.py"
     eng = os.path.join(a.dest, "engine")
     for rel in ("donor", "snp_ad.1pz", "snp_dp.1pz", "ase_counts.tsv", "snp_ad.mtx.gz", "snp_dp.mtx.gz", "snp_ad_features.tsv.gz",
                 "snp_ad_barcodes.tsv.gz", "snp_dp_features.tsv.gz", "snp_dp_barcodes.tsv.gz"):
@@ -254,9 +263,7 @@ def main():
                 continue
             p = os.path.join(dpath, fn)
             files[os.path.relpath(p, a.dest)] = {"bytes": os.path.getsize(p), "sha256": sha256(p)}
-    man = {"sample": a.sample, "source": a.source, "run": os.path.abspath(a.run), "n_barcodes": len(barcodes),
-           "n_called_cells": len(cells), "n_panel_snps": len(names), "n_callable_sites": n_callable, "n_donors": K,
-           "n_donor_sites": n_sites, "tool": "scripts/genotype/backfill_genotypes.py", "files": dict(sorted(files.items()))}
+    man = {"sample": a.sample, "source": a.source, "run": os.path.abspath(a.run), **st, "writer": writer, "files": dict(sorted(files.items()))}
     with open(os.path.join(a.dest, "manifest.json"), "w") as f:
         json.dump(man, f, indent=1)
     print(json.dumps({k: v for k, v in man.items() if k != "files"}))
