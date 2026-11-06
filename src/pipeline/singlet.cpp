@@ -188,6 +188,9 @@ static int pre_gate(const std::string& sra_path,
         "microwell-seq", // R1=54bp with linker
         "surecell",      // R1=68bp with linker
         "strtseq",       // 5' cap protocol
+        "celseq2-u6b8",  // forced only
+        "scrbseq",       // forced only
+        "icell8",        // forced only
     };
 
     using Clock = std::chrono::steady_clock;
@@ -1291,6 +1294,8 @@ static int cmd_decode(int argc, char* argv[]) {
             case 19: return "microwell-seq"; case 20: return "surecell";
             case 21: return "strtseq"; case 22: return "10x-arc-gex";
             case 23: return "10x-atac"; case 24: return "10x-visium";
+            case 25: return "cite-seq-gex"; case 26: return "celseq2-u6b8";
+            case 27: return "scrbseq"; case 28: return "icell8";
             default: return "other";
         }
     };
@@ -9182,6 +9187,8 @@ static int singlet_main(int argc, char* argv[]) {
                 case 19: return "microwell-seq"; case 20: return "surecell";
                 case 21: return "strtseq"; case 22: return "10x-arc-gex";
                 case 23: return "10x-atac"; case 24: return "10x-visium";
+                case 25: return "cite-seq-gex"; case 26: return "celseq2-u6b8";
+                case 27: return "scrbseq"; case 28: return "icell8";
                 default: return "other";
             }
         };

@@ -273,6 +273,7 @@ target_compile_definitions(test_whitelist_integrity PRIVATE
     WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 add_pileup_test(test_ws2_protocol_hardening)
 add_pileup_test(test_protocol_short_barcode_read)
+add_pileup_test(test_protocol_forced_only)
 add_pileup_test(test_protocol_untrimmed_r1)
 add_pileup_test(test_ws4_crash_diagnostics)
 add_pileup_test(test_bam_sort_budget)
