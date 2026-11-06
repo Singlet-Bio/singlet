@@ -103,6 +103,22 @@ int main() {
     singlet::DemuxResult none;
     CHECK(G::write_donors_vcf(dir + "/none.vcf.gz", none, ad, dp, called, snps) == 0, "no donors");
 
+    // 3. owner-only private/: 0700 at creation, then every directory 0700 and file 0600 (files written with the usual 0644)
+    {
+        namespace fs = std::filesystem;
+        const std::string priv = dir + "/out/private";
+        G::make_private_dir(priv);
+        CHECK(fs::status(priv).permissions() == fs::perms::owner_all, "private/ not 0700 at creation");
+        fs::create_directories(priv + "/donor");
+        { std::ofstream(priv + "/donor/donor0.vcf") << "x\n"; std::ofstream(priv + "/snp_ad.1pz") << "x\n"; }
+        fs::permissions(priv + "/donor", fs::perms::all, fs::perm_options::replace);
+        CHECK(G::secure_private_tree(priv) == 3, "entries");
+        CHECK(fs::status(priv + "/donor").permissions() == fs::perms::owner_all, "donor/ not 0700");
+        const auto rw = fs::perms::owner_read | fs::perms::owner_write;
+        CHECK(fs::status(priv + "/donor/donor0.vcf").permissions() == rw && fs::status(priv + "/snp_ad.1pz").permissions() == rw, "files not 0600");
+        CHECK(G::secure_private_tree(dir + "/absent") == 0, "absent dir");
+    }
+
     std::filesystem::remove_all(dir);
     if (n_fail == 0) std::cout << "all passed\n";
     return n_fail ? 1 : 0;

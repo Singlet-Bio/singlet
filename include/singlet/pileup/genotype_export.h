@@ -36,6 +36,36 @@ constexpr float kDonorMinProb = 0.9f;       // aggregate_donor_depths' default
 constexpr double kGenoErr = 0.01;           // call_donor_genotype's defaults
 constexpr double kGenoPost = 0.99;
 
+/// Owner-only private/ (D-52): $WORK on Clipper is group project space, and private/ holds genotypes (per-cell SNP counts, donor VCFs,
+/// chrM alleles). make_private_dir creates it 0700 before anything is written into it, so its files are unreachable for group and world
+/// from their creation; secure_private_tree then sets every directory below it 0700 and every file 0600, so a copy that keeps modes
+/// (cp -p, shutil.copy2) stays owner-only. Errors are reported, never fatal: the outputs matter more than their modes.
+inline void make_private_dir(const std::string& dir)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    fs::permissions(dir, fs::perms::owner_all, fs::perm_options::replace, ec);
+    if (ec) std::fprintf(stderr, "[genotype] WARNING: could not make %s owner-only: %s\n", dir.c_str(), ec.message().c_str());
+}
+
+inline size_t secure_private_tree(const std::string& dir)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) return 0;
+    size_t n = 0;
+    fs::permissions(dir, fs::perms::owner_all, fs::perm_options::replace, ec);
+    for (auto it = fs::recursive_directory_iterator(dir, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        std::error_code e2;
+        if (it->is_directory(e2)) fs::permissions(it->path(), fs::perms::owner_all, fs::perm_options::replace, e2);
+        else fs::permissions(it->path(), fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, e2);
+        if (e2) std::fprintf(stderr, "[genotype] WARNING: could not set the mode of %s: %s\n", it->path().c_str(), e2.message().c_str());
+        else ++n;
+    }
+    return n;
+}
+
 struct GzOut {
     gzFile f = nullptr;
     std::string buf;
