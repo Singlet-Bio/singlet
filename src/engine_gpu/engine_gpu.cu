@@ -535,6 +535,7 @@ static std::string stepLine() {
 
 // one lane over reads idx in batches of NB (one Work per read in flight). NEW: E12's kernels (above; WARP: phase 3 warp per read,
 // MAXREG 64: phase 3 under the register cap); otherwise the engine's kernels before E12 (SINGLET_ENGINE_GPU_CFG=old)
+static std::atomic<u64>* g_autoBudget = nullptr;   // SINGLET_ENGINE_GPU_STEPS_B=auto: lane B's step budget as the controller sets it, read after every batch
 static std::string g_laneLog;   // E12: per lane and chunk, its configuration (logged once by mapDistinct)
 // E12: called after each batch with the batch's statuses (lane B: its overflows go to the host lane while the device runs on)
 typedef std::function<void(u64 b0, u64 nb, const uint8_t* status)> BatchFn;
@@ -622,6 +623,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             std::vector<uint8_t> hs(nb);
             EG_CK(cudaMemcpy(hs.data(), dSt + b0, nb, cudaMemcpyDeviceToHost));
             (*onBatch)(b0, nb, hs.data());
+            if (g_autoBudget && nm[0] == 'B') budget = g_autoBudget->load();
         }
     }
     EG_CK(cudaDeviceSynchronize());
@@ -722,15 +724,20 @@ struct HostPool {
     std::vector<u64> pend;               // per chunk: tasks not yet done
     std::vector<std::thread> th;
     std::atomic<u64> busyNs{0}, nDone{0};
+    std::atomic<int> active{0};          // threads inside fn now
+    int nThreads = 0;
     std::function<void(int, const Task&)> fn;
+    u64 qsize() { std::lock_guard<std::mutex> lk(mu); return qu.size(); }
     void start(int nt, u64 nChunks, std::function<void(int, const Task&)> f) {
-        fn = std::move(f); pend.assign(nChunks, 0);
+        fn = std::move(f); pend.assign(nChunks, 0); nThreads = nt;
         for (int t = 0; t < nt; t++) th.emplace_back([this, t]() {
             for (;;) {
                 Task tk;
                 { std::unique_lock<std::mutex> lk(mu); cv.wait(lk, [&] { return stop || !qu.empty(); }); if (stop) return; tk = qu.front(); qu.pop_front(); }
                 const auto t0 = std::chrono::steady_clock::now();
+                active++;
                 fn(t, tk);
+                active--;
                 busyNs += (u64) std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(); nDone++;
                 { std::lock_guard<std::mutex> lk(mu); if (--pend[tk.c] == 0) cvDone.notify_all(); }
             }
@@ -1346,7 +1353,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 nbB0 = envU("SINGLET_ENGINE_GPU_NBB", NEW ? 131072 : 65536, 1024);
     // SINGLET_ENGINE_GPU_STEPS_B: lane B's stitching step budget (default 2048). SINGLET_ENGINE_GPU_BHOST=1: lane B is skipped and every read
     // that reaches it goes to the host pool (needs the pool: not with HOSTLANE=after or CFG=old). Results are the same (the host maps with mapRead)
-    const u64 stepsB = envU("SINGLET_ENGINE_GPU_STEPS_B", 2048, 1);
+    const char* sbE = std::getenv("SINGLET_ENGINE_GPU_STEPS_B");
+    const bool autoReq = sbE && std::string(sbE) == "auto";   // auto: a controller moves the budget between batches (start 2048, bounds 64..8192)
+    const u64 stepsB = autoReq ? 2048 : envU("SINGLET_ENGINE_GPU_STEPS_B", 2048, 1);
     const char* bhE = std::getenv("SINGLET_ENGINE_GPU_BHOST");
     const bool bhostReq = bhE && std::string(bhE) == "1";
     // sequences per chunk: the lanes' device buffers scale with it (SINGLET_ENGINE_GPU_CHUNK, default 16M; E17: smaller when the budget needs it)
@@ -1408,7 +1417,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::vector<HostCtx> hctx(poolThreads);
     const char* hlE = std::getenv("SINGLET_ENGINE_GPU_HOSTLANE");
     std::unique_ptr<HostPool> pool;
-    bool bhost = false;   // set below once the pool exists
+    bool bhost = false, autoOn = false;   // set below once the pool exists
+    std::atomic<u64> autoBudget{2048};
+    std::string ctlLog; double ctlT = 0, ctlBatchSec = 0;
     if (NEW0 && !(hlE && std::string(hlE) == "after") && nChunks > 0) {
         pool.reset(new HostPool);
         pool->start(poolThreads, nChunks, [&](int t, const HostPool::Task& tk) {
@@ -1419,7 +1430,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             HostRes& R = *hres[tk.c];
             R.st[tk.q] = (uint8_t)s; R.out[tk.q].assign(X.buf.data(), X.buf.data() + bl.n);
         });
-        bhost = bhostReq;
+        bhost = bhostReq; autoOn = autoReq && !bhostReq;
     }
     // E8 (SINGLET_ENGINE_GPU_E2E=1): the lanes keep their packed results on the device; per record its source and read (k_rec_len)
     const bool e2e = in.e2e != nullptr && in.e2e->base != nullptr;
@@ -1505,6 +1516,25 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                 std::vector<HostPool::Task> v;
                 for (u64 k = 0; k < nb; k++) if (st[k] != (uint8_t)Status::Ok) v.push_back({(uint32_t)ci, (uint32_t)qn++, repB[b0 + k]});
                 pool->push(v);
+                if (autoOn) {   // controller: idle pool threads with an empty queue lower the budget, a queue the pool cannot drain before the lanes end raises it
+                    const double t = now();
+                    if (ctlT > 0) ctlBatchSec = ctlBatchSec > 0 ? 0.5 * ctlBatchSec + 0.5 * (t - ctlT) : t - ctlT;
+                    ctlT = t;
+                    const u64 left = repB.size() > b0 + nb ? repB.size() - (b0 + nb) : 0, q = pool->qsize();
+                    const int act = pool->active.load(), idle = pool->nThreads - act;
+                    const u64 nd = pool->nDone.load();
+                    const double avg = nd ? pool->busyNs.load() / 1e9 / (double)nd : 0;
+                    const double devLeft = ctlBatchSec * (double)((left + nb - 1) / nb), drain = pool->nThreads ? (double)q * avg / pool->nThreads : 0;
+                    const u64 cur = autoBudget.load(); u64 nw = cur; const char* why = "";
+                    if (ctlBatchSec > 0 && nd > 0 && drain > devLeft) { nw = std::min<u64>(8192, cur * 2); why = "queue backs up"; }
+                    else if (q == 0 && idle * 4 >= pool->nThreads) { nw = std::max<u64>(64, cur / 2); why = "pool idle"; }
+                    if (nw != cur) {
+                        autoBudget = nw;
+                        char cb[200]; snprintf(cb, sizeof cb, "B budget %llu -> %llu (%s; chunk %llu at %llu, queue %llu, idle %d of %d, drain %.2f s, device left %.2f s); ",
+                                               (unsigned long long)cur, (unsigned long long)nw, why, (unsigned long long)ci, (unsigned long long)(b0 + nb), (unsigned long long)q, idle, pool->nThreads, drain, devLeft);
+                        ctlLog += cb;
+                    }
+                }
             };
         }
         if (bhost) {   // every lane B read to the host pool, in lane B's order (the order of repH below)
@@ -1512,7 +1542,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             std::vector<HostPool::Task> v; v.reserve(repB.size());
             for (u64 k = 0; k < repB.size(); k++) v.push_back({(uint32_t)ci, (uint32_t)qn++, repB[k]});
             pool->push(v);
-        } else if (!runLaneParts<LaneB>(P, D, dS, dO, ixB, nbB, partB, stepsB, B, err, resident, "B", NEW, pool ? &onB : nullptr, nPB)) return false;
+        } else {
+            if (autoOn) { autoBudget = std::max<u64>(64, std::min<u64>(8192, autoBudget.load())); g_autoBudget = &autoBudget; }
+            const bool okB = runLaneParts<LaneB>(P, D, dS, dO, ixB, nbB, partB, autoOn ? autoBudget.load() : stepsB, B, err, resident, "B", NEW, pool ? &onB : nullptr, nPB);
+            g_autoBudget = nullptr;
+            if (!okB) return false;
+        }
         if (nPB > 1) { allRes = false; resident = false; }
         {
             char pl[320];
@@ -1521,7 +1556,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                      (unsigned long long)repM.size(), (unsigned long long)nbMc, wM ? "warp" : "thread", nPM > 1 ? (" in " + std::to_string(nPM) + " parts").c_str() : "",
                      (unsigned long long)repB.size(), (unsigned long long)nbB, nPB > 1 ? (" in " + std::to_string(nPB) + " parts").c_str() : "");
             planLog += pl;
-            if (c0 == 0) planLog += "STEPS_B " + std::to_string(stepsB) + ", BHOST " + (bhost ? "1" : bhostReq ? "requested but no host pool (ignored)" : "0") + "; ";
+            if (c0 == 0) planLog += "STEPS_B " + (autoOn ? "auto (start 2048, bounds 64..8192, now " + std::to_string(autoBudget.load()) + ")" : autoReq ? "auto requested but no host pool or BHOST set (ignored, 2048)" : std::to_string(stepsB)) + ", BHOST " + (bhost ? "1" : bhostReq ? "requested but no host pool (ignored)" : "0") + "; ";
             if (c0 == 0) { nbMlog = nbMc; nbBlog = nbB; wMlog = wM; }
         }
         out.secMapGpu += now() - tc0;
@@ -1925,6 +1960,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                       (unsigned long long)nChunks, (unsigned long long)nbA, (unsigned long long)nbMlog, (unsigned long long)nbBlog, b2gb(g_bud.peak), g_bud.peakAt.c_str());
         out.log += bl;
         out.log += "engine_gpu: E17 lanes: " + planLog + "\n";
+        if (autoOn) out.log += "engine_gpu: STEPS_B auto changes: " + (ctlLog.empty() ? std::string("none") : ctlLog) + "\n";
     }
     char line[512];
     snprintf(line, sizeof line, "engine_gpu: %llu reads, %llu distinct (%llu with N), mapped on the GPU %llu, host lane %llu (%.2f s), not mapped %llu; "

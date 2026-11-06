@@ -100,6 +100,7 @@ cfg_set() {
     maponly) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
     s512) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=512" ;;       # gpu/bold-split: lane B step budget
     s128) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=128" ;;
+    sauto) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=auto" ;;      # gpu/bold-split: controller between lane B batches
     bhost) CFG_ENV="SINGLET_ENGINE_GPU_BHOST=1" ;;           # gpu/bold-split: lane B on the host pool
     nohc) CFG_ENV="SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
     nohc_alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
