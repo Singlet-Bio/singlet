@@ -15,6 +15,8 @@
 #   SINGLET_E2E_1FQ       a small 10x .1fq (Clipper: pipeline-benchmark/data/pbmc2m/pbmc2m.1fq)
 #   SINGLET_E2E_GENOME    a reference folder with star_2.7.11b/ and genes/genes.gtf
 #   SINGLET_E2E_REF_BASE  --ref-base (optional), SINGLET_E2E_THREADS (default 8), SINGLET_E2E_KEEP=1 keeps the outputs
+#   SINGLET_E2E_WHITELIST_DIR  the barcode whitelists (exported as SINGLET_WHITELIST_DIR). The stream path needs a whitelist.
+#                         Without it the run starts on the sorted path and has nothing to restart, so the test skips.
 set -uo pipefail
 BIN=${1:?singlet binary}; MODE=${2:-cpu}
 if [ -z "${SINGLET_E2E_1FQ:-}" ] || [ -z "${SINGLET_E2E_GENOME:-}" ]; then
@@ -23,6 +25,10 @@ fi
 [ -f "$SINGLET_E2E_1FQ" ] || { echo "SKIP: no $SINGLET_E2E_1FQ"; exit 77; }
 if [ "$MODE" = gpu ] && ! nvidia-smi -L >/dev/null 2>&1; then echo "SKIP: MODE gpu without a usable GPU"; exit 77; fi
 G=$SINGLET_E2E_GENOME; T=${SINGLET_E2E_THREADS:-8}
+[ -n "${SINGLET_E2E_WHITELIST_DIR:-}" ] && export SINGLET_WHITELIST_DIR=$SINGLET_E2E_WHITELIST_DIR
+if [ -z "${SINGLET_WHITELIST_DIR:-}" ] && [ ! -d "$(dirname "$BIN")/../whitelists" ]; then
+  echo "SKIP: no barcode whitelists (set SINGLET_E2E_WHITELIST_DIR): the run would start on the sorted path"; exit 77
+fi
 D=$(mktemp -d "${TMPDIR:-/tmp}/singlet_restart_e2e.XXXXXX")
 [ "${SINGLET_E2E_KEEP:-0}" = 1 ] || trap 'rm -rf "$D"' EXIT
 FAIL=0
@@ -33,7 +39,7 @@ run() {   # run NAME [extra args...]
   mkdir -p "$D/$n/out"
   ( cd "$D/$n" && SINGLET_TEST_FORCE_STRAND_RESTART=1 timeout -k 30 "${SINGLET_E2E_TIMEOUT:-1200}" "$BIN" "$SINGLET_E2E_1FQ" ${SINGLET_E2E_REF_BASE:+--ref-base "$SINGLET_E2E_REF_BASE"} \
       --genome-dir "$G/star_2.7.11b" --exons "$G/genes/genes.gtf" --out-prefix "$D/$n/out/" --threads "$T" --pipeline \
-      --output-format 1pz ${SINGLET_WHITELIST_DIR:+--whitelist-dir "$SINGLET_WHITELIST_DIR"} "$@" > "$D/$n/run.log" 2>&1 )
+      --output-format 1pz "$@" > "$D/$n/run.log" 2>&1 )
   local rc=$?
   echo "$n: exit $rc"
   [ $rc = 124 ] && fail "$n: no exit within ${SINGLET_E2E_TIMEOUT:-1200} s (a hang)"
