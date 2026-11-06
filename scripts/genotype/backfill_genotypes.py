@@ -34,8 +34,12 @@ POST = 0.99
 def read_snp(priv, which):
     """private/snp_<which> as (SNPs x barcodes CSC, snp names, barcodes), from .1pz or from --output-format mtx files."""
     p = os.path.join(priv, "snp_%s.1pz" % which)
-    if os.path.exists(p):
-        return read_1pz(p)
+    if os.path.exists(p) and not os.environ.get("BACKFILL_PREFER_MTX"):
+        try:
+            return read_1pz(p)
+        except RuntimeError:   # the binding's 4.2 M-row cap: use the mtx copy when the run wrote one (--output-format all)
+            if not os.path.exists(os.path.join(priv, "snp_%s.mtx.gz" % which)):
+                raise
     import scipy.io
     m = scipy.io.mmread(os.path.join(priv, "snp_%s.mtx.gz" % which)).tocsc()
     names = [l.rstrip("\n").split("\t")[0] for l in gzip.open(os.path.join(priv, "snp_%s_features.tsv.gz" % which), "rt")]
