@@ -139,7 +139,7 @@ L.append('## Ranking by mean share of mapping cost saved while keeping output ex
 table(['rank', 'approach', 'mean cost saved', 'output'], [[i + 1, n, pct(v), o] for i, (n, v, o) in enumerate(cands)])
 L.append('## Recommendation\n')
 if cands:
-    L.append('Start with %s. It saves %s of cost on average and needs no change to the aligner. ' % (cands[0][0].lower(), pct(cands[0][1])) +
+    L.append('Start with: %s. It saves %s of cost on average and needs no change to the aligner. ' % (cands[0][0], pct(cands[0][1])) +
              'A k-mer routing of mito and ribosomal reads changes output and is not recommended for the byte-identical aligner. '
              'Use its precision as a guide for which sequences a cache should hold first.\n')
 json.dump(dict(per_sample=WI, cross=CR, ranking=[dict(approach=n, mean_cost_saved=v, output=o) for n, v, o in cands]), open(os.path.join(out, 'summary.json'), 'w'), indent=1)
