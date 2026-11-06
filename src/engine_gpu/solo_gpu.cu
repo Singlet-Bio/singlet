@@ -652,8 +652,7 @@ bool soloKeepReadsPart(const u64* dAux, u64 stride, u64 i0, u64 m, u64 n, std::s
         if (i0 + m == n) { K.n = n; K.reads = true; }
         return true;
     } catch (const std::exception& e) {
-        log += std::string("soloKeepReadsPart failed: ") + e.what() + "
-";
+        log += std::string("soloKeepReadsPart failed: ") + e.what() + "\n";
         cudaGetLastError(); soloKeepRelease();
         return false;
     }
@@ -671,8 +670,7 @@ bool soloKeepRecordsBegin(u64 nRec, const u32* dRec, u64 n, std::string& log) {
         K.nRec = nRec;
         return true;
     } catch (const std::exception& e) {
-        log += std::string("soloKeepRecordsBegin failed: ") + e.what() + "
-";
+        log += std::string("soloKeepRecordsBegin failed: ") + e.what() + "\n";
         cudaGetLastError(); soloKeepRelease();
         return false;
     }
@@ -698,8 +696,7 @@ bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecP
         K.nOverflow += cnt.get(0);
         return true;
     } catch (const std::exception& e) {
-        log += std::string("soloKeepRecordsPart failed: ") + e.what() + "
-";
+        log += std::string("soloKeepRecordsPart failed: ") + e.what() + "\n";
         cudaGetLastError(); soloKeepRelease();
         return false;
     }

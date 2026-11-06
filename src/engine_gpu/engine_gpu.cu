@@ -2538,7 +2538,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             if (!singlet_records_gpu::buildRecords(RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const char*) dS.p, (const uint64_t*) dSO.p, m,
                                                    (const uint64_t*) dcs, false, R6, e6err, true)) { why = "buildRecords: " + e6err; return false; }
             if (R6.nAln != cAln[c] || R6.nOps != cOps[c] || R6.nSeq != cSeq[c]) { why = "a record chunk's counts differ between its two builds"; return false; }
-            k_rebase_recs<<<(unsigned) ((std::max(m, R6.nAln) + 255) / 256), 256>>>(R6.sigs, m, R6.alns, R6.nAln, (uint32_t) aB, sB, (uint32_t) oB);
+            k_rebase_recs<<<(unsigned) ((std::max<u64>(m, R6.nAln) + 255) / 256), 256>>>(R6.sigs, m, R6.alns, R6.nAln, (uint32_t) aB, sB, (uint32_t) oB);
             if (cudaDeviceSynchronize() != cudaSuccess) { why = std::string("records rebase: ") + cudaGetErrorString(cudaGetLastError()); return false; }
             tBuild += now() - ta; ta = now();
             if (!d2hc(RG.base + oS + q0 * sizeof(SigRec), R6.sigs, m * sizeof(SigRec)) || (R6.nAln && !d2hc(RG.base + oA + aB * sizeof(AlnRec), R6.alns, R6.nAln * sizeof(AlnRec)))
