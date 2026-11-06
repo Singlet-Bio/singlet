@@ -7,7 +7,7 @@
 //       [TAG K [key=value ...]] [-- TAG K [key=value ...]] ...
 // K = -1 for auto. Config keys: detect_doublets, doublet_threshold, doublet_rounds, doublet_crossfit,
 // doublet_prior, geno_error, min_prob, max_donors, n_inits, seed, k_select_sep_z, k_select_sep_min, n_ward_inits, min_donor_cells, min_donor_frac, geno_conc_hom, geno_conc_het, k_select_patience,
-// k_select_inits, k_select_max_iter, k_select_max_cells, k_select_min_snp_cells, fast_k_select.
+// k_select_inits, k_select_max_iter, k_select_max_cells, k_select_min_snp_cells, fast_k_select, screen_single_donor, screen_max_cells.
 //
 // Build (Clipper job):  g++ -std=c++20 -O2 -pthread -I<repo>/include demux_harness.cpp -o demux_harness
 
@@ -141,6 +141,8 @@ static void apply_kv(singlet::DonorDemuxConfig& cfg, const std::string& k, const
     else if (k == "k_select_max_cells") cfg.k_select_max_cells = i;
     else if (k == "k_select_min_snp_cells") cfg.k_select_min_snp_cells = i;
     else if (k == "fast_k_select") cfg.fast_k_select = i != 0;
+    else if (k == "screen_single_donor") cfg.screen_single_donor = i != 0;
+    else if (k == "screen_max_cells") cfg.screen_max_cells = i;
     else std::cerr << "unknown key " << k << "\n";
 }
 

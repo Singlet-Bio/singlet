@@ -66,6 +66,12 @@ struct DonorDemuxConfig {
     double k_select_z = 4.0;           // more donors are accepted only if held-out log-lik improves, paired z above this
     double k_select_min_gain = 200.0;  // ... and by at least this many nats in total (about 10 cells' worth of a donor)
     int   k_select_patience = 3;       // stop after this many consecutive K without more distinct donors
+    // ── Single-donor screen (auto-K only) ──────────────────────────────────
+    // Before the full K search, test K=1 against K=2 on a small subsample. When K=1 wins the
+    // run continues with the K=1 fit and skips the 1..max_donors search (about a fifth of the
+    // host work of a single-donor sample). Switchable by SINGLET_DEMUX_SCREEN=0/1 in export.h.
+    bool  screen_single_donor = true;
+    int   screen_max_cells = 2000;     // called cells used by the screen
     int   min_donor_cells = 15;        // a donor owns at least max(this, min_donor_frac * cells) cells
     float min_donor_frac = 0.004f;
     int   n_ward_inits = 4;            // extra Ward-seeded restarts in the final fit (K >= 2)
@@ -1898,6 +1904,18 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
     return best_v;
 }
 
+// Cheap single-donor screen: held-out K=1 against K=2 only, on at most screen_max_cells called
+// cells and the reduced SNP set. Returns true when K=1 wins (K=2 is not accepted).
+static bool screen_single_donor_k1(const CoveredSNPData& cov, const DonorDemuxConfig& cfg)
+{
+    DonorDemuxConfig scfg = cfg;
+    scfg.max_donors = 2;
+    scfg.k_select_max_cells = cfg.screen_max_cells;
+    scfg.k_select_patience = 1;
+    std::vector<KSelectRow> trace;
+    return select_k_heldout(cov, scfg, &trace) <= 1;
+}
+
 // ============================================================================
 // Split-merge repair of a fitted K-donor VB model.
 //
@@ -2050,6 +2068,7 @@ struct DemuxResult {
     std::vector<KSelectRow> k_selection;           // auto-K trace (empty when K was given)
     int n_doublets = 0;                            // called cells labelled "doublet"
     float geno_error = 0.0f;                       // fitted per-read genotype error (doublet model)
+    bool screened_single = false;                  // K=1 chosen by the single-donor screen
 };
 
 // ============================================================================
@@ -2144,6 +2163,11 @@ inline DemuxResult run_demux(
     std::vector<int> k_candidates;
     if (cfg.n_donors > 0) {
         k_candidates.push_back(cfg.n_donors);
+    } else if (cfg.fast_k_select && cfg.screen_single_donor && screen_single_donor_k1(cov_use, cfg)) {
+        // The screen found one donor: fit K=1 directly (same path as an auto-K result of 1)
+        std::cerr << "[demux] single-donor screen: K=1 beats K=2, skipping the full K search\n";
+        k_candidates.push_back(1);
+        demux_result.screened_single = true;
     } else if (cfg.fast_k_select) {
         // Held-out likelihood search (see select_k_heldout)
         k_candidates.push_back(select_k_heldout(cov_use, cfg, &demux_result.k_selection));

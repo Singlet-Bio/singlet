@@ -1245,6 +1245,8 @@ inline ExportStats export_results(const PileupEngine& engine,
                 dcfg.n_donors = export_cfg.n_donors;
                 dcfg.threads = export_cfg.threads;
                 dcfg.seed = 42;
+                if (const char* e = std::getenv("SINGLET_DEMUX_SCREEN"))
+                    dcfg.screen_single_donor = std::atoi(e) != 0;
                 demux_result = run_demux(
                     snp_ad_csc.nrows, snp_ad_csc.ncols,
                     snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),

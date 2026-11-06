@@ -290,6 +290,38 @@ int main() {
         }
     }
 
+    std::cout << "=== single-donor screen ===\n";
+    {
+        auto same_result = [](const DemuxResult& a, const DemuxResult& b) {
+            bool same = a.n_donors_k == b.n_donors_k && a.assignments.size() == b.assignments.size() &&
+                        a.covered_to_original == b.covered_to_original;
+            for (size_t c = 0; same && c < a.assignments.size(); ++c)
+                same = a.assignments[c].label == b.assignments[c].label &&
+                       a.assignments[c].prob_max == b.assignments[c].prob_max &&
+                       a.assignments[c].cell_status == b.assignments[c].cell_status;
+            return same;
+        };
+        // single donor: the screen fires and the result equals the screen-off auto-K result
+        Pool P1 = make_pool(1, 3000, 2000, 150, 0.0, 31);
+        DonorDemuxConfig on = base_cfg(), off = base_cfg();
+        on.screen_single_donor = true;
+        off.screen_single_donor = false;
+        DemuxResult r_on = run(P1, on), r_off = run(P1, off);
+        CHECK(r_on.screened_single, "single donor: screen fires");
+        CHECK(!r_off.screened_single, "screen off: flag stays false");
+        CHECK(r_on.n_donors_k == 1, "single donor: screen gives K=1");
+        CHECK(same_result(r_on, r_off), "single donor: screen on equals screen off");
+
+        // multi-donor pools: the screen does not fire and the result equals screen off
+        for (int Kt : {2, 4}) {
+            Pool P = make_pool(Kt, 400 * Kt, 3000, 150, 0.05, 40 + Kt);
+            DemuxResult a = run(P, on), b = run(P, off);
+            CHECK(!a.screened_single, "K=" + std::to_string(Kt) + ": screen does not fire");
+            CHECK(a.n_donors_k == Kt, "K=" + std::to_string(Kt) + ": auto-K still recovers K");
+            CHECK(same_result(a, b), "K=" + std::to_string(Kt) + ": screen on equals screen off");
+        }
+    }
+
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
     return n_fail == 0 ? 0 : 1;
 }
