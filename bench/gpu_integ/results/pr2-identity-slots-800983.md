@@ -1,5 +1,7 @@
 # PR-2 gate G5: identity at 2 slots and at 3 slots with MPS (candidate c8849bb2)
 
+> **Scope of every rate in this file: per node, 2 GPUs.** The job requested one GPU, but the node is exclusive and the job saw both H100s (`gpus=2` in its log). The runs were unpinned and spread over device 0 and device 1. These are not one-GPU rates. Core-seconds per M read pairs and lock-held seconds per run are per run and do not depend on this. The one-GPU measurement is job 803326 (A/B/B/A) and job 803327 (k by T grid), both with `CUDA_VISIBLE_DEVICES=0`.
+
 Job 800983 (GPU, g051, T=7, k=8, pbmc1k_v3, 24 runs per point, WSHRINK on, `IDENT=1`). References: the CPU engine of this binary (job 800980, T=7) and each point's alone run. Script `tp_integ.sbatch` of this branch. Results were written by that script to `$W/jobs/gpu-integ/results/tp-800983/` (a new folder, nothing existing overwritten).
 
 **Identity: 48 of 48 runs IDENTICAL**, against the alone run and against the CPU engine. 24 of 24 at 2 slots, 24 of 24 at 3 slots with MPS. Every replicate was checked.
