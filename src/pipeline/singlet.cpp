@@ -2950,6 +2950,8 @@ int main(int argc, char* argv[]) {
             if (sub == "download")
                 return cmd_download(argc - 2, argv + 2);
 #ifdef SINGLET_HAVE_ENGINE_GPU
+            if (sub == "gpu-holder")   // shared resident genome index, started by the first engine process or the job script (docs/gpu-engine/bold/SHARED-INDEX.md)
+                return singlet_engine_gpu::holderMain(argc - 2, argv + 2);
             if (sub == "gpu-probe") {   // E19: "ok" (exit 0) when CUDA sees a usable device, else the reason (exit 1); the pipeline's probe
                 std::string w;
                 const bool ok = singlet_engine_gpu::available(&w);

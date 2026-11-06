@@ -1319,6 +1319,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (chrStart.size() < chrLength.size() + 1) return skip("chrStart size");
     time_t t0 = time(nullptr);
     singlet_engine_gpu::Input in;
+    in.genomeDir = P.pGe.gDir;   // SINGLET_GPU_SHARED_INDEX=1: names the holder of the shared device index
     if (!fillClip(P, in.clip, why)) return skip(why);
     // E10 (SINGLET_ENGINE_GPU_E2E >= 2): where E8 runs (e2eWant's conditions below) on one cDNA and one barcode FASTQ file, the decode also
     // keeps per read the CR/UR key and the quality bits the device builds the hand-off entries from

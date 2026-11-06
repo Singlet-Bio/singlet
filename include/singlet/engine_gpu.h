@@ -176,6 +176,7 @@ struct Input {
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
+    std::string genomeDir;              // the STAR genome directory behind `host` (SINGLET_GPU_SHARED_INDEX=1: it names the holder of the shared device index)
     std::vector<uint8_t> cr4info;       // not read by the engine: per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
     // E8: with e2e set, mapDistinct also builds the pileup's records on the device and copies them into e2e (E2EHeader); the host lane
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
@@ -258,11 +259,17 @@ bool mapDistinct(const m5::Params& P, const m5::GenomeView& host, uint64_t saByt
 // SINGLET_ENGINE_GPU_SLOTS. It bounds what the sample's process holds on the device in each phase: the prefill (context, index, reads, lanes,
 // records, E10/E11 products and keep: mapDistinct sizes its chunk and lane batches from it) and the pileup (its arena). The non-host screen's
 // index (24.9 GB, fixed) is outside it.
+// SINGLET_GPU_SHARED_INDEX=1: bytes of the genome index that a live holder process keeps on the device (0 without one). The budget below leaves them out.
+uint64_t sharedIndexReserve();
+// `singlet gpu-holder --genome-dir D [--device N] [--idle S] | --stop ...`: the holder process of the shared device index (docs/gpu-engine/bold/SHARED-INDEX.md)
+int holderMain(int argc, char** argv);
 inline uint64_t memBudget(uint64_t total) {
     if (const char* g = std::getenv("SINGLET_ENGINE_GPU_MEM_GB")) { const double v = std::atof(g); return v > 0 ? (uint64_t) (v * (double) (1ull << 30)) : 0; }
     const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
     const uint64_t slots = sl != nullptr ? (uint64_t) std::min(8, std::max(1, std::atoi(sl))) : 1, margin = 2ull << 30;
-    return (total > margin ? total - margin : total) / slots;
+    const uint64_t sh = sharedIndexReserve();
+    const uint64_t avail = (total > margin ? total - margin : total);
+    return (avail > sh ? avail - sh : avail) / slots;
 }
 // Samples per GPU: SINGLET_ENGINE_GPU_SLOTS (default 1 = one sample at a time) exclusive locks per device, named by PCI bus id so jobs that see different
 // GPUs under the same index do not wait for each other (slot k > 0 has ".k" appended to the lock file name). Each sample keeps its device memory within
@@ -283,22 +290,22 @@ inline int lockDeviceImpl(int* lockFd) {
     if (dv != nullptr) {
         device = std::atoi(dv);
         for (int k = 0; k < slots; k++) {
-            int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR, 0666);
+            int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return device; }
             if (fd >= 0) close(fd);
         }
-        *lockFd = open(lockPath(device, (int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+        *lockFd = open(lockPath(device, (int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
         return device;
     }
     for (int k = 0; k < slots; k++)
         for (int d = 0; d < nDev; d++) {
-            int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR, 0666);
+            int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
             if (fd >= 0) close(fd);
         }
     device = (int) (getpid() % nDev);
-    *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+    *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
@@ -328,11 +335,11 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     *lockFd = -1;
     for (int k = 0; k < slots; k++) {
-        int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR, 0666);
+        int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return; }
         if (fd >= 0) close(fd);
     }
-    *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR, 0666);
+    *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
 }
 
