@@ -49,7 +49,7 @@ def load_gtf(path):
     cls[ribo] = 2
     cls[mt] = 1
     return dict(chrs=chrs, cid=g.cid.values, skey=(g.cid.values << 32) | g.s.values.astype(np.int64),
-                end=g.e.values.astype(np.int64), names=g.name.values.astype('U'), cls=cls)
+                end=g.e.values.astype(np.int64), names=np.array(g.name.tolist(), dtype='U'), cls=cls)
 
 
 def gene_of(G, chrname, pos):
