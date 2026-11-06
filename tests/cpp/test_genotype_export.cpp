@@ -98,7 +98,7 @@ int main() {
               "row0 " << rows[0]);
         CHECK(rows[1] == "chr2\t50\tchr2:50:G>A\tG\tA\t.\tPASS\tNS=2\tGT:GQ:AD:DP:PL\t" + G::donor_fields(5, 5) + "\t" + G::donor_fields(0, 5),
               "row1 " << rows[1]);
-        CHECK(rows[2] == "chr2\t60\tchr2:60:T>C\tT\tC\t.\tPASS\tNS=1\tGT:GQ:AD:DP:PL\t./.\t" + G::donor_fields(1, 1), "row2 " << rows[2]);
+        CHECK(rows[2] == "chr2\t60\tchr2:60:T>C\tT\tC\t.\tPASS\tNS=1\tGT:GQ:AD:DP:PL\t./.:.:0,0:0:.\t" + G::donor_fields(1, 1), "row2 " << rows[2]);
     }
     singlet::DemuxResult none;
     CHECK(G::write_donors_vcf(dir + "/none.vcf.gz", none, ad, dp, called, snps) == 0, "no donors");
