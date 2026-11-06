@@ -634,6 +634,77 @@ bool soloKeepRecords(const SoloParams& S, const SoloModel& M, const e6::RecParam
         return false;
     }
 }
+bool soloKeepReadsPart(const u64* dAux, u64 stride, u64 i0, u64 m, u64 n, std::string& log) {
+    try {
+        const auto t0 = std::chrono::steady_clock::now();
+        SoloKeep& K = g_keep;
+        if (i0 == 0) {
+            if (K.cr3) cudaFree(K.cr3);
+            if (K.ur3) cudaFree(K.ur3);
+            K.cr3 = K.ur3 = nullptr; K.reads = false; K.msReads = 0;
+            CK(cudaMalloc(&K.cr3, std::max<u64>(1, n) * 8));
+            CK(cudaMalloc(&K.ur3, std::max<u64>(1, n) * 8));
+        } else if (!K.cr3 || !K.ur3) throw std::runtime_error("the reads' arrays do not exist");
+        u64* c = K.cr3 + i0; u64* u = K.ur3 + i0; const u64 st = stride;
+        each(true, m, [=] __host__ __device__(u64 i) { c[i] = dAux[i * st]; u[i] = dAux[i * st + 1]; });
+        CK(cudaDeviceSynchronize());
+        K.msReads += msSince(t0);
+        if (i0 + m == n) { K.n = n; K.reads = true; }
+        return true;
+    } catch (const std::exception& e) {
+        log += std::string("soloKeepReadsPart failed: ") + e.what() + "
+";
+        cudaGetLastError(); soloKeepRelease();
+        return false;
+    }
+}
+bool soloKeepRecordsBegin(u64 nRec, const u32* dRec, u64 n, std::string& log) {
+    try {
+        SoloKeep& K = g_keep;
+        if (!K.reads || K.n != n) throw std::runtime_error("the reads were not kept");
+        if (K.rec) cudaFree(K.rec);
+        if (K.recAnn) cudaFree(K.recAnn);
+        K.rec = nullptr; K.recAnn = nullptr; K.recs = false; K.nOverflow = 0; K.msRecs = 0;
+        CK(cudaMalloc(&K.rec, std::max<u64>(1, n) * 4));
+        CK(cudaMalloc(&K.recAnn, std::max<u64>(1, nRec) * sizeof(RecAnn)));
+        if (n) CK(cudaMemcpy(K.rec, dRec, n * 4, cudaMemcpyDeviceToDevice));
+        K.nRec = nRec;
+        return true;
+    } catch (const std::exception& e) {
+        log += std::string("soloKeepRecordsBegin failed: ") + e.what() + "
+";
+        cudaGetLastError(); soloKeepRelease();
+        return false;
+    }
+}
+bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecParams& RP, const uint8_t* dBlob, const u64* dBlobOff, const u64* dSeqOff,
+                         u64 r0, u64 m, std::string& log) {
+    try {
+        SoloKeep& K = g_keep;
+        if (!K.recAnn || r0 + m > K.nRec) throw std::runtime_error("the records' annotation array does not hold this part");
+        Buf<u64> dTrS, dTrE, dTrEmax; Buf<u32> dTrExI, dTrGene, dExSE; Buf<uint16_t> dTrExN; Buf<uint8_t> dTrStr;
+        dTrS.from(true, M.trS.data(), M.trS.size()); dTrE.from(true, M.trE.data(), M.trE.size()); dTrEmax.from(true, M.trEmax.data(), M.trEmax.size());
+        dTrExI.from(true, M.trExI.data(), M.trExI.size()); dTrGene.from(true, M.trGene.data(), M.trGene.size()); dExSE.from(true, M.exSE.data(), M.exSE.size());
+        dTrExN.from(true, M.trExN.data(), M.trExN.size()); dTrStr.from(true, M.trStr.data(), M.trStr.size());
+        const TrModel tm{dTrS.p, dTrE.p, dTrEmax.p, dTrExI.p, dTrExN.p, dTrStr.p, dTrGene.p, dExSE.p, (u32)M.trS.size()};
+        Buf<u64> cnt; cnt.alloc(true, 1); cnt.zero();
+        RecAnn* ra = K.recAnn + r0; u64* c = cnt.p; const SoloParams s = S; const e6::RecParams rp = RP;
+        each(true, m, [=] __host__ __device__(u64 r) {
+            const RecAnn a = recAnnotate(rp, dBlob + dBlobOff[r], dSeqOff[r + 1] - dSeqOff[r], tm, s);
+            ra[r] = a;
+            if (a.bits & RA_OVERFLOW) addU64(c, 1);
+        });
+        CK(cudaDeviceSynchronize());
+        K.nOverflow += cnt.get(0);
+        return true;
+    } catch (const std::exception& e) {
+        log += std::string("soloKeepRecordsPart failed: ") + e.what() + "
+";
+        cudaGetLastError(); soloKeepRelease();
+        return false;
+    }
+}
+void soloKeepRecordsEnd(double ms) { g_keep.recs = true; g_keep.msRecs = ms; }
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
                  std::string& log, const CbQualFn& cbQual) {
     SoloKeep& K = g_keep;

@@ -1056,6 +1056,19 @@ std::string deviceId(int device) {
 }
 int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return 0; return n; }
 
+// P3-MEM-03: a record chunk's offsets shifted by the earlier chunks' counts (alignments, sequence bytes, operations); a read's record local
+// to the chunk [r0, r1) or NONE
+__global__ void k_rebase_recs(SigRec* s, u64 nS, AlnRec* a, u64 nA, uint32_t alnBase, u64 seqBase, uint32_t opsBase) {
+    const u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i < nS) { s[i].aln_off += alnBase; s[i].seq_off += seqBase; }
+    if (i < nA) a[i].ops_off += opsBase;
+}
+__global__ void k_local_rr(const uint32_t* g, u64 n, uint32_t r0, uint32_t r1, uint32_t* l) {
+    const u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const uint32_t v = g[i];
+    l[i] = (v != 0xFFFFFFFFu && v >= r0 && v < r1) ? v - r0 : 0xFFFFFFFFu;
+}
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
     std::string err;
@@ -2404,6 +2417,229 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         out.e2eOk = true;
         return true;
     };
+    // P3-MEM-03: e2eBuild by record chunks (with the read chunks). The host-assembled records go to the device one chunk at a time: a first
+    // pass counts each chunk's alignments, operations and sequence bytes (buildRecords), the region's arrays are then taken at their final
+    // sizes, and a second pass builds each chunk again, shifts its offsets by the earlier chunks' counts and copies it into place, so the
+    // region holds the same bytes as the whole-sample build. E10's products run per chunk (a read counts in the chunk of its record) and are
+    // summed; the junctions are merged by key (counts summed, overhang maxed, as products' reduction); the unmapped reads come from
+    // readRecord and the records' mapped flags. E11's keep is filled in parts (the reads' CR/UR by read chunks of their aux).
+    auto e2eBuildRC = [&](std::string& why) -> bool {
+        singlet_engine_gpu::E2ERegion& RG = *in.e2e;
+        const u64 nRec = out.seqOff.size() - 1;
+        if (nRec == 0 || out.readRecord.size() != n) { why = "no records"; return false; }
+        if (nRec >= 0xFFFFFFFFull) { why = "more records than 32-bit indices"; return false; }
+        g_bud.at = "records";
+        e6::RecParams RP;
+        RP.outFilterScoreMin = (int) P.outFilterScoreMin; RP.outFilterScoreMinOverLread = P.outFilterScoreMinOverLread;
+        RP.outFilterMatchNmin = P.outFilterMatchNmin; RP.outFilterMatchNminOverLread = P.outFilterMatchNminOverLread;
+        RP.outFilterMismatchNmax = P.outFilterMismatchNmax; RP.outFilterMismatchNoverLmax = P.outFilterMismatchNoverLmax;
+        RP.outFilterMismatchNoverReadLmax = P.outFilterMismatchNoverReadLmax; RP.outFilterMultimapNmax = P.outFilterMultimapNmax;
+        RP.outSAMmultNmax = P.outSAMmultNmax; RP.outSAMmapqUnique = in.outSAMmapqUnique; RP.outSAMflagAND = in.outSAMflagAND; RP.outSAMflagOR = in.outSAMflagOR;
+        struct DB { void* p = nullptr; ~DB() { dfree(p); } };
+        auto dalc = [&](DB& b, u64 bytes) -> bool { if (dmalv(&b.p, bytes + 64) != cudaSuccess) { cudaGetLastError(); b.p = nullptr; return false; } return true; };
+        auto d2hc = [&](void* dst, const void* src, u64 b) -> bool { return g_d2h ? g_d2h->copy(dst, src, b) : cudaMemcpy(dst, src, b, cudaMemcpyDeviceToHost) == cudaSuccess; };
+        Stager SU;
+        if (!SU.init(std::max(1, std::min(8, hostThreads)))) { why = "page-locked staging buffers (records)"; return false; }
+        const double t0r = now();
+        // E11: the reads' CR/UR from their aux, by read chunks
+        bool keep = e10 && in.e10.soloModel != nullptr && in.e10.soloParams != nullptr;
+        if (keep) {
+            const u64 st = 2 + (u64) in.e10.nw, m0 = std::max<u64>(1, std::min<u64>(n, RCN ? RCN : n));
+            DB dA; std::string ws;
+            if (!dalc(dA, m0 * st * 8)) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (device memory)\n"; }
+            for (u64 i0 = 0; keep && i0 < n; i0 += m0) {
+                const u64 m = std::min(m0, n - i0);
+                if (!SU.copy(dA.p, in.e10.aux.data() + i0 * st, m * st * 8) || !SU.finish()) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (aux upload)\n"; }
+                else if (!e9::soloKeepReadsPart((const uint64_t*) dA.p, st, i0, m, n, ws)) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (" + ws + ")\n"; }
+            }
+            if (keep) { keepTally = budRound(std::max<u64>(1, n) * 8) * 2; g_bud.used += keepTally; g_bud.note(); }
+            stepAdd("e2e.keep", now() - t0r);
+        }
+        // readRecord on the device (products' and E11's read -> record map); per chunk its local copy
+        DB dRRg, dRRl;
+        if (!dalc(dRRg, n * 4) || !dalc(dRRl, n * 4) || cudaMemcpy(dRRg.p, out.readRecord.data(), n * 4, cudaMemcpyHostToDevice) != cudaSuccess) {
+            why = "out of device memory (readRecord)"; return false;
+        }
+        if (keep) {
+            std::string ws;
+            if (!e9::soloKeepRecordsBegin(nRec, (const uint32_t*) dRRg.p, n, ws)) { keep = false; out.e10.log += "engine_gpu: E11: the records' Gene annotation not kept (" + ws + ")\n"; }
+        }
+        // record chunks: SINGLET_ENGINE_GPU_RECCHUNK, else about a quarter of the room
+        const u64 avgB = out.blob.size() / nRec + 1, avgS = out.seq.size() / nRec + 1;
+        const u64 perRec = avgB + avgS + 16 + 101 + avgS / 2 + 64;
+        u64 RRN = 0;
+        if (const char* e = std::getenv("SINGLET_ENGINE_GPU_RECCHUNK")) RRN = std::strtoull(e, nullptr, 10);
+        if (RRN == 0) {
+            u64 room = cap ? g_bud.room() : ~0ull; size_t f = 0, t = 0; cudaMemGetInfo(&f, &t);
+            room = std::min<u64>(room, f > (2ull << 30) ? f - (2ull << 30) : 0);
+            room = room > SLACK ? room - SLACK : 0;
+            RRN = std::max<u64>(1u << 20, room / 4 / perRec / (1u << 20) * (1u << 20));
+        }
+        RRN = std::min<u64>(RRN, nRec);
+        const u64 nCh = (nRec + RRN - 1) / RRN;
+        u64 maxNB = 0, maxNS = 0;
+        for (u64 q0 = 0; q0 < nRec; q0 += RRN) {
+            const u64 q1 = std::min(nRec, q0 + RRN);
+            maxNB = std::max<u64>(maxNB, out.blobOff[q1] - out.blobOff[q0]); maxNS = std::max<u64>(maxNS, out.seqOff[q1] - out.seqOff[q0]);
+        }
+        DB dB, dBO, dS, dSO;
+        if (!dalc(dB, maxNB) || !dalc(dBO, (RRN + 1) * 8) || !dalc(dS, maxNS) || !dalc(dSO, (RRN + 1) * 8)) {
+            why = "E17 budget: the records' chunk of " + std::to_string(RRN) + " does not fit (" + gbs(g_bud.used) + " in use), within " + budName; return false;
+        }
+        singlet_engine_gpu::NoInitVector<u64> hbo(RRN + 1), hso(RRN + 1);
+        double tUp = 0, tBuild = 0, tCopy = 0, tProd = 0;
+        auto upChunk = [&](u64 q0, u64 m) -> bool {
+            const double ta = now();
+            const u64 b0 = out.blobOff[q0], s0 = out.seqOff[q0];
+            parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) { hbo[k] = out.blobOff[q0 + k] - b0; hso[k] = out.seqOff[q0 + k] - s0; } });
+            const bool ok = SU.copy(dB.p, out.blob.data() + b0, out.blobOff[q0 + m] - b0) && SU.copy(dS.p, out.seq.data() + s0, out.seqOff[q0 + m] - s0)
+                            && SU.copy(dBO.p, hbo.data(), (m + 1) * 8) && SU.copy(dSO.p, hso.data(), (m + 1) * 8) && SU.finish();
+            tUp += now() - ta;
+            return ok;
+        };
+        // pass 1: the counts
+        std::vector<u64> cAln(nCh), cOps(nCh), cSeq(nCh);
+        u64 nAln = 0, nOps = 0, nSeqT = 0, nNoExon = 0, nBadBest = 0, nMapped = 0;
+        for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
+            const u64 m = std::min(RRN, nRec - q0);
+            if (!upChunk(q0, m)) { why = "records upload"; return false; }
+            const double ta = now();
+            singlet_records_gpu::DeviceRecords R6; std::string e6err;
+            struct R6Free { singlet_records_gpu::DeviceRecords& r; ~R6Free() { singlet_records_gpu::release(r); } } r6f{R6};
+            if (!singlet_records_gpu::buildRecords(RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const char*) dS.p, (const uint64_t*) dSO.p, m,
+                                                   (const uint64_t*) dcs, false, R6, e6err, true)) { why = "buildRecords: " + e6err; return false; }
+            if (R6.nMateGap) { why = std::to_string(R6.nMateGap) + " records with a mate gap (paired-end; alignBAM's path)"; return false; }
+            cAln[c] = R6.nAln; cOps[c] = R6.nOps; cSeq[c] = R6.nSeq;
+            nAln += R6.nAln; nOps += R6.nOps; nSeqT += R6.nSeq; nNoExon += R6.nNoExon; nBadBest += R6.nBadBest; nMapped += R6.nMapped;
+            tBuild += now() - ta;
+        }
+        if (nAln >= 0xFFFFFFFFull || nOps >= 0xFFFFFFFFull) { why = "the records' alignments or operations exceed 32-bit offsets"; return false; }
+        const u64 oS = RG.take(nRec * sizeof(SigRec)), oA = RG.take(nAln * sizeof(AlnRec)), oO = RG.take(nOps * 4), oN = RG.take(nAln * 2), oQ = RG.take(nSeqT);
+        if (!oS || !oA || !oO || !oN || !oQ) { why = "the shared region is full"; return false; }
+        // pass 2: build, shift, copy; E10's products and E11's annotation per chunk
+        decltype(out.e10) acc;   // the products, summed
+        struct SJ { u64 start; uint32_t gap, cu, cm; uint8_t strand, motif, annot; uint16_t ov; };
+        std::vector<SJ> sjList;
+        bool prodOk = e10;
+        if (e10) out.e10.recMapped.assign(nRec, 0);
+        u64 aB = 0, oB = 0, sB = 0;
+        for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
+            const u64 m = std::min(RRN, nRec - q0);
+            if (!upChunk(q0, m)) { why = "records upload"; return false; }
+            double ta = now();
+            singlet_records_gpu::DeviceRecords R6; std::string e6err;
+            struct R6Free { singlet_records_gpu::DeviceRecords& r; ~R6Free() { singlet_records_gpu::release(r); } } r6f{R6};
+            if (!singlet_records_gpu::buildRecords(RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const char*) dS.p, (const uint64_t*) dSO.p, m,
+                                                   (const uint64_t*) dcs, false, R6, e6err, true)) { why = "buildRecords: " + e6err; return false; }
+            if (R6.nAln != cAln[c] || R6.nOps != cOps[c] || R6.nSeq != cSeq[c]) { why = "a record chunk's counts differ between its two builds"; return false; }
+            k_rebase_recs<<<(unsigned) ((std::max(m, R6.nAln) + 255) / 256), 256>>>(R6.sigs, m, R6.alns, R6.nAln, (uint32_t) aB, sB, (uint32_t) oB);
+            if (cudaDeviceSynchronize() != cudaSuccess) { why = std::string("records rebase: ") + cudaGetErrorString(cudaGetLastError()); return false; }
+            tBuild += now() - ta; ta = now();
+            if (!d2hc(RG.base + oS + q0 * sizeof(SigRec), R6.sigs, m * sizeof(SigRec)) || (R6.nAln && !d2hc(RG.base + oA + aB * sizeof(AlnRec), R6.alns, R6.nAln * sizeof(AlnRec)))
+                || (R6.nOps && !d2hc(RG.base + oO + oB * 4, R6.ops, R6.nOps * 4)) || (R6.nAln && !d2hc(RG.base + oN + aB * 2, R6.nm, R6.nAln * 2))
+                || (R6.nSeq && !d2hc(RG.base + oQ + sB, R6.seq, R6.nSeq))) { why = std::string("records copy: ") + cudaGetErrorString(cudaGetLastError()); return false; }
+            aB += R6.nAln; oB += R6.nOps; sB += R6.nSeq;
+            tCopy += now() - ta; ta = now();
+            if (prodOk || keep) {
+                k_local_rr<<<(unsigned) ((n + 255) / 256), 256>>>((const uint32_t*) dRRg.p, n, (uint32_t) q0, (uint32_t) (q0 + m), (uint32_t*) dRRl.p);
+                if (cudaDeviceSynchronize() != cudaSuccess) { why = "local readRecord"; return false; }
+            }
+            if (prodOk) {
+                decltype(out.e10) pc; std::string w;
+                if (!singlet_hostloop_gpu::products(RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const uint64_t*) dSO.p, m, (const uint32_t*) dRRl.p, n,
+                                                    nullptr, nullptr, in.e10.outSJ, in.e10.sjAll, pc, w, H.chrStart[H.nChr])) { prodOk = false; e10Off("products: " + w); }
+                else {
+                    for (int k = 0; k < decltype(out.e10)::S_N; k++) acc.stats[k] += pc.stats[k];
+                    acc.mappedPortion += pc.mappedPortion; acc.nOddRec += pc.nOddRec; acc.nSJentries += pc.nSJentries; acc.msProducts += pc.msProducts;
+                    acc.sjGapBits = pc.sjGapBits;
+                    std::memcpy(out.e10.recMapped.data() + q0, pc.recMapped.data(), m);
+                    for (u64 k = 0; k < pc.nSJ; k++) {
+                        const uint8_t* d = pc.sj.data() + k * 27; SJ j;
+                        std::memcpy(&j.start, d, 8); std::memcpy(&j.gap, d + 8, 4); j.strand = d[12]; j.motif = d[13]; j.annot = d[14];
+                        std::memcpy(&j.cu, d + 15, 4); std::memcpy(&j.cm, d + 19, 4); std::memcpy(&j.ov, d + 23, 2);
+                        sjList.push_back(j);
+                    }
+                }
+            }
+            if (keep) {
+                std::string ws;
+                if (!e9::soloKeepRecordsPart(*in.e10.soloParams, *in.e10.soloModel, RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const uint64_t*) dSO.p, q0, m, ws)) {
+                    keep = false; out.e10.log += "engine_gpu: E11: the records' Gene annotation not kept (" + ws + ")\n";
+                }
+            }
+            tProd += now() - ta;
+            devNote();
+        }
+        singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
+        E2H.nRec = nRec; E2H.nAln = nAln; E2H.nOps = nOps; E2H.nSeq = nSeqT;
+        E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
+        E2H.nMateGap = 0; E2H.nNoExon = nNoExon; E2H.nBadBest = nBadBest; E2H.nMapped = nMapped;
+        E2H.msGather = tUp * 1e3; E2H.msBuild = tBuild * 1e3; E2H.msD2H = tCopy * 1e3;
+        if (prodOk && acc.nOddRec) { prodOk = false; e10Off(std::to_string(acc.nOddRec) + " records mapped without a transcript"); }
+        if (prodOk) {
+            for (int k = 0; k < decltype(out.e10)::S_N; k++) out.e10.stats[k] = acc.stats[k];
+            out.e10.mappedPortion = acc.mappedPortion; out.e10.nOddRec = 0; out.e10.nSJentries = acc.nSJentries; out.e10.msProducts = acc.msProducts;
+            out.e10.sjGapBits = acc.sjGapBits;
+            // the junctions merged by key (start, gap): counts summed, overhang maxed
+            std::stable_sort(sjList.begin(), sjList.end(), [](const SJ& a, const SJ& b) { return a.start != b.start ? a.start < b.start : a.gap < b.gap; });
+            std::vector<SJ> u;
+            for (const SJ& j : sjList) {
+                if (!u.empty() && u.back().start == j.start && u.back().gap == j.gap) { u.back().cu += j.cu; u.back().cm += j.cm; u.back().ov = std::max(u.back().ov, j.ov); }
+                else u.push_back(j);
+            }
+            out.e10.sj.assign((u.size() + 1) * 27, 0);
+            for (u64 k = 0; k < u.size(); k++) {
+                uint8_t* d = out.e10.sj.data() + k * 27; const SJ& j = u[k];
+                std::memcpy(d, &j.start, 8); std::memcpy(d + 8, &j.gap, 4); d[12] = j.strand; d[13] = j.motif; d[14] = j.annot;
+                std::memcpy(d + 15, &j.cu, 4); std::memcpy(d + 19, &j.cm, 4); std::memcpy(d + 23, &j.ov, 2); std::memcpy(d + 25, &j.ov, 2);
+            }
+            std::memset(out.e10.sj.data() + u.size() * 27, 255, 27);
+            out.e10.nSJ = u.size();
+            // the reads whose record is unmapped, in read order
+            const u64 nT = (u64) std::max(1, std::min(hostThreads, 64));
+            std::vector<std::vector<uint32_t>> um(nT);
+            std::vector<std::thread> th;
+            for (u64 t = 0; t < nT; t++) th.emplace_back([&, t]() {
+                for (u64 i = n * t / nT, e = n * (t + 1) / nT; i < e; i++) { const uint32_t r = out.readRecord[i]; if (r != NONE && !out.e10.recMapped[r]) um[t].push_back((uint32_t) i); }
+            });
+            for (auto& x : th) x.join();
+            out.e10.unmappedReads.clear();
+            for (auto& v : um) out.e10.unmappedReads.insert(out.e10.unmappedReads.end(), v.begin(), v.end());
+            if (entHost) {   // the entries and masks are in the region since the read chunks: zero those of the reads without a record, list the hook's reads
+                if (entPre) out.e10.hookReads.swap(hkPre);
+                else entHostPass(out.e10.hookReads);
+                out.e10.oEntries = entOff; out.e10.oQMask = qmOff; out.e10.ok = true;
+                char l2[400];
+                snprintf(l2, sizeof l2, "engine_gpu: E10 on the device: entries %.1f ms, R11 histogram %.1f ms (%llu reads), products %.1f ms in %llu record chunks "
+                         "(%llu junction entries -> %llu junctions, %llu unmapped reads, %llu hook reads), entries/masks to the region at the read chunks\n",
+                         out.e10.msEntries, out.e10.msR11, (unsigned long long) out.e10.r11Total, out.e10.msProducts, (unsigned long long) nCh,
+                         (unsigned long long) out.e10.nSJentries, (unsigned long long) out.e10.nSJ, (unsigned long long) out.e10.unmappedReads.size(),
+                         (unsigned long long) out.e10.hookReads.size());
+                out.e10.log += l2;
+            } else e10Off("the entries are not in the region");
+        }
+        if (keep && out.e10.ok) {
+            e9::soloKeepRecordsEnd(tProd * 1e3);
+            const e9::SoloKeep& K = e9::soloKeep();
+            out.e10.soloKept = K.nOverflow == 0;
+            { const u64 kr = budRound(std::max<u64>(1, n) * 4) + budRound(std::max<u64>(1, nRec) * 8); keepTally += kr; g_bud.used += kr; g_bud.note(); devNote(); }
+            char l3[300];
+            snprintf(l3, sizeof l3, "engine_gpu: E11: Solo inputs kept on the device: CR/UR of %llu reads (%.1f ms), Gene annotation of %llu records in %llu chunks "
+                     "and the read -> record map (%llu exon overflows), %.2f GB\n", (unsigned long long) K.n, K.msReads, (unsigned long long) K.nRec,
+                     (unsigned long long) nCh, (unsigned long long) K.nOverflow, (K.n * 20.0 + K.nRec * 8.0) / 1e9);
+            out.e10.log += l3;
+            if (!out.e10.soloKept) e9::soloKeepRelease();
+        } else if (in.e10.soloModel != nullptr) { e9::soloKeepRelease(); out.e10.soloKept = false; if (e10) out.e10.log += "engine_gpu: E11: Solo inputs not kept\n"; }
+        char l[512];
+        snprintf(l, sizeof l, "engine_gpu: E8 records on the device in %llu record chunks of %llu (P3-MEM-03): %llu records, %llu alignments, %llu ops, %llu seq bytes "
+                 "(%llu mapped, no exon %llu, trBest=trInit %llu); upload %.0f ms (two passes), buildRecords %.0f ms, copy to the region %.0f ms, products and keep %.0f ms\n",
+                 (unsigned long long) nCh, (unsigned long long) RRN, (unsigned long long) nRec, (unsigned long long) nAln, (unsigned long long) nOps,
+                 (unsigned long long) nSeqT, (unsigned long long) nMapped, (unsigned long long) nNoExon, (unsigned long long) nBadBest, tUp * 1e3, tBuild * 1e3,
+                 tCopy * 1e3, tProd * 1e3);
+        out.log += l;
+        out.e2eOk = true;
+        return true;
+    };
     // per read: its record (sequence-cache result) or NONE; final once every hostPart ran
     auto fillReadRecord = [&]() {
         singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);   // set for every representative, the only reads readRep names
@@ -2448,7 +2684,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     }
     if (e2e) {
         std::string e2eWhy;
-        if (!e2eBuild(e2eWhy)) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
+        if (!(RC ? e2eBuildRC(e2eWhy) : e2eBuild(e2eWhy))) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
         step("e2e.build");
         { const bool ok10 = out.e10.ok; e10 = false; e10Off(""); out.e10.ok = ok10; }   // frees the device entries
         for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
