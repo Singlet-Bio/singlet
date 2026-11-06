@@ -13,7 +13,18 @@ default of E19. The CPU engine and the default GPU path (`SINGLET_ENGINE_GPU_E2E
 
 ## 0. Answer in brief
 
-[[ANSWER]]
+E20 is built and measured. It is not gated on all samples and it carries one open risk.
+
+**Takeaway:** E20 shortens the time a sample holds the device lock. Core-seconds per M read pairs fell in one calibration job and stayed flat in another. One of 16 loaded runs fell back to the CPU after a device out-of-memory error.
+
+| Check | Result | Job |
+|---|---|---|
+| Tier 1, alone, ABBA, g051 | core-s per M 8.94 to 7.79 (-12.8%). Lock held 39.1 s to 27.6 s (-29.4%). Wall 152.9 s to 144.2 s | 800360 |
+| Tier 2, 24 runs per leg, stopped after leg 2 | core-s per M 9.89 to 9.92 (flat). Lock held 45.0 s to 36.4 s. Progress rate 1.809 to 2.098 M pairs/s. One device out-of-memory fallback in 16 loaded runs. Verdict REJECT by the tier 2 rule | 800365 |
+| Identity against the CPU engine | pbmc1k_v3, neuron1k_v3 and pbmc5p_v1 identical. The other 7 of the 10 gate samples were never run | see §4 |
+
+The decision rests on core-seconds per M and lock held, not on rate. Rates in this report come from "steady" windows that the drain of the queue biases upward.
+PR-2 on `perf/gpu-next` carries E20 together with WSHRINK. WSHRINK shrinks lane B memory per read and may remove the out-of-memory fallback. That claim waits for the PR-2 gates.
 
 ## 1. The lock
 
@@ -76,7 +87,16 @@ the host pass, after the unlock unless SINGLET_GPU_PILEUP_UNLOCK=reset)`.
 
 ### 1d. The hold per phase
 
-[[LOCKTABLE]]
+The logged examples in §1a to §1c give these holds. They come from single runs. The per-run hold in §5 is the measured total.
+
+| Phase | Hold | Source |
+|---|---|---|
+| Prefill, both holds | 13.87 s (12.67 s to the lanes' end, 1.20 s for the records on the device, 2.37 s released between them) | log line quoted in §1a |
+| Pileup | 2.3 s (`pileupRun`). The device reset of 0.77 s runs after the unlock | log line quoted in §1b |
+| Non-host screen | 4.4 s, of which about 3.6 s is the index load | §1c |
+| Solo (E11) | 0.6 to 1.0 s | §1c |
+
+Before E20 the E16 head held the lock 36.1 s per pbmc1k_v3 sample at T = 7. About 7.9 s of that was host work with the device idle (E18 §4).
 
 
 ## 2. The CellRanger4 clip on the device
@@ -133,7 +153,7 @@ lengths stay on the device for `k_clip`, E10's entries and the dedup of the clip
 
 ### 2d. Identity of the clip
 
-[[CLIPID]]
+The device clip matches the host clip on the 92.9 M reads of neuron1k_v3. No other sample has a recorded clip comparison. `SINGLET_ENGINE_GPU_CR4_CHECK=1` runs both clips and compares `pre5`, `pre3` and `info` byte for byte. The PR-2 gate runs the 10-sample gate with this switch on.
 
 
 ## 3. The CR4 probe: kept on the host
@@ -176,24 +196,62 @@ natural home of a device probe is E21's resident per-GPU process, which keeps th
 
 ## 4. Identity
 
-[[IDENTITY]]
+- pbmc1k_v3, neuron1k_v3 and pbmc5p_v1 are identical to the CPU engine.
+- The default path (`SINGLET_ENGINE_GPU_E2E=0`) is identical to E11's gpuD.
+- The four mapDistinct dumps of the stream runs match.
+- Overnight job 800576 reported identity on 4 of 4 runs. Its summary file is not available, so this line is unreproduced.
+- The integration build `gpu/bold-integ` (E20, WSHRINK and the strand fix) differs from b0 only in a provenance path in job 800821, on pbmc1k_v3.
+- **Not gated:** the other 7 of the 10 gate samples. All earlier gates ran one slot. Identity at 2 and 3 slots is a PR-2 gate.
 
 ## 5. Throughput and core-s
 
-[[THROUGHPUT]]
+pbmc1k_v3, one slot, T = 7, Fable job 798129 against f73938b2:
+
+| Run | M pairs/s | core-s per M | Lock held per run |
+|---|---|---|---|
+| f73938b2, k = 1 | 0.532 | 8.73 | 35.2 s |
+| E20, k = 1 | 0.555 | 7.50 | 26.2 s |
+| f73938b2, k = 8, steady | 1.599 | 8.11 | 31.9 s |
+| E20, k = 8, steady | 2.177 | 6.90 | 24.4 s |
+
+The "steady" rates carry the drain bias. The calibration jobs on g051 give a smaller gain in core-seconds per M than job 798129 (tier 1 -12.8%, tier 2 flat). The jobs disagree on core-seconds per M, so the record asks for the range and not a single value. Host peak memory fell from 349 GB to 298 GB in tier 2. Device headroom with all slots held is 2.2 GB for E20 and 3.4 GB for s3 (e42c0636).
+
+The node target of 5 M pairs/s was never measured on this branch. The one-slot target of 2.0 M pairs/s at k = 8 is met in job 798129 and the core-seconds target of 6.5 per M is not met (6.90).
 
 ## 6. Surprises
 
-[[SURPRISES]]
+- The tier 2 run (job 800365) showed one device out-of-memory fallback in 16 loaded runs. The failing allocation was `dmal(&dBits, bitsCap * 4)`. That run used 4.5 times the core-seconds of a normal run. The earlier headline rate hid this CPU fallback.
+- The calibration jobs disagree. Tier 1 gives -12.8% core-s per M and tier 2 gives no change (9.89 to 9.92). The hold fell in both.
+- The handoff row for e20w omitted the fallback risk.
 
 ## 7. What remains
 
-[[REMAINS]]
+1. Gate the 7 samples that never ran, with `SINGLET_ENGINE_GPU_CR4_CHECK=1`.
+2. Run identity at 2 and 3 slots, with MPS at k = 8.
+3. Test whether WSHRINK removes the device out-of-memory fallback.
+4. Run E20 with E21. They touch the same start path and have never run together.
+5. Move the CR4 probe to the device. §3 explains why it belongs with E21's resident process.
 
 ## 8. Files touched, and why
 
-[[FILES]]
+| File | Change |
+|---|---|
+| `src/engine_gpu/engine_gpu.cu` | `k_cr4`, the two prefill holds, E10 entries into the shared region |
+| `include/singlet/engine_gpu.h` | `Input::reacquire`, the split of the hold |
+| `src/star/SeqCacheGpuPrefill.cpp` | the device-clip decision, the clip check, the log lines |
+| `include/singlet/pileup/pileup_engine.h` | the pileup's unlock right after `pileupRun`, the reset on a thread |
+| `src/pipeline/singlet.cpp` | the probe's CPU time from `wait4` in the log |
+| `bench/fable/lockclip/` | build, gate and run jobs, `e20_start.py` |
+| `bench/fable/throughput/e18_locks.py` | a sixth sampler interval, `prefill2` |
 
 ## 9. Jobs, commits, how to run
 
-[[JOBS]]
+| Job | Purpose |
+|---|---|
+| 798129 | one slot, T = 7, E20 against f73938b2 |
+| 800360 | calibration, tier 1, ABBA, g051 |
+| 800365 | calibration, tier 2, stopped after leg 2 |
+| 800576 | overnight rerun, summary not available |
+| 800821 | identity of the integration build with WSHRINK and the strand fix |
+
+Code heads: `de5d85aa` (E20), `aeef7a5e` (`perf/gpu-next-e20`, the e20w binary). Job scripts are in `bench/fable/lockclip/jobs/`. The gate and timing commands for PR-2 are in the pull request description.
