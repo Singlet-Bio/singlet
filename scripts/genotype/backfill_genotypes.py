@@ -260,6 +260,11 @@ def main():
         if os.path.exists(os.path.join(a.run, rel)):
             os.makedirs(eng, exist_ok=True)
             shutil.copy2(os.path.join(a.run, rel), os.path.join(eng, rel))
+    os.umask(0o077)
+    for dpath, dns, fns in os.walk(a.dest):   # owner-only store: copy2 keeps the source modes
+        os.chmod(dpath, 0o700)
+        for fn in fns:
+            os.chmod(os.path.join(dpath, fn), 0o600)
     files = {}
     for dpath, _d, fns in os.walk(a.dest):
         for fn in fns:

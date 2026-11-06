@@ -29,7 +29,11 @@ def test_keep_copies_genotype_files(tmp_path):
     man = json.loads((dest / "manifest.json").read_text())
     assert set(man["files"]) == {"genotype/donors.vcf.gz", "genotype/cellsnp/cellSNP.tag.AD.mtx", "donor/donor0.vcf", "snp_ad.1pz",
                                  "snp_dp.1pz", "donor_assignments.tsv", "cell_calls.tsv"}
-    assert stat.S_IMODE(os.stat(dest).st_mode) & 0o077 == 0 or os.name == "nt"
+    if os.name != "nt":
+        assert stat.S_IMODE(os.stat(dest).st_mode) == 0o700
+        for dp, dns, fns in os.walk(dest):
+            assert all(stat.S_IMODE(os.stat(os.path.join(dp, d)).st_mode) == 0o700 for d in dns)
+            assert all(stat.S_IMODE(os.stat(os.path.join(dp, f)).st_mode) == 0o600 for f in fns)
     assert not (dest.parent / "GSM2.tmp").exists()
 
 

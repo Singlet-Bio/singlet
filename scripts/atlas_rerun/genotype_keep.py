@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep every genotype output of a campaign sample on Clipper (D-52, 2026-11-06), before the worker deletes its scratch.
 
-Copies from the sample's engine out dir into <genotype_dir>/<GSE>/<GSM>/ (directories 0700, files 0600):
+Copies from the sample's engine out dir into <genotype_dir>/<GSE>/<GSM>/ (directories 0700, files 0600, owner-only):
   private/genotype/      donors.vcf.gz (GT:GQ:AD:DP:PL per donor) and cellsnp/ (cellsnp-lite layout of the called cells)
   private/donor/         the engine's per-donor VCFs and coverage tables
   private/snp_ad.*, private/snp_dp.*, private/ase_counts.tsv   per-cell allele counts of every panel SNP and barcode
@@ -27,6 +27,16 @@ def _sha256(path):
         for b in iter(lambda: f.read(1 << 20), b""):
             h.update(b)
     return h.hexdigest()
+
+
+def _owner_only(top):
+    """Directories 0700 (setgid cleared), files 0600: $WORK is group project space and the genotype store is owner-only."""
+    os.chmod(top, 0o700)
+    for dp, dns, fns in os.walk(top):
+        for d in dns:
+            os.chmod(os.path.join(dp, d), 0o700)
+        for f in fns:
+            os.chmod(os.path.join(dp, f), 0o600)
 
 
 def keep(out_dir, gse, gsm, base=None):
@@ -59,6 +69,7 @@ def keep(out_dir, gse, gsm, base=None):
             src = os.path.join(out_dir, rel)
             if os.path.exists(src):
                 shutil.copy2(src, os.path.join(tmp, rel))
+        _owner_only(tmp)   # copy2 keeps the source modes (0644): the store is owner-only
         files = {}
         for dp, _d, fns in os.walk(tmp):
             for fn in fns:
@@ -74,6 +85,7 @@ def keep(out_dir, gse, gsm, base=None):
             json.dump(man, f, indent=1)
         shutil.rmtree(dest, ignore_errors=True)
         os.rename(tmp, dest)
+        os.chmod(os.path.join(dest, "manifest.json"), 0o600)
     finally:
         os.umask(old)
     return {"path": dest, "files": len(files), "bytes": sum(v["bytes"] for v in files.values()), "status": man["status"]}
