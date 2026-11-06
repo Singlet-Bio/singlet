@@ -1791,7 +1791,7 @@ class SraEncoder {
                           << " (R1@" << fast_r1_off << "+" << fast_r1l
                           << " R2@" << fast_r2_off << "+" << fast_r2l << ")\n";
 
-            if (cfg.vdb_threads > 1) {
+            if (cfg.vdb_threads > 1 && reader.random_access()) {   // file inputs (FASTQ / BAM) are read in one serial pass
                 // ── Parallel VDB reading: N threads, each with own cursor ──
                 int n_threads = cfg.vdb_threads;
                 int64_t first = reader.first_row() + static_cast<int64_t>(probe_count);
@@ -2251,7 +2251,7 @@ class SraEncoder {
         // ── Phase 6: Finalize ──
         t0 = Clock::now();
         std::string meta = build_metadata_json(
-            sra_path, protocol_tag, protocol_id, confidence, assay,
+            cfg.source_label.empty() ? sra_path : cfg.source_label, protocol_tag, protocol_id, confidence, assay,
             stats.wl_match_rate, r1_len, r2_len, count, clip5p_length, cfg,
             writer.bc_whitelist_exact(), writer.bc_raw());
         if (writer.bc_whitelist_exact() + writer.bc_raw() > 0)

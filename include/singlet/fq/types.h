@@ -726,6 +726,9 @@ struct EncoderConfig {
     // SRA / GEO metadata to embed in the .1fq metadata block
     SraMetadata sra_meta;
 
+    // The metadata block's "source" (empty = the input path or accession). FASTQ and BAM inputs pass the run they hold.
+    std::string source_label;
+
     // Progress callback: called every N reads
     std::function<void(uint64_t reads, uint64_t total)> progress_cb;
     uint64_t progress_interval = 1000000;

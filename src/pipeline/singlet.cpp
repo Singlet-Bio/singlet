@@ -482,6 +482,16 @@ static int cmd_download(int argc, char* argv[]) {
     std::string swap_reads_mode = "auto";  // B-G2-1: auto|on|off|none
     std::string stage_out;                 // --stage-out FILE: write the staged .1fg2 straight from the SRA (no .1fq)
     bool stage_part = false;               // --stage-part: FILE is a part (one run of a multi-run sample), merged later by singlet-stage --merge-parts
+    // FASTQ / BAM inputs (fq/spot_source.h): staged into the same .1fq as an SRA run, through the same encoder
+    std::vector<std::string> fq_r1, fq_r2, fq_i1, fq_i2;   // --r1/--r2/--i1/--i2 FILE[,FILE...] (local paths or URLs)
+    std::string fq_spec;                   // --fastq-spec SPEC: segments as spot_source.h describes ("fastq:" optional)
+    std::string fq_dir;                    // --fastq-dir DIR (or a .tar / URL of a .tar as the positional input)
+    std::string fq_sample;                 // --fastq-sample NAME: library name filter in a folder with several
+    bool fq_index = false;                 // --include-index: index reads become spot segments (folder layouts)
+    std::string bam_input;                 // --bam FILE|URL: Cell Ranger style BAM (CR/UR + CY/UY tags)
+    std::string source_label;              // --source-label LABEL: the metadata block's "source" (default: the input)
+    std::string staging_dir;               // --staging-dir DIR: downloads and unpacked tars (default: next to the output)
+    bool keep_staged = false;              // --keep-staged: keep what was downloaded or unpacked
 
     for (int i = 0; i < argc; ++i) {
         std::string arg = argv[i];
@@ -511,6 +521,16 @@ static int cmd_download(int argc, char* argv[]) {
                 << "                       no barcode sort, no .1fq written or re-read; single-run samples, 10x R1 protocols\n"
                 << "  --metadata-json FILE Write metadata JSON file (auto-fills singlet_version,\n"
                 << "                       pipeline_date, srr_ids, protocol, read_count)\n"
+                << "FASTQ and BAM inputs (staged through the same encoder as an SRA run; files or http/https/ftp URLs):\n"
+                << "  --r1 F[,F..] --r2 F[,F..]  FASTQ reads in spot order (lanes in order); --i1/--i2 add index reads as segments\n"
+                << "  --fastq-dir DIR      Find one library's FASTQ in DIR (bcl2fastq names, or Cell Ranger 1.x GemCode names)\n"
+                << "  --fastq-sample NAME  Library name filter when DIR holds several\n"
+                << "  --include-index      With --fastq-dir: index reads (I1/I2) become segments of the spot\n"
+                << "  --fastq-spec SPEC    Segments explicitly, as in include/singlet/fq/spot_source.h\n"
+                << "  --bam FILE           Cell Ranger BAM: barcode read from CR+UR (CY+UY), cDNA from the read (needs samtools)\n"
+                << "  Positional FILE.tar, folder, or URL of a .tar / .bam: downloaded and unpacked into --staging-dir\n"
+                << "  --source-label LABEL The metadata block's source (default: the input)\n"
+                << "  --staging-dir DIR    Where downloads and tars go (default: OUTPUT.staging/); removed unless --keep-staged\n"
                 << "  --swap-reads MODE    R1\u2194R2 swap mode: auto (default)|on|off|none\n"
                 << "                       auto: heuristic swap passes (geometry + whitelist)\n"
                 << "                       on  : force swap regardless of detection\n"
@@ -547,6 +567,18 @@ static int cmd_download(int argc, char* argv[]) {
         else if (arg == "--no-profile") show_profile = false;
         else if (arg == "--metadata-json" && i+1 < argc) metadata_json_path = argv[++i];
         else if (arg == "--swap-reads" && i+1 < argc) swap_reads_mode = argv[++i];
+        else if ((arg == "--r1" || arg == "--r2" || arg == "--i1" || arg == "--i2") && i+1 < argc) {
+            auto& dst = arg == "--r1" ? fq_r1 : arg == "--r2" ? fq_r2 : arg == "--i1" ? fq_i1 : fq_i2;
+            for (const auto& f : singlet::fq::SpotSource::split(argv[++i], ',')) if (!f.empty()) dst.push_back(f);
+        }
+        else if (arg == "--fastq-spec" && i+1 < argc) fq_spec = argv[++i];
+        else if (arg == "--fastq-dir" && i+1 < argc) fq_dir = argv[++i];
+        else if (arg == "--fastq-sample" && i+1 < argc) fq_sample = argv[++i];
+        else if (arg == "--include-index") fq_index = true;
+        else if (arg == "--bam" && i+1 < argc) bam_input = argv[++i];
+        else if (arg == "--source-label" && i+1 < argc) source_label = argv[++i];
+        else if (arg == "--staging-dir" && i+1 < argc) staging_dir = argv[++i];
+        else if (arg == "--keep-staged") keep_staged = true;
         else if (arg[0] != '-' && sra_input.empty())
             sra_input = arg;
         else {
@@ -555,15 +587,126 @@ static int cmd_download(int argc, char* argv[]) {
         }
     }
 
+    // ── FASTQ / BAM inputs: resolve to a "fastq:" or "bam:" spot spec that SraReader opens in place of a VDB run ──
+    std::string staged_dir_made;   // removed at the end unless --keep-staged
+    struct StagedCleanup {
+        std::string* d; bool* keep;
+        ~StagedCleanup() { if (!d->empty() && !*keep) { std::error_code ec; std::filesystem::remove_all(*d, ec); } }
+    } staged_cleanup{&staged_dir_made, &keep_staged};
+    {
+        auto is_url = [](const std::string& x) {
+            return x.rfind("http://", 0) == 0 || x.rfind("https://", 0) == 0 || x.rfind("ftp://", 0) == 0;
+        };
+        auto ends_with = [](const std::string& x, const char* suf) {
+            const size_t n = std::strlen(suf);
+            return x.size() >= n && x.compare(x.size() - n, n, suf) == 0;
+        };
+        auto basename_of = [](std::string x) {
+            const auto q = x.find('?');
+            if (q != std::string::npos) x.resize(q);
+            const auto sl = x.rfind('/');
+            return sl == std::string::npos ? x : x.substr(sl + 1);
+        };
+        auto shq = [](const std::string& x) {
+            std::string o = "'";
+            for (char c : x) {
+                if (c == '\'') o += "'\\''";
+                else o += c;
+            }
+            return o + "'";
+        };
+        const bool want_files = !fq_r1.empty() || !fq_r2.empty() || !fq_spec.empty() || !fq_dir.empty() || !bam_input.empty() ||
+                                (!sra_input.empty() && (is_url(sra_input) || ends_with(sra_input, ".tar") ||
+                                                        ends_with(sra_input, ".bam") || std::filesystem::is_directory(sra_input)));
+        if (want_files) {
+            auto staging = [&]() -> std::string {
+                if (staged_dir_made.empty()) {
+                    std::string d = staging_dir;
+                    if (d.empty()) d = (output_path.empty() ? std::string(".") : output_path) + ".staging";
+                    std::filesystem::create_directories(d);
+                    staged_dir_made = d;
+                }
+                return staged_dir_made;
+            };
+            // A URL is downloaded once into the staging folder (curl, resumable); a local path is used as it is
+            auto fetch = [&](const std::string& x) -> std::string {
+                if (!is_url(x)) return x;
+                const std::string dst = staging() + "/" + basename_of(x);
+                std::cerr << "[singlet-download] fetching " << x << "\n";
+                const std::string cmd = "curl -fsSL --retry 5 --retry-delay 10 -C - -o " + shq(dst) + " " + shq(x);
+                if (std::system(cmd.c_str()) != 0) throw std::runtime_error("download failed: " + x);
+                return dst;
+            };
+            auto untar = [&](const std::string& tar) -> std::string {
+                const std::string d = staging() + "/unpacked";
+                std::filesystem::create_directories(d);
+                std::cerr << "[singlet-download] unpacking " << tar << "\n";
+                const std::string cmd = "tar -xf " + shq(tar) + " -C " + shq(d);
+                if (std::system(cmd.c_str()) != 0) throw std::runtime_error("cannot unpack " + tar);
+                return d;
+            };
+            try {
+                std::string spec, label = source_label;
+                if (!sra_input.empty()) {   // positional file / URL / folder
+                    const std::string name = basename_of(sra_input);
+                    if (ends_with(name, ".bam")) bam_input = sra_input;
+                    else if (ends_with(name, ".tar") || ends_with(name, ".tar.gz") || ends_with(name, ".tgz")) fq_dir = untar(fetch(sra_input));
+                    else if (std::filesystem::is_directory(sra_input)) fq_dir = sra_input;
+                    else throw std::runtime_error("cannot tell what " + sra_input + " holds (give --r1/--r2, --bam or --fastq-dir)");
+                    if (label.empty()) {
+                        label = name;
+                        for (const char* suf : {".tar.gz", ".tgz", ".tar", ".bam"})
+                            if (ends_with(label, suf)) { label.resize(label.size() - std::strlen(suf)); break; }
+                    }
+                }
+                if (!bam_input.empty()) {
+                    spec = "bam:" + fetch(bam_input);
+                    if (label.empty()) label = basename_of(bam_input);
+                } else if (!fq_spec.empty()) {
+                    spec = fq_spec.rfind("fastq:", 0) == 0 ? fq_spec : "fastq:" + fq_spec;
+                    if (label.empty()) label = "fastq";
+                } else if (!fq_dir.empty()) {
+                    const auto L = singlet::fq::discover_fastq_layout(fq_dir, fq_sample, fq_index);
+                    spec = L.spec;
+                    std::cerr << "[singlet-download] FASTQ layout: " << L.kind << ", library " << L.library;
+                    for (const auto& n : L.notes) std::cerr << "; " << n;
+                    std::cerr << "\n";
+                    if (label.empty()) label = L.library;
+                } else {
+                    if (fq_r1.empty() || fq_r2.empty()) throw std::runtime_error("FASTQ input needs --r1 and --r2");
+                    if (fq_r1.size() != fq_r2.size()) throw std::runtime_error("--r1 and --r2 list different numbers of files");
+                    auto seg = [&](const std::vector<std::string>& v) {
+                        std::string o;
+                        for (size_t k = 0; k < v.size(); ++k) o += (k ? "," : "") + fetch(v[k]);
+                        return o;
+                    };
+                    spec = "fastq:";
+                    if (!fq_i1.empty()) spec += seg(fq_i1) + "|";
+                    if (!fq_i2.empty()) spec += seg(fq_i2) + "|";
+                    spec += seg(fq_r1) + "|" + seg(fq_r2);
+                    if (label.empty()) label = basename_of(fq_r1.front());
+                }
+                sra_input = spec;
+                source_label = label;
+                std::cerr << "[singlet-download] input spec: " << spec << "\n";
+            } catch (const std::exception& e) {
+                std::cerr << "ERROR: " << e.what() << "\n";
+                return 1;
+            }
+        }
+    }
+
     if (sra_input.empty()) {
         std::cerr << "ERROR: SRA accession or .sra file required\n"
                   << "Usage: singlet download <SRRxxxxxxx | file.sra> [-o output.1fq]\n";
         return 1;
     }
+    const bool file_input = singlet::fq::SpotSource::is_spec(sra_input);
+    const std::string input_name = file_input ? source_label : sra_input;   // run label for output names and provenance
 
     // Default output: accession.1fq
     if (output_path.empty()) {
-        std::string base = sra_input;
+        std::string base = input_name;
         // Strip path and extensions
         auto slash = base.rfind('/');
         if (slash != std::string::npos) base = base.substr(slash + 1);
@@ -597,6 +740,7 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.block_size  = block_size;
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
+    ecfg.source_label = source_label;   // FASTQ / BAM inputs: the run they hold (empty for SRA = the accession or path)
     // $SINGLET_WHITELIST_DIR when the user didn't pass --whitelist-dir (the engine, the stager and the .1fg2 reader read it too). Without it the
     // protocol gate had no 10x whitelist to score against and rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
     if (whitelist_dirs.empty()) {
@@ -641,7 +785,7 @@ static int cmd_download(int argc, char* argv[]) {
     if (!stage_out.empty()) {
         stg = std::make_shared<stage::Encoder>();
         const std::string scratch_dir = [&]() { auto pos = stage_out.rfind('/'); return pos == std::string::npos ? std::string(".") : stage_out.substr(0, pos); }();
-        const std::string run_label = sra_input.substr(sra_input.find_last_of('/') == std::string::npos ? 0 : sra_input.find_last_of('/') + 1);
+        const std::string run_label = input_name.substr(input_name.find_last_of('/') == std::string::npos ? 0 : input_name.find_last_of('/') + 1);
         ecfg.metadata_sink = [stg](const std::string& m) { stg->set_source_metadata(m); };   // the .1fg2 keeps the .1fq's metadata JSON verbatim
         ecfg.block_sink = [stg, whitelist_dirs, scratch_dir, run_label](const singlet::fq::StagedBlock& sb) {
             if (!sb.dict) throw std::runtime_error("--stage-out: no barcode dictionary for this protocol (use the .1fq path)");
@@ -850,7 +994,7 @@ static int cmd_download(int argc, char* argv[]) {
         std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", std::localtime(&now));
 
         // Extract SRR accession (strip path+extension for the srr_ids field)
-        std::string srr_acc = sra_input;
+        std::string srr_acc = input_name;
         {
             auto sl = srr_acc.rfind('/');
             if (sl != std::string::npos) srr_acc = srr_acc.substr(sl + 1);
