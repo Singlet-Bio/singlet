@@ -295,3 +295,9 @@ Sample: `pilot_GSM4987148` (GSM4987148, GSE163781, four-line mixture, 836 M pair
 | CellBender cell barcodes | `pilot/GSM4987148/tools/cellbender/cb_cell_barcodes.csv` |
 
 The numbers in the diagnosis come from `python3 ops/s15/diag_pilot.py <pilot dir>`, which reads these files and prints the contingency tables. Vireo and souporcell used the STARsolo BAM and `K=4`.
+
+### Correction: species of the two cell-line mixtures (2026-11-06)
+
+ENA lists both GSM4987144 (5' v1) and GSM4987148 (3' v3) as *Homo sapiens* plus *Mus musculus*, because the mixtures contain the mouse line EL4. Both were first run against GRCh38 only. Their STARsolo, SoupX/decontX/scDblFinder, emptyDrops, CellBender and Kraken results were moved to `benchmark-store/_invalid_wrong_reference/pilot_GSM4987144` and `pilot_GSM4987148`, and the five tools are rerun on the human+mouse reference (jobs `s15-g-*`, started by `ops/s15/store/rerun_species.sh`). The kb, alevin, mgatk, vireo and souporcell results stay as human-reference results.
+
+The scores above for these two samples compare Singlet with the human-only STARsolo run. They are provisional until the barnyard rerun finishes, and the cell-call comparison for GSM4987148 (Jaccard 0.49) in particular must be redone. The other eleven pilot samples are single-species by their ENA records (the MDA-MB-231 xenograft GSM9038586 was already run as human+mouse).
