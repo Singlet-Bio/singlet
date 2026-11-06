@@ -1,0 +1,101 @@
+corpus_row	dataset_id	protocol	singlet_route	singlet_route_note
+1	hgmm1k_v3	10x 3p v3	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+2	hgmm1k_v2	10x 3p v2	planned	protocol 10x-3p-v2 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+3	hgmm10k_v3	10x 3p v3	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+4	macosko2015_dropseq_mix	Drop-seq	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+5	gierahn2017_seqwell_mix	Seq-Well	yes	protocol seqwell in known_protocols() and reads come from an SRA run; R1 is 32 nt against 20 expected, detection untested
+6	zheng2017_gemcode_mix	10x 3p v1	planned	10x v1 (GemCode): spec 10x-3p-v1 exists, but the SRA runs lack R1; the 10x tar is a FASTQ input (engine item)
+7	rosenberg2018_splitseq_mix	SPLiT-seq	yes	protocol splitseq in known_protocols() and reads come from an SRA run
+8	cao2017_sci_mix	sci-RNA-seq	no	sci-RNA-seq3 spec exists, Cao 2017 is sci-RNA-seq v1 (R1 18 nt): different layout
+9	stoeckius2018_hashing	10x 3p v2	yes	protocol 10x-3p-v2 in known_protocols() and reads come from an SRA run
+10	howitt2023_bal1	10x 3p, HTO	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+11	howitt2023_cl	10x 3p, HTO	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+12	tenx_cellplex_pbmc10k	10x 3p v3, CMO	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+13	xili_hek_hmec_multi	10x 3p, MULTI-seq	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+14	xili_nuc_multi	10x 3p nuclei, MULTI-seq	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+15	kang2018_b1_a	10x 3p v1	planned	protocol 10x-3p-v1 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+16	kang2018_b1_b	10x 3p v1	planned	protocol 10x-3p-v1 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+17	kang2018_b1_c	10x 3p v1	planned	protocol 10x-3p-v1 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+18	kang2018_ctrl	10x 3p v1	planned	protocol 10x-3p-v1 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+19	osorio2019_lcl_mix	10x 3p v2	yes	protocol 10x-3p-v2 in known_protocols() and reads come from an SRA run
+20	lcl_gse230239_HG01277	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+21	lcl_gse230239_HG00362	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+22	neavin2023_village	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+23	mcfarland2020_mixseq	10x 3p	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+24	frozen_pbmc_bc_v1	10x 3p v1	planned	protocol 10x-3p-v1 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+25	pilot_GSM5682562	10x 5p, HTO	planned	protocol 10x-5p-v3 exists, input route unclear
+26	pilot_GSM9038586	10x 3p	planned	protocol 10x-3p-v3 exists, input route unclear
+27	pilot_GSM4987144	10x 5p v1	planned	protocol 10x-5p-v2 exists, input route unclear
+28	pilot_GSM4987148	10x 3p v3	planned	protocol 10x-3p-v3 exists, input route unclear
+29	pilot_GSM5171610	10x 5p	planned	protocol 10x-5p-v3 exists, input route unclear
+30	pilot_GSM8085472	10x 5p, HTO	planned	protocol 10x-5p-v3 exists, input route unclear
+31	lr_pbmc_E_pbmc1	10x 3p + PacBio + ONT	planned	long-read comparison set; engine input is short-read
+32	lr_pbmc_E_pbmc2	10x 3p + PacBio	planned	long-read comparison set; engine input is short-read
+33	lr_musc	10x 3p + ONT	planned	long-read comparison set; engine input is short-read
+34	lr_LB	10x 3p + Kinnex + ONT	planned	long-read comparison set; engine input is short-read
+35	lr_mix1k	10x 3p + long reads	planned	long-read comparison set; engine input is short-read
+36	lr_mix10k_3	10x 3p + long reads	planned	long-read comparison set; engine input is short-read
+37	lr_mix10k_5	10x 5p + long reads	planned	long-read comparison set; engine input is short-read
+38	lr_wtc11_r1	10x 3p + long reads	planned	long-read comparison set; engine input is short-read
+39	lr_wtc11_r2	10x 3p + long reads	planned	long-read comparison set; engine input is short-read
+40	lr_chm13	10x 3p + long reads	planned	long-read comparison set; engine input is short-read
+41	lebrigand2020_scnaumi	10x 3p + ONT	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+42	tian2019_sc_10x_5cl	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+43	tian2019_celseq2_5cl_p1	CEL-Seq2	planned	celseq2 spec expects R1 of 12 nt, Tian R1 is 32 nt
+44	tian2019_rnamix_celseq2	CEL-Seq2	planned	celseq2 spec expects R1 of 12 nt, Tian R1 is 32 nt
+45	mereu2020_icell8	ICELL8	no	no ICELL8 protocol spec in known_protocols()
+46	mereu2020_dropseq	Drop-seq	planned	Drop-seq spec expects R1 of 20 nt, Mereu R1 is 76 nt: needs an R1-length rule
+47	mereu2020_indrop	inDrops	planned	spec exists (indrop) but expects R1 of 46 nt; Mereu layout differs
+48	mereu2020_scrbseq	SCRB-seq	no	no SCRB-seq protocol spec in known_protocols()
+49	mereu2020_celseq2	CEL-Seq2	planned	spec exists (celseq2) but expects R1 of 12 nt; Mereu layout differs
+50	pbmc10k_cite_v3	10x 3p v3	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+51	zheng2017_sorted_b	10x 3p v1	planned	10x v1 (GemCode): spec 10x-3p-v1 exists, but the SRA runs lack R1; the 10x tar is a FASTQ input (engine item)
+52	zheng2017_sorted_cd14	10x 3p v1	planned	10x v1 (GemCode): spec 10x-3p-v1 exists, but the SRA runs lack R1; the 10x tar is a FASTQ input (engine item)
+53	zheng2017_sorted_nk	10x 3p v1	planned	10x v1 (GemCode): spec 10x-3p-v1 exists, but the SRA runs lack R1; the 10x tar is a FASTQ input (engine item)
+54	tabula_muris_kidney_facs	Smart-seq2	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+55	qiu2020_scnt_neu	scNT-seq (10x)	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+56	mereu2020_singlenuclei	snRNA-seq (Mereu nuclei protocol)	no	no protocol spec for 'snRNA-seq (Mereu nuclei protocol)'
+57	pbmc_multiome10k	10x multiome RNA, nuclei	planned	protocol 10x-arc-gex exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+58	lake2018_brain_nuclei	snDrop-seq nuclei	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+59	ravindra2021_mock	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+60	ravindra2021_dpi1	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+61	ravindra2021_dpi2	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+62	russell2018_influenza	10x 3p v2	planned	protocol 10x-3p-v2 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+63	avital2017_salmonella	CEL-Seq style dual host and pathogen	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+64	macosko2015_dropseq_ercc	Drop-seq	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+65	tenx_crispr_a375_10k	10x 3p v3, CRISPR	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+66	norman2019_gem1	10x 3p v2, CRISPR	yes	protocol 10x-3p-v2 in known_protocols() and reads come from an SRA run
+67	replogle2022_k562_gg41	10x 3p v3, CRISPR	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+68	pbmc5p_v1	10x 5p v1	planned	protocol 10x-5p-v2 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+69	pbmc10k_5p_v2	10x 5p v2	planned	protocol 10x-5p-v2 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+70	gse145370_tcr	10x 5p VDJ	yes	protocol 10x-5p-v3 in known_protocols() and reads come from an SRA run
+71	bcr_pbmc3_b	10x 5p BCR	planned	protocol 10x-5p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+72	bcr_nextgem_pbmc3_b	10x 5p BCR	planned	protocol 10x-5p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+73	bian2018_sctrio2_crc	scTrio-seq2	no	no protocol spec for 'scTrio-seq2'
+74	patel2014_gbm	Smart-seq (plate)	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+75	aynaud2020_ewing	Smart-seq style plate (full-length)	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+76	mereu2020_ddseq	ddSEQ	planned	spec exists (ddseq) but expects R1 of 68 nt; Mereu layout differs
+77	ludwig2019_mt_clones	Smart-seq2 plate	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+78	miller2022_maester	10x 3p + chrM enrichment	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+79	deng2014_f1_embryo	Smart-seq	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+80	hagemann2020_smartseq3_f1	Smart-seq3	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+81	panten2024_f1_testis	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+82	buettner2015_esc_cycle	Smart-seq (C1)	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+83	battich2020_sceu	scEU-seq (CEL-Seq2 based)	yes	protocol celseq2 in known_protocols() and reads come from an SRA run
+84	qiu2020_scnt	scNT-seq (10x)	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+85	erhard2019_scslam	scSLAM-seq	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+86	visium_mouse_brain_ant	Visium	planned	protocol 10x-visium exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+87	visium_cytassist_post_xenium_colon	Visium CytAssist FFPE	planned	protocol 10x-visium exists, input route unclear
+88	visiumhd_crc_xenium	Visium HD	yes	protocol 10x-visium in known_protocols() and reads come from an SRA run
+89	slideseqv2_hippocampus	Slide-seqV2	no	no protocol spec for 'Slide-seqV2'
+90	ren2025_serial_sections	Visium HD, Stereo-seq	planned	protocol 10x-visium exists, input route unclear
+91	dlpfc_maynard2021	Visium	planned	protocol 10x-visium exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+92	zf_microwell2022	Microwell-seq	yes	protocol microwell-seq in known_protocols() and reads come from an SRA run
+93	zf_daniocell	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+94	dm_fca2022	10x 3p (snRNA)	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+95	dm_davie2018	10x 3p and Drop-seq	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+96	ce_taylor2021_cengen	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+97	ce_cao2017_sci	sci-RNA-seq	no	sci-RNA-seq3 spec exists, Cao 2017 is sci-RNA-seq v1 (R1 18 nt): different layout
+98	macaque_shami2020_testis	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+99	pbmc5k_v4_d1	10x 3p v4	planned	protocol 10x-3p-v3 exists, but the engine stages reads from SRA runs only (FASTQ and BAM inputs are an engine item)
+100	flex_pbmc_4plex	10x Flex (probe)	no	no protocol spec for '10x Flex (probe)'
