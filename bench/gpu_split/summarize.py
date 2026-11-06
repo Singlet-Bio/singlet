@@ -34,7 +34,7 @@ p("# gpu/bold-split overnight summary")
 p()
 b = os.environ.get("BUILD_JOB", "")
 p("## Build")
-t = rd(f"{LOGS}/gbold-build-{b}.out") if b else None
+t = rd((glob.glob(f"{LOGS}/*-{b}.out") or [""])[0]) if b else None
 if t:
     for l in t.splitlines():
         if l.startswith("COMMIT=") or re.match(r"^[0-9a-f]{64}  ", l) or l.startswith("[build]"):
@@ -47,7 +47,7 @@ p()
 
 p("## Identity against b0 (pbmc1k_v3, T=14, one slot)")
 for j in os.environ.get("IDENT_JOBS", "").split():
-    t = rd(f"{LOGS}/gbold-ident-{j}.out")
+    t = rd((glob.glob(f"{LOGS}/*-{j}.out") or [""])[0])
     p(f"Job {j}: {state(j)}")
     if not t:
         p("    no log")
