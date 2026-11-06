@@ -6,7 +6,7 @@
 #SBATCH --mem=4G
 #SBATCH --time=00:20:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# Summarizer of the gpu/bold-split chain. Environment: BUILD_JOB IDENT_JOBS (space list) PATHS_JOB TP_JOB, BR (branch holding the scripts).
+# Summarizer of the gpu/bold-split chain. Environment: BUILD_JOB IDENT_JOBS (space list) PATHS_JOB TP_JOBS (space list), BR (branch holding the scripts).
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; export W
 BARE=$W/repos/singlet-py.git; BR=${BR:-gpu/bold-split}; URL="$(git -C $BARE config remote.origin.url)"

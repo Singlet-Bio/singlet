@@ -82,6 +82,13 @@ export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_R
 export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 NGPU=$(nvidia-smi -L | wc -l)
+# MPS=1 (gpu/bold-split): the CUDA MPS daemon for the job (use with --exclusive: it serves every process of the node's GPU), stopped at exit
+if [ "${MPS:-0}" = 1 ]; then
+  export CUDA_MPS_PIPE_DIRECTORY=/tmp/$USER-mps-$SLURM_JOB_ID/pipe CUDA_MPS_LOG_DIRECTORY=/tmp/$USER-mps-$SLURM_JOB_ID/log
+  mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY
+  nvidia-cuda-mps-control -d && echo "MPS daemon started (pipe $CUDA_MPS_PIPE_DIRECTORY)" | tee -a $S || echo "!! MPS daemon did not start" | tee -a $S
+  trap 'echo quit | nvidia-cuda-mps-control 2>/dev/null; kill $(jobs -p) 2>/dev/null; git -C $BARE update-ref -d $SREF 2>/dev/null; rm -rf "${SCR:?}" /tmp/$USER-mps-$SLURM_JOB_ID' EXIT INT TERM
+fi
 echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT expect=$EXPECT_COMMIT embedded=$EMBED scripts=$SCRIPTS T=points:${POINTS[*]} $(date -Is)" | tee $S
 echo "node=$(hostname) job=$SLURM_JOB_ID cpus=$SLURM_CPUS_PER_TASK gpus=$NGPU cpu_ref=$CPU_REF points=${POINTS[*]} nruns=${NRUNS:-by-tag} sample=$SAMPLE" | tee -a $S
 { nvidia-smi --query-gpu=index,name,pci.bus_id,memory.total,driver_version --format=csv,noheader; lscpu | grep -E "^Model name|^CPU\(s\)|^NUMA node[0-9]"; free -g | head -2
@@ -98,6 +105,7 @@ cfg_set() {
     nodn) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen" ;;
     alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
     maponly) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
+    decided) CFG_ENV="$(cat ${DECISION_FILE:?DECISION_FILE})" ;;   # gpu/bold-split: the decider job's choice, e.g. SINGLET_ENGINE_GPU_STEPS_B=auto
     s512) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=512" ;;       # gpu/bold-split: lane B step budget
     s128) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=128" ;;
     sauto) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=auto" ;;      # gpu/bold-split: controller between lane B batches
