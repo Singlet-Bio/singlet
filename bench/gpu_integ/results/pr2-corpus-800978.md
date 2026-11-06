@@ -1,6 +1,6 @@
 # PR-2 gate G3: 16-input corpus on the candidate (c8849bb2)
 
-Job 800978 (GPU, g052, T=8, 658 s). CPU references: array 800977. Binary `gpu-pr2/bin2/c8849bb2/singlet-gpu` (build job 800974, fixed build script, sha256 f1bbc00f...). `ALLOW_NO_EMBED=1`. The branch head is later than c8849bb2 only by gate-result files.
+Job 800978 (GPU, g052, T=8, 655 s). CPU references: array 800977. Binary `gpu-pr2/bin2/c8849bb2/singlet-gpu` (build job 800974, fixed build script, sha256 f1bbc00f...). `ALLOW_NO_EMBED=1`. The branch head is later than c8849bb2 only by gate-result files.
 
 **Verdict: corpus FAILED as the harness counts it (11 of 16 pass). Output is IDENTICAL to the CPU engine on every input that produced output. strand100 does not hang.**
 
