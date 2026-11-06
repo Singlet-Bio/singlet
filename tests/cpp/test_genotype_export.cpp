@@ -53,10 +53,10 @@ int main() {
     for (uint32_t dp = 0; dp <= 200; ++dp)
         for (uint32_t ad = 0; ad <= dp; ++ad) {
             const std::string f = G::donor_fields(ad, dp);
-            const std::string gt = f.substr(0, 3);
+            const std::string gt = f.substr(0, 3);   // "./." also for dp == 0
             if (gt != singlet::call_donor_genotype(ad, dp)) { std::cout << "FAIL gt ad=" << ad << " dp=" << dp << " " << f << "\n"; ++n_fail; }
         }
-    CHECK(G::donor_fields(0, 0) == "./.", "no depth");
+    CHECK(G::donor_fields(0, 0) == "./.:.:0,0:0:.", "no depth");
     CHECK(G::donor_fields(0, 30) == "0/0:89:30,0:30:0,89,599", "hom-ref 30 " + G::donor_fields(0, 30));
     CHECK(G::donor_fields(1, 10) == "./.:10:9,1:10:0,10,160", "1 of 10 is no-call with GQ 10: " + G::donor_fields(1, 10));
 
