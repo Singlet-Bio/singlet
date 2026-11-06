@@ -18,7 +18,7 @@ PATHS=$(sbatch --parsable --kill-on-invalid-dep=yes --dependency=afterok:$IDENT,
 # TAIL: the last job queued on g050 at submission time (check with scontrol show job: ReqNodeList=g050), given by the caller
 TAIL=${TAIL:-}
 echo "tail of g050: ${TAIL:-none}"
-TIMING=$(sbatch --parsable --kill-on-invalid-dep=yes --dependency=afterok:$IDENT,afterany:$PATHS${TAIL:+:$TAIL} $J/timing.sbatch)
+TIMING=$(sbatch --parsable --kill-on-invalid-dep=yes --dependency=afterok:$IDENT,afterany:$PATHS $J/timing.sbatch)   # exclusive, any H100 node
 SUMM=$(sbatch --parsable --dependency=afterany:$BUILD:$PRE:$IDENT:$REFS:$PATHS:$TIMING \
        --export=ALL,BUILD_ID=$BUILD,IDENT_ID=$IDENT,PATHS_ID=$PATHS,TIMING_ID=$TIMING $J/summarize.sbatch)
 echo "build=$BUILD preflight=$PRE identity=$IDENT refs=$REFS paths=$PATHS timing=$TIMING(after $PATHS,${TAIL:-none}) summary=$SUMM"

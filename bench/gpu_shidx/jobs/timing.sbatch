@@ -3,12 +3,12 @@
 #SBATCH --account=debruinz
 #SBATCH --partition=short-gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
-#SBATCH --nodelist=g050
+#SBATCH --exclusive
 #SBATCH --cpus-per-task=28
 #SBATCH --mem=370G
 #SBATCH --time=03:55:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# Timing of the shared resident genome index (gpu/bold-shidx) on g050 (the timing node). One job, five arms, each the throughput harness
+# Timing of the shared resident genome index (gpu/bold-shidx) on any H100 node, exclusive (the first to start of g050, g051, g052). One job, five arms, each the throughput harness
 # (tp.sbatch, bench/gpu_shidx/jobs/tp.sbatch: a copy of bench/gpu_bold/jobs/tp.sbatch whose results directory lies under jobs/gpu-shidx) at k=8, T=7, r3 (24 runs):
 #   A  b0 at 2 slots (every process holds its own index)
 #   B  shared index, 2 slots          C  shared index, 3 slots (normal mode expected)
