@@ -76,6 +76,18 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
             posix_spawn_file_actions_addopen(&fa, 1, slog.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0666);
             posix_spawn_file_actions_adddup2(&fa, 1, 2);
             posix_spawnattr_t at; posix_spawnattr_init(&at); posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSID);
+            {   // the device holds one genome at a time: holders of other genomes on this device leave when they have no client (SIGUSR1)
+                glob_t g{};
+                if (glob(shPath(deviceId(device) + ".*", "info").c_str(), 0, nullptr, &g) == 0) {
+                    for (size_t i = 0; i < g.gl_pathc; i++) {
+                        if (std::string(g.gl_pathv[i]) == shPath(key, "info")) continue;
+                        FILE* f = fopen(g.gl_pathv[i], "r"); if (!f) continue;
+                        long pid = 0; if (fscanf(f, "%ld", &pid) == 1 && pid > 0) kill((pid_t) pid, SIGUSR1);
+                        fclose(f);
+                    }
+                }
+                globfree(&g);
+            }
             const int rc = posix_spawn(&child, self, &fa, &at, (char* const*) argv, environ);
             posix_spawn_file_actions_destroy(&fa); posix_spawnattr_destroy(&at);
             if (rc != 0) { close(lk); return no(std::string("cannot start the holder: ") + strerror(rc)); }
@@ -112,8 +124,9 @@ static bool shAcquire(const std::string& genomeDir, const GenomeView& H, u64 saB
     log += l;
     return true;
 }
-static volatile sig_atomic_t g_shStop = 0;
+static volatile sig_atomic_t g_shStop = 0, g_shEvict = 0;
 static void shSig(int) { g_shStop = 1; }
+static void shEvictSig(int) { g_shEvict = 1; }
 }   // namespace
 
 uint64_t sharedIndexReserve() {
@@ -137,6 +150,7 @@ uint64_t sharedIndexReserve() {
 // singlet gpu-holder --stop --genome-dir D [--device N]
 int holderMain(int argc, char** argv) {
     std::string gd; int device = 0; double idle = 900; bool stop = false;
+    if (const char* ie = std::getenv("SINGLET_GPU_SHARED_INDEX_IDLE_S")) idle = std::atof(ie);
     for (int i = 0; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--genome-dir" && i + 1 < argc) gd = argv[++i];
@@ -157,7 +171,7 @@ int holderMain(int argc, char** argv) {
         if (DIR* d = opendir("/proc/self/fd")) { const int dfd = dirfd(d); while (dirent* e = readdir(d)) { const int fd = atoi(e->d_name); if (fd > 2 && fd != dfd) fds.push_back(fd); } closedir(d); }
         for (int fd : fds) close(fd);
     }
-    signal(SIGTERM, shSig); signal(SIGINT, shSig); signal(SIGPIPE, SIG_IGN);
+    signal(SIGTERM, shSig); signal(SIGINT, shSig); signal(SIGUSR1, shEvictSig); signal(SIGPIPE, SIG_IGN);
     const double t0 = now();
     const std::string dir = gd.back() == '/' ? gd : gd + "/";
     struct stat sg{}, ss{}, si{};
@@ -168,7 +182,11 @@ int holderMain(int argc, char** argv) {
     const u64 hdr = 8 + (nb + 1) * 8, nGen = (u64) sg.st_size, saB = (u64) ss.st_size, saiB = (u64) si.st_size - hdr;
     const u64 allocG = nGen + 2 * SH_PAD + 8, allocSA = saB + 64 + 8, allocSAi = saiB + 64 + 8;
     void *dG = nullptr, *dSA = nullptr, *dSAi = nullptr;
-    if (cudaMalloc(&dG, allocG) || cudaMalloc(&dSA, allocSA) || cudaMalloc(&dSAi, allocSAi)) { fprintf(stderr, "gpu-holder: out of device memory for the index (%.2f GB)\n", b2gb(allocG + allocSA + allocSAi)); return 1; }
+    for (int tries = 0; tries < 40; tries++) {   // another genome's holder may be leaving the device (SIGUSR1)
+        if (!cudaMalloc(&dG, allocG) && !cudaMalloc(&dSA, allocSA) && !cudaMalloc(&dSAi, allocSAi)) break;
+        cudaGetLastError(); cudaFree(dG); cudaFree(dSA); cudaFree(dSAi); dG = dSA = dSAi = nullptr; sleep(1);
+    }
+    if (!dG || !dSA || !dSAi) { fprintf(stderr, "gpu-holder: out of device memory for the index (%.2f GB)\n", b2gb(allocG + allocSA + allocSAi)); return 1; }
     cudaMemset(dG, 0, allocG); cudaMemset(dSA, 0, allocSA); cudaMemset(dSAi, 0, allocSAi);
     cudaMemset(dG, 5, SH_PAD); cudaMemset((char*) dG + SH_PAD + nGen, 5, SH_PAD);   // STAR's tail of the largest symbol (GENOME_spacingChar) around G
     const u64 CH = 256ull << 20; char* pin = nullptr;
@@ -224,6 +242,7 @@ int holderMain(int argc, char** argv) {
             }
         }
         if (!cl.empty()) lastBusy = now();
+        else if (g_shEvict) { fprintf(stderr, "gpu-holder: asked to leave the device for another genome, exiting after %llu clients\n", (unsigned long long) nServed); break; }
         else if (now() - lastBusy > idle) { fprintf(stderr, "gpu-holder: idle for %.0f s, exiting after %llu clients\n", idle, (unsigned long long) nServed); break; }
     }
     for (int c : cl) close(c);
