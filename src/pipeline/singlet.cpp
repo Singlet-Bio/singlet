@@ -636,7 +636,10 @@ static int cmd_download(int argc, char* argv[]) {
                 if (!is_url(x)) return x;
                 const std::string dst = staging() + "/" + basename_of(x);
                 std::cerr << "[singlet-download] fetching " << x << "\n";
-                const std::string cmd = "curl -fsSL --retry 5 --retry-delay 10 -C - -o " + shq(dst) + " " + shq(x);
+                // Large archive files (tens of GB) drop mid-stream now and then (curl 56, TLS EOF), which --retry alone does not cover:
+                // --retry-all-errors plus an outer loop, each attempt resuming from the bytes already on disk (-C -).
+                const std::string one = "curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -C - -o " + shq(dst) + " " + shq(x);
+                const std::string cmd = "for i in 1 2 3 4 5 6; do " + one + " && exit 0; sleep 30; done; exit 1";
                 if (std::system(cmd.c_str()) != 0) throw std::runtime_error("download failed: " + x);
                 return dst;
             };
