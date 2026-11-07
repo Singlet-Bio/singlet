@@ -968,7 +968,7 @@ inline std::vector<DoubletResult> detect_doublets(
         const size_t qi = static_cast<size_t>(std::floor(0.95 * (1.0 - rho) * (n - 1)));
         std::nth_element(o.begin(), o.begin() + qi, o.end());
         const float thr = o[qi];
-        if (het_cl.empty()) {
+        if (het_cl.empty() || mix_used <= 0.0) {   // no heterotypic simulation: the plain share, as before the change
             uint32_t above = 0;
             for (float v : sim_stat) if (v > thr) ++above;
             h = static_cast<double>(above) / std::max<size_t>(1, sim_stat.size());
