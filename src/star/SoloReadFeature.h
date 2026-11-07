@@ -12,6 +12,12 @@
 
 class SoloFeature;
 
+//parallel Solo input: a thread's counted records (cb, feature, umi[, read index]) in file order, and how many per CB, instead of writing them at the CB cursors
+struct SoloRecSink {
+    vector<uint32> v, cnt;
+    uint32 stride=0;
+};
+
 class SoloReadFeature {
 public:
 
@@ -38,7 +44,7 @@ public:
     void addStats(const SoloReadFeature &soloCBin);
     void statsOut(ofstream &streamOut);
     void inputRecords(uint32 **cbP, uint32 cbPstride, vector<uint32> &cbReadCountTotal, vector<readInfoStruct> &readInfo, SoloReadFlagClass &readFlagCounts,
-                      vector<uint32> &nReadPerCBunique1, vector<uint32> &nReadPerCBmulti1);
+                      vector<uint32> &nReadPerCBunique1, vector<uint32> &nReadPerCBmulti1, SoloRecSink *sink=nullptr);
 
 private:
     const int32 featureType;

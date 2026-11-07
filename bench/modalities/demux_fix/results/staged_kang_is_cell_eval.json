@@ -1,0 +1,54 @@
+{
+ "singlet_auto": {
+  "cells_called": 14404,
+  "truth_cells": 14619,
+  "cells_in_truth": 14402,
+  "truth_singlets": 12139,
+  "ari_all_singlets": 0.9718117211362719,
+  "ari_assigned_only": 0.9987750829877109,
+  "acc_assigned": 0.9990751639482092,
+  "unassigned_rate": 0.0015652030645028421,
+  "singlets_called_doublet": 0.018617678556718018,
+  "per_donor_recall": {
+   "101": 0.9657210401891253,
+   "1015": 0.9470958194598594,
+   "1016": 0.9958896065766295,
+   "1039": 0.9431072210065645,
+   "107": 0.990234375,
+   "1244": 0.9967602591792657,
+   "1256": 0.9893924783027965,
+   "1488": 0.9909638554216867
+  },
+  "dbl_auroc_genotype": 0.9716284906342997,
+  "dbl_auprc_genotype": 0.9042887508863788,
+  "dbl_recall_at_call": 0.8836045056320401,
+  "dbl_precision_at_call": 0.8223645894001165,
+  "n_donors_found": 8
+ },
+ "vireo": {
+  "cells_called": 14404,
+  "truth_cells": 14619,
+  "cells_in_truth": 14402,
+  "truth_singlets": 12139,
+  "ari_all_singlets": 0.9232509620243582,
+  "ari_assigned_only": 0.9573033976429854,
+  "acc_assigned": 0.9479976090854751,
+  "unassigned_rate": 0.01985336518658868,
+  "singlets_called_doublet": 0.015404893319054288,
+  "per_donor_recall": {
+   "101": 0.9657210401891253,
+   "1015": 0.8405475397706252,
+   "1016": 0.995302407516148,
+   "1039": 0.0,
+   "107": 0.892578125,
+   "1244": 0.9956803455723542,
+   "1256": 0.9879459980713597,
+   "1488": 0.9879518072289156
+  },
+  "dbl_auroc_genotype": 0.9500847556273747,
+  "dbl_auprc_genotype": 0.8423919286477767,
+  "dbl_recall_at_call": 0.7891113892365457,
+  "dbl_precision_at_call": 0.8214983713355049,
+  "n_donors_found": 8
+ }
+}

@@ -41,7 +41,8 @@ inline std::vector<CellSaturation> compute_saturation(
     const DirectionalUmiStore& store,
     int umi_len)
 {
-    auto cell_stats = store.per_cell_stats(umi_len);
+    auto cell_stats = store.molecules_empty() ? store.per_cell_stats(umi_len)
+                                              : store.per_cell_molecule_stats(umi_len);
 
     std::vector<CellSaturation> result;
     result.reserve(cell_stats.size());

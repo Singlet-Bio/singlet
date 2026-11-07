@@ -69,6 +69,9 @@ add_test(NAME test_pz2_multi_tu COMMAND test_pz2_multi_tu)
 
 # Cell calling / QC
 add_pileup_test(test_cell_calling)
+add_pileup_test(test_called_v2)   # C++ port of python/singlet/s1/cellcall.py vs its output (called_v2_fixture.h)
+target_include_directories(test_called_v2 PRIVATE ${CMAKE_SOURCE_DIR}/tests/cpp)
+target_compile_definitions(test_called_v2 PRIVATE CV2_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/data/called_ed_golden")
 add_pileup_test(test_barcode_rank)
 add_pileup_test(test_cell_qc)
 add_pileup_test(test_tiny_dataset_guard)
@@ -83,13 +86,38 @@ add_pileup_test(test_barnyard_route)
 add_pileup_test(test_doublet_scores)
 add_pileup_test(test_saturation_curve)
 add_pileup_test(test_splice_psi)
+add_pileup_test(test_sj_unique_only)
 add_pileup_test(test_em_rescue)
+add_pileup_test(test_molecule_labels)
+add_pileup_test(test_csc_add_signed)   # the uint16 cap of the pre-USA exon / intron split (csc_add_signed, mixed molecules past 65535)
+add_pileup_test(test_umi_store_scale)
+add_pileup_test(test_umi_deep_roots)
+add_pileup_test(test_umi_consume)
+add_pileup_test(test_umi_seeds)         # SINGLET_UMI_COLLAPSE=seed: order-free seed-based directional collapse
+add_pileup_test(test_mt_numt_tie)
+add_pileup_test(test_pileup_workers)   # run_parallel: counts independent of the worker count
+# GPU pileup vs CPU pileup (labels, kFlank, legacy_exon_extra) under intron rules 397 and 389. Built in every configuration; it prints SKIP
+# and exits 77 (ctest: skipped) in a CPU-only build or without a usable CUDA device. The GPU engine library exists when the pipeline is built
+# with a CUDA compiler (SINGLET_ENGINE_GPU, top-level CMakeLists.txt).
+add_pileup_test(test_gpu_pileup_labels)
+set_tests_properties(test_gpu_pileup_labels PROPERTIES SKIP_RETURN_CODE 77)
+if(TARGET singlet_engine_gpu)
+    target_link_libraries(test_gpu_pileup_labels PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_pileup_labels PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
+add_pileup_test(test_strand_detect)
+add_pileup_test(test_stream_strand_restart)
+add_pileup_test(test_run_screen)
 add_pileup_test(test_tpm_fpkm)
 add_pileup_test(test_atac_peaks)
 add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
+add_pileup_test(test_stall_watchdog)
+add_pileup_test(test_nonhost_sample)
 add_pileup_test(test_atac_fragment)
+add_pileup_test(test_atac_peak_caller)
+add_pileup_test(test_atac_metrics)
 add_pileup_test(test_atac_bin_counter)
 add_pileup_test(test_atac_qc)
 add_pileup_test(test_atac_cell_caller)
@@ -116,8 +144,10 @@ add_pileup_test(test_txome_aligner)
 
 # Nonhost detection
 add_pileup_test(test_nonhost)
+add_pileup_test(test_min_sketch_mmap)
 add_pileup_test(test_nonhost_aligner)
 add_pileup_test(test_nonhost_cell_matrix)
+add_pileup_test(test_nonhost_confirmed_reads)
 add_pileup_test(test_nonhost_db_build)
 add_pileup_test(test_nonhost_em)
 add_pileup_test(test_nonhost_host_filter)
@@ -133,11 +163,13 @@ add_pileup_test(test_summary_json)
 
 # Doublet / ambient / dedup
 add_pileup_test(test_doublet_detect_v2)
+add_pileup_test(test_doublet_calibration)   # v7 Scrublet-style scorer: planted doublets, rate-calibrated calls, determinism
 add_pileup_test(test_ambient_profile)
 add_pileup_test(test_read_dedup_stats)
 add_pileup_test(test_donor_demux_perf)
 add_pileup_test(test_wl_ambient)
 add_pileup_test(test_ambient_realistic)
+add_pileup_test(test_ambient_decontx)   # gene-level cluster-EM ambient estimator + integer corrected matrix
 add_pileup_test(test_sparse_accumulator)
 add_pileup_test(test_pseudocount_sensitivity)
 add_pileup_test(test_gray_zone)
@@ -145,6 +177,7 @@ add_pileup_test(test_mc_pvalue_calibration)
 
 # Modality-specific
 add_pileup_test(test_mt_events)
+add_pileup_test(test_mt_caller)   # reference-based, strand-aware chrM caller + private haplotype outputs
 add_pileup_test(test_rna_variant_caller)
 add_pileup_test(test_longread)
 add_pileup_test(test_methyl)
@@ -160,6 +193,7 @@ add_pileup_test(test_wgs_assembly)
 # Spatial
 add_pileup_test(test_visium_spatial)
 add_pileup_test(test_visium_qc)
+add_pileup_test(test_visium_tissue)
 add_pileup_test(test_spatial_barcodes)
 add_pileup_test(test_spatial_multiome)
 
@@ -203,8 +237,14 @@ add_pileup_test(test_te_kmer_integration)
 add_pileup_test(test_txome_gene_index)
 add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
+add_pileup_test(test_read_source)   # read_source.h: shared .1fq decoder, STAR chunk source
+add_pileup_test(test_fastq_encoder_r1_101)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_donor_genotype_call)
+add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
+add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
+add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features
 add_pileup_test(test_feature_barcode_detect)
 add_pileup_test(test_ram_tier)
 add_pileup_test(test_species_short_r2)
@@ -215,7 +255,10 @@ add_pileup_test(test_whitelist_integrity)
 target_compile_definitions(test_whitelist_integrity PRIVATE
     WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 add_pileup_test(test_ws2_protocol_hardening)
+add_pileup_test(test_protocol_short_barcode_read)
+add_pileup_test(test_protocol_untrimmed_r1)
 add_pileup_test(test_ws4_crash_diagnostics)
+add_pileup_test(test_bam_sort_budget)
 
 # HDF5-dependent tests (h5ad, loom, molecule_info, and anything else that
 # transitively includes export.h -> h5ad_writer.h -> <hdf5.h>)

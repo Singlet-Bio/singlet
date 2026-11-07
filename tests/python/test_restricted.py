@@ -131,6 +131,18 @@ class TestRules:
         assert is_restricted_member("donor/anything_new.tsv")
         assert is_restricted_member("mt/anything_new.tsv")
 
+    def test_private_dir_is_restricted(self):
+        for rel in (
+            "private/snp_ad.1pz",
+            "private/ase_counts.tsv",
+            "private/mt_allele_counts.mtx.gz",
+            "private/donor/donor0.vcf",
+            "private/mt/donor0_mt_consensus.fa",
+        ):
+            assert is_restricted_member(rel)
+            assert is_restricted_path(f"samples/GSM1/{rel}")
+        assert not is_restricted_member("donor_assignments.tsv")
+
     def test_study_level_files_are_public(self):
         for n in ("manifest.json", "study_meta.json", "feature_vocab.json"):
             assert not is_restricted_path(n)

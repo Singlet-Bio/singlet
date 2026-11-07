@@ -1,0 +1,294 @@
+{
+ "label": "new_q20umi",
+ "pileup_reads_used": 2289411,
+ "n_variants_public": 5,
+ "D_variants_ge50_het_cells": 0,
+ "D_variants_ge50_het_cells_frac": 0.0,
+ "het_matrix_nnz": 24,
+ "A_entries": 24,
+ "A_entries_with_pileup": 24,
+ "A_orig_pearson": 0.9657245062435278,
+ "A_orig_mean_abs_diff": 0.07362684309035052,
+ "A_orig_frac_within_0.01": 0.08333333333333333,
+ "A_same_alt_pearson": 0.9657245062435278,
+ "A_same_alt_mean_abs_diff": 0.07362684309035052,
+ "A_same_alt_frac_within_0.01": 0.08333333333333333,
+ "B_pool_pileup_variants_alt3_af1pct": 1329,
+ "B_strong_pileup_variants_alt10_af5pct": 205,
+ "B_public_variants": 5,
+ "B_public_supported_by_pileup": 0,
+ "B_public_precision_vs_pileup": 0.0,
+ "B_public_supported_alt3_any_af": 5,
+ "B_public_in_strong": 0,
+ "B_strong_recall_public": 0.0,
+ "B_sites_evaluated": 10605,
+ "B_sites_class_counts": {
+  "rejected": 10565,
+  "haplotype": 35,
+  "het": 5
+ },
+ "B_union_variants": 90,
+ "B_union_precision_vs_pileup": 0.8777777777777778,
+ "B_union_in_strong": 73,
+ "B_strong_recall_union": 0.35609756097560974,
+ "B_haplotype_like_sites": 35,
+ "C_truth_donor_haplotype_sizes": {
+  "101": 20,
+  "1015": 20,
+  "1016": 12,
+  "1039": 10,
+  "107": 19,
+  "1244": 24,
+  "1256": 16,
+  "1488": 27
+ },
+ "C_per_donor": [
+  {
+   "singlet_donor": "donor0",
+   "truth_donor": "101",
+   "n_singlet": 22,
+   "n_singlet_in_covered": 19,
+   "n_ref_haplotype": 20,
+   "tp": 17,
+   "precision": 0.8947368421052632,
+   "recall": 0.85,
+   "precision_vs_af75": 1.0,
+   "recall_vs_af75": 0.76,
+   "missed": [
+    "11623T",
+    "16271C",
+    "3107T"
+   ],
+   "false_pos": [
+    "3010A",
+    "5513A"
+   ],
+   "missed_reasons": {
+    "11623T": "af af=0.77 dp=93 fwd/rev=71/1 prof=1389/39",
+    "16271C": "af af=0.78 dp=27 fwd/rev=2/19 prof=59/250",
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10"
+   }
+  },
+  {
+   "singlet_donor": "donor5",
+   "truth_donor": "1015",
+   "n_singlet": 22,
+   "n_singlet_in_covered": 18,
+   "n_ref_haplotype": 20,
+   "tp": 14,
+   "precision": 0.7777777777777778,
+   "recall": 0.7,
+   "precision_vs_af75": 0.9444444444444444,
+   "recall_vs_af75": 0.6296296296296297,
+   "missed": [
+    "13020C",
+    "13734C",
+    "16129C",
+    "3107T",
+    "5390G",
+    "6045T"
+   ],
+   "false_pos": [
+    "12139A",
+    "16189C",
+    "16362C",
+    "5513A"
+   ],
+   "missed_reasons": {
+    "13020C": "af af=0.79 dp=266 fwd/rev=206/3 prof=975/41",
+    "13734C": "af af=0.75 dp=126 fwd/rev=81/14 prof=445/62",
+    "16129C": "af af=0.76 dp=37 fwd/rev=3/25 prof=15/165",
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10",
+    "5390G": "af af=0.80 dp=5292 fwd/rev=4208/3 prof=23771/25",
+    "6045T": "af af=0.70 dp=83 fwd/rev=11/47 prof=63/267"
+   }
+  },
+  {
+   "singlet_donor": "donor1",
+   "truth_donor": "1016",
+   "n_singlet": 16,
+   "n_singlet_in_covered": 14,
+   "n_ref_haplotype": 12,
+   "tp": 10,
+   "precision": 0.7142857142857143,
+   "recall": 0.8333333333333334,
+   "precision_vs_af75": 1.0,
+   "recall_vs_af75": 0.7777777777777778,
+   "missed": [
+    "3107T",
+    "7645C"
+   ],
+   "false_pos": [
+    "12139A",
+    "152C",
+    "3197C",
+    "5513A"
+   ],
+   "missed_reasons": {
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10",
+    "7645C": "af af=0.75 dp=53 fwd/rev=21/19 prof=170/208"
+   }
+  },
+  {
+   "singlet_donor": "donor3",
+   "truth_donor": "1039",
+   "n_singlet": 8,
+   "n_singlet_in_covered": 7,
+   "n_ref_haplotype": 10,
+   "tp": 6,
+   "precision": 0.8571428571428571,
+   "recall": 0.6,
+   "precision_vs_af75": 1.0,
+   "recall_vs_af75": 0.4666666666666667,
+   "missed": [
+    "15535T",
+    "3107T",
+    "4977C",
+    "9950C"
+   ],
+   "false_pos": [
+    "5513A"
+   ],
+   "missed_reasons": {
+    "15535T": "af af=0.64 dp=280 fwd/rev=176/2 prof=6316/90",
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10",
+    "4977C": "af af=0.62 dp=16 fwd/rev=9/1 prof=631/88",
+    "9950C": "af af=0.64 dp=900 fwd/rev=574/0 prof=24235/15"
+   }
+  },
+  {
+   "singlet_donor": "donor7",
+   "truth_donor": "107",
+   "n_singlet": 10,
+   "n_singlet_in_covered": 8,
+   "n_ref_haplotype": 19,
+   "tp": 8,
+   "precision": 1.0,
+   "recall": 0.42105263157894735,
+   "precision_vs_af75": 1.0,
+   "recall_vs_af75": 0.38095238095238093,
+   "missed": [
+    "10238C",
+    "11928G",
+    "12092T",
+    "12822G",
+    "14581C",
+    "16390A",
+    "3107T",
+    "3921A",
+    "4917G",
+    "5471A",
+    "8251A"
+   ],
+   "false_pos": [],
+   "missed_reasons": {
+    "10238C": "af af=0.73 dp=74 fwd/rev=51/3 prof=1365/31",
+    "11928G": "af af=0.70 dp=1296 fwd/rev=910/0 prof=31908/31",
+    "12092T": "af af=0.69 dp=781 fwd/rev=540/0 prof=18640/28",
+    "12822G": "af af=0.60 dp=42 fwd/rev=24/1 prof=860/45",
+    "14581C": "af af=0.73 dp=216 fwd/rev=156/1 prof=3698/49",
+    "16390A": "af af=0.62 dp=24 fwd/rev=4/11 prof=130/345",
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10",
+    "3921A": "af af=0.77 dp=231 fwd/rev=178/0 prof=4292/20",
+    "4917G": "af af=0.70 dp=23 fwd/rev=15/1 prof=216/58",
+    "5471A": "af af=0.73 dp=668 fwd/rev=487/0 prof=14446/11",
+    "8251A": "af af=0.77 dp=1724 fwd/rev=1330/3 prof=34672/27"
+   }
+  },
+  {
+   "singlet_donor": "donor6",
+   "truth_donor": "1244",
+   "n_singlet": 27,
+   "n_singlet_in_covered": 25,
+   "n_ref_haplotype": 24,
+   "tp": 22,
+   "precision": 0.88,
+   "recall": 0.9166666666666666,
+   "precision_vs_af75": 1.0,
+   "recall_vs_af75": 0.8620689655172413,
+   "missed": [
+    "10750G",
+    "3107T"
+   ],
+   "false_pos": [
+    "12139A",
+    "14905A",
+    "5513A"
+   ],
+   "missed_reasons": {
+    "10750G": "af af=0.77 dp=142 fwd/rev=101/8 prof=743/85",
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10"
+   }
+  },
+  {
+   "singlet_donor": "donor4",
+   "truth_donor": "1256",
+   "n_singlet": 21,
+   "n_singlet_in_covered": 19,
+   "n_ref_haplotype": 16,
+   "tp": 14,
+   "precision": 0.7368421052631579,
+   "recall": 0.875,
+   "precision_vs_af75": 1.0,
+   "recall_vs_af75": 0.7916666666666666,
+   "missed": [
+    "3107T",
+    "7768G"
+   ],
+   "false_pos": [
+    "12139A",
+    "12618A",
+    "16189C",
+    "3197C",
+    "5513A"
+   ],
+   "missed_reasons": {
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10",
+    "7768G": "af af=0.78 dp=60 fwd/rev=19/28 prof=159/206"
+   }
+  },
+  {
+   "singlet_donor": "donor2",
+   "truth_donor": "1488",
+   "n_singlet": 33,
+   "n_singlet_in_covered": 30,
+   "n_ref_haplotype": 27,
+   "tp": 25,
+   "precision": 0.8333333333333334,
+   "recall": 0.9259259259259259,
+   "precision_vs_af75": 0.9666666666666667,
+   "recall_vs_af75": 0.9354838709677419,
+   "missed": [
+    "10463C",
+    "3107T"
+   ],
+   "false_pos": [
+    "12139A",
+    "12633A",
+    "13368A",
+    "5513A",
+    "8697A"
+   ],
+   "missed_reasons": {
+    "10463C": "af af=0.75 dp=12 fwd/rev=0/9 prof=7/26",
+    "3107T": "not_in_donor_at_af>=0.5_dp>=10"
+   }
+  }
+ ],
+ "C_mean_precision": 0.836764828738513,
+ "C_mean_recall": 0.7652473196881091,
+ "C_mean_precision_vs_truth_af75": 0.9888888888888889,
+ "C_mean_recall_vs_truth_af75": 0.7005307447722631,
+ "C_ref_pairs_distinguishable": 28,
+ "C_singlet_pairs_distinguishable": 28,
+ "C_pair_call_agreement": 1.0,
+ "C_n_pairs": 28,
+ "D_variants_with_ge5_carriers": 2,
+ "D_median_top_donor_share": 0.33636363636363636,
+ "D_frac_variants_top_donor_ge_0.8": 0.0,
+ "D_donor_af_table_sites": 5,
+ "D_donor_specific_sites": 0,
+ "D_max_top_af": 0.00867679,
+ "D_sites_top_af_ge_0.05": 0,
+ "D_expected_top_share_if_random": 0.22233049127080795
+}

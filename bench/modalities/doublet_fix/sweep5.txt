@@ -1,0 +1,8 @@
+clf2 hvg=8000 clf=1
+clf2_m23 hvg=8000 clf=1 mask=23
+clf1 hvg=8000 clf=1 rounds=1
+clf3 hvg=8000 clf=1 rounds=3
+clf2_ex1 hvg=8000 clf=1 excl=1.0
+clf2_ex2p5 hvg=8000 clf=1 excl=2.5
+clf2_h4k hvg=4000 clf=1
+clf2_h12k hvg=12000 clf=1

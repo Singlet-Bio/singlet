@@ -126,6 +126,31 @@ Rule (orchestrator / Zach, 2026-10-29: those reads are real molecules; 10x's rul
 
 Why: these reads come from real cells. A sequencing error in the barcode read, or one uncalled base, does not make a molecule disappear, and 10x's rule (Cell Ranger, STARsolo `1MM_multi_Nbase_pseudocounts`) assigns them where the evidence is strong (posterior >= 0.975). Using STAR's code path and float semantics exactly makes the stream's cell assignment identical to STAR's own CB on the sorted path. Each read is checked against that tag (SINGLET_TEST_CB_CHECK=1).
 
+## R12. Donor genotype call: binomial posterior on aggregated molecule counts
+**Rule.** For each (donor, covered site), with `dp` = aggregated molecule depth and `ad` = alt molecules from that donor's assigned cells (the R1/R9 molecule counts, unchanged), set `r = dp - ad`, `e = 0.01`, and the three log-likelihoods `L0 = r*ln(1-e) + ad*ln(e)`, `L1 = dp*ln(0.5)`, `L2 = ad*ln(1-e) + r*ln(e)`. With a flat prior over {0/0, 0/1, 1/1}, GT is the genotype whose posterior is >= 0.99, else `./.`. `dp == 0` -> `./.`. The VB `af_vb` stays in the output for information but no longer decides GT.
+
+**Order-free.** The inputs are integer sums over the donor's cells (commutative), the function is pure and stateless, and ties cannot occur at posterior >= 0.99 > 0.5. The donor assignment of cells is unchanged by R12. Computation in double; the log and exp of three terms. Any threshold flip at exactly 0.99 is the only place implementations can differ, so the GPU reducer should use the same double formula (or compare in log-odds: `Lbest - ln(sum exp(L)) >= ln(0.99)`).
+
+**GPU SNP reducer needs.** Per (donor, site): the two uint32 sums `ad` and `dp` (already in the sparse donor depth tables), then a trivial epilogue kernel that applies the formula above and writes the GT code (0, 1, 2, -1). It does not need qualities, positions or strands. Gate: identical GT codes to the CPU function for every (ad, dp) with dp <= 4096 (exhaustive table), and identical `ad`/`dp` sums to the CPU path.
+
+**Evidence.** See above: false-alt 0.054 / 0.044 / 0.033 / 0.026 / 0.040 -> 0.0058 / 0.0059 / 0.0119 / 0.0034 / 0.0053 on five Kang pools, true alt kept 0.97-0.98 (at 0.9).
+
+**Threshold 0.99 (genotype-sota, 2026-10-31).** At 0.9 Singlet trailed the cellsnp-lite pileup by 0.4 pp concordance at equal DP>=10 sites on four Kang pools and on Osorio 2019 (independent 1000 Genomes truth). Re-genotyping the same aggregated (ad, dp) at 0.99 closed it: concordance 0.9899 vs 0.9901, true-alt kept 0.9880 vs 0.9880, false-alt 0.64% vs 0.61% (all five pools; Osorio 0.9871 vs 0.9873). The counts are not the issue, only the cut. 0.999 reaches 0.9917 at 3.5% fewer sites. Anchor cases: (1,10), (2,10), (9,10), (0,5) are `./.` at 0.99.
+
+Note: the `--bam-file` replay harness (the shuffled-order gate) does not apply R11, so a replay of the tee'd stream BAM has about 2% fewer barcoded reads than the stream run it came from; replay is not a reference for R11.
+
+## R12. UMI collapse of exon / intron molecules: seed-based directional, molecule UMI = best-supported UMI
+
+Status: implemented behind `SINGLET_UMI_COLLAPSE=seed` (off by default), measured, not made the default for the beta (2026-11-01).
+
+Today (`DirectionalUmiStore::collapse_groups`, GPU `m6.cu`): per (barcode, gene) the UMIs are sorted by reads descending then UMI ascending, an edge joins UMIs at Hamming distance 1 when `count_i >= 2 count_j - 1`, and the connected components of those edges are the molecules. The partition is a function of the (UMI, reads) multiset, so it does not depend on read order. Two things in it are not the best choice:
+1. A component can chain two well-supported UMIs 2 mismatches apart through a one-read error copy that sits one mismatch from both (A1 100 reads, A2 80 reads, B 1 read: A1->B and A2->B), merging two templates into one molecule. The directional method of Smith et al. 2017 (UMI-tools) does not: a seed claims what it reaches, and seeds do not merge.
+2. The molecule's UMI is the union-find root, which depends on the order the edges were visited and is not always the best-supported UMI. It is the key of the cross-gene rule (`kUmiGeneCR`: a UMI in more than one gene of a cell keeps the gene with most reads) and of R9's gene roots, and the GPU has to replay the pairwise union in the same order to reproduce it.
+
+Rule: rank the UMIs of a (barcode, gene) group by reads descending, UMI ascending (a total order). In rank order, a UMI that no earlier seed has claimed becomes a seed and claims every unclaimed UMI reachable from it through directional edges. A molecule is a seed with the UMIs it claimed; its UMI is the seed (the best-supported UMI of the molecule, ties to the smaller UMI), its reads, flags, diag and smallest feature indices are the union over its members. The result depends only on the (UMI, reads) multiset, and it needs no replay: the owner of a UMI is the first seed that reaches it.
+
+Measured (build 09977a3e, CPU engine, prod/campaign + PR #165): pbmc1k_v3 molecules +0.003% (15,335,599 -> 15,336,115 unique UMIs; spliced +67, unspliced +54, ambiguous +395), pbmc1k_cite_v3 +0.002%; gate-2 counts metrics identical to 4 digits on pbmc1k_v3, cite_v3 and neuron1k_v3. The effect is real but far below anything the gates see, so the beta keeps the component rule; adopting R12 later costs one change on the CPU (`umi_directional_seeds`) and one in `m6.cu` (owner by seed instead of the pairwise replay), gated on identical molecules CPU = GPU.
+
 ## Gates
 
 1. Byte-identical outputs at 4, 8 and 16 threads and on a rerun, including the non-host tables (`nonhost/*`), except wall-time fields (`read_stats.tsv:wall_seconds`, `provenance` timings) and fields that hold paths or the sizes of those files.
@@ -147,6 +172,7 @@ Why: these reads come from real cells. A sequencing error in the barcode read, o
 | thread/rerun gate | met for every output including `nonhost/*` on `f4a1e95` and `253c2c6`, 3' and 5' (4 vs 16 threads, rerun) | — |
 | R8 non-host EM | done, `f4a1e95` (canonical input order, hash sample above the cap) | match if the GPU runs the non-host EM |
 | R9 UMI correction (SJ, V(D)J, SNP) | per (cell, gene) `13d8faf` (per-feature version `253c2c6`), both paths; gates 1-2 met; vs prod: junctions within 0.03% (5') / 0.001% (3'), V(D)J -2.0% and SNP DP -1.6% on 5' (residual, see ws-w3b update h) | to implement (same rule) |
+| R12 UMI collapse (seed-based directional, UMI = best-supported) | `umi_directional_seeds` behind `SINGLET_UMI_COLLAPSE=seed` (off), test `test_umi_seeds`; +0.003% molecules, not default for the beta | to implement with the default |
 | R10 ambient pool (5-100 UMIs, sequence ties, cells in sequence order) | done, `2a45dd3`: pool and mean rho path-independent; R10b (data-seeded clusters, 10 restarts) in progress | match if the GPU runs the ambient correction |
 | R11 stream CB correction (STAR 1MM_multi_Nbase_pseudocounts; reader restores raw barcodes) | in progress on `perf/bam-stream` | gate the GPU barcode layer against it (mm1 mode) |
 | shuffled-order gate | met on `8699980` (791182) and `253c2c6` (791783), GSM4006843: 44 files identical across as-written / collate / coord replays. `f4a1e95` had failed on `exon_counts` (multimapper exon, fixed by R7) | — |

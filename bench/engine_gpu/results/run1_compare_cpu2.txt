@@ -1,0 +1,25 @@
+a = /tmp/debruinz-engid-789898/t/cpu/out
+b = /tmp/debruinz-engid-789898/t/cpu2/out
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 959255592 != 959255597
+  DIFF read_stats.tsv (141 vs 141 bytes)
+    2 of 3/3 lines differ
+    a: align	73921372	73921372		0	0	211.14
+    b: align	73921372	73921372		0	0	211.43
+    a: pileup	73921372	73921372		0	0	33.74
+    b: pileup	73921372	73921372		0	0	33.32
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 46 identical, 3 differ only in timings/paths, 5 differ
+RESULT: 5 differences
+  differs: ./ambient_contamination.json order-independent: DIFFERENT
+  differs: ./nonhost_reads.fq order-independent: same
+  differs: ./pileup_stats.json order-independent: DIFFERENT
+  differs: ./provenance.json order-independent: DIFFERENT
+  differs: ./read_stats.tsv order-independent: DIFFERENT
+  differs: ./star_Log.final.out order-independent: DIFFERENT
+  differs: ./star_Log.out order-independent: DIFFERENT
+  differs: ./star_Log.progress.out order-independent: DIFFERENT
+  differs: ./star_Unmapped.out.mate1 order-independent: same
+  differs: ./star_Unmapped.out.mate2 order-independent: same
+  differs: ./summary.json order-independent: DIFFERENT

@@ -102,27 +102,58 @@ public:
                 c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 
             uint32_t id = static_cast<uint32_t>(guides_.size());
-            seq_to_id_[seq] = id;
             guides_.push_back({std::move(name), seq, id});
         }
         return !guides_.empty();
     }
 
-    /// Try to match the read sequence (raw pointer, length) against all
-    /// loaded guides.  Uses exact substring matching of each guide sequence
-    /// within the query sequence.
-    /// @return guide id (0-based) on success, -1 if no guide matches.
+    /// Match the read sequence (raw pointer, length) against all loaded guides by exact substring.
+    /// The sequence must be in the read's sequencing orientation, the orientation the guide library is written in
+    /// (see match_bam for a BAM record).
+    /// @return guide id (0-based) when exactly one guide occurs in the read, -1 when none does, kAmbiguous (-2) when
+    ///         two or more guides occur (nested guides, or a sequence listed twice). Never a hash-order winner: the
+    ///         result depends only on the read and the library.
     int match(const char* read_seq, int read_len) const {
-        if (seq_to_id_.empty() || read_seq == nullptr || read_len <= 0) return -1;
-        // Build a temporary std::string for substring search.
-        // For typical guide lengths (≤30 bp) this is fast.
+        if (guides_.empty() || read_seq == nullptr || read_len <= 0) return -1;
         std::string rstr(read_seq, static_cast<size_t>(read_len));
         for (auto& c : rstr)
             c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-        for (const auto& [seq, id] : seq_to_id_) {
-            if (rstr.find(seq) != std::string::npos) return static_cast<int>(id);
+        int found = -1;
+        for (const auto& g : guides_) {
+            if (rstr.find(g.sequence) != std::string::npos) {
+                if (found >= 0) return kAmbiguous;
+                found = static_cast<int>(g.id);
+            }
         }
-        return -1;
+        return found;
+    }
+
+    /// Match the sequence stored in a BAM record. A read aligned to the reverse strand is stored reverse-complemented,
+    /// so it is turned back into the sequencing orientation first (otherwise a guide written in read orientation
+    /// would never match it). `buf` is scratch of at least read_len bytes, already holding the decoded BAM sequence.
+    int match_bam(char* buf, int read_len, bool reverse_strand) const {
+        if (reverse_strand) reverse_complement(buf, read_len);
+        return match(buf, read_len);
+    }
+
+    static constexpr int kAmbiguous = -2;
+
+    /// In-place reverse complement (A/C/G/T, either case; any other base becomes N).
+    static void reverse_complement(char* s, int n) {
+        auto comp = [](char c) -> char {
+            switch (c) {
+                case 'A': case 'a': return 'T';
+                case 'C': case 'c': return 'G';
+                case 'G': case 'g': return 'C';
+                case 'T': case 't': return 'A';
+                default: return 'N';
+            }
+        };
+        for (int i = 0, j = n - 1; i <= j; ++i, --j) {
+            char a = comp(s[i]), b = comp(s[j]);
+            s[i] = b;
+            s[j] = a;
+        }
     }
 
     /// Overload accepting std::string.
@@ -144,7 +175,6 @@ public:
 
 private:
     std::vector<GuideEntry>                  guides_;
-    std::unordered_map<std::string, uint32_t> seq_to_id_;
 };
 
 // ── GuideCounter ──────────────────────────────────────────────────────────

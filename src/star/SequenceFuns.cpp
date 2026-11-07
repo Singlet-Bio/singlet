@@ -1,6 +1,8 @@
 #include "SequenceFuns.h"
 #include <assert.h>
 #include <cstring>
+#include <vector>
+#include <algorithm>
 
 // Lookup table: ASCII → numeric (A/a→0, C/c→1, G/g→2, T/t→3, else→4)
 static const char nucl_to_num[256] = {
@@ -304,17 +306,43 @@ uint chrFind(uint Start, uint i2, uint* chrStart) {// find chromosome from globa
 uint localSearch(const char *x, uint nx, const char *y, uint ny, double pMM){
     //find the best alignment of two short sequences x and y
     //pMM is the maximum percentage of mismatches
+    //singlet: the same ixBest as the plain double loop over every ix and iy (bench/host_cost/model_localsearch.py checks it), but a
+    //candidate is dropped as soon as it cannot qualify, which is almost at once for a random read (it ran on every read of a 5'
+    //library, for the TSO adapter: ~2,300 inner steps per 91-base read, ~330 now). With k mismatches among the m positions of the
+    //candidate, nMM>=k and nMatch<=m-k, so nMM/nMatch>=k/(m-k) (a correctly rounded division is monotone in both arguments);
+    //kmax[m] is the largest k with k/(m-k)<=pMM, computed with the same double arithmetic. And nMatch<=m, m falls as ix grows,
+    //so once m<nMatchBest nothing later can win.
+    static thread_local double kmaxP=0;
+    static thread_local bool kmaxOk=false;
+    static thread_local std::vector<uint> kmax;
+    const uint mMax=min(ny,nx);
+    if (!kmaxOk || !(pMM==kmaxP || (pMM!=pMM && kmaxP!=kmaxP)) || kmax.size()<=mMax) {
+        const uint M=max<uint>(mMax,DEF_readSeqLengthMax);
+        kmax.assign(M+1,0);
+        for (uint m=1;m<=M;m++) {
+            uint k=kmax[m-1];
+            while (k+1<=m && !(double(k+1)/double(m-k-1)>pMM)) k++;//0/0 and k/0 as the plain loop's nMM/nMatch: NaN and inf
+            kmax[m]=k;
+        };
+        kmaxP=pMM;
+        kmaxOk=true;
+    };
     uint nMatch=0, nMM=0, nMatchBest=0, nMMbest=0, ixBest=nx;
     for (uint ix=0;ix<nx;ix++) {
+        const uint m=min(ny,nx-ix);
+        if (m<nMatchBest) break;
         nMatch=0; nMM=0;
-        for (uint iy=0;iy<min(ny,nx-ix);iy++) {
+        const uint kmaxM=kmax[m];
+        bool dead=false;
+        for (uint iy=0;iy<m;iy++) {
             if (x[ix+iy]>3) continue;
             if (x[ix+iy]==y[iy]) {
                 nMatch++;
             } else {
-                nMM++;
+                if (++nMM>kmaxM) {dead=true; break;};
             };
         };
+        if (dead) continue;
 
         if ( ( nMatch>nMatchBest || (nMatch==nMatchBest && nMM<nMMbest) ) && double(nMM)/double(nMatch)<=pMM) {
             ixBest=ix;

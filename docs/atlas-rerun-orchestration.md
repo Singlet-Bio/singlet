@@ -113,13 +113,15 @@ clean directory, so a requeued job is safe.
    (`singlet download <.sra>`).
 4. Re-runs `screen-runs` on the full local runs. Its JSON is the authoritative `--run-screen` provenance, and its
    `runs_kept` becomes `runs_used`.
-5. Pools the kept runs into `sample.1fq`.
+5. One kept run: it becomes `sample.1fq`. Several: the per-run `<run>.1fq` files stay as they are and the engine reads them as
+   one stream (`--runs-dir <stage dir> --run-screen screen.json`, PR #82), with no decode, re-encode or pooled copy.
 
-Pooling decodes each run with `singlet decode`, then runs one `singlet encode --no-dedup --no-trim --quality none
---protocol <tag>`. These options match `download`'s defaults. This is an interim path; see §6.
+Legacy path, kept for one release: `pipeline.pooled_input: true` pools the kept runs into `sample.1fq` (`singlet decode` each
+run, then one `singlet encode --no-dedup --no-trim --quality none`). Per-run input gives the same count values as the pool
+(evidence in §8); only barcode column order differs.
 
 **Compute stage** (`stages.compute_stage`):
-* runs the pinned binary on `sample.1fq` with `--pipeline` (the SNP panel is on by default and goes to `private/`),
+* runs the pinned binary on `sample.1fq` (or `--runs-dir` for a multi-run sample) with `--pipeline` (the SNP panel is on by default and goes to `private/`),
   `--output-format 1pz`, `--bam-sort-mode disk`, a private genome (`--genome-shared off`) and `--run-screen`;
 * sets `SINGLET_REF_BASE` when the non-host screen is on (the default, as recommended in plan §9);
 * runs in node-local scratch, then copies the outputs.
@@ -236,6 +238,7 @@ start.
 | a stage fails (download, prefetch, decode, screen, pool, binary exit) | the stage's `failed` event with reason and log tail | requeue once (`retry_max: 1`), then park as `retries_exhausted(<reason>)` |
 | job killed: timeout, OOM, node failure, preemption without requeue | `squeue` loses it, `sacct` gives the state, 2 ticks in a row | `lost` with the reason → retried once, with escalation for timeout and OOM |
 | compute failed, staged reads intact | reason starts with `compute:` and `stage/<GSM>/sample.1fq` exists | only the compute stage runs again |
+| the binary exits 8 (`strand_contradiction`): on the unsorted stream the reads contradict the protocol orientation, and a pipe cannot be re-read | `compute_stage` sees rc 8 and emits `strand_retry` | the same command runs again once with `--sorted-bam`, whose strand safety net re-reads the BAM and recounts with the opposite orientation. A second exit 8 fails as `strand_contradiction` |
 | nothing to run: no 10x run, or no run passes the screen | the stage exits 3 with `parked` | parked at once, no retry. The chained compute task is cancelled |
 | binary differs from the pin | sha256 checked at the start of every stage | `binary_mismatch` failure, so the whole campaign parks visibly. Fix the pin, then unpark |
 | staging fills | the controller sums staged bytes | no new I/O until the compute stage drains it |
@@ -372,3 +375,55 @@ before anything over ~1,000 SU.
   limit.
 
 **Network.** Prefetch reached ~38 MB/s per stream (26.9 GB in 711 s).
+
+## 8. Beta channel, packing, per-run input (S6, 2026-10-30)
+
+**Node packing.** `common.job_slots` computes the concurrent jobs of a node from its memory: `(node_gb * mem_fill -
+shared_index_gb) // job_peak_gb`, capped by `cores // threads`. The inputs are in `clusters.<c>.node`: `job_peak_gb` 33.4 and
+`shared_index_gb` 17.8 (deep GSM7036403 with the shared index, #86) and `mem_fill` 0.9. A 512 GB node gives 13 jobs, a 768 GB node
+16 at 8 threads (cores bind) and 20 at 4 threads on more cores. `node_stage` reads the node's memory from `SLURM_MEM_PER_NODE` or
+`/proc/meminfo`.
+
+**Exit 8.** The compute stage reruns once on `--sorted-bam` and emits `strand_retry`; a second exit 8 fails as
+`strand_contradiction`. (Supersedes PR #85.)
+
+**Beta publishing** (`beta.py`, `orchestrator.py beta-publish --cluster C --gse G [--dry-run]`, controller `beta_pass` when
+`beta.enabled`). A finished study's hand-off goes to `beta.producer` (a command that writes `<work>/<GSE>.manifest.json` and
+the `s1/...` objects it names; the default is `s1_producer.py`, which reuses `scripts/s1_publish.py` against a local store:
+out/ -> pack_gse bundle -> `singlet.s1.migrate` -> `verify`, so a study is written about twice; needs `beta.catalog`, the
+processing catalog parquet; the `PipelineDirBundle` of rollout plan W5 would remove the bundle detour), then to `scripts/beta/beta_ingest.py` of the website repo
+(`beta.uploader`), which is the only writer of Beta's R2 and D1. Retried `beta.retries` times; failed studies again on later
+ticks up to `beta.max_attempts`. The target must name Beta: host, `beta.bucket` and `beta.database` contain "beta" and are not
+a production name, or nothing runs. A manifest naming a `private/`, restricted, BAM, reads or genotype key is refused.
+
+**Evidence (2026-10-30, Clipper job 793180, `bench/atlas_rerun/perrun_vs_pooled.sbatch`).** GSM6470208 (2 runs, 121.8 M pairs),
+binary `singlet-pc-tip` (prod/campaign, #82, R11 on in both), the orchestrator's own io and compute stages, `--output-format mtx`.
+A = per-run `--runs-dir`, B = the same staged runs pooled (`pool_runs`, 245 s). All 8 count matrices (exon, intron, ambient-corrected,
+ambiguous, sj, splice_psi, mt_heteroplasmy, vdj) have the same 118,371 barcodes and 0 differing entries. 70 files identical; the 6 that
+differ are the clip5p probe and rRNA samples (read order), the Q30 line (pool re-encoded with `--quality none`), and timings/paths.
+Compute wall 1063 s (A) vs 1016 s (B), peak RSS 37.6 GB both, and A skips the pool (245 s, one copy of the reads).
+
+**End to end on a real sample (2026-10-30, Clipper).** GSM6470208 through the orchestrator's io and compute stages (per-run input,
+1pz, `singlet-pc-tip`, job 793210, 23 min), then `s1_producer.py` (job 793487: `s1_publish.py --policy beta-policy.json
+--local-root`, the Alpha migrate route, verify exit 0) gives one 33.9 MB `.s1` object and a manifest with `n_samples` 1.
+* The first attempt made a hollow object (`n_columns` 0): the source worktrees have no compiled `singlet._pz`/`_pz2`, so every
+  `.1pz` was "undecodable" and stored verbatim. `s1_producer.py` now refuses a repo without the readers (exit 5) and a manifest with a
+  hollow sample. `bench/atlas_rerun/build_s1_repo.sbatch` builds a repo copy (setuptools and pybind11 installed to a temp dir; a
+  `.so` from another worktree has a different `_pz2.encode` signature).
+* Now: `n_columns` 118,371 (all barcodes), exon sum 16,788,004 = the mtx run's exon total. `n_called` 4,791 is the knee set, the
+  `called` column the migration reads by design (docs/called-ed.md); `called_ed` in the cells metadata has `n_called_ed` 10,239,
+  = `summary.json` `n_cells_called`.
+* Release policy: `s1_publish.py --policy` (new) passes `--alpha-policy` to the transcoder; `beta-policy.json` has no withheld
+  studies or excluded samples and gets the fixed layer list (genotype, mtDNA alleles, ancestry call, ambient, doublet scores,
+  per-cell non-host, legacy PSI and sex call). The manifest's `release_policy.omitted_layers` records it.
+
+**Beta publish, read back (2026-10-30).** GSM5287666 (GSE173756, 1 run, 16.7 M pairs): job 793537 (io, compute, producer; 8.6 min), job
+793554 from Clipper (`publish_s1_sample.sbatch`, token from `~/.singlet/beta_ingest_token`, mode 600): dry run (0 present, 1 to upload),
+publish (19.5 MB sent, 8 D1 rows), publish again (0 rows, `rev_unchanged`), read back through beta-data.singlet.bio (manifest rev
+and object SHA-256 match), and none of the policy's withheld layers among the object's 41 members. The token is accepted by
+beta.singlet.bio and rejected by singlet.bio (401).
+
+**Beta's data Worker bundles Alpha's policy.** `workers/data/policy/alpha-policy.json` (1,416 withheld studies, 26,188 excluded
+samples) also applies on beta-data.singlet.bio, so a Beta sample that Alpha withholds is published but answers 404 (GSE200743 /
+GSM6470208 did: uploaded, in D1, not served). The uploader has no delete path, so that test study remains in Beta's R2 and D1.
+

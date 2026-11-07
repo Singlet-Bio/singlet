@@ -196,6 +196,120 @@ would need a `called_ed` bit to filter on.
 2. `called` stays the default selection for now.
 3. inDrop and Drop-seq: stored with `validated: false` (as proposed; not separately decided).
 
+## In the pipeline (C++ port, prod/atlas-rerun)
+
+`include/singlet/pileup/called_v2.h` is a port of `cellcall.call()` with the same parameters (version 2.1 since
+2026-10-25: bounded knee and tail p-values, see the correction at the top of this note). It is the pipeline's
+default cell caller (`--cell-caller called_v2`; `star_solo` and `emptydrops` keep the old callers):
+
+* The knee set `called` is STARsolo's `CellRanger2.2 3000 0.99 10` rule (`SoloFeature_cellFiltering.cpp`), computed
+  on the pileup's exon counts after strand detection. STARsolo's own filtered barcodes are no longer used: STARsolo
+  counts with `--soloStrand Forward`, so for 5' libraries its knee came from wrong-strand counts. Strand is only known
+  after the pileup probe (#25), so passing `--soloStrand Reverse` would not cover undeclared 5' libraries.
+* `called_v2` runs on exon + intron counts per gene, keyed and sorted as in `cellcall.gene_counts`.
+* `cell_calls.tsv` has one row per barcode: `is_cell` (= `called_v2`, the call; what the migration reads as `called`), `called_knee` (the knee set the call starts from; before Beta this column was `called` and was also what `is_cell` held), `called_v2`,
+  `umi_exon`, `umi_total`, `fdr`, `pvalue`, `log_prob`. The parameters (lower, retain, alpha, pool, counts) are in
+  `pileup_stats.json` under `provenance.cell_call`. Downstream per-cell outputs use the `called_v2` set.
+
+The port follows the reference down to floating-point order wherever a discrete decision depends on it:
+
+* the Monte Carlo is the same numbers: MT19937 seeded per path (`seed + i`), drawing as numba's `random()` and
+  `randint()`;
+* cephes `lgam` matches `scipy.special.gammaln` bit for bit;
+* the FITPACK `curfit` port reproduces `UnivariateSpline`'s knots and coefficients, including the `nest`
+  reset. It matched in 300 of 300 random barcode-rank curves;
+* numpy's pairwise sums, `quantile` and `histogram` edges, and scipy's bounded Brent minimiser are reproduced.
+
+One step is not reproduced bit for bit: `np.polyfit` in the Good-Turing smoothing (LAPACK `gelsd`). The ambient
+profile can therefore differ in the last bit, and alpha by up to the minimiser's `xatol` (1e-4 in log alpha) when
+the likelihood is flat. That can move a Monte Carlo count by one. A second residual: `retain = 10 ** log10(knee total)`. numpy's
+`log10` uses SVML on AVX-512 machines, the port uses glibc, and the two can land one ulp apart. When they
+straddle the total, uncalled barcodes with exactly the knee total are retained by one side and tested by the
+other. On the five validation samples the retain values were bit-identical on 4. On `nuclei2k_v2` they straddled
+3814, but no uncalled barcode had that total.
+
+Validation (Clipper, `bench/prod_atlas/`): on pbmc1k_v3, pbmc5p_v1, nuclei2k_v2, neuron1k_v3 and hgmm1k_v3 the
+binary's `called_v2` equals `cellcall.call` on its stored counts at 4 and 8 threads. That held in both the
+pinned venv (numpy 2.2 / scipy 1.15 / numba 0.64) and a newer env (numpy 2.5 / scipy 1.18 / numba 0.68). Over
+10,349 tested barcodes there were 0 differences, and FDRs agreed to the printed 6 digits. `tests/cpp/test_called_v2.cpp` checks the port
+against `cellcall.py` output (`bench/called_ed/make_cpp_fixture.py`). It requires identical `called_v2` sets and
+FDRs equal except for Monte Carlo ties. `bench/called_ed/equiv_cpp.py` runs the same comparison on real pipeline
+outputs.
+
+**Version 2.1 in C++** (2026-10-25). `knee_bounded()` (= `cellcall.knee`: the spline between DropletUtils' curve bounds,
+at least 6 points or the total at the left bound) gives `retain`; `knee()` keeps the 2.0 knee for reference. Barcodes below
+every simulated path get `p = min(Phi(z), 1/(niters+1))` (cephes `ndtr`, including its underflow to 0); the null mean and
+sd at each total are accumulated in the Monte Carlo kernel as exact fixed-point sums of deviations from path 0, so they do
+not depend on the thread count. Uncalled barcodes above 50,000 UMIs keep p = 1/(niters+1). The FDR is now kept in double
+(tail p reach 1e-200). `n_tail` is in the parameters. Both deviations from DropletUtils (the 6-point minimum, DropletUtils
+uses 4, and the tail extrapolation, DropletUtils keeps the floor) are intentional and pinned by the golden vectors.
+
+* Golden vectors (`tests/data/called_ed_golden/`): `test_called_v2.cpp` reads every case. Exact: `lower`, the ambient pool,
+  the tested set, `n_tail`, `called_v2`, every Monte Carlo and retained p. alpha agrees to 1e-6 (worst 6.9e-7, pbmc1k).
+  With alpha pinned to the reference value, tail p and FDR agree to 1e-6 on the log scale (worst 4e-14). Unpinned, the tail
+  p of `real_pbmc1k_v3` differ by up to 2.2e-6 on the log scale, so the free pass uses 1e-5 there. The cause is the
+  Good-Turing `np.polyfit`: LAPACK `gelsd` (SVD) is not reproduced bit for bit, a ~3-ulp change in the fitted line moves
+  alpha by up to ~7e-7 (fminbound's path), and a tail p at z near -30 moves by |z| times the change in z. Swapping the
+  port's line fit into the Python reproduces the C++ alpha exactly, so nothing else differs.
+* The vectors found a port gap, fixed here: when FITPACK's knot insertion reaches `n = nmax` it restarts with interior knots
+  placed as for interpolation and then smooths; the port returned NaN. Short curve-bounded fits reach it
+  (`synth_tail_extrapolation`: knee 2,755).
+* Stored counts (Clipper, `bench/called_ed_truth/verify_cpp.sbatch MODE=stored`, the `cv2_stored` driver on the runs the
+  truth-check script used): identical barcode sets to the script's recommended calls on all six datasets, Kang 16,573,
+  hgmm1k_v3 1,026, neuron1k_v3 1,355, nuclei2k_v2 2,376, pbmc1k_v3 1,190, pbmc5p_v1 8,399, with every Monte Carlo p equal.
+* Full pipeline (`singlet-prod-cv2`, 8 threads, `MODE=e2e`): pbmc1k_v3 1,196 and hgmm1k_v3 1,026, identical to
+  `cellcall.call` and to `cv2_stored` on the run's own stored counts. (pbmc1k_v3 calls 1,196 rather than 1,190 because this
+  branch's counts differ slightly from the `singlet-modfix` run the script used; the stored `prod-t4/t8` runs also call 1,196.)
+
+## Version 2.2: `is_cell` is EmptyDrops_CR, `called_lowrna` keeps the extra low-RNA calls
+
+Gate 2 (3eaa041c) failed 19 cell-calling rows. The scorer reads Cell Ranger's published filtered barcodes as truth (Kang: the
+authors' demuxlet table), and 2.1 deliberately calls 50-500 UMI barcodes that Cell Ranger and STARsolo EmptyDrops_CR do not, so
+its precision against that truth was low by design (nuclei2k_v2 0.772, Kang 16,524 cells vs 14,619). **The gate truth is largely
+Cell Ranger's own call and this rule copies it, so the gate partly rewards matching it.** The independent checks (below) still
+say the extras are mostly real.
+
+* `is_cell` (and the `called_v2` column the scorer reads) is now STARsolo's `--soloCellFilter EmptyDrops_CR 3000 0.99 10 45000
+  90000 500 0.01 20000 0.01 10000`, ported in `called_v2.h` (`emptydrops_cr`, from `SoloFeature_emptyDrops_CR.cpp`; STAR is MIT,
+  the notice is in the file). Knee set, then candidates with total >= max(500, 1% of the knee median) tested against the
+  Simple-Good-Turing profile of the barcodes ranked 45,000-90,000 (10,000 simulations, STAR's seeds), BH FDR 0.01. It runs on
+  **exon-only counts**, STARsolo's own input; on exon + intron counts it called up to 2% more barcodes and lost up to 3 points of precision against
+  the gate truth (Kang 0.955 vs 0.975, neuron1k_v3 0.983 vs 0.995; `scripts/gate2/cc_eval.sbatch`, 8 gate datasets). Samples without 45,000 barcodes fall back to the 2.1 test restricted to
+  candidates above 500 UMIs at FDR 0.01 (`is_cell_method` in `cell_calls.params`).
+* `called_lowrna` = the 2.1 call (exon + intron, unchanged: `Result::called_v2`, golden tests unchanged) that `is_cell` does not
+  include: the 50-500 UMI barcodes called as real cells by the empty-droplet test. Nothing is lost; use `is_cell | called_lowrna`
+  for the 2.1 set. `called_knee` is unchanged.
+
+Before/after against the gate truth (Cell Ranger; EDCR = STARsolo EmptyDrops_CR in the gate), 8 gate datasets:
+
+| dataset | 2.1 P / R / J | 2.2 P / R / J | EDCR P / R / J | called_lowrna |
+|---|---|---|---|---|
+| nuclei2k_v2 | 0.772 / 0.999 / 0.772 | 0.955 / 1.000 / 0.955 | 0.980 / 0.917 / 0.900 | 617 |
+| kang2018_ctrl | 0.885 / 1.000 / 0.885 | 0.975 / 0.998 / 0.973 | 0.974 / 0.998 / 0.972 | 1,575 |
+| neuron1k_v3 | 0.919 / 0.945 / 0.872 | 0.995 / 0.979 / 0.974 | 0.995 / 0.962 / 0.958 | 113 |
+| pbmc1k_v2 | 0.942 / 0.997 / 0.940 | 0.997 / 1.000 / 0.997 | 0.996 / 1.000 / 0.996 | 58 |
+| pbmc1k_v3 | 0.986 / 0.960 / 0.947 | 0.993 / 0.994 / 0.986 | 0.992 / 0.998 / 0.990 | 17 |
+| pbmc1k_cite_v3 | 0.963 / 0.985 / 0.949 | 0.999 / 1.000 / 0.999 | 0.999 / 1.000 / 0.999 | 26 |
+| hgmm1k_v3 | 0.981 / 0.961 / 0.943 | 0.999 / 0.997 / 0.996 | 0.997 / 1.000 / 0.997 | 22 |
+| pbmc5p_v1 | 0.969 / 0.981 / 0.951 | 1.000 / 0.899 / 0.899 | 1.000 / 0.902 / 0.902 | 943 |
+
+Remaining differences from EDCR: nuclei2k_v2 precision (0.955 vs 0.980; Singlet calls more nuclei, recall 1.00 vs 0.92; not diagnosed further) and hgmm1k_v3 / pbmc1k_v3 recall (0.997 / 0.994 vs 1.000 / 0.998).
+
+Kang b2 ctrl genotype check (dev lane only; `scripts/gate2/kang_genotype.py` on the independent genotype truth of
+bench/cellcall-independent-truth): share of barcodes that look like a real single-donor cell rather than ambient (1 = all real),
+by group and UMI bin, ratio estimator over barcodes with >= 25 informative SNP UMIs, bootstrap 95% CI.
+
+| group | UMI bin | n | real-cell fraction | single donor among hits |
+|---|---|---|---|---|
+| is_cell | 500-1000 | 1,810 | 1.11 [1.08, 1.14] | 0.97 |
+| is_cell | 1000-3000 | 10,759 | 1.02 [1.02, 1.03] | 0.92 |
+| called_lowrna | 500-1000 | 407 | 0.95 [0.83, 1.08] | 0.97 |
+| called_lowrna | 50-500 | 1,148 (489 decidable) | 0.61 [0.46, 0.76] | 0.94 |
+
+**`called_lowrna` is not a cell call:** about 61% of its 50-500 UMI calls are real cells (CI 0.46-0.76) and the rest are ambient-like; use `is_cell` for cells. The 500-1000 UMI extras are as cell-like as `is_cell` itself. At 50-500 UMIs the genotype test only decides 489 of 1,148 barcodes, and
+about 61% of the signal is explained by real cells. The matched empty-droplet pool (no caller, 50-500 UMIs, 282 barcodes in the
+truth universe, 10 decidable) is too small to give a control estimate. Consistent with the earlier 73% figure, but not stronger.
+
 ## Limitations
 
 * The authors' calls are Cell Ranger, itself OrdMag + EmptyDrops on full-depth counts (Singlet caps input at 30M reads), so

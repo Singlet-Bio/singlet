@@ -411,7 +411,41 @@ public:
         return results;
     }
 
-
+    // Phase D of classify_multi_batch_filtered on Phases A-C computed elsewhere (the GPU engine, src/engine_gpu/nonhost_gpu.cu):
+    // np[ri] = non-host minimizers of read ri (0 when fewer than kMinNonhostMins), and one (key, count) group per (read, map,
+    // species) with key = read << 33 | map << 32 | species_id (map 0 = viral, 1 = microbial), groups in the order in which Phase C
+    // would first increment them. Inserting the species in that order gives each map the same insertion sequence, hence the same
+    // iteration order, as Phase C, so the MultiHits are identical. Returns empty if the groups are inconsistent with np.
+    std::vector<MultiHit> classify_from_groups(const std::vector<uint32_t>& np, const std::vector<uint64_t>& key,
+                                               const std::vector<uint32_t>& cnt, float soft_threshold_multiplier = 0.25f,
+                                               int n_threads = 0) const {
+        const size_t n_reads = np.size();
+        if (key.size() != cnt.size()) return {};
+        std::vector<uint64_t> start(n_reads + 1, 0);   // groups of read ri: [start[ri], start[ri+1])
+        for (size_t g = 0; g < key.size(); ++g) {
+            const uint64_t ri = key[g] >> 33;
+            if (ri >= n_reads || (g > 0 && ri < (key[g - 1] >> 33)) || np[ri] == 0) return {};
+            ++start[ri + 1];
+        }
+        for (size_t ri = 0; ri < n_reads; ++ri) start[ri + 1] += start[ri];
+#ifdef _OPENMP
+        const int nt = std::max(1, n_threads > 0 ? n_threads : omp_get_max_threads());
+#else
+        (void) n_threads;
+#endif
+        std::vector<MultiHit> results(n_reads);
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic, 64) num_threads(nt)
+#endif
+        for (int ri = 0; ri < static_cast<int>(n_reads); ++ri) {
+            if (np[ri] == 0) continue;
+            std::unordered_map<uint32_t, uint32_t> vh, mh;
+            for (uint64_t g = start[ri]; g < start[ri + 1]; ++g)
+                ((key[g] >> 32) & 1 ? mh : vh)[static_cast<uint32_t>(key[g] & 0xffffffffu)] = cnt[g];
+            results[ri] = hits_to_multi_hit(vh, mh, np[ri], soft_threshold_multiplier);
+        }
+        return results;
+    }
 
     // Minimum number of non-host minimizers required to call a read nonhost.
     // Reads with fewer non-host minimizers are returned as UNKNOWN (probably

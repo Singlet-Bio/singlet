@@ -97,7 +97,7 @@ class FastqEncoder {
             throw std::runtime_error("No reads in input FASTQ files");
         }
 
-        ProtocolCandidate detected;
+        ProtocolCandidate detected{};
         if (need_detection) {
             // Full protocol auto-detection from probe reads
             struct ProbeSpot {
@@ -116,6 +116,10 @@ class FastqEncoder {
                 probe_spots, r1_len,
                 static_cast<uint16_t>(probe_spots.empty() ? 0 : probe_spots[0].r2_len),
                 cfg.whitelist_dirs);
+
+            // A whitelist protocol whose barcodes are not in its whitelist would give garbage counts: stop.
+            if (const std::string werr = protocol_wl_floor_error(detected); !werr.empty())
+                throw std::runtime_error(werr);
 
             // ── AUTOFIX-VDB-READ-SWAP-PROTOCOL (FASTQ path) ──────────────────
             // When FASTQ files have R1=cDNA (long) and R2=CB+UMI (short),
@@ -148,6 +152,7 @@ class FastqEncoder {
             if (spec) {
                 detected.tag = spec->tag;
                 detected.protocol_id = spec->protocol_id;
+                detected.r1_length = spec->r1_len;
                 detected.bc_offset = spec->bc_offset;
                 detected.bc_length = spec->bc_len;
                 detected.umi_offset = spec->umi_offset;
@@ -217,6 +222,24 @@ class FastqEncoder {
             // For known non-5' protocols: skip adapter detection entirely.
         }
 
+        // Over-sequenced barcode read (e.g. R1 = 101 nt where the protocol reads 28: GSE230239). The protocol
+        // fixes how much of R1 is barcode + UMI; the rest is not read 1 of anything we use. Keeping it made the
+        // writer's fixed R1 length disagree with the protocol and no read had a usable barcode. Same rule as the
+        // SRA encoder ("Trimming over-sequenced R1"): trust a confident protocol, cut R1 to its length.
+        uint16_t r1_trim = 0;
+        if (detected.confidence >= Confidence::MEDIUM && detected.r1_length > 0 &&
+            detected.r1_length < r1_len && first_r2_len > 0) {
+            r1_trim = detected.r1_length;
+            std::cerr << "[1fq-encode] Trimming over-sequenced R1: " << r1_len << " -> " << r1_trim << "\n";
+            for (auto& pr : probe_reads) {
+                if (pr.r1_seq.size() > r1_trim) {
+                    pr.r1_seq.resize(r1_trim);
+                    pr.r1_qual.resize(r1_trim);
+                }
+            }
+            r1_len = r1_trim;
+        }
+
         // Configure and open writer
         WriterConfig wcfg;
         wcfg.codec = cfg.codec;
@@ -282,6 +305,7 @@ class FastqEncoder {
         uint16_t r1l, r2l, r1ql, r2ql;
         while (read_fastq_record(r1_fp, name_buf, r1_seq_buf, r1_qual_buf, plus_buf, r1l, r1ql) &&
                read_fastq_record(r2_fp, name_buf, r2_seq_buf, r2_qual_buf, plus_buf, r2l, r2ql)) {
+            if (r1_trim > 0 && r1l > r1_trim) r1l = r1_trim;   // over-sequenced barcode read
             r1_num.resize(r1l);
             r1_qnum.resize(r1l);
             r2_num.resize(r2l);

@@ -1,0 +1,23 @@
+	Command being timed: "/mnt/projects/debruinz_project/debruinz/singlet/jobs/w11/engine/bin12/singlet-gpu /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf --out-prefix /tmp/debruinz-engprof-790078/cpu/out/ --threads 9 --pipeline --output-format 1pz --engine cpu"
+	User time (seconds): 2228.09
+	System time (seconds): 217.20
+	Percent of CPU this job got: 442%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 9:12.36
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 56371488
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 40634953
+	Voluntary context switches: 2254456
+	Involuntary context switches: 332963
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 115431240
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

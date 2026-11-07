@@ -107,16 +107,16 @@ class AtacDonorDemux {
         struct Entry {
             uint32_t bc;
             uint32_t snp;
-            uint8_t ad;
-            uint8_t dp;
+            uint16_t ad;
+            uint16_t dp;
         };
         std::vector<Entry> entries;
         entries.reserve(tally.size());
         for (const auto& [key, t] : tally) {
             uint32_t bc = static_cast<uint32_t>(key >> 32);
             uint32_t snp = static_cast<uint32_t>(key & 0xFFFFFFFF);
-            uint8_t ad = static_cast<uint8_t>(std::min(t.ad, 255u));
-            uint8_t dp = static_cast<uint8_t>(std::min(t.dp, 255u));
+            uint16_t ad = static_cast<uint16_t>(std::min(t.ad, 65535u));
+            uint16_t dp = static_cast<uint16_t>(std::min(t.dp, 65535u));
             entries.push_back({bc, snp, ad, dp});
         }
 
@@ -128,10 +128,10 @@ class AtacDonorDemux {
         // Build CSC indptr/indices/data for AD and DP
         std::vector<int32_t> ad_indptr(n_barcodes + 1, 0);
         std::vector<int32_t> ad_indices;
-        std::vector<uint8_t> ad_data;
+        std::vector<uint16_t> ad_data;
         std::vector<int32_t> dp_indptr(n_barcodes + 1, 0);
         std::vector<int32_t> dp_indices;
-        std::vector<uint8_t> dp_data;
+        std::vector<uint16_t> dp_data;
 
         for (const auto& e : entries) {
             ad_indices.push_back(static_cast<int32_t>(e.snp));
@@ -150,10 +150,10 @@ class AtacDonorDemux {
 
         const int32_t* aip = ad_indptr.data();
         const int32_t* aii = ad_indices.empty() ? nullptr : ad_indices.data();
-        const uint8_t* aid = ad_data.empty() ? nullptr : ad_data.data();
+        const uint16_t* aid = ad_data.empty() ? nullptr : ad_data.data();
         const int32_t* dip = dp_indptr.data();
         const int32_t* dii = dp_indices.empty() ? nullptr : dp_indices.data();
-        const uint8_t* did = dp_data.empty() ? nullptr : dp_data.data();
+        const uint16_t* did = dp_data.empty() ? nullptr : dp_data.data();
 
         return run_demux(
             n_snps, n_barcodes,

@@ -1,6 +1,7 @@
 #include "ReadAlign.h"
 #include "SuffixArrayFuns.h"
 #include "ErrorWarning.h"
+#include "StarProfile.h"
 
 uint ReadAlign::maxMappableLength2strands(uint pieceStartIn, uint pieceLengthIn, uint iDir, uint iSA1, uint iSA2, uint& maxLbest, uint iFrag) {
     //returns number of mappings, maxMappedLength=mapped length
@@ -15,6 +16,9 @@ uint ReadAlign::maxMappableLength2strands(uint pieceStartIn, uint pieceLengthIn,
     // gSAsparseD = 1
     // gSAindexNbases = 14
 
+#ifdef STAR_PROFILE
+    profCnt[0]++;
+#endif
     for (uint iDist=0; iDist<min(pieceLengthIn,P.pGe.gSAsparseD); iDist++) {//cycle through different distances
         uint pieceStart;
         uint pieceLength=pieceLengthIn-iDist;
@@ -102,6 +106,9 @@ uint ReadAlign::maxMappableLength2strands(uint pieceStartIn, uint pieceLengthIn,
             bool comparRes;
             maxL=compareSeqToGenome(mapGen, Read1, pieceStart, pieceLength, Lind, iSA1, dirR, comparRes);
         } else {//need SA search, pieceLength>maxL
+#ifdef STAR_PROFILE
+            profCnt[1]++;
+#endif
             if (iSA2good && iSA1noN) {
                 maxL = Lind; //Lind bases were already matched
             } else {

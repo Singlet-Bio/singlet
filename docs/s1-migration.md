@@ -136,7 +136,7 @@ campaign takes the policy JSON (`version`, `withheld_studies`, `excluded_samples
   |---|---|
   | `genotype` | `donor/*` except `donor_assignments.tsv`, `snp_*`, `*.vcf`/`.bcf`, `ase_counts.tsv`, aligned reads (`*.bam`, 4 samples) |
   | `mtdna_alleles` | `mt/*` except `mt_summary.tsv`, `mt_heteroplasmy.1pz`, `mt_variants.tsv`, `*_mt_consensus*`, `*_mt_variants*` |
-  | `ancestry_call` | `ancestry_call.json` |
+  | `ancestry_call` | `ancestry_call.json`, the legacy 50-marker AIM call (`include/singlet/pileup/ancestry.h`). Not to be read: its confidence is uncalibrated (softmax of summed read log-likelihoods, no depth cap or genotype model) and it is coverage-limited on 3' data (0-10 of the 51 markers covered on the bench host runs; a call needs only 5 informative markers). Superseded by the validated per-cell ancestry label (`singlet.celllabels.ancestry`, full 1000 Genomes panel, at least 300 sites), which is authoritative |
   | `ambient` | `ambient_contamination.*`, `ambient_profile.tsv` |
   | `doublet_scores` | `doublet_scores.tsv` |
   | `nonhost_per_cell` | `nonhost/*per_cell*`; the sample-level `nonhost_summary.json` and `nonhost_em_abundance.tsv` stay |

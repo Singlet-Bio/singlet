@@ -3,22 +3,30 @@
 // singlet-pileup: atac_fragment.h
 // A1 — Fragment extraction from paired-end BAM for 10x ATAC / ATAC-seq.
 //
-// Reads a coordinate-sorted BAM produced by STAR in PE-DNA mode and emits
-// Tn5-shifted, deduplicated fragments as (chrom_idx, start, end, barcode_idx).
+// Reads a coordinate-sorted BAM produced by STAR in PE-DNA mode and emits Tn5-shifted, deduplicated fragments as
+// (chrom_idx, start, end, barcode_idx, read_pairs), the content of Cell Ranger ATAC's fragments.tsv.gz.
 //
-// Barcode origin: QNAME prefix "BC:NNNN_originalName" injected during .1fq
-// decode. Reads with no or all-N barcode are silently skipped.
+// One record per pair is used: the leftmost mate (TLEN > 0). The fragment is [pos, pos + TLEN) on the reference
+// (0-based, end exclusive), shifted +4 / -5 for the Tn5 9 bp duplication (Buenrostro 2013; Cell Ranger ATAC).
+// Both mates of a STAR pair carry the same MAPQ, so one MAPQ check covers the pair.
 //
-// Deduplication: per-chromosome unordered_set on (start, end, barcode_idx).
-// The BAM is coordinate-sorted so the caller can flush each chromosome's set
-// after the last record for that chromosome to bound peak memory.
+// Barcode origin: QNAME prefix "BC:<raw>_originalName" injected during .1fq decode. With an AtacBarcodeCorrector the raw
+// barcode is corrected against the whitelist (atac_barcodes.h) and barcode_idx is the whitelist index; without one,
+// the legacy exact-match barcode map is used. Reads with no or all-N barcode are skipped.
+//
+// Deduplication: identical (start, end, barcode) pairs are one fragment whose read_pairs counts the duplicates (column 5
+// of fragments.tsv.gz), in one global table (order-free rule A1). With set_assume_sorted(true) on a coordinate-sorted BAM
+// the table only holds the current start position.
 
 #include <htslib/sam.h>
+
+#include "atac_barcodes.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -33,6 +41,7 @@ struct ATACFragment {
     int32_t start;  // Tn5-shifted, 0-based inclusive
     int32_t end;    // Tn5-shifted, 0-based exclusive
     uint32_t barcode_idx;
+    uint32_t read_pairs = 1;  // read pairs supporting the fragment (duplicates + 1)
 };
 
 // ---------------------------------------------------------------------------
@@ -84,6 +93,13 @@ class ATACFragmentExtractor {
         barcode_map_ = &bc_map;
     }
 
+    /// Whitelist correction (takes precedence over the barcode map). Caller owns the corrector.
+    void set_barcode_corrector(AtacBarcodeCorrector* c) { corrector_ = c; }
+
+    /// Memory optimisation for a coordinate-sorted BAM only: dedup keys are dropped whenever the start changes. Off by default
+    /// (A1): on any other record order it would keep duplicates that are not adjacent.
+    void set_assume_sorted(bool v) { assume_sorted_ = v; }
+
     void set_min_fragment_size(int min_size = 10) { min_frag_ = min_size; }
     void set_max_fragment_size(int max_size = 2000) { max_frag_ = max_size; }
     void set_min_mapq(uint8_t min_mapq = 30) { min_mapq_ = min_mapq; }
@@ -104,24 +120,24 @@ class ATACFragmentExtractor {
         // Skip secondary / supplementary
         if (flag & BAM_FSECONDARY) return;
         if (flag & BAM_FSUPPLEMENTARY) return;
-        // Process only read1 — read2 carries the same fragment info
-        if (!(flag & BAM_FREAD1)) return;
-
-        // MAPQ filter — exclude ambiguous multi-mappers (standard: MAPQ≥30,
-        // matching CellRanger-ATAC, ArchR, sinto conventions).
+        // MAPQ filter — exclude ambiguous multi-mappers (standard: MAPQ>=30, matching Cell Ranger ATAC, ArchR, sinto).
+        // STAR gives 255 (unique), 3, 1, 0.
         if (b->core.qual < min_mapq_) {
-            ++stats_.low_mapq;
+            if (b->core.isize > 0) ++stats_.low_mapq;
             return;
         }
 
+        // One record per pair: the leftmost mate carries TLEN > 0.
+        const int32_t tlen = b->core.isize;
+        if (tlen <= 0) return;
+        if (b->core.mtid != b->core.tid) return;
+
         ++stats_.proper_pairs;
 
-        // Fragment coordinates from TLEN (insert size, signed)
-        const int32_t tlen = b->core.isize;
-        if (tlen == 0 || std::abs(tlen) < min_frag_ || std::abs(tlen) > max_frag_) return;
+        if (tlen < min_frag_ || tlen > max_frag_) return;
 
         int32_t frag_start = b->core.pos;
-        int32_t frag_end = frag_start + std::abs(tlen);
+        int32_t frag_end = frag_start + tlen;
 
         // Tn5 shift (standard Buenrostro / 10x ATAC convention)
         frag_start += 4;
@@ -139,16 +155,42 @@ class ATACFragmentExtractor {
 
         const int32_t tid = b->core.tid;
 
-        // Per-chromosome deduplication
+        // Deduplication (rule A1, docs/research-beta/atac-reducers-prep.md): one global exact-key table, so the result is a
+        // function of the set of records. The table is only cleared per start when the caller promises a coordinate-sorted
+        // stream (set_assume_sorted), where keys can only collide at the same start; it is NOT the default.
+        if (assume_sorted_ && (tid != cur_tid_ || frag_start != cur_start_)) {
+            dedup_.clear();
+            cur_tid_ = tid;
+            cur_start_ = frag_start;
+        }
         FragmentKey key{tid, frag_start, frag_end, bc_idx};
-        auto [it, inserted] = dedup_set_.emplace(key);
+        auto [it, inserted] = dedup_.emplace(key, fragments_.size());
         if (!inserted) {
             ++stats_.duplicate_fragments;
+            ++fragments_[it->second].read_pairs;
             return;
         }
 
         ++stats_.unique_fragments;
-        fragments_.push_back(ATACFragment{tid, frag_start, frag_end, bc_idx});
+        fragments_.push_back(ATACFragment{tid, frag_start, frag_end, bc_idx, 1});
+    }
+
+    /// Raw barcode of a record ("BC:<raw>_..." QNAME prefix), or empty. Used for the corrector's counting passes.
+    static std::string_view raw_barcode(const bam1_t* b) {
+        const char* q = bam_get_qname(b);
+        if (q[0] != 'B' || q[1] != 'C' || q[2] != ':') return {};
+        const char* s = q + 3;
+        const char* u = std::strchr(s, '_');
+        if (!u) return {};
+        return std::string_view(s, static_cast<size_t>(u - s));
+    }
+
+    /// True for the record of a pair that process_record() would use (before barcode and MAPQ checks).
+    static bool is_fragment_record(const bam1_t* b) {
+        const uint16_t f = b->core.flag;
+        if (!(f & BAM_FPROPER_PAIR) || (f & (BAM_FUNMAP | BAM_FMUNMAP | BAM_FSECONDARY | BAM_FSUPPLEMENTARY)))
+            return false;
+        return b->core.isize > 0;
     }
 
     // ------------------------------------------------------------------
@@ -159,7 +201,9 @@ class ATACFragmentExtractor {
         std::sort(fragments_.begin(), fragments_.end(),
                   [](const ATACFragment& a, const ATACFragment& b) {
                       if (a.chrom_idx != b.chrom_idx) return a.chrom_idx < b.chrom_idx;
-                      return a.start < b.start;
+                      if (a.start != b.start) return a.start < b.start;
+                      if (a.end != b.end) return a.end < b.end;
+                      return a.barcode_idx < b.barcode_idx;
                   });
     }
 
@@ -203,6 +247,12 @@ class ATACFragmentExtractor {
         }
         if (all_n) return false;
 
+        if (corrector_) {
+            const int64_t idx = corrector_->resolve(bc);
+            if (idx < 0) return false;
+            bc_idx_out = static_cast<uint32_t>(idx);
+            return true;
+        }
         if (!barcode_map_) return false;
         auto it = barcode_map_->find(bc);
         if (it == barcode_map_->end()) return false;
@@ -213,12 +263,15 @@ class ATACFragmentExtractor {
 
     // Pointer to caller-owned barcode map (not owned here)
     const std::unordered_map<std::string, uint32_t>* barcode_map_ = nullptr;
+    AtacBarcodeCorrector* corrector_ = nullptr;
+    std::unordered_map<FragmentKey, size_t, FragmentKeyHash> dedup_;
+    int32_t cur_tid_ = -1, cur_start_ = -1;
+    bool assume_sorted_ = false;
 
     int min_frag_ = 10;
     int max_frag_ = 2000;
     uint8_t min_mapq_ = 30;
 
-    std::unordered_set<FragmentKey, FragmentKeyHash> dedup_set_;
     std::vector<ATACFragment> fragments_;
 
     struct Stats {

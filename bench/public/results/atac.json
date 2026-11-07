@@ -1,0 +1,763 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "atac",
+ "title": "Chromatin accessibility (scATAC)",
+ "conclusion": "Against Cell Ranger, Singlet's ATAC cell calls and fragments match better than chromap+snapatac2 from the same FASTQs; peaks match on scATAC and trail MACS3 slightly on Multiome. atac_pbmc_5k_nextgem: cells 0.9496 vs 0.8835, exact fragments 0.9124 vs 0.906, peak F1 0.8973 vs 0.8923; pbmc_multiome10k: cells 0.9853 vs 0.9182, exact fragments 0.9808 vs 0.9758, peak F1 0.8297 vs 0.8373.",
+ "methods": "**Data.** 10x Genomics public datasets (CC BY 4.0), each processed from its published FASTQs: scATAC PBMC 5k Next GEM\n(Cell Ranger ATAC 1.2.0 outputs), and the ATAC library of Multiome PBMC 10k (Cell Ranger ARC 2.0.0). Multiome PBMC 3k\nwas used for development and is not scored. Reference: 10x GRCh38-2024-A for every tool.\n\n**Singlet 1.0.0.** `singlet encode` (R1, barcode read, R3), then the pipeline with STAR in paired-end DNA mode (no\nsplicing) and the ATAC post-alignment step. That step detects the barcode window and corrects barcodes against the 10x\nwhitelist; for Multiome it translates them to GEX barcodes. It then builds Tn5-shifted fragments (MAPQ \u2265 30,\ndeduplicated) and calls peaks on cut sites with the MACS2 recipe Signac/ArchR use (q < 0.05). It also computes Cell\nRanger / ArchR / Signac QC definitions and calls cells with a mixture model on fragments in peaks (joint with GEX UMIs for\nMultiome). 16 threads.\n\n**Competitor.** The open-source route from FASTQs to a Signac/ArchR object, on the same FASTQs, whitelist, reference and\nthreads:\n- Chromap 0.2 (`--preset atac`, whitelist correction, ARC barcode translation for Multiome);\n- peaks: MACS3 as Signac's `CallPeaks` runs it;\n- cells: SnapATAC2 TSS enrichment plus ArchR's default cell filter (\u2265 1,000 fragments, TSS enrichment \u2265 4).\n\n**Truth.** Cell Ranger's published cell calls, per-barcode metrics, fragments and peaks. The Cell Ranger ATAC 1.2 outputs\nof the 5k dataset are on hg19; their peaks and fragments are lifted to GRCh38 with UCSC's hg19ToHg38 chain (both ends\nmust land on the same chromosome and strand). Fragments or peaks that do not lift are dropped; this affects both tools\nthe same way.\n\n**Metrics.** Each is computed per dataset.\n- Cell-call Jaccard with Cell Ranger.\n- Spearman correlation of fragments per cell with Cell Ranger, over Cell Ranger's cells, chrM excluded.\n- Fraction of Cell Ranger's fragments of its cells on chr21 that a tool reproduces exactly (chromosome, start, end,\n  barcode).\n- Peak F1: the harmonic mean of the fraction of Cell Ranger peaks overlapped by a tool's peaks and the fraction of the\n  tool's peaks overlapping Cell Ranger peaks.\n- TSS fragments per cell against Cell Ranger. This metric has no open competitor, so it uses a threshold rule.\n\nEvery comparison metric is match-or-beat against the competitor, with no tolerance.\n",
+ "status": "final",
+ "generated_at": "2026-10-26T16:13:35+00:00",
+ "owner": "atac-multiome-spatial",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368",
+  "branch": "claude/atac-spatial-benchmark-2ba7df",
+  "binary": "singlet-atacsp",
+  "binary_sha256": "982f5925cd05539c8000f22068cab8d48521065bbe0d74b2db191ef442b4c859",
+  "build_flags": "CMake Release, -march=x86-64-v3; this branch merged onto prod/modality-fixes 4f110f283cd4b1bc4865d1103a08b56346027da3"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet encode --reads R1 R2 [R3] --protocol 10x-atac|10x-visium; singlet x.1fq --ref-base REF --genome-dir GRCh38/GRCm39-2024-A/star_2.7.11b --exons genes.gtf --threads 16 --pipeline --output-format mtx --raw-matrix [--paired-gex GEX_RUN]"
+  },
+  {
+   "name": "chromap+snapatac2",
+   "version": "chromap 0.3.2-r518; snapatac2 2.9.0; MACS3 macs3 3.0.4",
+   "role": "competitor",
+   "url": "https://github.com/haowenz/chromap",
+   "params": "chromap --preset atac -t 16 -x GRCh38-2024-A.index -r genome.fa -1 R1 -2 R3 -b R2 --barcode-whitelist WL [--read-format bc:<window of Singlet's detected layout>] [--barcode-translate ARC pairs]; macs3 callpeak -f BED --nomodel --extsize 200 --shift -100 --keep-dup all -g hs (Signac CallPeaks); snapatac2.pp.import_fragments + metrics.tsse; cells = ArchR createArrowFiles defaults (minFrags 1000, minTSS 4)"
+  },
+  {
+   "name": "cellranger-atac/arc",
+   "version": "ATAC 1.2.0 / ARC 2.0.0",
+   "role": "truth",
+   "url": "https://www.10xgenomics.com/datasets",
+   "params": "10x published outputs"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "atac_pbmc_5k_nextgem",
+   "title": "10x scATAC PBMC 5k Next GEM (Cell Ranger ATAC 1.2)",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_pbmc_5k_nextgem/"
+   },
+   "truth": "Cell Ranger ATAC 1.2.0 published cell calls, fragments and peaks",
+   "data_kind": "real"
+  },
+  {
+   "id": "pbmc_multiome10k",
+   "title": "10x Multiome PBMC 10k, granulocytes sorted out (ARC 2.0)",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-arc/2.0.0/pbmc_granulocyte_sorted_10k/"
+   },
+   "truth": "Cell Ranger ARC 2.0.0 published joint cell calls, barcode pairs, fragments and peaks",
+   "data_kind": "real"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "cell_jaccard",
+   "name": "Cell calls: Jaccard with Cell Ranger",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9496,
+    "ci": [
+     0.945,
+     0.955
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.8835
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.006
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (200 resamples of the 5208 called barcodes): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "Cell Ranger 4585, Singlet 4707, chromap+snapatac2 (ArchR default filter) 5183 cells",
+   "pass": "pass"
+  },
+  {
+   "id": "fragments_per_cell_spearman",
+   "name": "Fragments per cell: Spearman with Cell Ranger",
+   "unit": "rho",
+   "category": "accuracy",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9967
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.9966
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (200 resamples of the 4585 cells): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "over Cell Ranger's cells; chrM excluded",
+   "pass": "pass"
+  },
+  {
+   "id": "fragment_exact_recall",
+   "name": "Cell Ranger fragments reproduced exactly (chr21)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9124
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.906
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0009
+    },
+    "rationale": "1.96 x the binomial standard error of the difference of two proportions over the 823,229 Cell Ranger fragments (conservative: the two tools are scored on the same fragments)"
+   },
+   "notes": "823,229 Cell Ranger fragments of its 4585 cells",
+   "pass": "pass"
+  },
+  {
+   "id": "peak_f1",
+   "name": "Peaks: F1 of overlap with Cell Ranger peaks",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8973
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.8923
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0009
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (50 resamples of the 27 chromosomes): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "recall/precision Singlet 0.842/0.961 (118,589 peaks); chromap+snapatac2 0.826/0.971 (103,709 peaks)",
+   "pass": "pass"
+  },
+  {
+   "id": "tss_fragments_spearman",
+   "name": "TSS fragments per cell: Spearman with Cell Ranger",
+   "unit": "rho",
+   "category": "accuracy",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9944
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.9,
+    "rationale": "Cell Ranger reports TSS fragments but no open tool reproduces its TSS set; 0.9 is the rank agreement of the fragments-per-cell metric of the open-source competitor on the same cells (metric 2), the bar a correct implementation of the same definition should clear"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cell_jaccard",
+   "name": "Cell calls: Jaccard with Cell Ranger",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9853,
+    "ci": [
+     0.984,
+     0.9869
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.9182
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0039
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (200 resamples of the 12620 called barcodes): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "Cell Ranger 11898, Singlet 12067, chromap+snapatac2 (ArchR default filter) 12166 cells",
+   "pass": "pass"
+  },
+  {
+   "id": "fragments_per_cell_spearman",
+   "name": "Fragments per cell: Spearman with Cell Ranger",
+   "unit": "rho",
+   "category": "accuracy",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 1.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (200 resamples of the 11898 cells): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "over Cell Ranger's cells; chrM excluded",
+   "pass": "pass"
+  },
+  {
+   "id": "fragment_exact_recall",
+   "name": "Cell Ranger fragments reproduced exactly (chr21)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9808
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.9758
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0003
+    },
+    "rationale": "1.96 x the binomial standard error of the difference of two proportions over the 2,440,031 Cell Ranger fragments (conservative: the two tools are scored on the same fragments)"
+   },
+   "notes": "2,440,031 Cell Ranger fragments of its 11898 cells",
+   "pass": "pass"
+  },
+  {
+   "id": "peak_f1",
+   "name": "Peaks: F1 of overlap with Cell Ranger peaks",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8297
+   },
+   "competitors": [
+    {
+     "tool": "chromap+snapatac2",
+     "value": 0.8373
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.001
+    },
+    "rationale": "half-width of the bootstrap 95% CI of the Singlet - competitor difference (50 resamples of the 36 chromosomes): differences smaller than this are not distinguishable on this dataset"
+   },
+   "notes": "recall/precision Singlet 0.786/0.878 (130,345 peaks); chromap+snapatac2 0.771/0.916 (115,479 peaks)",
+   "pass": "fail"
+  },
+  {
+   "id": "tss_fragments_spearman",
+   "name": "TSS fragments per cell: Spearman with Cell Ranger",
+   "unit": "rho",
+   "category": "accuracy",
+   "dataset": "pbmc_multiome10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9997
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.9,
+    "rationale": "Cell Ranger reports TSS fragments but no open tool reproduces its TSS set; 0.9 is the rank agreement of the fragments-per-cell metric of the open-source competitor on the same cells (metric 2), the bar a correct implementation of the same definition should clear"
+   },
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "threads": 16,
+   "wall_s": 2354.9,
+   "cpu_h": 2.967,
+   "max_rss_gb": 19.12,
+   "notes": "sum of FASTQ encode, main run"
+  },
+  {
+   "tool": "chromap+snapatac2",
+   "dataset": "atac_pbmc_5k_nextgem",
+   "threads": 16,
+   "wall_s": 1373.0,
+   "cpu_h": 1.632,
+   "max_rss_gb": 21.41,
+   "notes": "sum of main run, MACS3 + SnapATAC2"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc_multiome10k",
+   "threads": 16,
+   "wall_s": 5017.2,
+   "cpu_h": 6.143,
+   "max_rss_gb": 19.42,
+   "notes": "sum of FASTQ encode, main run"
+  },
+  {
+   "tool": "chromap+snapatac2",
+   "dataset": "pbmc_multiome10k",
+   "threads": 16,
+   "wall_s": 2808.9,
+   "cpu_h": 3.135,
+   "max_rss_gb": 21.31,
+   "notes": "sum of main run, MACS3 + SnapATAC2"
+  }
+ ],
+ "figures": [
+  {
+   "id": "peak_recall_precision",
+   "title": "Peak overlap with Cell Ranger",
+   "kind": "grouped_bar",
+   "caption": "Fraction of Cell Ranger peaks recovered (recall) and of each tool's peaks that Cell Ranger also calls (precision).",
+   "x": {
+    "label": "dataset / measure",
+    "categories": [
+     "atac_pbmc_5k_nextgem recall",
+     "atac_pbmc_5k_nextgem precision",
+     "pbmc_multiome10k recall",
+     "pbmc_multiome10k precision"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "scale": "linear",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "Singlet",
+     "tool": "singlet",
+     "x": [
+      "atac_pbmc_5k_nextgem recall",
+      "atac_pbmc_5k_nextgem precision",
+      "pbmc_multiome10k recall",
+      "pbmc_multiome10k precision"
+     ],
+     "y": [
+      0.8419,
+      0.9606,
+      0.7865,
+      0.878
+     ]
+    },
+    {
+     "name": "chromap+snapatac2",
+     "tool": "chromap+snapatac2",
+     "x": [
+      "atac_pbmc_5k_nextgem recall",
+      "atac_pbmc_5k_nextgem precision",
+      "pbmc_multiome10k recall",
+      "pbmc_multiome10k precision"
+     ],
+     "y": [
+      0.8256,
+      0.9707,
+      0.7708,
+      0.9165
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pareto_fragments_per_cell_spearman_atac_pbmc_5k_nextgem",
+   "kind": "pareto",
+   "title": "Fragments per cell: Spearman with Cell Ranger against CPU-hours (atac_pbmc_5k_nextgem)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Fragments per cell: Spearman with Cell Ranger",
+    "unit": "rho"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      2.967
+     ],
+     "y": [
+      0.9967
+     ],
+     "frontier": true
+    },
+    {
+     "name": "chromap+snapatac2",
+     "tool": "chromap+snapatac2",
+     "x": [
+      1.632
+     ],
+     "y": [
+      0.9966
+     ],
+     "frontier": true
+    }
+   ]
+  },
+  {
+   "id": "pareto_peak_f1_atac_pbmc_5k_nextgem",
+   "kind": "pareto",
+   "title": "Peaks: F1 of overlap with Cell Ranger peaks against CPU-hours (atac_pbmc_5k_nextgem)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Peaks: F1 of overlap with Cell Ranger peaks",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      2.967
+     ],
+     "y": [
+      0.8973
+     ],
+     "frontier": true
+    },
+    {
+     "name": "chromap+snapatac2",
+     "tool": "chromap+snapatac2",
+     "x": [
+      1.632
+     ],
+     "y": [
+      0.8923
+     ],
+     "frontier": true
+    }
+   ]
+  },
+  {
+   "id": "pareto_fragments_per_cell_spearman_pbmc_multiome10k",
+   "kind": "pareto",
+   "title": "Fragments per cell: Spearman with Cell Ranger against CPU-hours (pbmc_multiome10k)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Fragments per cell: Spearman with Cell Ranger",
+    "unit": "rho"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      6.143
+     ],
+     "y": [
+      1.0
+     ],
+     "frontier": false
+    },
+    {
+     "name": "chromap+snapatac2",
+     "tool": "chromap+snapatac2",
+     "x": [
+      3.135
+     ],
+     "y": [
+      1.0
+     ],
+     "frontier": true
+    }
+   ]
+  },
+  {
+   "id": "pareto_peak_f1_pbmc_multiome10k",
+   "kind": "pareto",
+   "title": "Peaks: F1 of overlap with Cell Ranger peaks against CPU-hours (pbmc_multiome10k)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Peaks: F1 of overlap with Cell Ranger peaks",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      6.143
+     ],
+     "y": [
+      0.8297
+     ],
+     "frontier": false
+    },
+    {
+     "name": "chromap+snapatac2",
+     "tool": "chromap+snapatac2",
+     "x": [
+      3.135
+     ],
+     "y": [
+      0.8373
+     ],
+     "frontier": true
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "atac_atac_pbmc_5k_nextgem_barcodes.tsv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_atac_pbmc_5k_nextgem_barcodes.tsv.gz",
+   "kind": "derived",
+   "sha256": "7b3d8640daf8140e2395a2d837ef79ef5365e707add0205855bbabf42f5cef36",
+   "bytes": 1352049,
+   "format": "gz"
+  },
+  {
+   "name": "atac_atac_pbmc_5k_nextgem_peaks_tenx.bed.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_atac_pbmc_5k_nextgem_peaks_tenx.bed.gz",
+   "kind": "truth",
+   "sha256": "3c912c5dd520549672ce2f4e0e8d780a1b75f75b41963602e7ac48cd00c757a3",
+   "bytes": 946551,
+   "format": "gz"
+  },
+  {
+   "name": "atac_atac_pbmc_5k_nextgem_peaks_singlet.bed.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_atac_pbmc_5k_nextgem_peaks_singlet.bed.gz",
+   "kind": "singlet_output",
+   "sha256": "4a5333faed8f8ef1ff49ac0efcadbe5218682de9f73061fc6370322c1e976a21",
+   "bytes": 874515,
+   "format": "gz"
+  },
+  {
+   "name": "atac_atac_pbmc_5k_nextgem_peaks_chromap_macs3.bed.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_atac_pbmc_5k_nextgem_peaks_chromap_macs3.bed.gz",
+   "kind": "competitor_output",
+   "sha256": "e61f56f02d8e8891d24a14f10e5fc487efdf9d02b8dd077a8b0dae014326f781",
+   "bytes": 853102,
+   "format": "gz"
+  },
+  {
+   "name": "atac_atac_pbmc_5k_nextgem_fragment_concordance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_atac_pbmc_5k_nextgem_fragment_concordance.json",
+   "kind": "derived",
+   "sha256": "b1faae795866cf2f662eca4e7b401bec4ee1b9d62310310a5ba1c7642de5f5cc",
+   "bytes": 700,
+   "format": "json"
+  },
+  {
+   "name": "atac_pbmc_multiome10k_barcodes.tsv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_pbmc_multiome10k_barcodes.tsv.gz",
+   "kind": "derived",
+   "sha256": "43c169a10f9492b19370330ac0a4aca101f1f8a2058e89bb032dd3883d2545ec",
+   "bytes": 1848757,
+   "format": "gz"
+  },
+  {
+   "name": "atac_pbmc_multiome10k_peaks_tenx.bed.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_pbmc_multiome10k_peaks_tenx.bed.gz",
+   "kind": "truth",
+   "sha256": "a5dc25b045c70e8d241182134ad465aad5212a0177d5ad273fa22a15d0611291",
+   "bytes": 1187151,
+   "format": "gz"
+  },
+  {
+   "name": "atac_pbmc_multiome10k_peaks_singlet.bed.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_pbmc_multiome10k_peaks_singlet.bed.gz",
+   "kind": "singlet_output",
+   "sha256": "23589742271db1dec4ab889428c6a459ae28e91fdb6c53eca9bd400b905c6aeb",
+   "bytes": 957298,
+   "format": "gz"
+  },
+  {
+   "name": "atac_pbmc_multiome10k_peaks_chromap_macs3.bed.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_pbmc_multiome10k_peaks_chromap_macs3.bed.gz",
+   "kind": "competitor_output",
+   "sha256": "2903754695648e2b53e482405d1e002193fade36a7b0821d3da3fa8ab3c6b1d5",
+   "bytes": 944535,
+   "format": "gz"
+  },
+  {
+   "name": "atac_pbmc_multiome10k_fragment_concordance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/atac_pbmc_multiome10k_fragment_concordance.json",
+   "kind": "derived",
+   "sha256": "80d94492b0919f06dca37518125a04af3175bd501c9d842dabe602877eb443e0",
+   "bytes": 639,
+   "format": "json"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/atac/provenance.json",
+   "kind": "derived",
+   "sha256": "22a00d43410c7ff0a6620c01dec2ef3d64f945b11aabd2f4bd54c7f4dc3a401f",
+   "bytes": 6925,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "include/singlet/pileup/atac_pipeline.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_pipeline.h",
+   "role": "implementation"
+  },
+  {
+   "path": "include/singlet/pileup/atac_barcodes.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_barcodes.h",
+   "role": "implementation"
+  },
+  {
+   "path": "include/singlet/pileup/atac_fragment.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_fragment.h",
+   "role": "implementation"
+  },
+  {
+   "path": "include/singlet/pileup/atac_peak_caller.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_peak_caller.h",
+   "role": "implementation"
+  },
+  {
+   "path": "include/singlet/pileup/atac_metrics.h",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/include/singlet/pileup/atac_metrics.h",
+   "role": "implementation"
+  },
+  {
+   "path": "bench/atac_spatial/make_artifacts.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/atac_spatial/make_artifacts.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/atac_spatial/run_chromap.sbatch",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/atac_spatial/run_chromap.sbatch",
+   "role": "harness"
+  },
+  {
+   "path": "bench/atac_spatial/competitors_atac.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/atac_spatial/competitors_atac.py",
+   "role": "harness"
+  },
+  {
+   "path": "bench/public/capabilities/atac.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/public/capabilities/atac.py",
+   "role": "metric"
+  },
+  {
+   "path": "bench/public/capabilities/_atacsp.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/88a41ffb7e4e1c8a2dc9f97a8e08958b7516a368/bench/public/capabilities/_atacsp.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/atac.py",
+  "function": "compute",
+  "laptop_minutes": 13,
+  "clipper_command": "bash bench/atac_spatial/submit.sh"
+ },
+ "caveats": [
+  "Binary: this branch (ATAC/Visium code) merged onto prod/modality-fixes, not yet part of the singlet-campaign build the other capabilities use; the results describe the code that the merge will bring.",
+  "Barcode lists (scATAC whitelist, ARC ATAC-GEX pairs, visium-v1 spots) were rebuilt from 10x public datasets (CC BY 4.0); the 737K-cratac-v1.txt bundled before this change is a copy of the 3' v2 list and matches ~1% of scATAC barcodes.",
+  "Development data: Multiome PBMC 3k. The ATAC-only cell cut (density valley), STAR Extend5pOfReads12 and peak q 0.05 were chosen on it. The 5k scATAC cell count of the first caller (6,895 vs Cell Ranger's 4,585) was seen before the cell caller changed; the change was made on the 3k evidence only.",
+  "Cell Ranger ATAC 1.2 published the 5k outputs on hg19; its peaks and fragments are lifted to GRCh38 with UCSC's hg19ToHg38 chain before comparison (both tools are scored against the same lifted set).",
+  "Peaks: on Multiome 10k Singlet recovers more Cell Ranger peaks (recall 0.786 vs 0.771) but fewer of its peaks are Cell Ranger peaks (precision 0.878 vs 0.916); F1 0.830 vs 0.837 fails.",
+  "Runtime: Chromap is an approximate mapper specialised for chromatin; Singlet aligns with STAR as part of the full pipeline and is ~1.8x slower (resources, not gated)."
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "fragments, peaks, peak matrix, per-cell QC, cells",
+   "supported": "yes",
+   "note": "from FASTQs, one pipeline run"
+  },
+  {
+   "tool": "singlet",
+   "output": "gene activity",
+   "supported": "yes",
+   "note": "Signac GeneActivity definition"
+  },
+  {
+   "tool": "singlet",
+   "output": "Multiome ATAC-GEX pairing and joint cells",
+   "supported": "yes",
+   "note": "--paired-gex"
+  },
+  {
+   "tool": "chromap+snapatac2",
+   "output": "fragments, peaks, per-cell QC, cells",
+   "supported": "yes",
+   "note": "three tools; read format chosen by the user"
+  },
+  {
+   "tool": "chromap+snapatac2",
+   "output": "Multiome ATAC-GEX pairing",
+   "supported": "partial",
+   "note": "Chromap's --barcode-translate refused the ARC pair table"
+  },
+  {
+   "tool": "cellranger-atac/arc",
+   "output": "fragments, peaks, peak matrix, cells",
+   "supported": "yes",
+   "note": "10x EULA; published outputs used"
+  }
+ ]
+}

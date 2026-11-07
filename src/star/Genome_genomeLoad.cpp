@@ -10,6 +10,16 @@
 #endif
 #ifdef SA_HUGEPAGES
 #include <sys/mman.h>
+// Ask for transparent hugepages on a heap block before it is first touched. The block comes from
+// operator new (glibc mmaps large blocks, so it is not page aligned): advise the page-aligned
+// interior. With THP in "madvise" mode (as on Clipper) this is what turns hugepages on at all, and
+// it must happen before the genome is read in: pages already faulted as 4 KB stay 4 KB until
+// khugepaged collapses them.
+static void adviseHugepages(void *p, size_t len) {
+    const uintptr_t pg = 4096;
+    uintptr_t a = ((uintptr_t)p + pg - 1) & ~(pg - 1), e = ((uintptr_t)p + len) & ~(pg - 1);
+    if (e > a) madvise((void *)a, e - a, MADV_HUGEPAGE);
+}
 #endif
 
 //addresses with respect to shmStart of several genome values
@@ -299,6 +309,12 @@ void Genome::genomeLoad(){//allocate and load Genome
                 };
             };
             SAi.allocateArray();
+#ifdef SA_HUGEPAGES
+            adviseHugepages(G1, nGenome+L+L);
+            adviseHugepages(SA.charArray, SA.lengthByte);
+            adviseHugepages(SAi.charArray, SAi.lengthByte);
+            P.inOut->logMain << "SA_HUGEPAGES: MADV_HUGEPAGE on G, SA, SAi before loading\n" << flush;
+#endif
             P.inOut->logMain <<"Shared memory is not used for genomes. Allocated a private copy of the genome.\n"<<flush;
         } catch (exception & exc) {
             ostringstream errOut;
@@ -355,17 +371,6 @@ void Genome::genomeLoad(){//allocate and load Genome
 
     time ( &rawtime );
     P.inOut->logMain << "Finished loading the genome: " << asctime (localtime ( &rawtime )) <<"\n"<<flush;
-
-#ifdef SA_HUGEPAGES
-    // Hint the kernel to promote genome, SA, and SAi to 2MB transparent hugepages.
-    // With transparent_hugepages=always this is largely redundant but ensures prompt
-    // promotion and correct handling of heap-allocated arrays.
-    // Reduces TLB miss rate: 3.1GB genome at 4KB pages = 760K PTEs; at 2MB = 1550 PTEs.
-    madvise(G1,             nGenome + L + L,  MADV_HUGEPAGE);
-    madvise(SA.charArray,   SA.lengthByte,    MADV_HUGEPAGE);
-    madvise(SAi.charArray,  SAi.lengthByte,   MADV_HUGEPAGE);
-    P.inOut->logMain << "SA_HUGEPAGES: madvise MADV_HUGEPAGE applied to G, SA, SAi\n" << flush;
-#endif
 
     #ifdef GENOME_PACKED
     {

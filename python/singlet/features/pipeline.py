@@ -46,9 +46,38 @@ def _empty(fs: str, n: int) -> SetResult:
     return SetResult(fs, vals, feats, REG.method_version(fs))
 
 
+def _doublet_result(sample, timings: Optional[dict]) -> SetResult:
+    from . import doublet as DBL
+
+    t0 = time.perf_counter()
+    values, extra = DBL.score_sample(sample, timings=timings)
+    res = SetResult("doublet", values, REG.features("doublet"), REG.method_version("doublet"))
+    if not extra:
+        res.dropped = {
+            "score_v2": f"no score: other organism, fewer than {DBL.MIN_CELLS} cells, or no engine doublet score"
+        }
+    if timings is not None:
+        timings["doublet_s"] = time.perf_counter() - t0
+    return res
+
+
 def score_sample(
-    sample, sets: Sequence[str] = REG.FEATURE_SETS, *, timings: Optional[dict] = None
+    sample,
+    sets: Sequence[str] = REG.FEATURE_SETS,
+    *,
+    timings: Optional[dict] = None,
 ) -> Dict[str, SetResult]:
+    """Every requested set; ``doublet`` also needs ``sample.prod_doublet_score`` (the engine's score per row of ``X``)."""
+    out: Dict[str, SetResult] = {}
+    if "doublet" in sets:
+        out["doublet"] = _doublet_result(sample, timings)
+        sets = tuple(s for s in sets if s != "doublet")
+    if sets:
+        out.update(_score_gene_sets(sample, sets, timings))
+    return out
+
+
+def _score_gene_sets(sample, sets: Sequence[str], timings: Optional[dict]) -> Dict[str, SetResult]:
     X = sps.csr_matrix(sample.X, dtype=np.float32)
     n = X.shape[0]
     org = sample.species if sample.species in GS.ORGANISMS else None

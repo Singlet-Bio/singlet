@@ -460,9 +460,12 @@ print.singlet_study <- function(x, ...) {
     splice_junctions = "sj_counts.1pz",                    # altExp: reads per junction
     psi = "sj_counts.1pz",                                 # altExp: percent spliced in, computed from the junctions
     mt = "mt_heteroplasmy.1pz",
-    vdj = "vdj_gene_usage.1pz")
+    vdj = "vdj_gene_usage.1pz",
+    atac = "atac_peak_counts.1pz",                         # altExp: ATAC cut sites per peak
+    gene_activity = "atac_gene_activity.1pz")              # altExp: ATAC fragments per gene
 .s1_modality_alias <- c(x = "counts", exon = "spliced", intron = "unspliced", junctions = "splice_junctions",
-                        sj = "splice_junctions", splice_psi = "psi", mt_heteroplasmy = "mt", vdj_gene_usage = "vdj")
+                        sj = "splice_junctions", splice_psi = "psi", mt_heteroplasmy = "mt", vdj_gene_usage = "vdj",
+                        peaks = "atac", chromatin = "atac")
 .s1_gene_members <- c("exon_counts.1pz", "intron_counts.1pz")
 .s1_gene_modalities <- c("counts", "spliced", "unspliced")
 
@@ -516,7 +519,7 @@ print.singlet_study <- function(x, ...) {
 #' @param x A \code{singlet_study} or a GEO Series accession.
 #' @param gsm Optional sample accession: only that sample's modalities.
 #' @return A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{splice_junctions},
-#'   \code{psi}, \code{mt}, \code{vdj}.
+#'   \code{psi}, \code{mt}, \code{vdj}, \code{atac}, \code{gene_activity}.
 #' @export
 singlet_study_modalities <- function(x, gsm = NULL) {
     study <- if (inherits(x, "singlet_study")) x else singlet_study(x)
@@ -770,7 +773,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 .s1_sample_empty <- function(r) is.null(r$exon) && is.null(r$intron) && length(r$features) == 0L
 
 # Assays and altExps of the selected modalities from per-sample reads `ok` (each with `ord`, the cell order, and `cn`, the cell
-# names). counts / spliced / unspliced are gene assays; splice_junctions, psi, mt and vdj are altExps (SummarizedExperiment) on
+# names). counts / spliced / unspliced are gene assays; splice_junctions, psi, mt, vdj, atac and gene_activity are altExps (SummarizedExperiment) on
 # the union of the samples' feature names, with empty columns for samples that lack the member.
 .s1_assemble <- function(ok, mods, axis, n_genes, explicit) {
     loadNamespace("Matrix")

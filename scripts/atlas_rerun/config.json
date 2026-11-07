@@ -1,14 +1,27 @@
 {
   "campaign": "atlas-rerun-2026",
   "binary": {
-    "path": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-campaign",
+    "path": "/mnt/projects/debruinz_project/debruinz/singlet/builds/PIN_COMMIT8/bin/singlet-gpu",
     "sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
     "commit": "prod/campaign 02aa9b9 (to be replaced by the pinned PGO build of step 0)"
   },
   "pipeline": {
     "nonhost": true,
     "stall_timeout_s": 10800,
-    "extra_args": []
+    "extra_args": [],
+    "pooled_input": false
+  },
+  "beta": {
+    "enabled": false,
+    "base": "https://beta.singlet.bio",
+    "bucket": "singlet-beta-data",
+    "database": "singlet-beta-catalog",
+    "uploader": "scripts/beta/beta_ingest.py",
+    "producer": ["python3", "{here}/s1_producer.py", "{gse}", "{handoff}", "{work}", "--catalog", "{catalog}"],
+    "catalog": "/mnt/projects/debruinz_project/debruinz/singlet/data/atlas-rerun/samples.parquet",
+    "token_env": "SINGLET_INGEST_TOKEN",
+    "retries": 3,
+    "max_attempts": 5
   },
   "references": {
     "Homo sapiens": "GRCh38-2024-A",
@@ -33,7 +46,7 @@
       "account": "debruinz",
       "root": "/mnt/projects/debruinz_project/debruinz/singlet/atlas-rerun/campaign",
       "scratch": "/tmp",
-      "ref_base": "/mnt/projects/debruinz_project/cellarium/reference",
+      "ref_base": "/mnt/projects/debruinz_project/cellarium/reference", "species_filters": "/mnt/projects/debruinz_project/debruinz/singlet/reference-extra/species_filters",
       "whitelist_dir": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists",
       "sra_tools": "/mnt/projects/debruinz_project/debruinz/singlet/envs/pbench/bin",
       "ncbi_home": "/mnt/projects/debruinz_project/debruinz/singlet/cache/condahome",
@@ -85,7 +98,8 @@
         {"name": "n4", "threads": 4, "partition": "wholenode", "time": "24:00:00", "mem_gb": 0},
         {"name": "n16", "threads": 16, "partition": "wholenode", "time": "24:00:00", "mem_gb": 0}
       ],
-      "node": {"partition": "wholenode", "time": "24:00:00", "slot_cores": 112, "fill": 0.8, "max_nodes": 4},
+      "node": {"partition": "wholenode", "time": "24:00:00", "slot_cores": 112, "fill": 0.8, "max_nodes": 4,
+               "job_peak_gb": 33.4, "shared_index_gb": 17.8, "mem_fill": 0.9},
       "controller": {"partition": "shared", "time": "03:55:00", "mem_gb": 1.9, "interval_s": 900},
       "sbatch_extra": []
     }

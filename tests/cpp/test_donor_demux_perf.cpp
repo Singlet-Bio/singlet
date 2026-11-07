@@ -36,7 +36,7 @@ struct SyntheticDemux {
     // CSC AD/DP for run_demux()
     int n_snps = 0, n_cells = 0;
     std::vector<int32_t> ad_indptr, ad_indices, dp_indptr, dp_indices;
-    std::vector<uint8_t> ad_data, dp_data;
+    std::vector<uint16_t> ad_data, dp_data;
 };
 
 static SyntheticDemux make_synthetic(
@@ -99,7 +99,7 @@ static SyntheticDemux make_synthetic(
     auto to_csc = [&](const std::vector<COO>& coo,
                       std::vector<int32_t>& indptr,
                       std::vector<int32_t>& indices,
-                      std::vector<uint8_t>& data) {
+                      std::vector<uint16_t>& data) {
         indptr.assign(n_cells + 1, 0);
         for (auto& e : coo) indptr[e.col + 1]++;
         for (int i = 0; i < n_cells; ++i) indptr[i+1] += indptr[i];
@@ -387,7 +387,7 @@ static void test_numerical_stability() {
         // Build minimal CSC from cov
         std::vector<int32_t> ad_indptr(N+1, 0), dp_indptr(N+1, 0);
         std::vector<int32_t> ad_indices, dp_indices;
-        std::vector<uint8_t> ad_data, dp_data;
+        std::vector<uint16_t> ad_data, dp_data;
         for (int c = 0; c < N; ++c) {
             for (size_t si = 0; si < cov.cells[c].snp_idx.size(); ++si) {
                 dp_indices.push_back(cov.cells[c].snp_idx[si]);
@@ -409,7 +409,7 @@ static void test_numerical_stability() {
         // Actually build correctly from the cov structure
         std::vector<int32_t> ad_ip(N+1, 0), dp_ip(N+1, 0);
         std::vector<int32_t> ad_idx2, dp_idx2;
-        std::vector<uint8_t> ad_d2, dp_d2;
+        std::vector<uint16_t> ad_d2, dp_d2;
         for (int c = 0; c < N; ++c) {
             for (size_t si = 0; si < cov.cells[c].snp_idx.size(); ++si) {
                 dp_ip[c+1]++;
@@ -462,7 +462,7 @@ static void test_numerical_stability() {
         // All dp=0 → extract_covered_snps finds nothing
         std::vector<int32_t> ad_ip(11, 0), dp_ip(11, 0);
         std::vector<int32_t> ad_idx, dp_idx;
-        std::vector<uint8_t> ad_d, dp_d;
+        std::vector<uint16_t> ad_d, dp_d;
         DonorDemuxConfig cfg; cfg.n_donors = -1; cfg.seed = 42;
         auto r = run_demux(100, 10,
             ad_ip.data(), ad_idx.data(), ad_d.data(), 0,

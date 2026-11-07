@@ -5,7 +5,7 @@
 #include <cmath>
 #include <ctime>
 
-void stitchWindowAligns(uint iA, uint nA, int Score, bool WAincl[], uint tR2, uint tG2, Transcript trA, \
+void stitchWindowAligns(uint iA, uint nA, int Score, bool WAincl[], uint tR2, uint tG2, const Transcript& trIn, \
                         uint Lread, uiWA* WA, char* R, Genome &mapGen, \
                         Parameters& P, Transcript** wTr, uint* nWinTr, ReadAlign *RA) {
     //recursively stitch aligns for one gene
@@ -14,6 +14,8 @@ void stitchWindowAligns(uint iA, uint nA, int Score, bool WAincl[], uint tR2, ui
     if (iA>=nA && tR2==0) return; //no aligns in the transcript
 
     if (iA>=nA) {//no more aligns to add, finalize the transcript
+
+        Transcript trA = trIn; //finalizing edits the transcript: work on a copy (the recursion below only reads it, so it takes it by reference)
 
         //extend first
         Transcript trAstep1;
@@ -308,6 +310,7 @@ void stitchWindowAligns(uint iA, uint nA, int Score, bool WAincl[], uint tR2, ui
     };
 
     ///////////////////////////////////////////////////////////////////////////////////
+    const Transcript& trA = trIn;
     int dScore=0;
     Transcript trAi=trA; //trA copy with this align included, to be used in the 1st recursive call of StitchAlign
     if (trA.nExons>0) {//stitch, a transcript has already been originated

@@ -1,0 +1,7 @@
+bayes8k hvg=8000
+clf8k hvg=8000 clf=1
+clf8k_m23 hvg=8000 clf=1 mask=23
+clf8k_m15 hvg=8000 clf=1 mask=15
+clf8k_m7 hvg=8000 clf=1 mask=7
+clf4k hvg=4000 clf=1
+clf8k_pcs20 hvg=8000 clf=1 pcs=20

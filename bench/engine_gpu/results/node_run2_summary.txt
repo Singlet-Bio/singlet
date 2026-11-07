@@ -1,0 +1,37 @@
+=== engine gpu: makespan 2188.952830616 s, node core-s 10411.584235
+  pbmc1k_v3: 9:34.94 wall, exit 0, engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (2.71 s), not mapped 0; upload 4.20 s, dedup 20.87 s, GPU mapping 50.42 s ENGINE_GPU: cache filled with 31763130 sequence results in 147 s (reading reads 32 s, GPU 106 s, cache inserts 9 s; dev
+  GSM7036403: 12:51.58 wall, exit 0, engine_gpu: 111623976 reads, 34826990 distinct (574330 with N), mapped on the GPU 34179429, host lane 73231 (2.52 s), not mapped 0; upload 5.31 s, dedup 25.34 s, GPU mapping 51.38 s ENGINE_GPU: cache filled with 34252660 sequence results in 175 s (reading reads 51 s, GPU 117 s, cache inserts 7 s; de
+  GSM7656149: 36:28.92 wall, exit 0, engine_gpu: 263410684 reads, 137199590 distinct (1603389 with N), mapped on the GPU 135334452, host lane 261749 (8.38 s), not mapped 0; upload 8.07 s, dedup 120.59 s, GPU mapping 221.73 s ENGINE_GPU: cache filled with 135596201 sequence results in 647 s (reading reads 126 s, GPU 497 s, cache inserts
+=== engine cpu: makespan 1844.309641316 s, node core-s 18136.2
+  pbmc1k_v3: 8:15.27 wall, exit 0, 
+  GSM7036403: 11:18.64 wall, exit 0, 
+  GSM7656149: 30:44.28 wall, exit 0, 
+    pbmc1k_v3 differs order-independently: ./ambient_contamination.json
+    pbmc1k_v3 differs order-independently: ./pileup_stats.json
+    pbmc1k_v3 differs order-independently: ./provenance.json
+    pbmc1k_v3 differs order-independently: ./read_stats.tsv
+    pbmc1k_v3 differs order-independently: ./star_Log.final.out
+    pbmc1k_v3 differs order-independently: ./star_Log.out
+    pbmc1k_v3 differs order-independently: ./star_Log.progress.out
+    pbmc1k_v3 differs order-independently: ./summary.json
+  identity pbmc1k_v3: 57 files, 11 differ byte-wise, 8 differ order-independently
+    GSM7036403 differs order-independently: ./ambient_contamination.json
+    GSM7036403 differs order-independently: ./nonhost/nonhost_em_abundance.tsv
+    GSM7036403 differs order-independently: ./nonhost/nonhost_summary.json
+    GSM7036403 differs order-independently: ./pileup_stats.json
+    GSM7036403 differs order-independently: ./provenance.json
+    GSM7036403 differs order-independently: ./read_stats.tsv
+    GSM7036403 differs order-independently: ./star_Log.final.out
+    GSM7036403 differs order-independently: ./star_Log.out
+    GSM7036403 differs order-independently: ./star_Log.progress.out
+    GSM7036403 differs order-independently: ./summary.json
+  identity GSM7036403: 59 files, 13 differ byte-wise, 10 differ order-independently
+    GSM7656149 differs order-independently: ./ambient_contamination.json
+    GSM7656149 differs order-independently: ./pileup_stats.json
+    GSM7656149 differs order-independently: ./provenance.json
+    GSM7656149 differs order-independently: ./read_stats.tsv
+    GSM7656149 differs order-independently: ./star_Log.final.out
+    GSM7656149 differs order-independently: ./star_Log.out
+    GSM7656149 differs order-independently: ./star_Log.progress.out
+    GSM7656149 differs order-independently: ./summary.json
+  identity GSM7656149: 57 files, 11 differ byte-wise, 8 differ order-independently

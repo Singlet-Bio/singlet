@@ -14,7 +14,7 @@ using namespace singlet::ase;
 using singlet::SparseAccumulator;
 
 // Alias for the CSCMatrix type used in ASE
-using CSCMatrix = SparseAccumulator<uint8_t>::CSCMatrix;
+using CSCMatrix = SparseAccumulator<uint16_t>::CSCMatrix;
 
 // Helper: Create an empty CSCMatrix
 CSCMatrix create_empty_csc() {
@@ -30,7 +30,7 @@ CSCMatrix create_empty_csc() {
 CSCMatrix create_csc_from_entries(uint32_t nrows, uint32_t ncols,
                                    const std::vector<uint32_t>& rows,
                                    const std::vector<uint32_t>& cols,
-                                   const std::vector<uint8_t>& vals) {
+                                   const std::vector<uint16_t>& vals) {
     assert(rows.size() == cols.size() && cols.size() == vals.size());
 
     CSCMatrix m;
@@ -67,7 +67,7 @@ CSCMatrix create_csc_from_entries(uint32_t nrows, uint32_t ncols,
 // Helper: Create a CSC matrix with a single column (single cell)
 CSCMatrix create_csc_single_col(uint32_t nrows,
                                  const std::vector<uint32_t>& row_indices,
-                                 const std::vector<uint8_t>& values) {
+                                 const std::vector<uint16_t>& values) {
     assert(row_indices.size() == values.size());
 
     CSCMatrix m;
@@ -163,8 +163,8 @@ void test_multiple_cells_and_sites() {
         0, 0, 0,        // Cell 0
         1, 1            // Cell 1
     };
-    std::vector<uint8_t> ad_vals = {3, 7, 2, 6, 4};
-    std::vector<uint8_t> dp_vals = {10, 20, 2, 15, 12};
+    std::vector<uint16_t> ad_vals = {3, 7, 2, 6, 4};
+    std::vector<uint16_t> dp_vals = {10, 20, 2, 15, 12};
 
     CSCMatrix ad_csc = create_csc_from_entries(3, 2, rows, cols, ad_vals);
     CSCMatrix dp_csc = create_csc_from_entries(3, 2, rows, cols, dp_vals);
@@ -255,8 +255,8 @@ void test_write_ase_tsv() {
 void test_varying_allelic_ratios() {
     // Test het sites with different AD/DP combinations
     std::vector<uint32_t> snp_indices = {0, 1, 2, 3};
-    std::vector<uint8_t> ad_vals = {1, 5, 8, 9};     // AD values
-    std::vector<uint8_t> dp_vals = {10, 10, 10, 10}; // DP=10 for all
+    std::vector<uint16_t> ad_vals = {1, 5, 8, 9};     // AD values
+    std::vector<uint16_t> dp_vals = {10, 10, 10, 10}; // DP=10 for all
 
     CSCMatrix ad_csc = create_csc_single_col(4, snp_indices, ad_vals);
     CSCMatrix dp_csc = create_csc_single_col(4, snp_indices, dp_vals);
@@ -279,6 +279,21 @@ void test_varying_allelic_ratios() {
     std::cout << "✓ test_varying_allelic_ratios: all ratios correct\n";
 }
 
+// SNP counters used to clamp at 255: a deep cell (DP 1000, AD 400) read as 255/255 and
+// was dropped as homozygous alt. With 16-bit counters it is a het site at ratio 0.4.
+void test_deep_cell_not_clamped() {
+    SparseAccumulator<uint16_t> ad, dp;
+    ad.set_barcodes({"BC"}); dp.set_barcodes({"BC"});
+    ad.set_n_features(1);    dp.set_n_features(1);
+    for (int i = 0; i < 1000; ++i) dp.increment(0, 0, 1);
+    for (int i = 0; i < 400; ++i)  ad.increment(0, 0, 1);
+    auto entries = compute_ase(ad.to_csc(), dp.to_csc(), 10);
+    assert(entries.size() == 1);
+    assert(entries[0].alt_count == 400 && entries[0].ref_count == 600);
+    assert(std::abs(entries[0].allelic_ratio - 0.4f) < 1e-6f);
+    std::cout << "✓ test_deep_cell_not_clamped: DP 1000 / AD 400 kept\n";
+}
+
 int main() {
     std::cout << "Running ASE tests...\n\n";
 
@@ -290,6 +305,7 @@ int main() {
     test_multiple_cells_and_sites();
     test_write_ase_tsv();
     test_varying_allelic_ratios();
+    test_deep_cell_not_clamped();
 
     std::cout << "\n✓ All ASE tests passed!\n";
     return 0;

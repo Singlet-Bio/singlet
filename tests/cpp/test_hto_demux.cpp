@@ -6,7 +6,10 @@
 #include <cassert>
 #include <cstdio>
 #include <fstream>
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
+#include <numeric>
 #include <string>
 
 #include "singlet/pileup/hto_demux.h"
@@ -174,12 +177,57 @@ static void test_three_hto_panel() {
              (res[0].assignment + " " + res[1].assignment + " " + res[2].assignment).c_str());
 }
 
+// -- Test 6: a realistic pool (400 cells, 4 tags): accuracy, and the calls do not depend on the cell order --
+// Cells 0-339 are singlets of tag (c % 4) with a noisy bound signal over a low ambient; cells 340-399 are doublets of two tags.
+static std::vector<uint32_t> synth_pool(size_t n_tags, size_t n_cells) {
+    uint64_t s = 12345;
+    auto rnd = [&]() {  // LCG in [0, 1)
+        s = s * 6364136223846793005ULL + 1442695040888963407ULL;
+        return static_cast<double>(s >> 11) / 9007199254740992.0;
+    };
+    std::vector<uint32_t> v(n_tags * n_cells, 0);
+    for (size_t c = 0; c < n_cells; ++c) {
+        const size_t a = c % n_tags, b = (c + 1 + (c / n_tags) % (n_tags - 1)) % n_tags;
+        const bool dbl = c >= 340;
+        for (size_t t = 0; t < n_tags; ++t) {
+            double x = 2.0 + 6.0 * rnd();  // ambient
+            if (t == a || (dbl && t == b)) x += 150.0 + 250.0 * rnd();
+            v[t * n_cells + c] = static_cast<uint32_t>(x);
+        }
+    }
+    return v;
+}
+
+static void test_pool_accuracy_and_order_invariance() {
+    const size_t T = 4, N = 400;
+    const std::vector<std::string> names = {"HTO-1", "HTO-2", "HTO-3", "HTO-4"};
+    auto vals = synth_pool(T, N);
+    HtoDemux demux;
+    auto res = demux.demux(make_mat(vals, T, N), names, N);
+    size_t ok = 0, dbl_ok = 0;
+    for (size_t c = 0; c < 340; ++c) ok += (res[c].classification == "SINGLET" && res[c].assignment == names[c % T]);
+    for (size_t c = 340; c < N; ++c) dbl_ok += (res[c].classification == "DOUBLET");
+    std::vector<uint32_t> rev(vals.size());
+    for (size_t t = 0; t < T; ++t)
+        for (size_t c = 0; c < N; ++c) rev[t * N + c] = vals[t * N + (N - 1 - c)];
+    auto res2 = demux.demux(make_mat(rev, T, N), names, N);
+    bool same = true;
+    for (size_t c = 0; c < N; ++c)
+        same &= (res[c].classification == res2[N - 1 - c].classification && res[c].assignment == res2[N - 1 - c].assignment);
+    if (ok >= 320 && dbl_ok >= 50 && same)
+        PASS("pool accuracy and order invariance");
+    else
+        FAIL("pool accuracy and order invariance",
+             (std::to_string(ok) + "/340 singlets, " + std::to_string(dbl_ok) + "/60 doublets, same=" + std::to_string(same)).c_str());
+}
+
 int main() {
     test_perfect_separation();
     test_all_zeros_are_negative();
     test_doublet_detection();
     test_write_tsv();
     test_three_hto_panel();
+    test_pool_accuracy_and_order_invariance();
 
     std::cerr << "\n"
               << g_passed << " passed, " << g_failed << " failed\n";

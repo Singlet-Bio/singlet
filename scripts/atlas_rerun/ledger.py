@@ -127,6 +127,11 @@ class Ledger:
             self.studies.setdefault(e["gse"], {}).update({"handoff": e.get("path"), "t_handoff": e["t"],
                                                          "n_done": e.get("n_done"), "n_parked": e.get("n_parked")})
             return
+        if ev == "beta_publish":
+            st = self.studies.setdefault(e["gse"], {})
+            st["beta"] = {"status": e.get("status"), "t": e["t"], "tries": int((st.get("beta") or {}).get("tries", 0)) + 1,
+                          "detail": (e.get("detail") or "")[:300]}
+            return
         if ev in ("campaign_paused", "campaign_resumed", "budget_stop"):
             self.campaign[ev] = e["t"]
             return

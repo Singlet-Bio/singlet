@@ -239,7 +239,12 @@ contamination, cell QC metrics) so those TSV members can be derived by recipe. T
 not tested): the stored call plus the uncalled barcodes EmptyDrops separates from ambient RNA (`singlet.s1.cellcall`, design and
 validation in docs/called-ed.md); the cells member's metadata and its manifest entry carry the call's parameters as `called_ed`
 (method, version, ambient bound, alpha, pool size, FDR, seed, `validated`). `called` stays the stored call and the default
-selection. Content digest = SHA-256 over `"CEL2CANON1"` + for each
+selection.
+Pipeline outputs of version 2.2 (`cell_calls.tsv`, `docs/called-ed.md`): `is_cell` and `called_v2` are STARsolo's EmptyDrops_CR call on
+exon-only counts (what the scorer and the default selection read), `called_knee` the knee set, and `called_lowrna` (0/1) the extra
+50-500 UMI barcodes the 2.1 empty-droplet test calls (exon + intron) that `is_cell` does not. A `cells` table that stores
+`called_lowrna` as an optional bitmap keeps those low-RNA cells selectable without changing `called`.
+**`called_lowrna` is not a cell call.** On the Kang b2 control lane (genotype truth), about 61% of the 50-500 UMI calls are real cells (95% CI 0.46-0.76) and the 500-1000 UMI ones are as real as `is_cell`; the rest at 50-500 UMIs is ambient-like. Select on `is_cell` for cells. Content digest = SHA-256 over `"CEL2CANON1"` + for each
 column in name order: name, dtype, raw little-endian values.
 
 ## 6. Packs
@@ -297,6 +302,7 @@ tests, the C++ readers call into the same definitions where they need them.
 | legacy member | .s1 treatment |
 |---|---|
 | `exon_counts.1pz`, `intron_counts.1pz` | pz2 matrix; names from vocabulary pack; columns from `cells` |
+| `spliced_counts.1pz`, `unspliced_counts.1pz`, `ambiguous_counts.1pz` | gene-level pz2 matrices (genes x `cells` columns) with the alevin-fry USA molecule labels: every molecule in exactly one of them. `exon_counts` is the molecules with an exon-only read and `intron_counts` the molecules whose reads all touch an intron (STARsolo Gene / GeneFull definitions), so `unspliced_counts` is not `intron_counts` (it also holds the nascent molecules that have an exon-only read) |
 | `sj_counts.1pz`, `vdj_gene_usage.1pz`, `mt_heteroplasmy.1pz`, `mt_events.1pz` | pz2 matrix (inline or pack names) |
 | `splice_psi.1pz` | derived from `sj_counts` by `psi-v1-rint`, `psi-v1-trunc` or `psi-v1-stub` (whichever reproduces the bytes) |
 | `cell_calls.tsv` | derived from the `cells` table (`cellcalls-v1`), else stored |
@@ -530,3 +536,82 @@ name strings, not decoding, is the slowest step for a client, which is one more 
   or an SCX1-style variant, see the stream sizes below).
 * Pipeline: record strand, motif and maximum overhang per junction (STAR knows them), and count junction UMIs once per molecule, in line
   with the exon/intron fix under way.
+
+## 14. Chromatin (ATAC) and spatial members (PROPOSAL, 2026-10-25)
+
+Owner: the ATAC/spatial session (branch `claude/atac-spatial-benchmark-2ba7df`, report `docs/atac-spatial-benchmark.md`).
+Section 13 (ADT/HTO, branch `claude/adt-modality-0637a6`) set the pattern followed here: new members carry flag bit 0
+(legacy) clear, matrices are pz2 with `Cells` columns, attachment is at migration (preferred) or through a sidecar
+`v2/x/<GSM>/<modality>.<d16hex>.s2` referenced as `samples[i].extra_objects.<modality>`.
+
+### 14.1 ATAC
+
+The primary ATAC data is the fragment file. It stays an immutable per-sample object; nothing per fragment goes to D1.
+
+| member | kind | content |
+|---|---|---|
+| `atac_fragments.tsv.gz` | 5 (raw, as written) | bgzip fragments, Cell Ranger layout (`chrom start end barcode read_pairs`), barcodes in the sample's column space; with `atac_fragments.tsv.gz.tbi` (kind 5) so clients can range-read a region |
+| `atac_peaks.bed` | 3 (stored, zstd) | the sample's insertion peaks (`atac_peak_caller.h`), narrowPeak-like columns |
+| `atac_peak_counts.1pz` | 1 (pz2) | cut sites per peak x the sample's columns; rows `Inline` (`chr:start-end`, the order of `atac_peaks.bed`) |
+| `atac_gene_activity.1pz` | 1 (pz2) | fragments over gene body + 2 kb upstream, protein-coding genes x columns; rows `Inline` (`gene_id_gene_name`) |
+| `atac_summary.json` | 3 (stored, zstd) | `singlet-atac-summary/1`: barcode layout and whitelist, fragment counts, cell-call method, sample QC with thresholds and pass/fail |
+
+Per-barcode ATAC QC (`fragments`, `tss_enrichment`, `nucleosome_signal`, `frip`, `mito_fragments`, `duplicate_read_pairs`)
+are per-cell QC counts: tier-2 columns of the cells table (`docs/CELL-ARCHITECTURE.md`), from `atac_barcode_metrics.tsv`.
+
+* **Multiome.** ATAC barcodes are translated to GEX barcodes (ARC pairs list), so the ATAC members attach to the **GEX
+  sample** like ADT does, with columns = the GEX cells table. ATAC barcodes without a GEX column (no GEX reads) are dropped
+  from the matrices and counted in `atac_summary.json`; fragments keep them. The joint ARC-style cell call
+  (`mixture-gex-atac`) is a cells-table column `called_multiome`; `called` stays the GEX call.
+* **scATAC alone.** The ATAC library is its own sample. Its cells table comes from `atac_barcode_metrics.tsv` (columns =
+  barcodes with >= 100 fragments or called); `called` is the ATAC call. It has no `exon_counts` / `intron_counts`; readers
+  use `atac_gene_activity` where a gene matrix is needed and say so.
+* Libraries processed as RNA before this change (139 in `docs/library-type-screen.md`) are re-run with the ATAC path; their
+  RNA-mode objects are not migrated.
+
+`modalities=` (section 11): `atac` -> `atac_peak_counts.1pz` (`obsm["atac"]`, names in `uns["obsm_features"]["atac"]`;
+R `altExp("atac")`), `gene_activity` -> `atac_gene_activity.1pz` (`obsm["gene_activity"]`), `fragments` -> the fragment
+file and its index (not loaded into memory; the client returns a path / byte-range reader). Aliases: `peaks`, `chromatin` ->
+`atac`.
+
+### 14.2 Spatial (Visium)
+
+| member | kind | content |
+|---|---|---|
+| `spatial_positions.tsv` | 3 (stored, zstd) | one row per column of the cells table, in column order: `barcode, spot, array_row, array_col, in_tissue, tissue_prob, primary, umis` (+ `in_tissue_spaceranger, pxl_row_in_fullres, pxl_col_in_fullres` when the authors deposited Space Ranger positions) |
+| `spatial_summary.json` | 3 (stored, zstd) | `singlet-spatial-summary/1`: slide list, tissue method, mixture fit, agreement with Space Ranger when available, QC thresholds and pass/fail |
+| `spatial_image_lowres.png`, `spatial_scalefactors.json` | 3 (stored, as written) | optional, only when deposited by the authors (GEO supplementary); never generated |
+
+* Spot coordinates are a property of the slide, not a measurement: the slide spot list (`visium-v1_coordinates.tsv`, 4,992
+  spots) maps each barcode to `(array_row, array_col)`. Pixel coordinates exist only when the authors deposited them.
+* The called set of a Visium sample is its tissue spots (`in_tissue` & `primary`); `cell_calls.tsv` is rewritten with
+  `call_method = visium_tissue` and the migration takes `called` from it as for any sample. A spot is not a cell: the
+  sample-level `assay` is `Spatial` and cell counts of Visium samples are reported as spots.
+* Tier 1 gets sample-level spatial facts only (slide version, tissue spots, median UMIs per tissue spot, QC verdict).
+
+`modalities=`: `spatial` -> `spatial_positions.tsv`; Python `obsm["spatial"]` = `(array_col, array_row)` (scanpy /
+squidpy convention: x, y), `obs["in_tissue"]`, `obs["array_row"]`, `obs["array_col"]`, `uns["spatial"]` with the summary
+(and the image when present); R `colData` columns and `spatialCoords` for SpatialExperiment.
+
+## 15. Registered modality members (companion libraries, ATAC, spatial)
+
+Every output the pipeline can write for a sample is a registered modality, so it is listed in `modalities` (D1 `s1_sample.modalities`) and
+found by name. The registry is `bundle.MODALITIES` (Python, source of truth), `scripts/s1_campaign.py::MODALITY_MEMBERS` and the
+website's `functions/_shared/modalities.ts`; `tests/python/test_s1_campaign_catalog.py` keeps them equal. Members that are not in the
+legacy bundle (this section) carry flag bit 0 clear. A member that lands in `out/` is carried by `pack_gse` (it packs `out/` whole), so
+registering the name is what makes it visible.
+
+| modality | member(s) | written by |
+|---|---|---|
+| `adt_counts`, `adt_features`, `adt_panel` | `adt_counts.1pz` (or the engine's `adt_counts.mtx`), `adt_features.tsv`, `adt_panel.json` | `singlet.adt.members` (companion ADT library) |
+| `hto_counts`, `hto_classification` | `hto_counts.1pz`, `hto_classification.tsv` | `singlet.adt.members`; the engine's hashtag caller |
+| `crispr_counts`, `crispr_guides` | `crispr_counts.1pz`, `crispr_guides.json` | `singlet.crispr.members` (companion guide library) |
+| `vdj_contigs`, `vdj_summary` | `vdj_contigs.parquet`, `vdj_summary.json` | `singlet.vdj.members` (companion V(D)J library; V-gene usage stays `vdj_gene_usage`) |
+| `doublet_scores_v2` | `doublet_scores_v2.tsv` | `scripts/doublet_v2.py`; beside the engine's `doublet_scores`, which is unchanged |
+| `atac_fragments`, `atac_fragments_index`, `atac_peaks`, `atac_cells`, `atac_barcode_metrics`, `atac_summary` | `atac_fragments.tsv.gz` (engine name `fragments.tsv.gz`), its `.tbi`, `atac_peaks.bed` (`peaks.bed`), ... | engine ATAC path |
+| `atac_peak_counts`, `atac_gene_activity` | `atac_peak_counts.1pz`, `atac_gene_activity.1pz` | section 14 aligned members |
+| `spatial_positions`, `spatial_summary` | `spatial_positions.tsv` (engine name `spatial_coordinates.tsv`), `spatial_summary.json` | engine Visium path; section 14 |
+
+Companion-library matrices (`adt_counts`, `hto_counts`, `crispr_counts`) have the GEX sample's `cells` rows as columns. Clients:
+`modalities=["adt"]` (aliases `protein`, `cite`), `"hto"` (`hashtag`), `"crispr"` (`guides`) land in `obsm`.
+Genotypes are never a modality here; V(D)J contigs hold no donor genotype.

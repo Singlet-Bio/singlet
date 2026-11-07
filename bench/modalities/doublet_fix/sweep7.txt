@@ -1,0 +1,8 @@
+sr003 hvg=8000 clf=1 sridge=0.03
+sr005 hvg=8000 clf=1 sridge=0.05
+sr007 hvg=8000 clf=1 sridge=0.07
+sr005_h4k hvg=4000 clf=1 sridge=0.05
+sr005_h12k hvg=12000 clf=1 sridge=0.05
+sr005_r1 hvg=8000 clf=1 sridge=0.05 rounds=1
+sr005_pcs20 hvg=8000 clf=1 sridge=0.05 pcs=20
+sr005_vs50 hvgmode=1 hvg=100000 vpctl=50 clf=1 sridge=0.05

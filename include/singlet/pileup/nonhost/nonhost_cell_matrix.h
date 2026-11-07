@@ -49,6 +49,7 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -102,7 +103,11 @@ public:
             const std::vector<NonHostScreener::MultiHit>&           multi_hits,
             const std::unordered_set<std::string>&                  valid_barcodes,
             const std::unordered_map<uint32_t, std::string>&        species_names,
-            const std::unordered_map<uint32_t, NonHostCategory>&    kingdom_map) {
+            const std::unordered_map<uint32_t, NonHostCategory>&    kingdom_map,
+            const std::unordered_set<uint32_t>*                     keep_species = nullptr) {
+        // keep_species: when non-null, only these species (the sample-level EM-confirmed set) are counted; a read is
+        // assigned to its best-scoring kept species. Sub-threshold k-mer hits (99% of PBMC cells had one "viral" UMI)
+        // are dropped instead of being written under numeric ids.
 
         NonHostCellMatrix mat;
 
@@ -134,6 +139,7 @@ public:
             NonHostCategory best_king  = NonHostCategory::UNKNOWN;
 
             for (const auto& [sid, rate] : mh.viral_hits) {
+                if (keep_species && !keep_species->count(sid)) continue;
                 if (rate > best_rate) {
                     best_rate  = rate;
                     best_sid   = sid;
@@ -141,6 +147,7 @@ public:
                 }
             }
             for (const auto& [sid, rate] : mh.microbial_hits) {
+                if (keep_species && !keep_species->count(sid)) continue;
                 if (rate > best_rate) {
                     best_rate  = rate;
                     best_sid   = sid;
@@ -229,11 +236,15 @@ public:
     // Returns one TaggedRead per cDNA read.  If mate2 is absent or shorter than
     // mate1, the remaining reads get empty cb and umi strings (will be ignored
     // by build() since they are not in valid_barcodes).
+    // selected (optional): keeps only the mate1 records for which selected(name line, sequence line) is true (mate2 is advanced for
+    // every record): the reads that were classified, when the screen sampled or skipped some, so that result[i] pairs with multi_hits[i]
+    template <class Sel = std::nullptr_t>
     static std::vector<TaggedRead> read_mate_pairs(
             const std::string& mate1_path,
             const std::string& mate2_path,
             int cb_len,
-            int umi_len) {
+            int umi_len,
+            Sel selected = nullptr) {
 
         std::vector<TaggedRead> result;
         std::ifstream fq1(mate1_path);
@@ -246,6 +257,8 @@ public:
                std::getline(fq1, p1) && std::getline(fq1, q1)) {
             TaggedRead tr;
             tr.seq = s1;
+            bool take = true;
+            if constexpr (!std::is_same_v<Sel, std::nullptr_t>) take = selected(n1, s1);
 
             // Read corresponding mate2 record (if available)
             if (fq2.is_open() &&
@@ -261,7 +274,7 @@ public:
                 // If R1 is shorter than cb_len + umi_len (edge case), fields stay empty
             }
 
-            result.push_back(std::move(tr));
+            if (take) result.push_back(std::move(tr));
         }
 
         return result;

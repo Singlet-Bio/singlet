@@ -54,6 +54,7 @@ enum class QualMode : uint8_t {
     BINNED4 = 1,  // 2 bits/base, 4 bins
     FULL = 2,     // 6 bits/base, full phred
     BINNED2 = 3,  // 1 bit/base, pass/fail at Q20
+    ILLUMINA4 = 4,  // 2 bits/base, Illumina's 4-level bins (qual::ilmn4_*); the download/encode default
 };
 
 // ── Compression tier ──
@@ -251,6 +252,19 @@ inline uint8_t bin4_to_phred(uint8_t bin) {
     static constexpr uint8_t centers[4] = {6, 15, 25, 37};
     return centers[bin & 0x03];
 }
+
+// Illumina-style 4 levels (QualMode::ILLUMINA4). The bounds are the decades 0-9, 10-19, 20-29, 30+, so a Q10 / Q20 /
+// Q30 cut (the pileup's --min-baseq, the variant caller's Q20) keeps or drops the same bases as on the original
+// qualities, whatever the instrument's own binning; every consumer in the pipeline only thresholds. The decoded values
+// are the 4-level binning most common in the atlas's 10x R2 reads (2, 11, 25, 37: '#', ',', ':', 'F'), so those
+// round-trip exactly. Checked against R2 Phred histograms in docs/format-1fq.md, section 4.3.
+inline constexpr uint8_t kIlmn4Upper[3] = {9, 19, 29};    // bin 0: Q <= 9, bin 1: 10-19, bin 2: 20-29, bin 3: >= 30
+inline constexpr uint8_t kIlmn4Phred[4] = {2, 11, 25, 37};
+
+inline uint8_t phred_to_ilmn4(uint8_t phred) {
+    return phred <= kIlmn4Upper[0] ? 0 : phred <= kIlmn4Upper[1] ? 1 : phred <= kIlmn4Upper[2] ? 2 : 3;
+}
+inline uint8_t ilmn4_to_phred(uint8_t bin) { return kIlmn4Phred[bin & 0x03]; }
 
 // Phred → 1-bit bin (pass/fail at Q20)
 inline uint8_t phred_to_bin2(uint8_t phred) {
@@ -641,6 +655,29 @@ struct SraMetadata {
     std::vector<std::pair<std::string, std::string>> sample_attributes;
 };
 
+// One flushed block of reads, in the Writer's own layout, handed to a block sink INSTEAD of being encoded into a .1fq block (EncoderConfig::block_sink,
+// used by `singlet download --stage-out`: the staged .1fg2 is built straight from the SRA, no .1fq is written). Sequences are byte-numeric (0-3, 4 = N);
+// R2 is after polyA trimming and --r2-maxlen, exactly what the .1fq would hold; quality is raw Phred (empty when the sample has none). No barcode sort.
+struct StagedBlock {
+    uint32_t n_reads = 0;
+    uint8_t protocol_id = 0;
+    QualMode qual_mode = QualMode::NONE;
+    bool dict = false;                       // barcode-dictionary layout (barcode indices + UMI bytes); false = full R1 per read
+    uint16_t bc_offset = 0, bc_length = 0, umi_offset = 0, umi_length = 0, r1_length = 0;
+    // dict layout
+    const uint32_t* bc_idx = nullptr;        // per read: index into *bc_dict, or bc_dict->size() for a whitelist miss
+    const std::vector<std::vector<uint8_t>>* bc_dict = nullptr;
+    const uint8_t* unk_bc = nullptr;         // raw barcodes of the misses, bc_length bytes each, in read order
+    const uint8_t* umi = nullptr;            // n_reads * umi_length bytes
+    // full-R1 layout
+    const uint8_t* r1 = nullptr;             // concatenated
+    const uint16_t* r1_len = nullptr;
+    // cDNA
+    const uint8_t* r2 = nullptr;             // concatenated
+    const uint16_t* r2_len = nullptr;
+    const uint8_t* r2_qual = nullptr;        // same layout as r2, raw Phred; null when none
+};
+
 struct EncoderConfig {
     std::string output_path;
     Codec codec = Codec::ZSTD;
@@ -671,6 +708,11 @@ struct EncoderConfig {
     bool no_dedup = false;    // --no-dedup: skip PCR duplicate collapsing
     bool no_trim = false;     // --no-trim: skip polyA/adapter trimming
     bool sort_by_bc = false;  // --sort-by-bc: sort reads by barcode within blocks
+
+    // When set, flushed blocks go to this sink (no .1fq is written, no sort); see StagedBlock
+    std::function<void(const StagedBlock&)> block_sink;
+    // With block_sink: receives the metadata JSON the .1fq would have embedded (the .1fg2 stores it verbatim)
+    std::function<void(const std::string&)> metadata_sink;
 
     // Parallel VDB reading threads (1=serial default)
     int vdb_threads = 1;

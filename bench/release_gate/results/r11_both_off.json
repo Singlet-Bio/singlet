@@ -1,0 +1,8 @@
+{
+ "umi_ratio_distance.exonic@hgmm1k_v3": 0.008719,
+ "gene_corr.exonic@hgmm1k_v3": 0.984579,
+ "pseudobulk_rho.exonic@hgmm1k_v3": 0.977413,
+ "umi_ratio_distance.total@hgmm1k_v3": 0.022329,
+ "gene_corr.total@hgmm1k_v3": 0.978039,
+ "pseudobulk_rho.total@hgmm1k_v3": 0.934594
+}

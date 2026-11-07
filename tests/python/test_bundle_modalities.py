@@ -113,7 +113,7 @@ class TestDiscovery:
         for name, mod in MODALITIES.items():
             assert mod.members, f"{name} declares no archive members"
             assert len(set(mod.members)) == len(mod.members)
-            assert mod.kind in {"matrix", "table", "json", "text"}
+            assert mod.kind in {"matrix", "table", "json", "text", "binary"}
 
     def test_list_files_is_relative_to_the_sample(self, bundle):
         files = set(bundle.list_files(GSM))

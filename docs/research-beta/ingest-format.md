@@ -1,5 +1,7 @@
 # Ingest format for the split pipeline (CPU nodes download and transform, GPU nodes align)
 
+> Copy of the W11 research note; the prototype code, jobs and raw results are in `bench/gpu/ingest/` on the research branch (PR Singlet-Bio/singlet#61). Measured summary: `bench/engine_gpu/results/ingest.json`.
+
 Status: design note with a measured prototype, written overnight 2026-10-28 (W11 side session). Code and raw results:
 `bench/gpu/ingest/` (README with job ids), `bench/gpu/results/ingest.json`. Nothing here has been committed by this session.
 

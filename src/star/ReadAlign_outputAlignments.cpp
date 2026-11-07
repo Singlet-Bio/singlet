@@ -1,6 +1,9 @@
+#include "StarProfile.h"
 #include "ReadAlign.h"
+#include "SeqCache.h"
 #include "GlobalVariables.h"
 #include "ErrorWarning.h"
+#include <cstdlib>
 
 void ReadAlign::outputAlignments() {
   
@@ -11,12 +14,18 @@ void ReadAlign::outputAlignments() {
     if (mapGen.pGe.gType==101) {//temporary
         ReadAlign::spliceGraphWriteSAM();
         return;
-    };    
+    };
+
+    if (handoffSum != nullptr) {//singlet GPU pileup "on": a hand-off read replays its sequence's summary (no alignments restored)
+        ReadAlign::outputHandoffSummary();
+        return;
+    };
 
     ReadAlign::outFilterBySJout();//sets outFilterBySJoutPass=false if read is held for the 2nd stage of outFilterBySJout
     
     if (outFilterBySJoutPass) {//otherwise align is held for the 2nd stage of outFilterBySJout
         ////////////////////////////////////
+        PROF_T0(tOutMapped);
         if (unmapType<0) {//passed mappedFilter. Unmapped reads can have nTr>0
 
             auto nTr1 = nTr;
@@ -41,11 +50,21 @@ void ReadAlign::outputAlignments() {
                 ReadAlign::recordSJ(nTr, trMult, chunkOutSJ); //this will set mateMapped
             };            
             
-            ReadAlign::alignedAnnotation();
+            //singlet --engine gpu: with --soloType CB_samTagOut, no GX/GN/sF attributes, no gene counts and no transcriptomic output,
+            //nothing reads the per-read gene annotation (SoloRead::record returns at once for CB_samTagOut), so it is skipped
+            static const bool annotUnused = getenv("SINGLET_ENGINE_GPU") != nullptr && getenv("SINGLET_ENGINE_GPU")[0] == '1'
+                && P.pSolo.type == P.pSolo.SoloTypes::CB_samTagOut && !P.outSAMattrPresent.GX && !P.outSAMattrPresent.GN
+                && !P.outSAMattrPresent.gx && !P.outSAMattrPresent.gn && !P.outSAMattrPresent.sF && !P.quant.geCount.yes && !P.quant.trSAM.yes;
+            if (!annotUnused)
+                ReadAlign::alignedAnnotation();
         };
+        PROF_ADD(PROF_outMapped, tOutMapped);
 
         //the operations below are both for mapped and unmapped reads
+        PROF_T0(tOutBarcode);
         soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+        PROF_ADD(PROF_outBarcode, tOutBarcode);
+        handoffReadEntry();
 
         //transcripts: need to be run after CB/UMI are obtained to output CR/UR tags
         if ( P.quant.trSAM.yes && unmapType<0) {//Aligned.toTranscriptome output, only for mapped
@@ -56,18 +75,24 @@ void ReadAlign::outputAlignments() {
             };
         };        
         
+        PROF_T0(tOutSolo);
         soloRead->record((unmapType<0 ? nTr : 0), trMult, iReadAll, readAnnot); //need to supply nTr=0 for unmapped reads
+        PROF_ADD(PROF_outSolo, tOutSolo);
+        PROF_T0(tOutSAM);
 
         if (P.pGe.transform.outSAM) {
             ReadAlign::writeSAM(alignsGenOut.alN, alignsGenOut.alMult, alignsGenOut.alBest);
         } else {
             ReadAlign::writeSAM(nTr, trMult, trBest); //this will set mateMapped
         };
+        PROF_ADD(PROF_outSAM, tOutSAM);
     };    
 
     if (unmapType>=0) {//unmapped reads
         statsRA.unmappedAll++; //include unmapType==4, i.e. one-mate alignments of PE reads - which may have been set in writeSAM above
+        PROF_T0(tOutUnmapped);
         ReadAlign::outReadsUnmapped(); //uses mateMapped that was set in writeSAM above
+        PROF_ADD(PROF_outUnmapped, tOutUnmapped);
     };    
 };
 
@@ -180,7 +205,11 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
                 };
             };
 
-            if (P.outBAMunsorted || P.outBAMcoord) {//BAM output
+            // iReadAll is 1-based (processChunks increments it before the read); readRecord is indexed from read 0
+            //(a read whose record has no alignments still gets its records, so it reaches the pileup, which stops: STAR and the hand-off disagree)
+            const bool handoffCovered = g_handoffReadRecord != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu
+                && g_handoffRecAln[g_handoffReadRecord[iReadAll - 1]] > 0;
+            if ((P.outBAMunsorted || P.outBAMcoord) && !handoffCovered) {//BAM output (singlet GPU pileup "on": not for hand-off reads)
                 alignBAM(*(trOutSAM[iTr]), nTrOutSAM, iTr, mapGen.chrStart[trOutSAM[iTr]->Chr], (uint) -1, (uint) -1, 0, -1, NULL, P.outSAMattrOrder,outBAMoneAlign, outBAMoneAlignNbytes);
 
                 if (P.outBAMunsorted) {//unsorted
@@ -322,4 +351,119 @@ void ReadAlign::alignedAnnotation()
     if ( P.quant.geneFull_Ex50pAS.yes ) {
         chunkTr->alignExonOverlap(nTr, trMult, P.pSolo.strand, readAnnot.annotFeatures[SoloFeatureTypes::GeneFull_Ex50pAS]);
     };    
+};
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReadAlign::handoffReadEntry()
+{//singlet GPU pileup "on": what the pileup would have taken from this hand-off read's BAM record (CR, UR, base qualities)
+    if (g_handoffReads == nullptr || iReadAll < 1 || iReadAll - 1 >= g_handoffNReads || g_handoffReadRecord[iReadAll - 1] == 0xFFFFFFFFu)
+        return;
+    HandoffReadEntry &e = g_handoffReads[iReadAll - 1];
+    auto pack = [](const string &s) {
+        uint64 v = 0;
+        for (size_t j = 0; j < s.size() && j < 21; j++) {
+            const char c = s[j];
+            v |= (uint64) (c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : c == 'T' ? 3 : 4) << (3 * j);
+        }
+        return v;
+    };
+    e.cr3 = pack(soloRead->readBar->cbSeq); e.ur3 = pack(soloRead->readBar->umiSeq);
+    uint32 lq = 0, ne = 0;
+    for (uint64 j = 0; j < readLengthOriginal[0]; j++) {
+        const bool low = ((int) (unsigned char) Qual0[0][j] - 33) < g_handoffMinQ, isN = Read0[0][j] == 'N';
+        lq += low; ne += (low != isN);
+    }
+    e.lowQual = (uint16) min(lq, (uint32) 65535); e.qualNeqN = (uint16) min(ne, (uint32) 65535);
+    uint32 fl = 1;
+    if (g_handoffQMask != nullptr) {//the low-quality mask of the record: the read without its clipped ends, original orientation
+        const uint64 c5q = clipMates[0][0].clippedN, c3q = clipMates[0][1].clippedN, Lq = readLengthOriginal[0];
+        uint64 *qm = g_handoffQMask + 2 * (iReadAll - 1);
+        qm[0] = 0; qm[1] = 0;
+        if (c5q + c3q > Lq || Lq - c5q - c3q > 128) {
+            fl |= 64;//no mask
+        } else {
+            for (uint64 j = c5q; j < Lq - c3q; j++)
+                if (((int) (unsigned char) Qual0[0][j] - 33) < g_handoffMinQ) qm[(j - c5q) >> 6] |= 1ull << ((j - c5q) & 63);
+        };
+    };
+    //clipped read: its record is the clipped sequence, so the pileup gets the clip lengths and what it reads from the clipped 3' tail of
+    //the BAM sequence (poly(A): A count and first base; the rRNA sample: the hook's verdict on the whole read)
+    const uint32 c5 = clipMates[0][0].clippedN, c3 = clipMates[0][1].clippedN;
+    if (c5 + c3 > 0) {
+        uint32 nA = 0;
+        for (uint64 j = readLengthOriginal[0] - c3; j < readLengthOriginal[0]; j++) nA += (Read0[0][j] | 32) == 'a';
+        if (c5 > 255 || c3 > 255) fl |= 32;
+        fl |= (min(c5, 255u) << 8) | (min(c3, 255u) << 16) | (min(nA, 255u) << 24);
+        if (c3 > 0 && (Read0[0][readLengthOriginal[0] - c3] | 32) == 'a') fl |= 2;
+        if (g_handoffReadHook != nullptr) fl |= g_handoffReadHook(iReadAll - 1, Read0[0], readLengthOriginal[0]) & 0x1Cu;
+    }
+    e.flags = fl;
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReadAlign::outputHandoffSummary()
+{//the mapped-read branch of outputAlignments for a hand-off read, from its sequence's summary (seqCacheHandoffSummary): mapping stats,
+ //junctions, the Solo Gene annotation, then barcode and UMI and the Solo record as for any read. No SAM/BAM output (the pileup has the
+ //alignments), and the read is mapped (an unmapped sequence has no summary).
+    const uint8 *p = handoffSum;
+    uint16 n16, ng;
+    memcpy(&n16, p, 2);
+    const uint8 flags = p[2], ov = p[3];
+    memcpy(&ng, p + 4, 2);
+    p += 6;
+    nTr = n16;
+    outFilterBySJoutPass = true;
+
+    PROF_T0(tOutMapped);
+    ReadAnnotFeature &af = readAnnot.annotFeatures[SoloFeatureTypes::Gene];
+    for (uint16 i = 0; i < ng; i++) {
+        uint32 g;
+        memcpy(&g, p + 4 * i, 4);
+        af.fSet.insert(af.fSet.end(), g);
+    };
+    p += 4 * ng;
+    af.ovType = ov;
+    if (nTr > 1) {//multimappers
+        statsRA.mappedReadsM++;
+        unmapType = -2;
+    } else {//unique mappers: Stats::transcriptStats
+        statsRA.mappedReadsU++;
+        uint16 a[3];
+        uint32 b[3];
+        memcpy(a, p, 6); memcpy(b, p + 6, 12);
+        const uint8 *c = p + 18;
+        p += 18 + SJ_MOTIF_SIZE + 1;
+        statsRA.mappedMismatchesN += a[0]; statsRA.mappedInsN += a[1]; statsRA.mappedDelN += a[2];
+        statsRA.mappedInsL += b[0]; statsRA.mappedDelL += b[1];
+        if (flags & 2) {
+            for (int k = 0; k < SJ_MOTIF_SIZE; k++) statsRA.splicesN[k] += c[k];
+            statsRA.splicesNsjdb += c[SJ_MOTIF_SIZE];
+            statsRA.mappedBases += b[2];
+            statsRA.mappedPortion += double(b[2]) / double(Lread);
+        };
+    };
+    uint16 nsj;
+    memcpy(&nsj, p, 2);
+    p += 2;
+    if (nsj > 0 && chunkOutSJ != nullptr) {//recordSJ's records for this read
+        memcpy(chunkOutSJ->data + chunkOutSJ->N * Junction::dataSize, p, (size_t) nsj * Junction::dataSize);
+        chunkOutSJ->N += nsj;
+    };
+    PROF_ADD(PROF_outMapped, tOutMapped);
+
+    PROF_T0(tOutBarcode);
+    soloRead->readBar->getCBandUMI(Read0, Qual0, readLengthOriginal, readNameExtra[0], readFilesIndex, readName);
+    PROF_ADD(PROF_outBarcode, tOutBarcode);
+    handoffReadEntry();
+
+    PROF_T0(tOutSolo);
+    for (int k = 0; k < 2; k++) {
+        handoffTr[k].Chr = (k == 0 && !P.pGe.chrSet.mito.empty()) ? *P.pGe.chrSet.mito.begin() : 0;
+    };
+    if (P.pGe.chrSet.mito.count(handoffTr[1].Chr) == 1) {//a contig that is not mito
+        for (uint64 c = 0; c < mapGen.nChrReal; c++) if (P.pGe.chrSet.mito.count(c) == 0) {handoffTr[1].Chr = c; break;};
+    };
+    for (uint64 i = 0; i < nTr; i++) trMult[i] = &handoffTr[(i == 0 && (flags & 1)) ? 0 : 1];
+    trBest = trMult[0];
+    soloRead->record(nTr, trMult, iReadAll, readAnnot);
+    PROF_ADD(PROF_outSolo, tOutSolo);
 };

@@ -1,0 +1,8 @@
+default
+hvg8000 hvg=8000
+hvg12000 hvg=12000
+vscore hvgmode=1 hvg=100000
+vscore70 hvgmode=1 hvg=100000 vpctl=70
+vscore50 hvgmode=1 hvg=100000 vpctl=50
+h8k_knn2 hvg=8000 knn=2
+h8k_knn05 hvg=8000 knn=0.5

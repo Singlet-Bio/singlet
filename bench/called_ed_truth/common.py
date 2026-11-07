@@ -78,7 +78,7 @@ def load_run(d):
     symbols = np.array([sym[g] for g in genes])
     cc = pd.read_csv(os.path.join(d, "cell_calls.tsv"), sep="\t", dtype={"barcode": str})
     cc = cc.set_index("barcode").reindex(bcs)
-    called = cc["called"].fillna(0).astype(int).to_numpy().astype(bool)
+    called = cc["called_knee" if "called_knee" in cc else "called"].fillna(0).astype(int).to_numpy().astype(bool)
     prod_v2 = cc["called_ed"].fillna(0).astype(int).to_numpy().astype(bool)
     tot = np.asarray(X.sum(axis=0)).ravel().astype(np.int64)
     ngenes = np.diff(X.indptr)

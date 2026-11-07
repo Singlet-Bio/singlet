@@ -1,0 +1,61 @@
+=== engine gpu: makespan 770.784192225 s, node core-s 4043.64448
+  pbmc1k_v3: 8:55.61 wall, exit 0, engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (4.46 s), not mapped 0; upload 4.42 s, dedup 1.76 s, GPU mapping 16.28 s ENGINE_GPU: cache filled with 31763130 sequence results in 94 s (reading reads 38 s, GPU 50 s, cache inserts 6 s; device
+  GSM7036403: 12:50.75 wall, exit 0, engine_gpu: 111623976 reads, 34826990 distinct (574330 with N), mapped on the GPU 34179429, host lane 73231 (3.98 s), not mapped 0; upload 5.05 s, dedup 2.48 s, GPU mapping 17.08 s ENGINE_GPU: cache filled with 34252660 sequence results in 126 s (reading reads 61 s, GPU 56 s, cache inserts 9 s; devi
+  GSM6996272: 1:29.10 wall, exit 0, engine_gpu: 2183003 reads, 1636998 distinct (27556 with N), mapped on the GPU 1591251, host lane 18191 (1.07 s), not mapped 0; upload 3.36 s, dedup 0.06 s, GPU mapping 1.35 s ENGINE_GPU: cache filled with 1609442 sequence results in 9 s (reading reads 2 s, GPU 7 s, cache inserts 0 s; device 1) 
+  GSM6996273: 1:28.55 wall, exit 0, engine_gpu: 1912553 reads, 1356527 distinct (22990 with N), mapped on the GPU 1315697, host lane 17840 (1.01 s), not mapped 0; upload 3.31 s, dedup 0.05 s, GPU mapping 1.28 s ENGINE_GPU: cache filled with 1333537 sequence results in 9 s (reading reads 1 s, GPU 7 s, cache inserts 1 s; device 0) 
+  GSM6996274: 1:56.31 wall, exit 0, engine_gpu: 4119601 reads, 2713041 distinct (51120 with N), mapped on the GPU 2637833, host lane 24088 (1.31 s), not mapped 0; upload 3.37 s, dedup 0.09 s, GPU mapping 2.08 s ENGINE_GPU: cache filled with 2661921 sequence results in 18 s (reading reads 2 s, GPU 9 s, cache inserts 1 s; device 1) 
+  GSM6250705: 0:32.73 wall, exit 3, engine_gpu: 4614338 reads, 2294498 distinct (404 with N), mapped on the GPU 2292216, host lane 1878 (0.16 s), not mapped 0; upload 3.33 s, dedup 0.10 s, GPU mapping 0.65 s ENGINE_GPU: cache filled with 2294094 sequence results in 8 s (reading reads 1 s, GPU 6 s, cache inserts 0 s; device 0) 
+=== engine cpu: makespan 754.143624460 s, node core-s 6583.47
+  pbmc1k_v3: 9:31.31 wall, exit 0, 
+  GSM7036403: 12:34.12 wall, exit 0, 
+  GSM6996272: 1:32.60 wall, exit 0, 
+  GSM6996273: 1:32.58 wall, exit 0, 
+  GSM6996274: 1:46.92 wall, exit 0, 
+  GSM6250705: 0:22.45 wall, exit 3, 
+    pbmc1k_v3 differs order-independently: ./ambient_contamination.json
+    pbmc1k_v3 differs order-independently: ./pileup_stats.json
+    pbmc1k_v3 differs order-independently: ./provenance.json
+    pbmc1k_v3 differs order-independently: ./read_stats.tsv
+    pbmc1k_v3 differs order-independently: ./star_Log.final.out
+    pbmc1k_v3 differs order-independently: ./star_Log.out
+    pbmc1k_v3 differs order-independently: ./star_Log.progress.out
+    pbmc1k_v3 differs order-independently: ./summary.json
+  identity pbmc1k_v3: 57 files, 11 differ byte-wise, 8 differ order-independently
+    GSM7036403 differs order-independently: ./ambient_contamination.json
+    GSM7036403 differs order-independently: ./nonhost/nonhost_em_abundance.tsv
+    GSM7036403 differs order-independently: ./nonhost/nonhost_summary.json
+    GSM7036403 differs order-independently: ./pileup_stats.json
+    GSM7036403 differs order-independently: ./provenance.json
+    GSM7036403 differs order-independently: ./read_stats.tsv
+    GSM7036403 differs order-independently: ./star_Log.final.out
+    GSM7036403 differs order-independently: ./star_Log.out
+    GSM7036403 differs order-independently: ./star_Log.progress.out
+    GSM7036403 differs order-independently: ./summary.json
+  identity GSM7036403: 59 files, 13 differ byte-wise, 10 differ order-independently
+    GSM6996272 differs order-independently: ./ambient_contamination.json
+    GSM6996272 differs order-independently: ./pileup_stats.json
+    GSM6996272 differs order-independently: ./provenance.json
+    GSM6996272 differs order-independently: ./read_stats.tsv
+    GSM6996272 differs order-independently: ./star_Log.final.out
+    GSM6996272 differs order-independently: ./star_Log.out
+    GSM6996272 differs order-independently: ./summary.json
+  identity GSM6996272: 56 files, 10 differ byte-wise, 7 differ order-independently
+    GSM6996273 differs order-independently: ./ambient_contamination.json
+    GSM6996273 differs order-independently: ./pileup_stats.json
+    GSM6996273 differs order-independently: ./provenance.json
+    GSM6996273 differs order-independently: ./read_stats.tsv
+    GSM6996273 differs order-independently: ./star_Log.final.out
+    GSM6996273 differs order-independently: ./star_Log.out
+    GSM6996273 differs order-independently: ./summary.json
+  identity GSM6996273: 56 files, 10 differ byte-wise, 7 differ order-independently
+    GSM6996274 differs order-independently: ./ambient_contamination.json
+    GSM6996274 differs order-independently: ./pileup_stats.json
+    GSM6996274 differs order-independently: ./provenance.json
+    GSM6996274 differs order-independently: ./read_stats.tsv
+    GSM6996274 differs order-independently: ./star_Log.final.out
+    GSM6996274 differs order-independently: ./star_Log.out
+    GSM6996274 differs order-independently: ./summary.json
+  identity GSM6996274: 56 files, 10 differ byte-wise, 7 differ order-independently
+    GSM6250705 differs order-independently: ./auto_barcodes.tsv
+    GSM6250705 differs order-independently: ./star_Log.out
+  identity GSM6250705: 6 files, 2 differ byte-wise, 2 differ order-independently

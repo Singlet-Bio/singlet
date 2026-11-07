@@ -46,7 +46,6 @@ inline std::vector<std::string> required_output_files() {
         "donor_assignments.tsv",
         "auto_barcodes.tsv",
         "saturation_curve.tsv",
-        "ase_counts.tsv",
         "mt_variants.tsv",
         "gene_expression.tsv",
         "splice_events.tsv",

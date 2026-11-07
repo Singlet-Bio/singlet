@@ -76,7 +76,11 @@ def _file_digest(name: str) -> str:
 
 def method_version(feature_set: str) -> str:
     """Everything that changes the values of a set: package version, rank cap, null construction (abundance references by
-    digest), gene-set release and its file digest."""
+    digest), gene-set release and its file digest. (``doublet``: :func:`singlet.features.doublet.method_version`.)"""
+    if feature_set == "doublet":
+        from . import doublet as DBL
+
+        return DBL.method_version()
     c = collection(feature_set)
     null = f"null=abundance50-k{K_NULL}(human:{_file_digest('abundance_human.parquet')},mouse:{_file_digest('abundance_mouse.parquet')})"
     return (
@@ -109,6 +113,10 @@ def _source_ref(c: dict, d: dict) -> str:
 @lru_cache(maxsize=None)
 def features(feature_set: str) -> Tuple[Feature, ...]:
     """Registered features of a set, in sidecar column order."""
+    if feature_set == "doublet":
+        from . import doublet as DBL
+
+        return tuple(DBL.features())
     c = collection(feature_set)
     mv = method_version(feature_set)
     orgs = tuple(
@@ -175,6 +183,10 @@ def features(feature_set: str) -> Tuple[Feature, ...]:
 PHASES = ("G1", "S", "G2M")
 PHASE_Z = 3.0
 FEATURE_SETS = ("hallmark", "cell_cycle")
+# sets that need more than the counts (the engine's doublet score, the cell type network, GPU or many cores): run on request
+# with ``features_run.py run --sets doublet``, never part of the default
+EXTRA_SETS = ("doublet",)
+ALL_SETS = FEATURE_SETS + EXTRA_SETS
 
 
 def registry_rows(sets: Sequence[str] = FEATURE_SETS) -> List[dict]:

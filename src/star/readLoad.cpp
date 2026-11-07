@@ -1,5 +1,6 @@
 #include "readLoad.h"
 #include "ErrorWarning.h"
+#include "SeqCache.h"
 
 int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOriginal, \
             char* readName, char* Seq, char* SeqNum, char* Qual, vector<ClipMate> &clipOneMate, \
@@ -10,13 +11,20 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
     if (readInStream.peek()!='@' && readInStream.peek()!='>') 
         return -1; //end of the stream
 
-    string line1;
-    
+    //1st line: readName iReadAll readFilter readFilesIndex [readNameExtra]
+    //parsed in place: same result as the former istringstream extraction, without building a stream per read
+    static thread_local string line1;
     getline(readInStream, line1); //read 1st line
-    istringstream line1str(line1);
-    
-    readName[0]=0;//clear char array
-    line1str >> readName; //TODO check that it does not overflow the array
+    const char *lp = line1.c_str();
+    auto skipWs = [&lp]() {while (*lp!=0 && isspace((unsigned char) *lp)) lp++;};
+
+    skipWs();
+    {
+        const char *t = lp;
+        while (*lp!=0 && !isspace((unsigned char) *lp)) lp++;
+        memcpy(readName, t, lp-t); //TODO check that it does not overflow the array
+        readName[lp-t]=0;
+    };
     if (strlen(readName)>=DEF_readNameLengthMax-1) {
         ostringstream errOut;
         errOut << "EXITING because of FATAL ERROR in reads input: read name is too long:" << readInStream.gcount()<<"\nRead Name="<<readName<<"\nDEF_readNameLengthMax="<<DEF_readNameLengthMax<<'\n';
@@ -24,9 +32,17 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
         exitWithError(errOut.str(),std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
     };  
     
-    line1str >> iReadAll >> readFilter >> readFilesIndex; //extract read number TODO this is needed only for one mate
-    line1str >> std::ws; //skip whitespace before readNameExtra
-    getline(line1str, readNameExtra);
+    {//extract read number TODO this is needed only for one mate
+        char *e;
+        skipWs();
+        iReadAll = strtoull(lp, &e, 10); lp = e;
+        skipWs();
+        if (*lp!=0) readFilter = *lp++;
+        skipWs();
+        readFilesIndex = (uint32) strtoul(lp, &e, 10); lp = e;
+        skipWs(); //skip whitespace before readNameExtra
+        readNameExtra.assign(lp);
+    };
 
     readInStream.getline(Seq,DEF_readSeqLengthMax+1); //extract sequence
 
@@ -52,13 +68,30 @@ int readLoad(istream& readInStream, Parameters& P, uint& Lread, uint& LreadOrigi
     if (readName[0]=='@') {//fastq format: read the '+' line
         readFileType=2;
         readInStream.get(clipOneMate[0].clippedInfo); //this is used if clipChunk is activated, only 5' for now
+        if (g_cr4Info != nullptr && iReadAll >= 1 && iReadAll - 1 < g_cr4InfoN)   // singlet --engine gpu: computed by the prefill
+            clipOneMate[0].clippedInfo = (char) g_cr4Info[iReadAll - 1];
         readInStream.ignore(); //ignore one char: \n
     };
 
     //cout << readName <<'\t' << (uint32) line3char << '\n';
     
-    clipOneMate[0].clip(Lread, SeqNum); //5p clip
-    clipOneMate[1].clip(Lread, SeqNum); //3p clip
+    //singlet --engine gpu: a read with a hand-off record was clipped on the GPU (engine_gpu.cu k_clip, STAR's ClipMate::clip); its clip
+    //lengths replace the CPU clip (SINGLET_HANDOFF_CLIPCHECK=1 runs both and counts differences)
+    const bool gpuClip = g_handoffClip5 != nullptr && iReadAll >= 1 && iReadAll - 1 < g_handoffNReads
+        && g_handoffReadRecord[iReadAll - 1] != 0xFFFFFFFFu && (clipOneMate[0].type >= 0 || clipOneMate[1].type >= 0);
+    if (gpuClip && !g_handoffClipCheck) {
+        const uint c5 = g_handoffClip5[iReadAll - 1], c3 = g_handoffClip3[iReadAll - 1];
+        clipOneMate[0].clippedN = (uint32) c5; clipOneMate[1].clippedN = (uint32) c3;
+        if (c5 > 0) memmove(SeqNum, SeqNum + c5, Lread - c5);
+        Lread -= c5 + c3;
+    } else {
+        clipOneMate[0].clip(Lread, SeqNum); //5p clip
+        clipOneMate[1].clip(Lread, SeqNum); //3p clip
+        if (gpuClip && (clipOneMate[0].clippedN != g_handoffClip5[iReadAll - 1] || clipOneMate[1].clippedN != g_handoffClip3[iReadAll - 1])
+            && g_handoffClipBad++ < 10)
+            std::cerr << "[singlet] SINGLET_HANDOFF_CLIPCHECK: read " << iReadAll - 1 << " CPU clip " << clipOneMate[0].clippedN << "/"
+                      << clipOneMate[1].clippedN << ", GPU clip " << g_handoffClip5[iReadAll - 1] << "/" << g_handoffClip3[iReadAll - 1] << "\n";
+    };
 
     if (readName[0]=='@') {//fastq format, read qualities
         readInStream.getline(Qual,DEF_readSeqLengthMax);//read qualities

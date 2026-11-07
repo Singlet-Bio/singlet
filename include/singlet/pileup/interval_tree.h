@@ -50,6 +50,8 @@ public:
     }
 
     size_t size() const { return n_; }
+    // W11 GPU pileup: read-only view of the sorted interval array (the GPU replays the same pre-order traversal on it)
+    const std::vector<Interval>& sorted_intervals() const { return intervals_; }
 
 private:
     std::vector<Interval> intervals_;

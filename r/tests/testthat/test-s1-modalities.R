@@ -70,7 +70,7 @@ test_that("the vocabulary normalises aliases and refuses unknown or absent modal
     expect_identical(singlet:::.s1_normalize_modalities(NULL), c("counts", "spliced", "unspliced"))
     expect_identical(singlet:::.s1_normalize_modalities(NULL, layers = FALSE), "counts")
     expect_identical(singlet:::.s1_normalize_modalities(c("sj", "SPLICED", "junctions")), c("spliced", "splice_junctions"))
-    expect_error(singlet:::.s1_normalize_modalities("atac"), "unknown modality.*vocabulary is counts")
+    expect_error(singlet:::.s1_normalize_modalities("bogus"), "unknown modality.*vocabulary is counts")
     root <- skip_if_no_s1x()
     with_x_cache({
         st <- singlet_study(X_GSE, base = root)

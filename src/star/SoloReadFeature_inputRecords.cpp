@@ -6,7 +6,7 @@
 #include "serviceFuns.cpp"
 
 void SoloReadFeature::inputRecords(uint32 **cbP, uint32 cbPstride, vector<uint32> &cbReadCountTotal, vector<readInfoStruct> &readInfo, SoloReadFlagClass &readFlagCounts,
-                                   vector<uint32> &nReadPerCBunique1, vector<uint32> &nReadPerCBmulti1)
+                                   vector<uint32> &nReadPerCBunique1, vector<uint32> &nReadPerCBmulti1, SoloRecSink *sink)
 {   
     streamReads->flush();
     streamReads->seekg(0,std::ios::beg);
@@ -19,6 +19,22 @@ void SoloReadFeature::inputRecords(uint32 **cbP, uint32 cbPstride, vector<uint32
     vector<uint32> trIdDist;
     
     uint64 nReadsIn = 0;
+
+    //record a counted read for CB cb: at the CB's cursor, or (parallel input) in the thread's sink
+    auto emitRec = [&](int64 cbi) {
+        if (sink != nullptr) {
+            sink->v.push_back((uint32) cbi); sink->v.push_back(feature); sink->v.push_back((uint32) umi);
+            if (readIndexYes)
+                sink->v.push_back((uint32) iread);
+            sink->cnt[cbi]++;
+        } else {
+            cbP[cbi][0]=feature;
+            cbP[cbi][1]=umi;
+            if (readIndexYes)
+                cbP[cbi][2]=iread;
+            cbP[cbi]+=cbPstride;
+        };
+    };
 
     while (soloInputFeatureUMI(streamReads, featureType, readIndexYes, P.sjAll, iread, cbmatch, feature, umi, trIdDist, readFlagCounts)) {
         if (feature == (uint32)(-1) && !readIndexYes) {//no feature => no record, this can happen for SJs
@@ -50,14 +66,7 @@ void SoloReadFeature::inputRecords(uint32 **cbP, uint32 cbPstride, vector<uint32
                 if (featGood) {//good feature, will be counted
                     readIsCounted = true;
 
-                    cbP[cb][0]=feature;
-                    cbP[cb][1]=umi;
-
-                    if (readIndexYes) {
-                        cbP[cb][2]=iread;
-                    };
-
-                    cbP[cb]+=cbPstride;
+                    emitRec(cb);
 
                 } else if (readInfoYes) {//no feature - record readInfo
                     readInfo[iread].cb=cb;
@@ -91,12 +100,7 @@ void SoloReadFeature::inputRecords(uint32 **cbP, uint32 cbPstride, vector<uint32
                 //record feature single-number feature
                 if (featGood) {
                     readIsCounted = true;
-                    cbP[cb][0]=feature;
-                    cbP[cb][1]=umi;
-                    if (readIndexYes) {
-                        cbP[cb][2]=iread;
-                    };
-                    cbP[cb]+=cbPstride;
+                    emitRec(cb);
                 } else if (readInfoYes) {//no feature - record readInfo
                     readInfo[iread].cb=cb;
                     readInfo[iread].umi=umi;

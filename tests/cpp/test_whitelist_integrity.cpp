@@ -69,7 +69,7 @@ static const std::vector<std::string> CRITICAL_WHITELISTS = {
     "737K-august-2016.txt",     // 10x v2
     "737K-april-2014.txt",     // 10x v1
     "gex_737K-arc-v1.txt",     // 10x ARC GEX
-    "737K-cratac-v1.txt",      // 10x scATAC
+    "737K-cratac-v1.txt.gz",   // 10x scATAC (gzip: rebuilt list, see ATTRIBUTION.md; read by atac_barcodes.h via zlib)
     "bd_cls1.txt",             // BD Rhapsody segment 1
     "bd_cls2.txt",             // BD Rhapsody segment 2
     "bd_cls3.txt",             // BD Rhapsody segment 3
@@ -127,8 +127,13 @@ static void test_whitelists_nonempty() {
     // Only check critical whitelists for non-emptiness
     for (const auto& wl : CRITICAL_WHITELISTS) {
         std::string path = wl_dir + "/" + wl;
-        size_t lines = file_line_count(path);
         std::string test_name = "nonempty_" + wl;
+        if (wl.size() > 3 && wl.compare(wl.size() - 3, 3, ".gz") == 0) {
+            std::ifstream g(path, std::ios::binary | std::ios::ate);
+            CHECK(test_name.c_str(), g && g.tellg() > 1000);
+            continue;
+        }
+        size_t lines = file_line_count(path);
         CHECK(test_name.c_str(), lines >= 10);
     }
 }

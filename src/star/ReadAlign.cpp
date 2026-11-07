@@ -106,12 +106,6 @@ ReadAlign::ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, in
     //clipping
     P.pClip.initializeClipMates(clipMates);
 
-    #ifdef OPT_DEDUP_R2
-    dedupPrevSeq = new char[DEF_readSeqLengthMax+1];
-    dedupResetCache();
-    dedupReadsSkipped = 0;
-    #endif
-
     //debug
     {
     #ifdef DEBUG_OutputLastRead
@@ -133,11 +127,5 @@ void ReadAlign::resetN () {//reset resets the counters to 0 for a new read
     };
 };
 
-#ifdef OPT_DEDUP_R2
-void ReadAlign::dedupResetCache() {
-    dedupCacheValid = false;
-    dedupPrevSeqLen = 0;
-    dedupReadsSkipped = 0;
-};
-#endif
+
 

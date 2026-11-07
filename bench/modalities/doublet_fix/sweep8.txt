@@ -1,0 +1,7 @@
+m28 hvg=8000 clf=1 mask=28 ridge=0 sridge=0.05
+m20 hvg=8000 clf=1 mask=20 ridge=0 sridge=0.05
+m12 hvg=8000 clf=1 mask=12 ridge=0 sridge=0.05
+m30 hvg=8000 clf=1 mask=30 ridge=0 sridge=0.05
+m28_r01 hvg=8000 clf=1 mask=28 ridge=0.01 sridge=0.05
+m4 hvg=8000 clf=1 mask=4 ridge=0
+m28_s0 hvg=8000 clf=1 mask=28 ridge=0 sridge=0

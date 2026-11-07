@@ -25,12 +25,22 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iterator>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace singlet {
 namespace nonhost {
@@ -217,18 +227,23 @@ public:
         return idx;
     }
 
-    // Merge two finalized indexes into a new sorted index (requires same k/w).
+    // Union of two finalized indexes (requires same k/w). The result does not copy
+    // the entries: it holds both indexes' sorted runs (sharing their memory maps),
+    // and every query adds up the runs, which gives the counts a merged index would.
     static MinSketchIndex merge(const MinSketchIndex& a, const MinSketchIndex& b) {
         if (a.k_ != b.k_ || a.w_ != b.w_)
             throw std::runtime_error("MinSketchIndex::merge: k/w mismatch");
         MinSketchIndex out(a.k_, a.w_);
-        out.entries_.reserve(a.entries_.size() + b.entries_.size());
-        std::merge(a.entries_.begin(), a.entries_.end(),
-                   b.entries_.begin(), b.entries_.end(),
-                   std::back_inserter(out.entries_),
-                   [](const MinSketchEntry& x, const MinSketchEntry& y) {
-                       return x.kmer_hash < y.kmer_hash;
-                   });
+        for (const MinSketchIndex* src : {&a, &b}) {
+            out.blocks_.insert(out.blocks_.end(), src->blocks_.begin(), src->blocks_.end());
+            if (!src->entries_.empty()) {   // owned run: share a copy
+                auto blk = std::make_shared<Block>();
+                blk->owned = src->entries_;
+                blk->p = blk->owned.data();
+                blk->n = blk->owned.size();
+                out.blocks_.push_back(std::move(blk));
+            }
+        }
         // Merge species names: a's names take precedence; b fills in gaps
         out.species_names_ = a.species_names_;
         for (uint32_t sid = 0; sid < static_cast<uint32_t>(b.species_names_.size()); ++sid) {
@@ -249,12 +264,15 @@ public:
             const std::vector<uint64_t>& mins) const {
         std::unordered_map<uint32_t, uint32_t> hits;
         for (uint64_t h : mins) {
-            auto lo = std::lower_bound(entries_.begin(), entries_.end(), h,
-                [](const MinSketchEntry& e, uint64_t val) {
-                    return e.kmer_hash < val;
-                });
-            for (auto it = lo; it != entries_.end() && it->kmer_hash == h; ++it)
-                hits[it->species_id]++;
+            for_each_run([&](const MinSketchEntry* p, size_t n) {
+                const MinSketchEntry* end = p + n;
+                const MinSketchEntry* lo = std::lower_bound(p, end, h,
+                    [](const MinSketchEntry& e, uint64_t val) {
+                        return e.kmer_hash < val;
+                    });
+                for (auto it = lo; it != end && it->kmer_hash == h; ++it)
+                    hits[it->species_id]++;
+            });
         }
         return hits;
     }
@@ -283,12 +301,22 @@ public:
             const std::vector<std::pair<uint64_t, uint32_t>>& flat_mins,
             std::vector<std::unordered_map<uint32_t, uint32_t>>& results) const {
 
-        if (flat_mins.empty() || entries_.empty()) return;
+        if (flat_mins.empty()) return;
+        for_each_run([&](const MinSketchEntry* run, size_t n_run) {
+            batch_query_run(run, n_run, flat_mins, results);
+        });
+    }
 
+private:
+    static void batch_query_run(
+            const MinSketchEntry* entries_, size_t n_run,
+            const std::vector<std::pair<uint64_t, uint32_t>>& flat_mins,
+            std::vector<std::unordered_map<uint32_t, uint32_t>>& results) {
+        if (n_run == 0) return;
         size_t qi = 0;
         const size_t n_q = flat_mins.size();
         size_t di = 0;
-        const size_t n_d = entries_.size();
+        const size_t n_d = n_run;
 
         while (qi < n_q && di < n_d) {
             const uint64_t qh = flat_mins[qi].first;
@@ -310,6 +338,8 @@ public:
         }
     }
 
+public:
+
     // ── Serialization ────────────────────────────────────────────────────────
 
     void save(const std::string& path) const {
@@ -321,10 +351,23 @@ public:
         hdr.k         = static_cast<uint32_t>(k_);
         hdr.w         = static_cast<uint32_t>(w_);
         hdr.reserved  = 0;
-        hdr.n_entries = static_cast<uint64_t>(entries_.size());
+        hdr.n_entries = static_cast<uint64_t>(size());
         f.write(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
-        f.write(reinterpret_cast<const char*>(entries_.data()),
-                static_cast<std::streamsize>(entries_.size() * sizeof(MinSketchEntry)));
+        if (blocks_.empty()) {
+            f.write(reinterpret_cast<const char*>(entries_.data()),
+                    static_cast<std::streamsize>(entries_.size() * sizeof(MinSketchEntry)));
+        } else {   // union of runs: write them merged, sorted by hash
+            std::vector<MinSketchEntry> all(entries_);
+            all.reserve(size());
+            for (const auto& blk : blocks_) {
+                const size_t mid = all.size();
+                all.insert(all.end(), blk->p, blk->p + blk->n);
+                std::inplace_merge(all.begin(), all.begin() + mid, all.end(),
+                    [](const MinSketchEntry& x, const MinSketchEntry& y) { return x.kmer_hash < y.kmer_hash; });
+            }
+            f.write(reinterpret_cast<const char*>(all.data()),
+                    static_cast<std::streamsize>(all.size() * sizeof(MinSketchEntry)));
+        }
         // v2: species name manifest
         uint32_t n_sp = static_cast<uint32_t>(species_names_.size());
         f.write(reinterpret_cast<const char*>(&n_sp), sizeof(n_sp));
@@ -337,7 +380,22 @@ public:
         if (!f) throw std::runtime_error("MinSketchIndex::save: write error: " + path);
     }
 
+    // Load an index. On POSIX the entries are memory-mapped read-only (MAP_SHARED), so
+    // every process that loads the same file shares one copy in the page cache
+    // instead of holding a private one. SINGLET_NONHOST_NO_MMAP=1 reads the file into
+    // the process instead.
     static MinSketchIndex load(const std::string& path) {
+#ifndef _WIN32
+        const char* no_mmap = std::getenv("SINGLET_NONHOST_NO_MMAP");
+        if (!(no_mmap && no_mmap[0] == '1')) {
+            MinSketchIndex idx;
+            if (idx.load_mapped(path)) return idx;
+        }
+#endif
+        return load_private(path);
+    }
+
+    static MinSketchIndex load_private(const std::string& path) {
         std::ifstream f(path, std::ios::binary);
         if (!f) throw std::runtime_error("MinSketchIndex::load: cannot open: " + path);
         MinSketchHeader hdr{};
@@ -371,12 +429,49 @@ public:
         return idx;
     }
 
+    // The header (k, w) and the species-name manifest of an index file, without its entries (the GPU engine holds the entries in
+    // device memory; the host needs only the names). The result is empty() like an index with no entries.
+    static MinSketchIndex load_names(const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) throw std::runtime_error("MinSketchIndex::load_names: cannot open: " + path);
+        MinSketchHeader hdr{};
+        f.read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+        if (!f || std::memcmp(hdr.magic, "SNHSKIDX", 8) != 0)
+            throw std::runtime_error("MinSketchIndex::load_names: invalid magic");
+        if (hdr.version != 1 && hdr.version != 2)
+            throw std::runtime_error("MinSketchIndex::load_names: unsupported version " +
+                                     std::to_string(hdr.version));
+        MinSketchIndex idx(static_cast<int>(hdr.k), static_cast<int>(hdr.w));
+        f.seekg(static_cast<std::streamoff>(sizeof(hdr) + hdr.n_entries * sizeof(MinSketchEntry)));
+        if (!f) throw std::runtime_error("MinSketchIndex::load_names: truncated file: " + path);
+        if (hdr.version >= 2) {
+            uint32_t n_sp = 0;
+            f.read(reinterpret_cast<char*>(&n_sp), sizeof(n_sp));
+            if (f && n_sp > 0) {
+                idx.species_names_.resize(n_sp);
+                for (uint32_t i = 0; i < n_sp; ++i) {
+                    uint16_t nlen = 0;
+                    f.read(reinterpret_cast<char*>(&nlen), sizeof(nlen));
+                    if (f && nlen > 0) {
+                        idx.species_names_[i].resize(nlen);
+                        f.read(&idx.species_names_[i][0], nlen);
+                    }
+                }
+            }
+        }
+        return idx;
+    }
+
     // ── Accessors ────────────────────────────────────────────────────────────
 
-    size_t size()  const { return entries_.size(); }
+    size_t size()  const {
+        size_t n = entries_.size();
+        for (const auto& blk : blocks_) n += blk->n;
+        return n;
+    }
     int    k()     const { return k_; }
     int    w()     const { return w_; }
-    bool   empty() const { return entries_.empty(); }
+    bool   empty() const { return size() == 0; }
 
     // Species name manifest (populated from FASTA headers during build)
     void set_species_name(uint32_t species_id, const std::string& name) {
@@ -392,6 +487,86 @@ public:
     size_t n_species_names() const { return species_names_.size(); }
 
 private:
+    // A sorted run of entries that is not in entries_: a read-only memory map of an
+    // index file, or an owned copy. Shared between a union index and its sources.
+    struct Block {
+        const MinSketchEntry* p = nullptr;
+        size_t n = 0;
+        std::vector<MinSketchEntry> owned;
+        void* map_base = nullptr;
+        size_t map_len = 0;
+        Block() = default;
+        Block(const Block&) = delete;
+        Block& operator=(const Block&) = delete;
+        ~Block() {
+#ifndef _WIN32
+            if (map_base) munmap(map_base, map_len);
+#endif
+        }
+    };
+
+    template <class Fn>
+    void for_each_run(Fn&& fn) const {
+        if (!entries_.empty()) fn(entries_.data(), entries_.size());
+        for (const auto& blk : blocks_) fn(blk->p, blk->n);
+    }
+
+#ifndef _WIN32
+    // Map `path` read-only. Returns false (caller reads the file instead) if it cannot
+    // be mapped; throws for a file that is not an index.
+    bool load_mapped(const std::string& path) {
+        int fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0) return false;
+        struct stat sb{};
+        if (::fstat(fd, &sb) != 0 || static_cast<size_t>(sb.st_size) < sizeof(MinSketchHeader)) {
+            ::close(fd);
+            return false;
+        }
+        const size_t len = static_cast<size_t>(sb.st_size);
+        void* base = ::mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
+        ::close(fd);
+        if (base == MAP_FAILED) return false;
+        auto blk = std::make_shared<Block>();
+        blk->map_base = base;
+        blk->map_len = len;   // unmapped by ~Block, also on the throws below
+        MinSketchHeader hdr{};
+        std::memcpy(&hdr, base, sizeof(hdr));
+        if (std::memcmp(hdr.magic, "SNHSKIDX", 8) != 0)
+            throw std::runtime_error("MinSketchIndex::load: invalid magic");
+        if (hdr.version != 1 && hdr.version != 2)
+            throw std::runtime_error("MinSketchIndex::load: unsupported version " +
+                                     std::to_string(hdr.version));
+        const size_t body = static_cast<size_t>(hdr.n_entries) * sizeof(MinSketchEntry);
+        if (sizeof(MinSketchHeader) + body > len)
+            throw std::runtime_error("MinSketchIndex::load: truncated file: " + path);
+        k_ = static_cast<int>(hdr.k);
+        w_ = static_cast<int>(hdr.w);
+        blk->p = reinterpret_cast<const MinSketchEntry*>(static_cast<const char*>(base) + sizeof(MinSketchHeader));
+        blk->n = static_cast<size_t>(hdr.n_entries);
+        blocks_.push_back(std::move(blk));
+        if (hdr.version >= 2) {   // species name manifest follows the entries
+            const char* q = static_cast<const char*>(base) + sizeof(MinSketchHeader) + body;
+            const char* end = static_cast<const char*>(base) + len;
+            uint32_t n_sp = 0;
+            if (q + sizeof(n_sp) <= end) {
+                std::memcpy(&n_sp, q, sizeof(n_sp));
+                q += sizeof(n_sp);
+                if (n_sp > 0) species_names_.resize(n_sp);
+                for (uint32_t i = 0; i < n_sp && q + sizeof(uint16_t) <= end; ++i) {
+                    uint16_t nlen = 0;
+                    std::memcpy(&nlen, q, sizeof(nlen));
+                    q += sizeof(nlen);
+                    if (q + nlen > end) break;
+                    species_names_[i].assign(q, nlen);
+                    q += nlen;
+                }
+            }
+        }
+        return true;
+    }
+#endif
+
+    std::vector<std::shared_ptr<Block>>   blocks_;        // loaded / union runs (each sorted)
     std::vector<MinSketchEntry>           entries_;       // sorted by kmer_hash
     std::unordered_map<uint32_t,uint32_t> species_count_; // per-species entry counter
     std::vector<std::string>              species_names_; // species_id → name from FASTA header

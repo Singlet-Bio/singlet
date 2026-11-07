@@ -3,6 +3,7 @@
 #include "TimeFunctions.h"
 #include "SequenceFuns.h"
 #include "systemFunctions.h"
+#include <thread>
 
 void SoloFeature::countCBgeneUMI()
 {    
@@ -42,6 +43,69 @@ void SoloFeature::countCBgeneUMI()
     readFlagCounts.flagCounts.reserve(nCB*3/2);
     readFlagCounts.flagCountsNoCB = {};
     vector<uint32> nReadPerCBunique1(pSolo.cbWLsize), nReadPerCBmulti1(pSolo.cbWLsize); //temp arrays to record # of reads for all cells in the WL
+    //singlet --engine gpu (SINGLET_SOLO_PAR=0 turns it off): the threads' record files are read in parallel. Each thread keeps its counted records in
+    //file order; they are then placed at the CB cursors thread by thread, which is the layout the serial loop makes, and the flag counts are
+    //merged with their keys inserted in the order the serial loop first inserts them, so every later step sees the same data.
+    const char *soloPar = getenv("SINGLET_SOLO_PAR");
+    if (getenv("SINGLET_ENGINE_GPU") != nullptr && !(soloPar != nullptr && soloPar[0] == '0') && P.runThreadN > 1) {
+        const int T = P.runThreadN;
+        const uint64 W = pSolo.cbWLsize;
+        vector<SoloRecSink> sinks(T);
+        vector<SoloReadFlagClass> flags(T);
+        vector<vector<uintCB>> orders(T);
+        vector<vector<uint32>> nU(T), nM(T);
+        {
+            vector<std::thread> th;
+            for (int t=0; t<T; t++)
+                th.emplace_back([&, t]() {
+                    sinks[t].stride = rguStride; sinks[t].cnt.assign(W, 0);
+                    flags[t].order = &orders[t];
+                    nU[t].assign(W, 0); nM[t].assign(W, 0);
+                    readFeatAll[t]->inputRecords(rCBpa, rguStride, readBarSum->cbReadCountExact, readInfo, flags[t], nU[t], nM[t], &sinks[t]);
+                });
+            for (auto &x : th) x.join();
+        };
+        //where each CB's region starts; then, per CB, each thread's first slot (in cnt) and the cursor at the end of the region
+        vector<uint32*> starts(rCBpa, rCBpa + W);
+        {
+            vector<std::thread> th;
+            for (int t=0; t<T; t++)
+                th.emplace_back([&, t]() {
+                    for (uint64 cb = W*t/T; cb < W*(t+1)/T; cb++) {
+                        uint32 run = 0;
+                        for (int k=0; k<T; k++) {const uint32 c = sinks[k].cnt[cb]; sinks[k].cnt[cb] = run; run += c;};
+                        rCBpa[cb] = starts[cb] + (uint64) rguStride * run;
+                    };
+                });
+            for (auto &x : th) x.join();
+        };
+        {
+            vector<std::thread> th;
+            for (int t=0; t<T; t++)
+                th.emplace_back([&, t]() {
+                    const vector<uint32> &v = sinks[t].v;
+                    const uint64 rs = rguStride + 1;
+                    for (uint64 i = 0; i < v.size(); i += rs) {
+                        uint32 *d = starts[v[i]] + (uint64) rguStride * (sinks[t].cnt[v[i]]++);
+                        for (uint32 j = 0; j < rguStride; j++)
+                            d[j] = v[i + 1 + j];
+                    };
+                    vector<uint32>().swap(sinks[t].v);
+                });
+            for (auto &x : th) x.join();
+        };
+        for (int t=0; t<T; t++) {
+            for (uintCB cb : orders[t]) {
+                auto ins = readFlagCounts.flagCounts.insert({cb, {}});
+                const auto &src = flags[t].flagCounts[cb];
+                for (uint32 ib=0; ib<readFlagCounts.nBits; ib++)
+                    ins.first->second[ib] += src[ib];
+            };
+            readFlagCounts.countsAddNoCBarray(flags[t].flagCountsNoCB);
+            for (uint64 cb=0; cb<W; cb++) {nReadPerCBunique1[cb] += nU[t][cb]; nReadPerCBmulti1[cb] += nM[t][cb];};
+            readFeatSum->addStats(*readFeatAll[t]);
+        };
+    } else
     for (int ii=0; ii<P.runThreadN; ii++) {//TODO: this can be parallelized
         readFeatAll[ii]->inputRecords(rCBpa, rguStride, readBarSum->cbReadCountExact, readInfo, readFlagCounts, nReadPerCBunique1, nReadPerCBmulti1);
         readFeatSum->addStats(*readFeatAll[ii]);//sum stats: has to be done after inputRecords, since the stats values are updated there

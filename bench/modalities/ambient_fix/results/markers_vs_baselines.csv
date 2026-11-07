@@ -1,0 +1,7 @@
+tool,human_marker_retention_pct,mouse_marker_retention_pct
+SoupX (leiden clusters),99.65576724926387,99.82028402664321
+DecontX (default),99.99999782755616,99.99999749619907
+DecontX (empty-droplet background),99.78804432047272,99.94909373705893
+CellBender 0.3.2,98.99007050596812,99.25034560764107
+Singlet correct_counts formula (exon matrix),,
+Singlet gene-level EM [final],99.71886372319365,99.88236772653009

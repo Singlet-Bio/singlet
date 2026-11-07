@@ -1,0 +1,81 @@
+set=pbmc1k_v3 node=g051.clipper.gvsu.edu job=789924 bin=1b4c0e1c2c6b3336 commit=4c28e2b45b9ba644e5e4f73d1e05923b4a43e433 2026-10-28T02:55:18-04:00
+NVIDIA H100 NVL, 00000000:42:00.0
+cpu: exit 0, 411 s wall
+    SEQCACHE: on, 4096 MB in 64 shards
+    SEQCACHE: lookups=66488663 hits=33442511 hit_rate=0.502981 inserts=33046151 refreshes=1673114 uncacheable=113225
+verify: exit 0, 589 s wall
+    SEQCACHE: on, 7442 MB in 64 shards, verify
+    ENGINE_GPU: device 0 (0000_42_00_0), waited 0 s for it
+    engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (1.92 s), not mapped 0; upload 4.25 s, dedup 19.90 s, GPU mapping 48.46 s
+    SEQCACHE: on, 11921 MB in 64 shards, verify
+    ENGINE_GPU: cache filled with 31763130 sequence results in 131 s (reading reads 24 s, GPU 99 s, cache inserts 8 s; device 0)
+    SEQCACHE: lookups=66488663 hits=64775554 hit_rate=0.974235 inserts=33476239 refreshes=0 uncacheable=113225 verified=64775553 verify_mismatches=0
+gpu: exit 0, 514 s wall
+    SEQCACHE: on, 7442 MB in 64 shards
+    ENGINE_GPU: device 0 (0000_42_00_0), waited 0 s for it
+    engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (1.93 s), not mapped 0; upload 4.23 s, dedup 20.00 s, GPU mapping 48.35 s
+    SEQCACHE: on, 11921 MB in 64 shards
+    ENGINE_GPU: cache filled with 31763130 sequence results in 130 s (reading reads 22 s, GPU 99 s, cache inserts 9 s; device 0)
+    SEQCACHE: lookups=66488663 hits=64781276 hit_rate=0.974321 inserts=33470517 refreshes=0 uncacheable=113224
+verify run: verify_mismatches=0
+=== cpu vs verify
+a = /tmp/debruinz-engid-789924/t/cpu/out
+b = /tmp/debruinz-engid-789924/t/verify/out
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/clip5p/probe/n_reads: 12194 != 12000; /provenance/outputs/bytes_public: 959255591 != 959256205
+  DIFF read_stats.tsv (141 vs 177 bytes)
+    2 of 3/4 lines differ
+    a: align	73921372	73921372		0	0	207.24
+    b: encode	66601887	66601887		0	0	17.95
+    a: pileup	73921372	73921372		0	0	33.99
+    b: align	66601887	73921372		0	0	372.50
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 46 identical, 3 differ only in timings/paths, 5 differ
+RESULT: 5 differences
+  differs: ./ambient_contamination.json order-independent: DIFFERENT
+  differs: ./nonhost_reads.fq order-independent: same
+  differs: ./pileup_stats.json order-independent: DIFFERENT
+  differs: ./provenance.json order-independent: DIFFERENT
+  differs: ./read_stats.tsv order-independent: DIFFERENT
+  differs: ./star_Log.final.out order-independent: DIFFERENT
+  differs: ./star_Log.out order-independent: DIFFERENT
+  differs: ./star_Log.progress.out order-independent: DIFFERENT
+  differs: ./star_Unmapped.out.mate1 order-independent: same
+  differs: ./star_Unmapped.out.mate2 order-independent: same
+  differs: ./summary.json order-independent: DIFFERENT
+=== cpu vs gpu
+a = /tmp/debruinz-engid-789924/t/cpu/out
+b = /tmp/debruinz-engid-789924/t/gpu/out
+  DIFF nonhost/nonhost_summary.json: /em_iterations: 458 != 462
+  DIFF nonhost_reads.fq (75684237 vs 75684237 bytes)
+  DIFF pileup_stats.json: /provenance/clip5p/probe/n_reads: 12194 != 12000; /provenance/outputs/bytes_public: 959255591 != 959256019
+  DIFF read_stats.tsv (141 vs 177 bytes)
+    2 of 3/4 lines differ
+    a: align	73921372	73921372		0	0	207.24
+    b: encode	66601887	66601887		0	0	17.17
+    a: pileup	73921372	73921372		0	0	33.99
+    b: align	66601887	73921372		0	0	297.49
+  DIFF star_Unmapped.out.mate1 (556948817 vs 556948817 bytes)
+  DIFF star_Unmapped.out.mate2 (225446643 vs 225446643 bytes)
+files: 45 identical, 3 differ only in timings/paths, 6 differ
+RESULT: 6 differences
+  differs: ./ambient_contamination.json order-independent: DIFFERENT
+  differs: ./nonhost/nonhost_summary.json order-independent: DIFFERENT
+  differs: ./nonhost_reads.fq order-independent: same
+  differs: ./pileup_stats.json order-independent: DIFFERENT
+  differs: ./provenance.json order-independent: DIFFERENT
+  differs: ./read_stats.tsv order-independent: DIFFERENT
+  differs: ./star_Log.final.out order-independent: DIFFERENT
+  differs: ./star_Log.out order-independent: DIFFERENT
+  differs: ./star_Log.progress.out order-independent: DIFFERENT
+  differs: ./star_Unmapped.out.mate1 order-independent: same
+  differs: ./star_Unmapped.out.mate2 order-independent: same
+  differs: ./summary.json order-independent: DIFFERENT
+RESULT: PASS
+verify: ENGINE_GPU: device 0 (0000_42_00_0), waited 0 s for it
+verify: engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (1.92 s), not mapped 0; upload 4.25 s, dedup 19.90 s, GPU mapping 48.46 s
+verify: ENGINE_GPU: cache filled with 31763130 sequence results in 131 s (reading reads 24 s, GPU 99 s, cache inserts 8 s; device 0)
+gpu: ENGINE_GPU: device 0 (0000_42_00_0), waited 0 s for it
+gpu: engine_gpu: 66601887 reads, 31870813 distinct (107683 with N), mapped on the GPU 31676619, host lane 86511 (1.93 s), not mapped 0; upload 4.23 s, dedup 20.00 s, GPU mapping 48.35 s
+gpu: ENGINE_GPU: cache filled with 31763130 sequence results in 130 s (reading reads 22 s, GPU 99 s, cache inserts 9 s; device 0)

@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "IncludeDefine.h"
 #include "Parameters.h"
 #include "Transcript.h"
@@ -7,10 +8,15 @@
 #include "sjAlignSplit.h"
 #include "PackedArray.h"
 #include "GlobalVariables.h"
+#include "StarAccel.h"
+
+//exact: skip assignAlignToWindow calls for SA loci in bins without a window (SINGLET_STAR_FASTASSIGN=0 turns it off)
+bool g_starFastAssign = true;
 #include <time.h>
 
 void ReadAlign::stitchPieces(char **R, uint Lread) {
 
+    PROF_T0(tWin);
     //zero-out winBin
 #ifdef SA_LAZY_WINBIN
     // Lazy reset: only clear the bin ranges actually written during the previous read.
@@ -55,6 +61,13 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
 
 
     nW=0; //number of windows
+#ifdef STAR_PROFILE
+    unsigned long long tSub = __rdtsc();
+    for (uint iP=0; iP<nP; iP++) {
+        if (PC[iP][PC_Nrep]<=P.winAnchorMultimapNmax) profWin[3] += PC[iP][PC_SAend]-PC[iP][PC_SAstart]+1;
+        profWin[4] += PC[iP][PC_SAend]-PC[iP][PC_SAstart]+1;
+    };
+#endif
     for (uint iP=0; iP<nP; iP++) {//scan through all anchor pieces, create alignment windows
         // np is number of pieces (stored seed alignments)
 
@@ -108,6 +121,9 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
             }; //for (uint iSA=PC[iP][PC_SAstart]; iSA<=PC[iP][PC_SAend]; iSA++) //scan through all alignments of this piece
         };//if (PC[iP][PC_Nrep]<=P.winAnchorMultimapNmax) //proceed if anchor
     };//for (uint iP=0; iP<nP; iP++) //scan through all anchor pieces, create alignment windows
+#ifdef STAR_PROFILE
+    {unsigned long long t = __rdtsc(); profWin[0] = t - tSub; tSub = t;}
+#endif
 
 
     for (uint iWin=0;iWin<nW;iWin++) {//extend windows with flanks
@@ -154,6 +170,9 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
     };
 
     nWall=nW;
+#ifdef STAR_PROFILE
+    {unsigned long long t = __rdtsc(); profWin[1] = t - tSub; tSub = t;}
+#endif
 
     #ifdef OFF_BEFORE_SEEDdistribution
         #warning OFF_BEFORE_SEEDdistribution
@@ -172,6 +191,35 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
 
         for (uint ii=0;ii<nW;ii++) {//initialize nWAP
             nWAP[ii]=0;
+        };
+
+        if (g_starFastAssign) {//same calls to assignAlignToWindow, minus the ones that return at once (no window in the bin)
+            //strand conversion depends only on the piece direction and the SA strand bit: precompute both cases
+            const uint rS0 = PC[iP][PC_rStart], rS1 = Lread - (aLength + rS0);
+            uint strOf[2], rsOf[2];
+            if (aDir==0) {strOf[0]=0; rsOf[0]=rS0; strOf[1]=1; rsOf[1]=rS1;}
+            else         {strOf[0]=1; rsOf[0]=rS1; strOf[1]=0; rsOf[1]=rS0;}
+            if (revertStrand) {strOf[0]=1-strOf[0]; strOf[1]=1-strOf[1];}
+            const uint sjG = mapGen.sjGstart, nG = mapGen.nGenome, gMask = mapGen.GstrandMask;
+            const uint sBit = mapGen.GstrandBit, wbn = P.winBinNbits;
+            const uint iSAend = PC[iP][PC_SAend];
+            for (uint iSA=PC[iP][PC_SAstart]; iSA<=iSAend; iSA++) {
+                uint a1 = mapGen.SA[iSA];
+                const uint s = a1 >> sBit;
+                a1 &= gMask;
+                if (s==1) a1 = nG - (aLength+a1); //SA reverse strand: position on the + strand
+                const uint aStr = strOf[s], aRstart = rsOf[s];
+                if (a1>=sjG) {//this is sj read: as below
+                    uint a1D, aLengthD, a1A, aLengthA, isj1;
+                    if (sjAlignSplit(a1, aLength, mapGen, a1D, aLengthD, a1A, aLengthA, isj1)) {
+                        assignAlignToWindow(a1D, aLengthD, aStr, aNrep, aFrag, aRstart, aAnchor, isj1);
+                        assignAlignToWindow(a1A, aLengthA, aStr, aNrep, aFrag, aRstart+aLengthD, aAnchor, isj1);
+                    };
+                } else if (winBin[aStr][a1>>wbn]!=uintWinBinMax) {
+                    assignAlignToWindow(a1, aLength, aStr, aNrep, aFrag, aRstart, aAnchor, -1);
+                };
+            };
+            continue;
         };
 
         for (uint iSA=PC[iP][PC_SAstart]; iSA<=PC[iP][PC_SAend]; iSA++) {//scan through all alignments
@@ -235,6 +283,9 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
 //         };
 //     };
 
+#ifdef STAR_PROFILE
+    {unsigned long long t = __rdtsc(); profWin[2] = t - tSub; tSub = t;}
+#endif
 #ifdef COMPILE_FOR_LONG_READS
 uint swWinCovMax=0;
 for (uint iW=0;iW<nW;iW++) {//check each window
@@ -298,6 +349,11 @@ std::time(&timeStart);
         return;
     #endif
     //generate transcript for each window, choose the best
+    PROF_ADD(PROF_windows, tWin);
+#ifdef STAR_PROFILE
+    profCyc[1] = __rdtsc() - tWin;
+#endif
+    PROF_T0(tStitch);
     trBest =trInit; //initialize next/best
     uint iW1=0;//index of non-empty windows
     uint trNtotal=0; //total number of recorded transcripts
@@ -370,6 +426,10 @@ std::time(&timeStart);
     };
 
     nW=iW1;//only count windows that had alignments
+    PROF_ADD(PROF_stitch, tStitch);
+#ifdef STAR_PROFILE
+    profCyc[2] = __rdtsc() - tStitch;
+#endif
 
 //     {//debug
 //         std::time(&timeFinish);

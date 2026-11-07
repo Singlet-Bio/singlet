@@ -1,7 +1,7 @@
 # Research beta: ATAC, Multiome and Visium (hand-over)
 
 Branch `claude/atac-spatial-benchmark-2ba7df`, draft PR Singlet-Bio/singlet#48 (not merged). Full report:
-`docs/atac-spatial-benchmark.md`. Storage proposal: `docs/format-store.md` section 14.
+`docs/atac-spatial-benchmark.md`. Storage proposal: `docs/format-s1.md` section 14.
 
 ## Goal
 
@@ -32,7 +32,7 @@ published outputs as truth and open-source pipelines run on the same FASTQs.
   - **the real scATAC whitelist.** The old `737K-cratac-v1.txt` was a copy of the 3' v2 list.
 
   All are rebuilt only from 10x CC BY 4.0 datasets.
-- **Store format:** `python/singlet/store/modality_members.py` (section-14 members) and client modalities `atac`, `gene_activity`,
+- **Store format:** `python/singlet/s1/modality_members.py` (section-14 members) and client modalities `atac`, `gene_activity`,
   `spatial`.
 - **Contract:** `bench/public/capabilities/{atac,multiome,spatial,_atacsp}.py` and `bench/public/results/*.json`.
 

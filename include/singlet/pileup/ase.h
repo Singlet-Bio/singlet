@@ -43,20 +43,20 @@ struct ASEEntry {
 /// Within each CSC column the row indices are sorted (guaranteed by to_csc()),
 /// so this uses a single-pass merge-join — O(nnz) with no allocations.
 ///
-/// @param snp_ad_csc  Alt-allele depth (uint8_t, capped at 255) — from PileupEngine::snp_ad()
-/// @param snp_dp_csc  Total depth     (uint8_t, capped at 255) — from PileupEngine::snp_dp()
+/// @param snp_ad_csc  Alt-allele depth (uint16_t, capped at 65535) — from PileupEngine::snp_ad()
+/// @param snp_dp_csc  Total depth     (uint16_t, capped at 65535) — from PileupEngine::snp_dp()
 /// @param min_depth   Minimum total depth to consider a site (default: 10)
 /// @return            Flat vector of ASEEntry, ordered by (cell_idx, snp_idx)
 inline std::vector<ASEEntry> compute_ase(
-    const SparseAccumulator<uint8_t>::CSCMatrix& snp_ad_csc,
-    const SparseAccumulator<uint8_t>::CSCMatrix& snp_dp_csc,
+    const SparseAccumulator<uint16_t>::CSCMatrix& snp_ad_csc,
+    const SparseAccumulator<uint16_t>::CSCMatrix& snp_dp_csc,
     int min_depth = 10)
 {
     std::vector<ASEEntry> entries;
     if (snp_dp_csc.ncols == 0 || snp_dp_csc.data.empty()) return entries;
 
     const uint32_t ncols = snp_dp_csc.ncols;
-    const auto md = static_cast<uint8_t>(min_depth <= 255 ? min_depth : 255);
+    const auto md = static_cast<uint16_t>(min_depth <= 65535 ? min_depth : 65535);
 
     for (uint32_t j = 0; j < ncols; ++j) {
         const int32_t dp_start = snp_dp_csc.indptr[j];
@@ -69,7 +69,7 @@ inline std::vector<ASEEntry> compute_ase(
         int32_t qi = ad_start; // cursor into AD column
         for (int32_t pi = dp_start; pi < dp_end; ++pi) {
             const int32_t dp_row = snp_dp_csc.indices[pi];
-            const uint8_t dp_val = snp_dp_csc.data[pi];
+            const uint16_t dp_val = snp_dp_csc.data[pi];
 
             // Skip depth-insufficient sites early
             if (dp_val < md) continue;
@@ -78,10 +78,10 @@ inline std::vector<ASEEntry> compute_ase(
             while (qi < ad_end && snp_ad_csc.indices[qi] < dp_row)
                 ++qi;
 
-            const uint8_t ad_val =
+            const uint16_t ad_val =
                 (qi < ad_end && snp_ad_csc.indices[qi] == dp_row)
                 ? snp_ad_csc.data[qi]
-                : uint8_t(0);
+                : uint16_t(0);
 
             // Heterozygous check: both alleles observed
             if (ad_val >= 1 && dp_val > ad_val) {

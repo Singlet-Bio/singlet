@@ -1,0 +1,9 @@
+pbmc1k_v3	singlet-campaign	singlet-w3	campaign-vs-w3	-	-
+pbmc5p_v1	singlet-campaign	singlet-w3	campaign-vs-w3	-	-
+neuron1k_v3	singlet-campaign	singlet-w3	campaign-vs-w3	-	-
+GSM7036403	singlet-campaign	singlet-w3	campaign-vs-w3	-	-
+GSM6996274	singlet-campaign	singlet-w3	campaign-vs-w3	-	-
+pbmc1k_v3	singlet-w3-nopgo	singlet-w3	nopgo-vs-pgo	-	-
+pbmc5p_v1	singlet-w3-nopgo	singlet-w3	nopgo-vs-pgo	-	-
+pbmc1k_v3	singlet-w3	singlet-w3	serialoff-vs-on	SINGLET_STAR_SEQCACHE_MB=2048 SINGLET_PASS1_THREADS=1 SINGLET_CB_REFRESH_SERIAL=1 SINGLET_GENOME_PREFETCH=0	-
+GSM7036403	singlet-w3	singlet-w3	serialoff-vs-on	SINGLET_STAR_SEQCACHE_MB=2048 SINGLET_PASS1_THREADS=1 SINGLET_CB_REFRESH_SERIAL=1 SINGLET_GENOME_PREFETCH=0	-
