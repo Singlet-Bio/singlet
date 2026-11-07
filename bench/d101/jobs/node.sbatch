@@ -8,6 +8,7 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # All D-101 validation work as one dependency graph on one whole node (Clipper rule 2026-11-07: one node at a time, every core used).
 # node_run.py runs the per-item scripts in this folder (dl, bulk_star, run_sc, reditools, hla_sc, geuv_hla, host ctest) as tasks;
+# Cores are booked 2x: BAM conversion and the sc run spend long stretches on one core, which left 82% of b002 idle.
 # Host ctest runs as its own 24-core job afterwards (ctest-host2.sbatch): inside the graph the 8-core tasks kept taking its cores.
 # finished tasks are skipped, so resubmit with --dependency=afterany:<this job> until everything is done. Scoring runs at the end.
 set -uo pipefail
@@ -34,8 +35,8 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in $(seq 9 20); do printf 'hla-%s\thla\t8\t24\tdlsc-%s\t%s\n' $r $r "$(run hla_sc.sbatch $r)"; done
   for r in $(seq 1 60); do printf 'geuv-%s\tgeuv\t8\t24\t-\t%s\n' $r "$(run geuv_hla.sbatch $r)"; done
 } > $TF
-$ENV/bin/python3 $J/node_run.py $TF --state $J/state --logs $J/tasklogs --cpus $NC --mem $MEMG \
-  --limit dlsc=3 --limit dlbulk=2 --limit geuv=3 --limit run=2 --stop-after 12000
+$ENV/bin/python3 $J/node_run.py $TF --state $J/state --logs $J/tasklogs --cpus $(( NC * 2 )) --mem $MEMG \
+  --limit dlsc=4 --limit dlbulk=2 --limit geuv=6 --limit run=2 --stop-after 12000
 # Scoring (cheap; reruns on whatever has finished). HLA results are owner-only.
 chmod 700 $J/results
 $ENV/bin/python3 $J/score_hla.py geuvadis --truth $J/geuv/truth.txt --res $J/geuv/res > $J/results/hla_geuvadis.json 2>&1
