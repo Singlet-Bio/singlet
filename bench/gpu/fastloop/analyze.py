@@ -154,6 +154,7 @@ def main():
     ap.add_argument('--drop-first', type=int, default=0)
     ap.add_argument('--metric', default='held')
     ap.add_argument('--theta', type=float, default=0.03)
+    ap.add_argument('--guard', type=float, default=0.03, help='core-s/M ceiling of a device-time win (the campaign rule: +3%%)')
     ap.add_argument('--2fi', dest='twofi', action='store_true')
     ap.add_argument('--registry', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ideas.tsv'))
     ap.add_argument('--reps', type=int, default=1000)
@@ -163,12 +164,14 @@ def main():
     o = ap.parse_args()
     ideas = [x for x in o.ideas.split(',') if x]
     k = len(ideas)
-    stage_of = {}
+    stage_of, metric_of = {}, {}
     if os.path.exists(o.registry):
         for l in open(o.registry):
             f = l.rstrip('\n').split('\t')
             if len(f) >= 4 and not l.startswith('#'):
                 stage_of[f[0]] = f[3]
+                if len(f) >= 6 and f[5] not in ('', '-'):
+                    metric_of[f[0]] = f[5]   # the idea's own decision metric (a host idea: core), else --metric
     rows, excl = load(o.res, ideas, o.drop_first)
     if o.trim > 0:
         med = {}
@@ -268,16 +271,21 @@ def main():
         if m not in out:
             return 'n/a'
         e = out[m]['ideas'][j]
-        return 'WIN' if e['rhi'] < -o.theta else 'RULED-OUT' if e['rlo'] > -o.theta else 'OPEN'
+        d = 'WIN' if e['rhi'] < -o.theta else 'RULED-OUT' if e['rlo'] > -o.theta else 'OPEN'
+        # the campaign's guard: a device-time win may not cost more than GUARD of host core-s/M (its CI wholly above it: GUARD)
+        if d == 'WIN' and m != 'core' and 'core' in out and out['core']['ideas'][j]['rlo'] > o.guard:
+            d = 'GUARD (core-s/M)'
+        return '%s on %s' % (d, m)
     print()
-    print('Effect of switching each idea on, relative to the fitted all-off level (95 %% bootstrap CI); decision on %s at theta %.0f%% '
-          '(WIN: CI below -theta; RULED-OUT: CI above -theta; OPEN: neither, add a block).' % (o.metric, 100 * o.theta))
+    print('Effect of switching each idea on, relative to the fitted all-off level (95 %% bootstrap CI). Decision on each idea\'s own metric '
+          '(ideas.tsv column 6, else %s) at theta %.0f%% (WIN: CI below -theta; RULED-OUT: CI above -theta; OPEN: neither, add a block; '
+          'GUARD: a win whose core-s/M CI lies above +%.0f%%).' % (o.metric, 100 * o.theta, 100 * o.guard))
     print()
     print('| idea | stage | held | gheld | gsteps | core-s/M | wall | decision |')
     print('|---|---|---|---|---|---|---|---|')
     for j, i in enumerate(ideas):
         print('| %s | %s | %s | %s | %s | %s | %s | %s |' % (i, stage_of.get(i, ''), cell('held', j), cell('gheld', j), cell('gsteps', j), cell('core', j),
-                                                       cell('wall', j), decide(o.metric, j)))
+                                                       cell('wall', j), decide(metric_of.get(i, o.metric), j)))
     print()
     print('Where each idea acts: stage metrics whose 95 % CI excludes zero, largest first (seconds per run, then relative).')
     print()
