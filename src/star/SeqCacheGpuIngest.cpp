@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -52,6 +53,11 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
     int codeOf[256];
     for (int k = 0; k < 256; k++) codeOf[k] = -1;
     for (int k = (int) std::max<uint32_t>(1, pl.qualCodes) - 1; k >= 0; k--) codeOf[pl.qualPhred[k]] = k;   // the first code of a Phred wins
+    // The quality column as stored (SINGLET_INGEST_QUAL_COPY=0: unpacked to Phred and packed again, as before): a byte of the .1fq's 2-bit
+    // codes (first base in the top bits) maps through one table to the byte of ours (first base in the low bits, codeOf of its Phred), and
+    // the bases per code come from a histogram of those bytes. A source table with a code outside codeOf decodes that block as before.
+    const char* qcE = std::getenv("SINGLET_INGEST_QUAL_COPY");
+    const bool qualCopy = !(qcE && qcE[0] == '0');
     const int T = std::max(1, std::min<int>(threads, (int) std::max<uint32_t>(1, nB)));
     std::atomic<uint32_t> next{0};
     std::atomic<bool> stop{false};
@@ -67,9 +73,28 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
     auto worker = [&](int tid) {
         uint64_t hist[4] = {0, 0, 0, 0};
         singlet::fq::DecodedBlock blk;
+        blk.keep_packed_qual = qualCopy;
+        const uint8_t* mapFor = nullptr;   // the source table qmap was built for
+        bool mapOk = false;
+        uint8_t qmap[256];
+        uint64_t bytesOf[256];
         for (uint32_t b; !stop && (b = next.fetch_add(1)) < nB;) {
             try {
                 runs.decode(b, blk);
+                if (!blk.r2_qual_packed.empty() && blk.r2_qual_packed_phred != mapFor) {
+                    mapFor = blk.r2_qual_packed_phred;
+                    int cOf[4];
+                    mapOk = true;
+                    for (int c = 0; c < 4; c++) { cOf[c] = codeOf[mapFor[c]]; mapOk = mapOk && cOf[c] >= 0; }
+                    if (mapOk)
+                        for (int v = 0; v < 256; v++)
+                            qmap[v] = (uint8_t) (cOf[(v >> 6) & 3] | cOf[(v >> 4) & 3] << 2 | cOf[(v >> 2) & 3] << 4 | cOf[v & 3] << 6);
+                }
+                if (!blk.r2_qual_packed.empty() && !mapOk) {   // a code outside the quality mode: decoded as before, which finds it if used
+                    blk.keep_packed_qual = false;
+                    runs.decode(b, blk);
+                    blk.keep_packed_qual = true;
+                }
             } catch (const std::exception& ex) {
                 fail(std::string("block ") + std::to_string(b) + ": " + ex.what());
                 return;
@@ -78,15 +103,43 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
             uint64_t r = pl.first[b], pos = pl.baseAt[b], k = 0;
             uint8_t* qd = out.qual.data() + out.qualAt[b];
             uint8_t qacc = 0;
+            const bool packedQ = !blk.r2_qual_packed.empty();
             const bool hasQ = !blk.r2_qual.empty();
+            const uint8_t* qs = packedQ ? blk.r2_qual_packed.data() : nullptr;   // the next read's packed quality
+            const uint8_t* qsEnd = qs + blk.r2_qual_packed.size();
+            if (packedQ) std::memset(bytesOf, 0, sizeof bytesOf);
             for (uint32_t i = 0; i < blk.n_reads; i++) {
                 const uint16_t L1 = blk.r1_len(i), L2 = blk.r2_len(i);
+                const uint8_t* q0 = qs;
+                if (packedQ) qs += singlet::fq::pack::packed_bytes(L2);   // every read's quality is stored, those not given to STAR too
                 if (L1 == 0 || L2 == 0) continue;   // not given to STAR (format_block)
                 if (r >= rEnd || pos + L2 > posEnd) { fail("block " + std::to_string(b) + " has more reads or bases than the head scan counted"); return; }
                 if (L1 != pl.r1L) { fail("barcode read length " + std::to_string(L1) + " in block " + std::to_string(b)); return; }
                 // cDNA: codes and offsets
                 std::memcpy(out.seq.data() + pos, blk.r2_seq(i), L2);
                 out.off[r + 1] = pos + L2;
+                if (packedQ) {
+                    if (qs > qsEnd) { fail("block " + std::to_string(b) + ": the quality column is shorter than its reads"); return; }
+                    // four bases per source byte; m codes of the current output byte are pending in qacc
+                    const unsigned m = (unsigned) (k & 3), sh = 2 * m;
+                    const uint32_t full = L2 >> 2, rem = L2 & 3;
+                    for (uint32_t j = 0; j < full; j++) {
+                        const uint8_t v = qmap[q0[j]];
+                        bytesOf[v]++;
+                        const uint32_t cmb = (uint32_t) qacc | (uint32_t) v << sh;
+                        qd[k >> 2] = (uint8_t) cmb;
+                        qacc = (uint8_t) (cmb >> 8);
+                        k += 4;
+                    }
+                    if (rem) {
+                        const uint8_t v = (uint8_t) (qmap[q0[full]] & ((1u << (2 * rem)) - 1));
+                        for (uint32_t j = 0; j < rem; j++) hist[(v >> (2 * j)) & 3]++;
+                        const uint32_t cmb = (uint32_t) qacc | (uint32_t) v << sh;
+                        if (m + rem >= 4) { qd[k >> 2] = (uint8_t) cmb; qacc = (uint8_t) (cmb >> 8); }
+                        else qacc = (uint8_t) cmb;
+                        k += rem;
+                    }
+                } else {
                 // cDNA quality: 2-bit codes (a read without stored quality is 'F', Phred 37, as format_block writes it)
                 const uint8_t* q = hasQ ? blk.r2_quality(i) : nullptr;
                 for (uint32_t j = 0; j < L2; j++) {
@@ -98,6 +151,7 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
                     if ((k & 3) == 3) { qd[k >> 2] = qacc; qacc = 0; }
                     k++;
                 }
+                }
                 // barcode read: 3-bit codes, 21 per word
                 const uint8_t* s1 = blk.r1_seq(i);
                 uint64_t* rw = out.r1.data() + r * out.r1w;
@@ -107,6 +161,9 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
                 r++;
             }
             if ((k & 3) != 0) qd[k >> 2] = qacc;
+            if (packedQ)
+                for (int v = 0; v < 256; v++)
+                    if (bytesOf[v]) for (int j = 0; j < 4; j++) hist[(v >> (2 * j)) & 3] += bytesOf[v];
             if (r != rEnd || pos != posEnd) { fail("block " + std::to_string(b) + " has fewer reads or bases than the head scan counted"); return; }
         }
         for (int c = 0; c < 4; c++) acc[tid].hist[c] = hist[c];
@@ -142,6 +199,14 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
     // the low-quality bits per quality code
     bool lowQ[4];
     for (int c = 0; c < 4; c++) lowQ[c] = (int) out.qualPhred[c] < cfg.minQ;
+    // and per quality byte (four codes, the first base in the low bits): the four bits (SINGLET_INGEST_QUAL_COPY=0: base by base, as before)
+    const char* qcE = std::getenv("SINGLET_INGEST_QUAL_COPY");
+    const bool lowTable = !(qcE && qcE[0] == '0');
+    uint8_t lowOf[256];
+    for (int v = 0; v < 256; v++) {
+        lowOf[v] = 0;
+        for (int j = 0; j < 4; j++) if (lowQ[(v >> (2 * j)) & 3]) lowOf[v] |= (uint8_t) (1u << j);
+    }
     const bool r11On = cfg.wl != nullptr && cfg.nWL > 0 && !layoutBad;
     std::vector<uint64_t> dense(r11On ? cfg.nWL : 0, 0);
     const int T = std::max(1, std::min<int>(cfg.threads, (int) std::max<uint64_t>(1, N / 4096)));
@@ -170,8 +235,26 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
                 for (uint32_t x = 0; x < nw; x++) q[x] = 0;
                 const uint64_t s0 = out.off[r], L = out.off[r + 1] - s0;
                 if (L > 64 * (uint64_t) nw) { acc[t].tooLong = true; continue; }
-                for (uint64_t j = 0; j < L; j++)
-                    if (lowQ[out.qcode(b, s0 + j)]) q[j >> 6] |= 1ull << (j & 63);
+                if (lowTable) {
+                    // the read's bases k0 .. k0 + L of its block: single bases up to a byte boundary, then a byte (four codes) at a time
+                    const uint64_t k0 = s0 - out.baseAt[b];
+                    const uint8_t* qb = out.qual.data() + out.qualAt[b];
+                    uint64_t j = 0;
+                    for (; j < L && ((k0 + j) & 3) != 0; j++)
+                        if (lowQ[out.qcode(b, s0 + j)]) q[j >> 6] |= 1ull << (j & 63);
+                    for (; j + 4 <= L; j += 4) {
+                        const uint64_t mk = lowOf[qb[(k0 + j) >> 2]];
+                        if (!mk) continue;
+                        const unsigned o = (unsigned) (j & 63);
+                        q[j >> 6] |= mk << o;
+                        if (o > 60) q[(j >> 6) + 1] |= mk >> (64 - o);
+                    }
+                    for (; j < L; j++)
+                        if (lowQ[out.qcode(b, s0 + j)]) q[j >> 6] |= 1ull << (j & 63);
+                } else {
+                    for (uint64_t j = 0; j < L; j++)
+                        if (lowQ[out.qcode(b, s0 + j)]) q[j >> 6] |= 1ull << (j & 63);
+                }
             }
             // R11 (hostloop_gpu.cu k_r11 on the same keys): a UMI without N that is not a homopolymer, an N-free CB exact in the whitelist.
             // The .1fq is barcode-sorted, so consecutive reads mostly share their CB: one whitelist lookup per run of equal keys.
