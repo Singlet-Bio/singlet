@@ -16,21 +16,23 @@ Each idea is decided on its own metric (column 6 of `ideas.tsv`, held device sec
 
 | tier | sample and shape | what it sees | cost of a 2^3 design, 2 blocks |
 |---|---|---|---|
-| S1 | pbmc2m, one run at a time, 3 runs per point | whole pipeline at small size | 33 min on an RTX 8000; H100 pending (item 60) |
-| S2 | pbmc2m, 4 in flight on 2 slots | concurrency | unusable on RTX and V100S (index exceeds a slot); H100 pending (item 61) |
-| S3 | pbmc1k_v3, one at a time, ends after STAR and the pileup (`maponly`) | size-dependent lane ideas | about 72 min on an H100 (item 62) |
+| S1 | pbmc2m, one run at a time, 3 runs per point | whole pipeline at small size | 33 min on an RTX 8000, 32 min on an H100 (item 60) |
+| S2 | pbmc2m, 4 in flight on 2 slots | concurrency | unusable on RTX and V100S (index exceeds a slot); 18 min on an H100 for one block (item 61) |
+| S3 | pbmc1k_v3, one at a time (`maponly` ends after STAR and the pileup on builds from 23f83010) | size-dependent lane ideas | 51 min on an H100 for one block of a 2^3 design, whole pipeline (item 62) |
 | FULL | pbmc1k_v3, 8 in flight on 2 slots | the campaign's tier 4 | 1.5 h per idea by seqstop, about 20 min per block |
 
-On the RTX 8000 the S1 tier runs at about 1% coefficient of variation within a cell on every metric, against 2.4 to 2.7% for core-s/M and 11 to 23% for the device metrics at tier 4. A 2^3 design with 2 blocks resolves effects of about ±1% on held device time, and a 2^4 screen of four ideas took 31 RTX-minutes and no H100 time.
+On the RTX 8000 the S1 tier runs at about 1% coefficient of variation within a cell on every metric, against 2.4 to 2.7% for core-s/M and 11 to 23% for the device metrics at tier 4. A 2^3 design with 2 blocks resolves effects of about ±1% on held device time, and a 2^4 screen of four ideas took 31 RTX-minutes and no H100 time. The H100 behaves the same way: item 60 decided three ideas in 32 minutes with intervals of ±0.4 to ±1.0% on held device time, about 11 H100-minutes per verdict against 90 minutes and ±2.8% for one full sequential A/B. S2 adds concurrency at the price of noise: one block of item 61 gave intervals of about ±5%, enough for the shared index (−29%) and too wide for small effects.
 
 ## Calibration against the H100 anchors
 
 | idea | H100 full A/B | RTX S1 | V100S S1 | H100 S1 / S3 |
 |---|---|---|---|---|
-| shared index | held −12.8%, index −65% | held −14.0%, index −81% | every run fell back (no room beside the holder) | pending |
-| WSHRINK | held −12.0%, lane B −41% | held −5.8%, lane B −44% | held −2.8% | pending |
-| retry off | no measurable cost | held −0.4% [−1.4, +0.6] | +2.2% | pending |
-| stepsauto | lane B +41%, held +7% | no effect (the split never triggers at pbmc2m size) | no effect | pending (S3) |
+| shared index | held −12.8%, index −65% | held −14.0%, index −81% | every run fell back (no room beside the holder) | S1 held −20.2% [−21.0, −19.4], index −85%; S2 −28.9% [−33.4, −24.2]; S3 −6.4% [−8.6, −4.4] |
+| WSHRINK | held −12.0%, lane B −41% | held −5.8%, lane B −44% | held −2.8% | S1 +0.9% [−0.1, +2.0], lane B −13%; S2 +2.0% [−2.7, +7.5]; S3 −1.6% [−3.7, +0.6], lane B −17%, host lane +1.65 s, core-s/M +3.3% |
+| retry off | no measurable cost | held −0.4% [−1.4, +0.6] | +2.2% | S1 −0.9% [−2.0, +0.1]; S2 −0.0% [−5.5, +5.0]; S3 +0.2% [−2.1, +2.5] |
+| stepsauto | lane B +41%, held +7% | no effect (the split never triggers at pbmc2m size) | no effect | not run |
+
+The short tiers agree with the full A/B on the shared index and the retry at every size and on both cards. They miss WSHRINK on the H100, and the stage timers say why. Run one at a time, WSHRINK moves part of lane B's work onto the host lane, so the device saves less than the host spends. Its full-A/B win comes from 8 runs sharing the device, where device time is the bottleneck and host work overlaps. An idea that trades device work for host work therefore needs a concurrent tier (S2 with more blocks, or the full A/B), and the report's stage lines flag such an idea: lane B falls while the host lane rises.
 
 The RTX S1 tier agrees with the H100 on direction and stage for every anchor and is within a factor of two on size, which makes it a good first screen: does the idea act, and where. It does not rank by size. Lane B's share of the hold differs between the cards: at full size WSHRINK shortens lane B by 41% on the H100 and leaves it unchanged on the RTX. Three classes of idea therefore need the H100: concurrency ideas (slots, MPS, admission), ideas that need the H100's memory (the shared index on a V100S, the resident non-host server anywhere else) and ideas whose effect depends on sample size (S3).
 
