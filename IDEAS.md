@@ -69,3 +69,12 @@ Only one device dedup is in the tree. #145's per-read dedup pass (`k_dd_flags`, 
 (`k_heads`, `k_readrep`, the dedup's products on the device) and E12's staged uploads. E12's host loops stay behind
 `SINGLET_ENGINE_GPU_DEDUP=host` and `SINGLET_ENGINE_GPU_CFG=old` as the opt-out. P3-MEM-03 adds the lean path's dedup by hash
 partition, which is a memory plan of the same dedup, not a second one. Nothing to delete.
+
+## Second architecture (T10): V100S and RTX 8000
+
+The engine builds unchanged for sm_70 and sm_75 (`CMAKE_CUDA_ARCHITECTURES="70;75;80;90"`, build 803592; no kernel uses an sm_80-only
+feature). At run time it declined every device below compute capability 8.0, so 8aa096b2 adds `SINGLET_ENGINE_GPU_MIN_CC` (default 80;
+70 admits Clipper's V100S and RTX 8000). With it, pbmc2m runs the whole GPU path (level 5, ingest, GPU pileup and non-host screen, no
+fallback) and is IDENTICAL to the CPU engine on both: RTX 8000 39.1 s and 126 core-s (803615), V100S 39.5 s and 157 core-s, device peak
+28.6 GB of 32 GB (803616), against 34.2 s and 121 core-s on an H100 NVL for the same engine (803549). The same outputs on three GPU
+architectures are evidence for T10. The 9-sample gate on each (803632, 803633) decides whether identity gates move off the H100s.
