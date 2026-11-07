@@ -1157,7 +1157,11 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!DR.init(std::max(1, std::min(16, hostThreads)))) return fail("page-locked staging buffers (D2H)");
         g_d2h = &DR;
     }
-    if (staged && (!SR.init(std::max(1, std::min(8, hostThreads))) || !SI.init(std::max(1, std::min(4, hostThreads / 4)))))
+    // The index stager's copy threads are set apart from T: hostThreads / 4 gave one thread at the pool's T5 to T7, so the 32 GB index went up
+    // through one memcpy thread and the device hold stretched with it. SINGLET_ENGINE_GPU_IDX_STAGERS=n overrides the default of 4 (1 to 16).
+    int idxStagers = 4;
+    if (const char* isE = std::getenv("SINGLET_ENGINE_GPU_IDX_STAGERS")) idxStagers = std::max(1, std::min(16, std::atoi(isE)));
+    if (staged && (!SR.init(std::max(1, std::min(8, hostThreads))) || !SI.init(idxStagers)))
         return fail("page-locked staging buffers");
     // ---- E17 (docs/gpu-engine/fable/E17-budget.md): the device memory budget (bytes; 0: none, E12's sizes) and the tally, which starts at this
     // process's context (at most 1 GB of what the device holds now: the rest is other processes'). Mode "normal" (as E12: the index uploaded during
