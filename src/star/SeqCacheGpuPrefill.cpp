@@ -1513,20 +1513,21 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (const char *t = getenv("SINGLET_ENGINE_GPU_OOM_TRIES")) oomTries = std::max(1, atoi(t));
     // E10's own out-of-memory turn-off fails the call too (in.oomFatal), on every attempt: a run that goes on without E10 after E8 built the
     // records on the device ends in the GPU pileup's hand-off error (pilot item 12-oom, run c7), while a failed call leaves every read to STAR.
-    // dmal's failures say "out of device memory". The waits (15, 30, 45 s) cover another slot's device hold (about 34 s per pbmc1k_v3 run).
-    auto oomLog = [](const std::string &l) { return l.find("out of memory") != std::string::npos || l.find("out of device memory") != std::string::npos; };
+    // Every failure but E17's budget stop is retried: on a full device CUDA does not always say out of memory (run c15 of 12-oom failed with an
+    // empty message at 51.5 GB in use by others), and a failure that repeats costs the waits, against minutes of STAR mapping every read.
+    // The waits (15, 30, 45 s) cover another slot's device hold (about 34 s per pbmc1k_v3 run).
     in.oomFatal = oomTries > 1;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
-    for (int a = 2; !ok && !out.budgetFail && a <= oomTries && oomLog(out.log); a++) {
+    for (int a = 2; !ok && !out.budgetFail && a <= oomTries; a++) {
         in.release();
         const int waitS = 15 * (a - 1);
-        P.inOut->logMain << "ENGINE_GPU: attempt " << a - 1 << " ran out of device memory; attempt " << a << " in " << waitS << " s. Its log:\n" << out.log << flush;
-        singlet_tail::mark("prefill: device out of memory, attempt %d in %d s", a, waitS);
+        P.inOut->logMain << "ENGINE_GPU: attempt " << a - 1 << " failed on the device; attempt " << a << " in " << waitS << " s. Its log:\n" << out.log << flush;
+        singlet_tail::mark("prefill: device attempt failed, attempt %d in %d s", a, waitS);
         std::this_thread::sleep_for(std::chrono::seconds(waitS));
         in.reacquire();
         if (e2hSaved) *e2r.hdr() = e2h0;
         out = singlet_engine_gpu::Output{};
-        out.log = "engine_gpu: OOM retry: attempt " + std::to_string(a) + " of " + std::to_string(oomTries) + "\n";
+        out.log = "engine_gpu: retry: attempt " + std::to_string(a) + " of " + std::to_string(oomTries) + "\n";
         ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     }
     in.release();
