@@ -18,6 +18,7 @@
 #include <thrust/sort.h>
 #include <thrust/unique.h>
 #include <algorithm>
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 namespace {
 
@@ -361,6 +362,7 @@ struct PassBufs {
 
 bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std::vector<uint64_t>&, std::vector<E2ECrVal>&)>& crTable,
              E2EPassOut& out) {
+    ::singlet::gpu_ledger::Phase ledger_phase("hand-off");
     out = E2EPassOut();
     auto now = [] { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); };
     const double t0 = now();

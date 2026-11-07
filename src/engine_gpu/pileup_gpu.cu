@@ -7,6 +7,7 @@
 #include "singlet/engine_gpu.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/tail_trace.h"   // E16: the level-5 switches (digest)
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 static_assert(sizeof(IV) == sizeof(singlet_engine_gpu::PileupIv), "IV layout");
 static_assert(sizeof(SnpRow) == sizeof(singlet_engine_gpu::PileupSnpRow), "SnpRow layout");
@@ -20,6 +21,7 @@ static void copyT3(const std::vector<T3>& a, std::vector<PileupTriplet>& b) {
 }
 
 bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
+    ::singlet::gpu_ledger::Phase ledger_phase("pileup");
     po = PileupOutput();
     const double t0 = now_s();
     // E16: wall time of each host-side step (the GPU time is po.msGpu); appended to po.log

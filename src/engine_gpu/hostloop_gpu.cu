@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cstring>
 #include <vector>
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 namespace {
 

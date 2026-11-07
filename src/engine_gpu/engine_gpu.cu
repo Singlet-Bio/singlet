@@ -11,6 +11,7 @@
 #include "stitch.cuh"
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
 #include "singlet/qmask_words.h"   // P3-ENG-14
+#include "singlet/nvtx.h"
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
 #include <cuda_runtime.h>
@@ -40,6 +41,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 using namespace m5;
 
@@ -1071,6 +1073,8 @@ __global__ void k_local_rr(const uint32_t* g, u64 n, uint32_t r0, uint32_t r1, u
 }
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
+    ::singlet::gpu_ledger::Phase ledger_phase("prefill");
+    singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");   // NVTX ranges of the phases (SINGLET_NVTX=1; the d164b34d ranges, redeveloped)
     std::string err;
     Stager SR, SI;   // E12: staged uploads of the reads (this thread) and of the index (idxTh); declared first: destroyed after the join
     D2H DR;          // E12: staged device -> host copies (g_d2h while mapDistinct runs)
@@ -1106,6 +1110,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     memMark("start");
     step("init");
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)
+    nvch.next("mapDistinct: index");
     const u64 PAD = 200;
     GenomeView D = H;
     char* dG1 = nullptr; u64* dSA = nullptr; u64* dSAi = nullptr;
@@ -1230,6 +1235,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     D.sjdbMotif = dsm; D.sjdbShiftLeft = dsl; D.sjdbShiftRight = dsr; D.sjdbStrand = dst;
     step("tables.h2d");
     // ---- reads
+    nvch.next("mapDistinct: reads");
     u64 n = in.off.size() - 1;
     out.nReads = n;
     char* dSeq = nullptr; u64* dOff = nullptr;
@@ -1431,6 +1437,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     singlet_engine_gpu::NoInitVector<uint32_t> readRep(n);
     if (!RC) {
     // ---- dedup
+    nvch.next("mapDistinct: dedup");
     t0 = now();
     u64 *dH1, *dH2; uint8_t* dN; uint32_t *dOrder, *dHead; unsigned long long* dColl;
     g_bud.at = "dedup";
@@ -1532,6 +1539,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     }
     } else {
     // ---- P3-MEM-03: the reads phase by read chunks (upload, CellRanger4 and STAR clip, E10's entries and masks into the region, R11, the
+    nvch.next("mapDistinct: reads by chunk (P3-MEM-03)");
     // hashes of the clipped reads to the host), then the dedup by hash partition (the sort and the group heads on the device, the byte-for-byte
     // check on the host). Only a chunk of reads, or a partition's keys, is on the device at a time; what follows is E17's lean mode, which
     // needs on the host what this leaves there: hcs / hoffC (the clipped spans), readRep, rep in sequence order, the entries in the region.
@@ -1675,6 +1683,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     out.secUpload = now() - tR0;
     step("rc.reads");
     // ---- the dedup by hash partition: partition p holds the reads whose h1 falls in [p, p+1) * 2^64 / NP, in read order
+    nvch.next("mapDistinct: dedup by partition");
     const double tD0 = now();
     t0 = tD0;
     const char* rpE = std::getenv("SINGLET_ENGINE_GPU_RPARTS");
@@ -1835,6 +1844,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     memMark("index+distinct");
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
+    nvch.next("mapDistinct: map chunks");
     u64 nGpuMapped = 0;
     // a chunk of distinct sequences in two halves: the device lanes (gpuPart, under the caller's device lock) and the host lane and records
     // (hostPart, after in.release(): they hold the GPU for nothing)
@@ -1948,6 +1958,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     std::function<bool()> drainB;
     auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
         // ---- lanes
+        SINGLET_NVTX("mapDistinct: lanes of one chunk (GPU)");
         double tc0 = now();
         Lane A, M, B;
         memMark("before-laneA");
@@ -2089,6 +2100,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     auto hostPrep = [&](ChunkRes& cr) -> bool {
         const std::vector<uint32_t>& repH = cr.repH;
         // ---- host lane (STAR's limits)
+        SINGLET_NVTX("mapDistinct: host lane of one chunk");
         double th0 = now();
         std::vector<std::vector<uint8_t>>& hout = cr.hout; std::vector<uint8_t>& hst = cr.hst;
         if (pool) {   // E12: mapped by the pool while the device ran; wait for what is left of this chunk

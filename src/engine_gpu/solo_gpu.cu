@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <unordered_map>
 #include <utility>
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 namespace e9 {
 namespace {
@@ -147,6 +148,7 @@ template <class T> E9HD inline u64 lowerBound(const T* a, u64 n, T x) {
 }  // namespace
 
 bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, bool keep, std::string& log) {
+    ::singlet::gpu_ledger::Phase ledger_phase("solo");
     try {
         using clk = std::chrono::steady_clock;
         auto t0 = clk::now();
@@ -704,6 +706,7 @@ bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecP
 void soloKeepRecordsEnd(double ms) { g_keep.recs = true; g_keep.msRecs = ms; }
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
                  std::string& log, const CbQualFn& cbQual) {
+    ::singlet::gpu_ledger::Phase ledger_phase("solo");
     SoloKeep& K = g_keep;
     if (K.toHost.joinable()) K.toHost.join();   // E15: the copy to the host is done (or failed: the arrays are still on the device)
     if (device >= 0 && cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); log += "soloRunKept: cannot select the device\n"; soloKeepRelease(); return false; }

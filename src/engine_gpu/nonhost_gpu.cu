@@ -27,6 +27,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 namespace {
 
@@ -270,6 +271,7 @@ unsigned ceil_log2(uint64_t v) { unsigned b = 0; while ((1ull << b) < v) ++b; re
 namespace singlet_engine_gpu {
 
 static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
+    ::singlet::gpu_ledger::Phase ledger_phase("nonhost");
     out = NonhostResult();
     const double t0 = now();
     singlet::NvtxChain nvch; nvch.next("nonhost: context");
