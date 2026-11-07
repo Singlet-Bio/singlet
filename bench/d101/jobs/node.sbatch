@@ -2,8 +2,8 @@
 #SBATCH --job-name=d101-node
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
-#SBATCH --exclusive
-#SBATCH --mem=0
+#SBATCH --cpus-per-task=28
+#SBATCH --mem=700G
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # All D-101 validation work as one dependency graph on one whole node (Clipper rule 2026-11-07: one node at a time, every core used).
@@ -14,7 +14,7 @@
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; J=$W/jobs/d101; LIBS=$J/libs.tsv
 BIN=${BIN:-$W/jobs/gpu-pr2/bin2/val-daaf9d80/singlet-gpu}
-NC=$(nproc); MEMG=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1048576 - 24 ))
+NC=$(nproc); MEMG=$(( ${SLURM_MEM_PER_NODE:-716800} / 1024 - 16 ))  # a share of one node: nproc and the Slurm memory limit, not the whole machine
 echo "node $(hostname) cpus $NC mem ${MEMG}G $(date -Is)"
 URL="$(git -C $W/repos/singlet-py.git config remote.origin.url)"
 TF=$J/state/tasks-$SLURM_JOB_ID.tsv; mkdir -p $J/state $J/tasklogs $J/results
