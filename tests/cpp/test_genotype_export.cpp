@@ -103,6 +103,31 @@ int main() {
     singlet::DemuxResult none;
     CHECK(G::write_donors_vcf(dir + "/none.vcf.gz", none, ad, dp, called, snps) == 0, "no donors");
 
+    // 2b. D-101 per-cell VCF: the panel set above plus an all-site set holding a duplicate of chr1:100 (written once, from the panel),
+    // a het site of donor0 (donor1 not called) and a site where donor1 is 0/0 and its cell carries one contradicting ALT UMI
+    {
+        for (uint32_t d = 0; d <= 60; ++d) for (uint32_t a = 0; a <= d; ++a) {
+            const std::string gt = G::donor_fields(a, d).substr(0, 3); const int g = G::donor_gt_index(a, d);
+            CHECK(gt == (g < 0 ? std::string("./.") : g == 0 ? std::string("0/0") : g == 1 ? std::string("0/1") : std::string("1/1")), "gt index " << a << "/" << d);
+        }
+        const std::vector<std::string> as = {"chr1:100:A>G", "chr1:150:G>T", "chr2:70:C>A"};
+        const CSC adp = from_dense({{9, 0, 9, 0, 0}, {20, 0, 3, 0, 0}, {30, 0, 30, 0, 0}});
+        const CSC aad = from_dense({{0, 0, 9, 0, 0}, {10, 0, 1, 0, 0}, {30, 0, 1, 0, 0}});
+        std::vector<G::SiteSet<CSC>> sets{{&ad, &dp, &snps, "panel"}, {&aad, &adp, &as, "allsite"}};
+        const long long n = G::write_cells_vcf(dir + "/cells.vcf.gz", dm, sets, called, bcs, {"chr1", "chr2"});
+        const std::string v = slurp_gz(dir + "/cells.vcf.gz");
+        const auto r = body_lines(v);
+        CHECK(n == 4 && r.size() == 4, "cells.vcf rows " << n);
+        CHECK(v.find("\tFORMAT\tAAA-1\tGGG-1\n") != std::string::npos, "cells.vcf columns");
+        if (r.size() == 4) {
+            CHECK(r[0] == "chr1\t100\tchr1:100:A>G\tA\tG\t.\tPASS\tDGT=0/0,1/1;SRC=panel\tGT:AD:DP:DC\t0/0:10,0:10:0\t1/1:0,10:10:0", "c0 " << r[0]);
+            CHECK(r[1] == "chr1\t150\tchr1:150:G>T\tG\tT\t.\tPASS\tDGT=0/1,./.;SRC=allsite\tGT:AD:DP:DC\t0/1:10,10:20:0\t./.:2,1:3:.", "c1 " << r[1]);
+            CHECK(r[2] == "chr2\t50\tchr2:50:G>A\tG\tA\t.\tPASS\tDGT=1/1,0/0;SRC=panel\tGT:AD:DP:DC\t1/1:0,5:5:0\t0/0:5,0:5:0", "c2 " << r[2]);
+            CHECK(r[3] == "chr2\t70\tchr2:70:C>A\tC\tA\t.\tPASS\tDGT=1/1,0/0;SRC=allsite\tGT:AD:DP:DC\t1/1:0,30:30:0\t0/0:29,1:30:1", "c3 " << r[3]);
+        }
+        CHECK(G::write_cells_vcf(dir + "/none_cells.vcf.gz", none, sets, called, bcs, {"chr1", "chr2"}) == 0, "cells.vcf without donors");
+    }
+
     // 3. owner-only private/: 0700 at creation, then every directory 0700 and file 0600 (files written with the usual 0644)
     {
         namespace fs = std::filesystem;
