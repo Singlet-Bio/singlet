@@ -20,14 +20,16 @@ tools). An axis fails when the whole interval of Singlet minus STARsolo lies on 
 
 ## What closed the gap (November 2026)
 
-Two causes made Singlet's barnyard and chrY counts worse than STARsolo's. The first was counting: a multimapper whose other
+Three causes made Singlet's barnyard and chrY counts worse than STARsolo's. The first was counting: a multimapper whose other
 alignment lay in another gene's intron was still counted, and an exon of a gene nested in another gene's intron took the read.
-`intron_rule::kGeneFullSet` (512, default rules 909) adopts GeneFull's gene set and removes both. The second was alignment.
-Singlet's STAR ran with `--outFilterScoreMin 10`, so after CellRanger4 clipping short cDNA reads kept 10 to 30 point
-alignments, and those carry wrong-species reads. STARsolo run at 10 (`run_starsolo.sbatch PROFILE=beta10`) rose to Singlet's
-wrong-species fraction, with the same number of wrong molecules. The Beta aligner profile now uses Cell Ranger's 30.
-Multi-gene UMI rules, UMI deduplication and barcode correction explain none of the gap (`sim_rules.py` replays them on a
-molecule dump). Dropping kUnique (908) adds wrong intronic multimappers, so it stays on.
+`intron_rule::kGeneFullSet` (512) adopts GeneFull's gene set and removes both. The second was alignment. Singlet's STAR ran
+with `--outFilterScoreMin 10`, so after CellRanger4 clipping short cDNA reads kept 10 to 30 point alignments, and those carry
+wrong-species reads. STARsolo run at 10 (`run_starsolo.sbatch PROFILE=beta10`) rose to Singlet's wrong-species fraction, with
+the same number of wrong molecules. The Beta aligner profile now uses Cell Ranger's 30. The third showed only on hgmm5k_v3,
+where Singlet counted fewer wrong-species molecules than STARsolo but 0.8% fewer molecules overall, which left its fraction just
+above. `intron_rule::kUmiGeneSpliced` (2048) closes it: a UMI seen in two genes of a cell keeps its winner only when the winner
+is spliced (`sim_rules.py` predicted the effect on a molecule dump before the change). The default rules are 2957 = 397 + 512 +
+2048. Dropping kUnique (908, or 1932) adds wrong intronic multimappers, so it stays on.
 
 | hgmm1k_v3 | rules 397, score 10 | 909, score 10 | 909, score 30 | STARsolo 2.7.11b |
 |---|---|---|---|---|
@@ -35,6 +37,16 @@ molecule dump). Dropping kUnique (908) adds wrong intronic multimappers, so it s
 | exon | 0.387% | 0.361% | 0.337% | 0.358% |
 | intron | 0.293% | 0.294% | 0.267% | 0.271% |
 | chrY per million | 8.2 | 2.2 | 2.0 | 5.2 |
+
+Default 2957 with score 30 against STARsolo (commit d25045fa; Singlet / STARsolo, paired 95% CI of the difference in
+`gate_results/` for the gated datasets):
+
+| dataset | X | exon | intron | chrY per million | CITE Spearman |
+|---|---|---|---|---|---|
+| hgmm1k_v3 | 0.321% / 0.328% | 0.336% / 0.358% | 0.265% / 0.271% | 2.0 / 5.2 | |
+| hgmm1k_v2 | 0.800% / 0.843% | 0.739% / 0.754% | 1.253% / 1.249% (within CI) | 3.1 / 6.3 | |
+| hgmm5k_v3 | 0.9443% / 0.9474% | 1.066% / 1.091% | 0.508% / 0.516% | 2.5 / 5.5 | |
+| pbmc1k_cite_v3 | | | | | 0.42755 / 0.42757 (within CI) |
 
 ## Files
 
