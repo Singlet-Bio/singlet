@@ -12,9 +12,15 @@
 #   ref/nonhost/{viral,bacterial,fungal}.snhskidx, host_21mer.bloom      non-host screen (see NONHOST below)
 #   pbmc1k_v3/pbmc1k_v3.1fq                                               10x "1k PBMCs v3", both lanes, encoded with singlet encode
 #
-# Optional sources (none has a default; nothing here needs credentials):
+# Clipper's STAR index and non-host indices are published as tars with a manifest (sources, licenses, build commands, checksums):
+#   https://data.singlet.bio/reference/v1/manifest.json
+# fetch.sh downloads both tars, checks their sha256 and unpacks them. Nothing here needs credentials. Optional overrides:
+#   PUB_REF_BASE       another prefix serving the same tars (default https://data.singlet.bio/reference/v1)
+#   STAR_INDEX_TAR_URL another tar of a ready star_2.7.11b/ directory (its checksum is then not checked)
+#   BUILD_STAR=1       build the STAR index with STAR instead of downloading it (about an hour; byte-identical to Clipper's only
+#                      with the same STAR build)
 #   NONHOST_BASE_URL   a URL prefix serving viral.snhskidx, bacterial.snhskidx, fungal.snhskidx (and optionally host_21mer.bloom)
-#   STAR_INDEX_TAR_URL a tar of a ready star_2.7.11b/ directory (skips the index build)
+#                      instead of the published tar
 #   ONEFQ_URL          a ready pbmc1k_v3.1fq (skips the FASTQ download and the encoding)
 #   JOBS               threads for STAR and the encoder (default: all cores)
 set -euo pipefail
@@ -31,6 +37,10 @@ mkdir -p "$G/fasta" "$G/genes" "$REF/pileup_indices" "$REF/nonhost" "$S1" "$SCRA
 REFDATA_URL=https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz          # state/reference-manifest-v1.yaml
 FASTQ_URL=https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar     # bench/pipeline/datasets.tsv
 SNP_URL=https://sourceforge.net/projects/cellsnp/files/SNPlist/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.vcf.gz/download   # bench/modalities/genotype_pool/fetch_convert.sbatch
+PUB_REF_BASE=${PUB_REF_BASE:-https://data.singlet.bio/reference/v1}
+STAR_TAR_URL=${STAR_INDEX_TAR_URL:-$PUB_REF_BASE/star_2.7.11b-GRCh38-2024-A.tar}
+STAR_TAR_SHA256=80b5aed9b8e48d4d270204bb35874175a713567084a816e69081a946ab2fc661; [ -z "${STAR_INDEX_TAR_URL:-}" ] || STAR_TAR_SHA256=""   # another tar: no published checksum
+NONHOST_TAR_URL=$PUB_REF_BASE/nonhost-refseq223.tar; NONHOST_TAR_SHA256=5c5dc7a2dd0b220aa5dd9a853a86ff3fe1950b83cd4283fd2c12e27bda9397dd
 PANEL=$REF/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz
 # Clipper's pbmc1k_v3.1fq (pipeline-benchmark/data/pbmc1k_v3): 66,601,887 reads, 134 blocks, 1,838,043,689 bytes, no base qualities
 CLIPPER_1FQ_READS=66601887; CLIPPER_1FQ_BYTES=1838043689
@@ -42,6 +52,17 @@ get() {   # get URL FILE: resumable download through a .part file
   log "download $url"
   curl -fL --retry 5 --retry-delay 10 -C - -o "$out.part" "$url"
   mv "$out.part" "$out"
+}
+get_tar() {   # get_tar URL SHA256 DIR: download, check the sha256 (when given), unpack into DIR, delete the tar
+  local url=$1 want=$2 dir=$3 f; f="$SCRATCH/$(basename "$url")"
+  get "$url" "$f"
+  if [ -n "$want" ]; then
+    log "sha256 $(basename "$f")"
+    local got; got=$(sha256sum "$f" | cut -d' ' -f1)
+    [ "$got" = "$want" ] || { log "CHECKSUM MISMATCH $(basename "$f"): $got, published $want"; rm -f "$f"; exit 1; }
+  fi
+  tar -xf "$f" -C "$dir" && rm -f "$f"
+  log "unpacked $(basename "$f") into $dir"
 }
 have_tools() { [ -n "$SINGLET_BIN" ] && [ -x "$SINGLET_BIN" ]; }
 star_cmd() { if command -v STAR >/dev/null; then echo STAR; else echo "$SINGLET_BIN star"; fi; }
@@ -81,29 +102,32 @@ download() {
     mv "$PANEL.part" "$PANEL"; rm -f "$SCRATCH/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.vcf.gz"
   fi
 
-  # 4. Non-host screening indices (NCBI RefSeq 223 sketches, built with singlet build-nonhost-db). TODO: the repository records no
-  #    public URL for them. Set NONHOST_BASE_URL once they are hosted, or copy them into $REF/nonhost/ by hand. Without them run.sh
-  #    turns the screen off and labels its results as not comparable to Clipper's default runs.
-  for f in viral.snhskidx bacterial.snhskidx fungal.snhskidx host_21mer.bloom; do
-    [ -s "$REF/nonhost/$f" ] && continue
-    if [ -n "${NONHOST_BASE_URL:-}" ]; then get "${NONHOST_BASE_URL%/}/$f" "$REF/nonhost/$f" || log "no $f at $NONHOST_BASE_URL"
-    fi
-  done
-  if [ ! -s "$REF/nonhost/viral.snhskidx" ] || [ ! -s "$REF/nonhost/bacterial.snhskidx" ] || [ ! -s "$REF/nonhost/fungal.snhskidx" ]; then
-    log "TODO non-host indices missing in $REF/nonhost (no public source in the repository; set NONHOST_BASE_URL or copy them)"
+  # 4. Non-host screening indices (NCBI RefSeq 223 sketches, built with singlet build-nonhost-db) and the host Bloom filter:
+  #    the published tar, or the files under NONHOST_BASE_URL. Without them run.sh turns the screen off and labels its results as
+  #    not comparable to Clipper's default runs.
+  if [ -n "${NONHOST_BASE_URL:-}" ]; then
+    for f in viral.snhskidx bacterial.snhskidx fungal.snhskidx host_21mer.bloom; do
+      [ -s "$REF/nonhost/$f" ] || get "${NONHOST_BASE_URL%/}/$f" "$REF/nonhost/$f" || log "no $f at $NONHOST_BASE_URL"
+    done
+  elif [ ! -s "$REF/nonhost/viral.snhskidx" ] || [ ! -s "$REF/nonhost/bacterial.snhskidx" ] || [ ! -s "$REF/nonhost/fungal.snhskidx" ]        || [ ! -s "$REF/nonhost/host_21mer.bloom" ]; then
+    get_tar "$NONHOST_TAR_URL" "$NONHOST_TAR_SHA256" "$REF"
   fi
+  if [ ! -s "$REF/nonhost/viral.snhskidx" ] || [ ! -s "$REF/nonhost/bacterial.snhskidx" ] || [ ! -s "$REF/nonhost/fungal.snhskidx" ]; then
+    log "non-host indices missing in $REF/nonhost"
+  fi
+
+  # 5a. Clipper's STAR 2.7.11b index (the published tar), unless BUILD_STAR=1
+  if [ ! -s "$G/star_2.7.11b/SA" ] && [ "${BUILD_STAR:-0}" != 1 ]; then get_tar "$STAR_TAR_URL" "$STAR_TAR_SHA256" "$G"; fi
 }
 
 prepare() {
   if ! have_tools; then log "prepare: no singlet binary (SINGLET_BIN); run 'fetch.sh prepare' inside the image"; return 0; fi
   local star; star=$(star_cmd)
 
-  # 5. STAR 2.7.11b index with Clipper's parameters (genomeParameters.txt of $REF/GRCh38-2024-A/star_2.7.11b on Clipper:
+  # 5b. STAR 2.7.11b index (BUILD_STAR=1, or the download step was skipped) with Clipper's parameters (genomeParameters.txt of $REF/GRCh38-2024-A/star_2.7.11b on Clipper:
   #    --genomeSAsparseD 2 --sjdbGTFfile genes.gtf, defaults otherwise: sjdbOverhang 100, genomeSAindexNbases 14)
   if [ ! -s "$G/star_2.7.11b/SA" ]; then
-    if [ -n "${STAR_INDEX_TAR_URL:-}" ]; then
-      get "$STAR_INDEX_TAR_URL" "$SCRATCH/star_2.7.11b.tar"
-      tar -xf "$SCRATCH/star_2.7.11b.tar" -C "$G" && rm -f "$SCRATCH/star_2.7.11b.tar"
+    if [ "${BUILD_STAR:-0}" != 1 ]; then get_tar "$STAR_TAR_URL" "$STAR_TAR_SHA256" "$G"
     else
       log "STAR genomeGenerate ($star, $JOBS threads)"
       rm -rf "$G/star_2.7.11b.tmp" "$SCRATCH/star_gg"; mkdir -p "$G/star_2.7.11b.tmp"
