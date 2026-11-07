@@ -316,6 +316,29 @@ inline void admitTurnstile(int device) {
     if (fd < 0) return;
     flock(fd, LOCK_SH); flock(fd, LOCK_UN); close(fd);
 }
+// Advisor pick 4: a waiter takes whichever slot frees first. The blocking wait on slot (pid mod slots) left a sample queued behind one holder
+// while another slot of the same device stood free. pollSlots tries every (device, slot) pair without blocking, passing each device's admission
+// turnstile first, and sleeps 10 ms (growing to 50 ms) between rounds. SINGLET_ENGINE_GPU_LOCK_POLL=0 restores the blocking wait.
+inline bool lockPollOn() { const char* e = std::getenv("SINGLET_ENGINE_GPU_LOCK_POLL"); return !(e != nullptr && e[0] == '0'); }
+inline int pollSlots(const std::vector<int>& devices, int slots, int* lockFd) {
+    auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
+    std::vector<int> fds(devices.size() * (size_t) slots, -1);
+    for (int round = 0;; round++) {
+        for (size_t i = 0; i < devices.size(); i++) {
+            admitTurnstile(devices[i]);
+            for (int k = 0; k < slots; k++) {
+                int& fd = fds[i * (size_t) slots + (size_t) k];
+                if (fd < 0) fd = open(lockPath(devices[i], k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+                if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) {
+                    *lockFd = fd;
+                    for (int& o : fds) if (o >= 0 && o != fd) close(o);
+                    return devices[i];
+                }
+            }
+        }
+        usleep((useconds_t) (1000 * std::min(50, 10 + 5 * round)));
+    }
+}
 inline int lockDeviceImpl(int* lockFd) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
@@ -332,6 +355,7 @@ inline int lockDeviceImpl(int* lockFd) {
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return device; }
             if (fd >= 0) close(fd);
         }
+        if (lockPollOn()) return pollSlots({device}, slots, lockFd);
         *lockFd = open(lockPath(device, (int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
         return device;
@@ -343,6 +367,7 @@ inline int lockDeviceImpl(int* lockFd) {
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
             if (fd >= 0) close(fd);
         }
+    if (lockPollOn()) { std::vector<int> all(nDev); for (int d = 0; d < nDev; d++) all[d] = d; return pollSlots(all, slots, lockFd); }
     device = (int) (getpid() % nDev);
     admitTurnstile(device);
     *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
@@ -383,6 +408,7 @@ inline void lockDeviceSlot(int device, int* lockFd) {
         if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return; }
         if (fd >= 0) close(fd);
     }
+    if (lockPollOn()) { pollSlots({device}, slots, lockFd); return; }
     *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
 }
