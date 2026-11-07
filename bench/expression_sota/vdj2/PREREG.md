@@ -195,3 +195,17 @@ and after, and the gap to TRUST4. A confirmation library that loses more than 0.
 **Held-out pass rule.** Correct pairing of Singlet minus TRUST4 on the fresh library, with its paired bootstrap 95% interval, passes
 when the difference is at least the negative half-width of that interval (the gate contract); wrong-lineage rate at most Cell Ranger's
 plus 0.005; contig F1 above TRUST4's. One run, no tuning afterwards, and the result is reported whichever way it falls.
+
+**Amendment to Addendum 5 (2026-11-07, before any run with the change): mutated Phe/Trp118 codon.** A diagnosis on the five development
+libraries (not on the confirmation libraries) shows that the terminal anchor of the assembly graph accepts only a Phe or Trp codon
+(TTT, TTC, TGG) followed by Gly-X-Gly (`_codon_at`, `which = 1`). Cell Ranger contigs whose last codon is something else (a somatic
+mutation of Phe118, for example Val `GTC` or Leu `CTT`) are 0.3 to 1.0% of the reference contigs of a library and none of them is
+assembled; they are 17 to 43% of the contigs Singlet misses outright. Reads covering the CDR3 of the missed chains exist in the
+library (a median of tens to hundreds). A third mechanism is therefore registered with the other two, default off until the rule is met:
+3. `asm_fw_relax` (False = off): when no offset (0, -1, +1) of the J-anchor diagonal carries a canonical Phe/Trp codon, the codon at
+   offset 0 is accepted if it is not a stop codon and the J motif continues (Gly at the next two bases, and Gly at +9 and +10 when the
+   read extends that far). The terminal still needs the UMI support it has now. Canonical codons are tried first, so a read that
+   has one keeps its terminal.
+Metrics, libraries, dev rule, confirmation and held-out rule are those of Addendum 5. The three mechanisms are tested one at a time
+and in combination on the development libraries; the setting with the highest pooled development pairing that meets the dev rule is
+taken. `productive` is unchanged (a contig without a Phe/Trp end stays non-productive).
