@@ -350,10 +350,22 @@ def write(segs: List[Segment], path: str, provenance: str = ""):
             )
 
 
-def load(path_or_species: str = "human") -> List[Segment]:
+def data_path(species: str = "human", cdr3_start: str = "first") -> str:
+    """Packaged reference of a species. For human, ``cdr3_start`` picks the junction start of V genes that end in two adjacent
+    Cys codons (IGLV2-11, IGLV2-23, IGKV2-14, ...): "first" (default; Cell Ranger >= 3.1, which the 10x 3.1.0 and 4.0.0 public
+    libraries show, and every later version) or "second" (Cell Ranger 3.0 and earlier tables, the IMGT-Cys104 of the older packaged file)."""
+    if cdr3_start not in ("first", "second"):
+        raise ValueError("cdr3_start must be 'first' or 'second'")
+    name = f"vdj_{species}"
+    if species == "human" and cdr3_start == "first":
+        name += "_imgtcys"
+    return os.path.join(os.path.dirname(__file__), "data", name + ".tsv.gz")
+
+
+def load(path_or_species: str = "human", cdr3_start: str = "first") -> List[Segment]:
     path = path_or_species
     if not os.path.exists(path):
-        path = os.path.join(os.path.dirname(__file__), "data", f"vdj_{path_or_species}.tsv.gz")
+        path = data_path(path_or_species, cdr3_start)
     out = []
     with gzip.open(path, "rt") as f:
         for ln in f:
