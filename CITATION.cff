@@ -8,8 +8,8 @@ authors:
     given-names: Zachary
     affiliation: "Grand Valley State University"
     email: debruinz@gvsu.edu
-version: 1.3.0
-date-released: 2026-10-29
+version: 1.3.4
+date-released: 2026-11-06
 license: MIT
 url: "https://singlet.bio"
 repository-code: "https://github.com/Singlet-Bio/singlet"

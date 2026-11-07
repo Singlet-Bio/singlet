@@ -4,6 +4,40 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.3.4] — 2026-11-06: the production engine on `main`
+
+The engine that processed Research Alpha and the Research Beta pilot (`prod/campaign`, #78) is now on `main`. The Python
+and R client APIs are unchanged from 1.3.3.
+
+- **Alignment and counting.** STAR's sorted BAM is replaced by an unsorted stream into the pileup for CB/UMI protocols
+  (#63; `--sorted-bam` opts out), with counts that no longer depend on the worker count (#152). The Beta aligner profile
+  adds Cell Ranger 4 clipping, a junction guard and a mismatch cap per protocol (#96), and splice junctions count only
+  uniquely mapped molecules (#140). Exon/intron counts keep the legacy split, and alevin-fry USA labels are published
+  as spliced, unspliced and ambiguous matrices (#128, #135, #165).
+- **Cell calling and per-cell features.** In called_v2 2.2, `is_cell` is the EmptyDrops_CR call, with extra low-RNA
+  calls in `called_lowrna` (#121, #164). Other per-cell additions are a frozen cross-study doublet stacker (#122),
+  per-cell ambient RNA estimates (#123, #176), a cell x gene reads-per-UMI matrix as a compact `.s1` member
+  (#129, #133, #139) and ancestry labels from a rule trained on 1000 Genomes (#146).
+- **Genotypes and donors.** The donor genotype call follows cellsnp-lite's posterior cut (#93, #115), and EM and donor
+  demultiplexing are deterministic (#86).
+- **Other modalities.** ATAC, Multiome and Visium processing and QC (#48), HTO demultiplexing (#87), CRISPR guide
+  matching (#91) and SPLiT-seq and inDrop geometry (#94). ADT, HTO, CRISPR, V(D)J, ATAC and spatial modalities are
+  registered (#149), and the `singlet.adt`, `singlet.vdj` and `singlet.crispr` packages are included without pipeline
+  wiring (#147).
+- **Non-host reads.** The screen keeps classified and EM-confirmed reads (#127, #142). The non-host index cache is now
+  copied in-process rather than through a shell command, which closes a CodeQL command-injection alert.
+- **Optional GPU engine.** `singlet --engine gpu` runs STAR's mapping and the pileup on CUDA with identical outputs
+  (#66, #95, #107, #109, #120, #125). It is off by default and needs a CUDA build.
+- **Robustness and throughput.** Fixes cover a FIFO race that gave STAR zero reads (#75), the stall watchdog in every
+  phase (#114) and wrong-strand libraries restarting on the sorted path (#117). The finalize step uses less memory
+  (#118), and protocol detection keeps trimmed 10x barcode reads as 10x (#124, #170). The scATAC whitelist ships
+  gzipped.
+- **Atlas re-run tooling** (`scripts/atlas_rerun`): per-run `.1fq` input (#82, #97), staged `.1fg2` encoding (#110), a
+  multi-sample GPU drain worker (#137, #148), companion-library fetch (#150) and immutable engine builds identified by
+  commit (#169).
+- **CI.** Python 3.9 is tested on `ubuntu-24.04` because `ubuntu-latest` (26.04) has no 3.9 toolchain, and one failing
+  Python version no longer cancels the others.
+
 ## [1.3.3] — 2026-10-30: `S1Cells` under forked DataLoader workers; more requests in flight
 
 - **`S1Cells` works with `DataLoader(num_workers > 0)` over HTTP.** Each worker forked from a process that had already
