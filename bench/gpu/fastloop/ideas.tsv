@@ -7,3 +7,4 @@ nhtries1	SINGLET_NONHOST_GPU_TRIES=1	-	non-host screen	IDEAS item 1 control: the
 stepsauto	SINGLET_ENGINE_GPU_STEPS_B=auto	-	lanes (heavy-read split)	IDEAS item 6	-
 screen	SINGLET_DEMUX_SCREEN=1	-	demux (host)	IDEAS item 7	core
 trace	SINGLET_ENGINE_GPU_TRACE=1	-	all (diagnostic)	IDEAS item 2: the transfer ledger	-
+nhsrv	-	-	non-host index upload (XC)	XC card (a): resident non-host index, singlet gpu-nhsrv; tp_gc starts it per point	-

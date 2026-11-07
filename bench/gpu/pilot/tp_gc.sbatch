@@ -157,13 +157,25 @@ holder_stop() {   # the shared-index holders this item started (their environmen
   done
   [ $n -gt 0 ]
 }
+nhsrv_start() {   # the non-host server of this point (XC card, `singlet gpu-nhsrv`): it keeps the screen's index on the device across runs
+  NHSRV_SOCK=/tmp/singlet-nhsrv-$RUNID.sock; rm -f $NHSRV_SOCK
+  RUNID=$RUNID $BIN gpu-nhsrv $NHSRV_SOCK 0 8 >> $RES0/nhsrv.log 2>&1 & NHSRV_PID=$!
+  local i; for i in $(seq 1 60); do [ -S $NHSRV_SOCK ] && break; sleep 0.5; done
+  [ -S $NHSRV_SOCK ] || { echo "!! non-host server did not start (see $RES0/nhsrv.log)" | tee -a $S; return 1; }
+  echo "non-host server pid $NHSRV_PID on $NHSRV_SOCK ($(date -Is))" | tee -a $S
+}
+nhsrv_stop() {
+  [ -n "${NHSRV_PID:-}" ] || return 1
+  kill $NHSRV_PID 2>/dev/null; wait $NHSRV_PID 2>/dev/null; rm -f $NHSRV_SOCK; NHSRV_PID=""; return 0
+}
 cfg_set() {
   # A config is one atom or several joined by '+' (bench/gpu/fastloop: stacked designs), for example wshrink+shidx+maponly. An atom is a
   # name below, a name from the idea registry FL_IDEAS (TSV: name, env switches or -, extra arguments or -, stage), or x:NAME=VALUE.
   # The shared-index holder, MPS and admission arms act on the whole node: in the pilot they need both GPUs (a g2 item). FL_SOLE=1 admits
   # them in a g1 item that is the only item on its node (the one-GPU pilot, a smoke node): every holder on the node counts in the budget.
-  case $1 in *shidx*|*mps*|adm*) [ "${PILOT_SHARED:-0}" = 1 ] && [ "${FL_SOLE:-0}" != 1 ] && { echo "!! config $1 needs the whole node (queue it as a g2 item)" >&2; return 1; } ;; esac
+  case $1 in *shidx*|*mps*|adm*|*nhsrv*) [ "${PILOT_SHARED:-0}" = 1 ] && [ "${FL_SOLE:-0}" != 1 ] && { echo "!! config $1 needs the whole node (queue it as a g2 item)" >&2; return 1; } ;; esac
   holder_stop && { sleep 3; echo "shared-index holder stopped before point cfg $1" | tee -a $S; }
+  nhsrv_stop && { sleep 2; echo "non-host server stopped before point cfg $1" | tee -a $S; }
   case $1 in *mps*) ;; *) stop_mps ;; esac
   CFG_ARGS=""; CFG_ENV=""; ARM_BIN=$BIN
   local a; for a in ${1//+/ }; do cfg_atom $a || return 1; done
@@ -174,7 +186,9 @@ cfg_atom() {
     local l; l=$(awk -F'\t' -v n="$1" '$1 == n' "$FL_IDEAS" | head -1)
     if [ -n "$l" ]; then
       local e g; e=$(cut -f2 <<<"$l"); g=$(cut -f3 <<<"$l")
-      [ "$e" = - ] || CFG_ENV+=" $e"; [ "$g" = - ] || CFG_ARGS+=" $g"; return 0
+      if [ "$e" != - ] || [ "$g" != - ]; then   # a row with neither only labels one of the atoms below (nhsrv: it starts a process)
+        [ "$e" = - ] || CFG_ENV+=" $e"; [ "$g" = - ] || CFG_ARGS+=" $g"; return 0
+      fi
     fi
   fi
   case $1 in
@@ -182,6 +196,7 @@ cfg_atom() {
     base) ;;
     shidx) CFG_ENV+=" SINGLET_GPU_SHARED_INDEX=1" ;;                                     # VMM shared genome index (holder per device)
     mpsshidx) CFG_ENV+=" SINGLET_GPU_SHARED_INDEX=1"; start_mps ;;
+    nhsrv) nhsrv_start || return 1; CFG_ENV+=" SINGLET_NONHOST_SERVER=$NHSRV_SOCK" ;;   # XC: resident non-host index (singlet gpu-nhsrv)
     stepsauto) CFG_ENV+=" SINGLET_ENGINE_GPU_STEPS_B=auto" ;;                            # heavy-read split controller
     steps[0-9]*) CFG_ENV+=" SINGLET_ENGINE_GPU_STEPS_B=${1#steps}" ;;
     trace) CFG_ENV+=" SINGLET_ENGINE_GPU_TRACE=1" ;;                                      # transfer ledger
@@ -464,5 +479,6 @@ if [ -n "${NSYS_ITEMS:-}" ]; then
 fi
 [ -n "${MPS_ON:-}" ] && { echo quit | nvidia-cuda-mps-control; echo "MPS daemon stopped" | tee -a $S; }
 holder_stop && echo "shared-index holder of this item stopped at the end" | tee -a $S
+nhsrv_stop && echo "non-host server of this item stopped at the end" | tee -a $S
 echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT scripts=$SCRIPTS" | tee -a $S
 echo done $(date -Is) | tee -a $S
