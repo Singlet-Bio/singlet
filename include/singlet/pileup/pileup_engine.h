@@ -25,6 +25,8 @@
 #include <map>
 #include <tuple>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
@@ -118,6 +120,9 @@ struct PileupConfig {
     std::string out_chrm_bam;       // Output: chrM BAM
     int threads = 4;
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
+    // R11 stream (cb_from_cr with a cb_corrector): a reader thread decodes the records and resolves their CB and barcode index ahead of
+    // the serial loop (PileupEngine::LookAhead). The loop sees the same records in the same order with the same CBs.
+    bool stream_lookahead = false;
     int min_mapq = 20;              // Minimum mapping quality
     int min_baseq = 10;             // Minimum base quality for the SNP pileup (there is no editing pileup)
     bool count_introns = true;      // Count intronic reads
@@ -728,7 +733,19 @@ public:
 #endif
         singlet_tail::mark("parent: stream loop starts");
         bool e16_first = singlet_tail::on();
-        while (sam_read1(fp, hdr, b) >= 0) {
+        bam1_t* const b_own = b;
+        std::unique_ptr<LookAhead> look;
+        if (config_.stream_lookahead && config_.cb_from_cr && config_.cb_corrector) {
+            look.reset(new LookAhead(*this, fp, hdr));
+            std::cerr << "[singlet-pileup] stream look-ahead: records decoded and CBs resolved on a reader thread\n";
+        }
+        auto next_record = [&]() -> bool {
+            if (!look) return sam_read1(fp, hdr, b) >= 0;
+            if (look->next(b, look_cur_)) return true;
+            look_cur_ = nullptr;
+            return false;
+        };
+        while (next_record()) {
             if (e16_first) { e16_first = false; singlet_tail::mark("parent: first BAM record"); }
             tee.write(hdr, b);
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -794,7 +811,7 @@ public:
                     // Inline CB scanner — same as primary path, avoids htslib call overhead
                     const char* cb_sec_str = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
                     if (cb_sec_str && cb_sec_str[0] != '-') {
-                        int32_t bc_check = bc_index_.lookup(cb_sec_str);
+                        int32_t bc_check = look_cur_ ? look_cur_->bc : bc_index_.lookup(cb_sec_str);
 
                         // All alignments of the same read share the same barcode.
                         // If barcode is invalid, no entry exists in mm_buffer.
@@ -878,7 +895,7 @@ public:
                 PROF_BAM_IO_RESTART;
                 continue;
             }
-            int32_t bc_idx = bc_index_.lookup(cb_str);
+            int32_t bc_idx = look_cur_ ? look_cur_->bc : bc_index_.lookup(cb_str);
             cur_read_gene_ = UINT32_MAX;
             if (bc_idx < 0) {
                 // N22: WL ambient profiling — accumulate gene hits from WL-only barcodes
@@ -1217,6 +1234,9 @@ public:
             PROF_BAM_IO_RESTART;
         }
         PROF_BAM_IO_ACCUM;  // account for last failed sam_read1
+        look_cur_ = nullptr;
+        b = b_own;
+        look.reset();   // stops and joins the reader (after a strand abort it may hold up to one more batch, unread)
 
         if (gpu_covers_) std::cerr << "[gpu_pileup] stream drained\n";   // S8: log timestamps place the post-stream steps
         singlet_tail::mark("parent: stream drained (%llu records)", (unsigned long long) stats.total_reads);
@@ -3348,6 +3368,10 @@ private:
     char cb_buf_[40] = {};
     uint64_t cb_status_[8] = {};   // index status + 4: -4 rejected, -3 bad UMI, -2 two N, -1 no match, 0 exact, 1 one, 2 posterior
     const char* stream_cb(const bam1_t* b, bool count) {
+        if (look_cur_) {   // resolved ahead by the stream reader (LookAhead): the same function of the same record
+            if (count) ++cb_status_[look_cur_->st_idx];
+            return look_cur_->ok ? look_cur_->cb : nullptr;
+        }
         const CbCorrector* cc = config_.cb_corrector;
         const char* cr = inline_scan_cb_from_cr(b, cc == nullptr);
         if (!cc) return cr;
@@ -3359,6 +3383,88 @@ private:
         cb_buf_[cc->length()] = '\0';
         return cb_buf_;
     }
+    // stream_cb()'s work for one record, done ahead of the loop: its tally slot, its CB, and that CB's barcode index.
+    struct LookRec { int32_t bc; int8_t st_idx; int8_t ok; char cb[40]; };
+    const LookRec* look_cur_ = nullptr;
+    void look_resolve(const bam1_t* b, LookRec& r) const {
+        const CbCorrector* cc = config_.cb_corrector;
+        r.ok = 0; r.bc = -1;
+        const char* cr = inline_scan_cb_from_cr(b, false);
+        if (!cr) { r.st_idx = 1; return; }
+        if (static_cast<int>(std::strlen(cr)) != cc->length()) { r.st_idx = 3; return; }
+        const int st = cc->resolve(cr, nullptr, r.cb);
+        r.st_idx = static_cast<int8_t>(st + 4);
+        if (st < 0) return;
+        r.cb[cc->length()] = '\0';
+        r.ok = 1;
+        r.bc = bc_index_.lookup(r.cb);
+    }
+    // The stream reader: decodes records into a ring of batches and resolves each one (look_resolve) on its own thread; next()
+    // hands the loop the records in stream order. Stopped and joined by stop() or the destructor.
+    struct LookAhead {
+        static constexpr size_t kBatches = 8, kRecs = 2048;
+        struct Batch { std::vector<bam1_t*> rec; std::vector<LookRec> look; size_t n = 0; bool last = false; bool full = false; };
+        const PileupEngine& eng; htsFile* fp; sam_hdr_t* hdr;
+        Batch ring[kBatches];
+        std::mutex mu; std::condition_variable cv_full, cv_free;
+        bool stop_ = false;
+        std::thread th;
+        uint64_t seq = 0; size_t pos = 0; Batch* cur = nullptr;
+        LookAhead(const PileupEngine& e, htsFile* f, sam_hdr_t* h) : eng(e), fp(f), hdr(h) {
+            for (auto& B : ring) {
+                B.rec.resize(kRecs); B.look.resize(kRecs);
+                for (auto& r : B.rec) r = bam_init1();
+            }
+            th = std::thread([this] { read(); });
+        }
+        ~LookAhead() {
+            stop();
+            for (auto& B : ring) for (auto* r : B.rec) bam_destroy1(r);
+        }
+        void read() {
+            for (uint64_t k = 0;; ++k) {
+                Batch& B = ring[k % kBatches];
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_free.wait(lk, [&] { return !B.full || stop_; });
+                    if (stop_) return;
+                }
+                B.n = 0; B.last = false;
+                while (B.n < kRecs) {
+                    if (sam_read1(fp, hdr, B.rec[B.n]) < 0) { B.last = true; break; }
+                    eng.look_resolve(B.rec[B.n], B.look[B.n]);
+                    ++B.n;
+                }
+                { std::lock_guard<std::mutex> lk(mu); B.full = true; }
+                cv_full.notify_one();
+                if (B.last) return;
+            }
+        }
+        // The next record and its resolved CB; false at the end of the stream.
+        bool next(bam1_t*& b, const LookRec*& lr) {
+            for (;;) {
+                if (cur && pos < cur->n) { b = cur->rec[pos]; lr = &cur->look[pos]; ++pos; return true; }
+                if (cur) {
+                    const bool last = cur->last;
+                    { std::lock_guard<std::mutex> lk(mu); cur->full = false; }
+                    cv_free.notify_one();
+                    cur = nullptr;
+                    if (last) return false;
+                    ++seq;
+                }
+                Batch& B = ring[seq % kBatches];
+                std::unique_lock<std::mutex> lk(mu);
+                cv_full.wait(lk, [&] { return B.full; });
+                cur = &B; pos = 0;
+            }
+        }
+        void stop() {
+            if (!th.joinable()) return;
+            { std::lock_guard<std::mutex> lk(mu); stop_ = true; }
+            cv_free.notify_all();
+            th.join();
+        }
+    };
     void report_cb_status() const {
         if (!config_.cb_corrector) return;
         std::cerr << "[cb-correct] primary records: exact=" << cb_status_[4] << " one_candidate=" << cb_status_[5]
