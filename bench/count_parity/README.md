@@ -18,11 +18,31 @@ Cells are the published Cell Ranger filtered barcodes, and purity comes from Cel
 `bench/exact_vs_pseudo/score.py`. Every interval is a paired bootstrap over cells (the same resampled cells for both
 tools). An axis fails when the whole interval of Singlet minus STARsolo lies on the worse side of zero.
 
+## What closed the gap (November 2026)
+
+Two causes made Singlet's barnyard and chrY counts worse than STARsolo's. The first was counting: a multimapper whose other
+alignment lay in another gene's intron was still counted, and an exon of a gene nested in another gene's intron took the read.
+`intron_rule::kGeneFullSet` (512, default rules 909) adopts GeneFull's gene set and removes both. The second was alignment.
+Singlet's STAR ran with `--outFilterScoreMin 10`, so after CellRanger4 clipping short cDNA reads kept 10 to 30 point
+alignments, and those carry wrong-species reads. STARsolo run at 10 (`run_starsolo.sbatch PROFILE=beta10`) rose to Singlet's
+wrong-species fraction, with the same number of wrong molecules. The Beta aligner profile now uses Cell Ranger's 30.
+Multi-gene UMI rules, UMI deduplication and barcode correction explain none of the gap (`sim_rules.py` replays them on a
+molecule dump). Dropping kUnique (908) adds wrong intronic multimappers, so it stays on.
+
+| hgmm1k_v3 | rules 397, score 10 | 909, score 10 | 909, score 30 | STARsolo 2.7.11b |
+|---|---|---|---|---|
+| X wrong-species | 0.367% | 0.347% | 0.322% | 0.328% |
+| exon | 0.387% | 0.361% | 0.337% | 0.358% |
+| intron | 0.293% | 0.294% | 0.267% | 0.271% |
+| chrY per million | 8.2 | 2.2 | 2.0 | 5.2 |
+
 ## Files
 
 - `run_singlet.sbatch`, `run_starsolo.sbatch`: one run per dataset on Clipper. STARsolo uses the flags of
   `bench/exact_vs_pseudo/run_dataset.sbatch`; `PROFILE=beta` adds Singlet's Beta aligner flags, which isolates counting.
 - `diagnose.py`: classifies wrong-species and chrY molecules by read class from a `SINGLET_MOLECULE_DUMP` table.
+- `sim_rules.py`: replays multi-gene UMI rules on a molecule dump. `deficit.py`: correct-species UMIs per gene that STARsolo
+  counts and Singlet does not. `compare_runs.sbatch`: byte identity of two runs' matrices (CPU vs GPU pileup).
 - `parity_score.py`: all axes, paired CIs, per-gene excess over STARsolo, gate verdict (exit 1 on a failed axis).
 - `gate.sbatch`, `gate_record.py`, `gate_check.py`, `counting_sources.txt`, `gate_results/`: the standing gate.
 

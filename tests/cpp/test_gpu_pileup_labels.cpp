@@ -3,7 +3,8 @@
 //
 // The GPU pileup (SINGLET_GPU_PILEUP=on, src/engine_gpu/gpu_pileup) against the CPU pileup on a synthetic BAM, under the default intron
 // rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer), under 389 (without kFlank), under 909 = 397 | 512 (kGeneFullSet) and
-// under 908 (kGeneFullSet without kUnique: a multimapper inside one gene body gives intronic evidence, as STARsolo GeneFull). Compared: the exon / intron /
+// under 908 (kGeneFullSet without kUnique: a multimapper inside one gene body gives intronic evidence, as STARsolo GeneFull) and under
+// 1933 = 909 | 1024 (kUmiGeneVelo: a multi-gene UMI also loses its unspliced molecule, as STARsolo Velocyto). Compared: the exon / intron /
 // ambiguous accumulators (to_csc: indptr, indices, data), the molecule stats (spliced, unspliced, ambiguous, legacy_double, dropped) and the
 // per-barcode legacy_exon_extra. The fixture is test_molecule_labels.cpp's (G1 exon1 / intron / exon2, nested G2, G3; M1-M9) plus reads
 // for the alevin-fry USA labels (the CIGAR-N bit), kFlank (5 and 6 intronic bases), the kUnique / kNoSplicedIntron order and the legacy
@@ -101,6 +102,11 @@ bool write_inputs(const std::string& dir) {
     f << sam_line("gfd", 0, "chr2", 100, 3, "10M", 10, "GTGTCACACA", 3);
     f << sam_line("gfd", 256, "chr2", 560, 3, "10M", 10, "GTGTCACACA", 3);
     f << sam_line("gfd", 256, "chr1", 268, 3, "10M", 10, "GTGTCACACA", 3);
+    // a multi-gene UMI: two intronic reads in G1 (unspliced, 2 reads) and one exonic read in G3 (1 read). kUmiGeneCR keeps G1's
+    // unspliced molecule and drops G3's; kUmiGeneVelo (1024) drops G1's as well
+    f << sam_line("mga", 0, "chr1", 268, 255, "10M", 10, "TGCATGCATG");
+    f << sam_line("mgb", 0, "chr1", 272, 255, "10M", 10, "TGCATGCATG");
+    f << sam_line("mgc", 0, "chr2", 510, 255, "10M", 10, "TGCATGCATG");
     f.close();
     const std::string cmd = "samtools sort -o " + dir + "/t.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/t.bam";
     return std::system(cmd.c_str()) == 0;
@@ -181,7 +187,7 @@ int main(int argc, char** argv) {
     self[n] = 0;
 
     std::map<uint32_t, std::map<std::string, std::string>> cpu_by_rules;
-    for (uint32_t rules : {397u, 389u, 397u | 512u, 908u}) {
+    for (uint32_t rules : {397u, 389u, 397u | 512u, 908u, 1933u}) {
         const std::string tag = "rules " + std::to_string(rules);
         std::cout << "\n=== " << tag << " ===\n";
         const std::string cpu = run_dump(dir, rules);
@@ -221,6 +227,12 @@ int main(int argc, char** argv) {
         CHECK(field(b, "unspliced") == field(a, "unspliced") + 1, "908: one more unspliced molecule than 909 (m8)");
         CHECK(field(b, "spliced") + field(b, "unspliced") + field(b, "ambiguous") == field(a, "spliced") + field(a, "unspliced") + field(a, "ambiguous") + 1,
               "908: one more molecule than 909 (muf)");
+    }
+    {   // kUmiGeneVelo (1933 vs 909): the multi-gene UMI's unspliced winner (mga + mgb) is dropped too
+        const auto& a = cpu_by_rules[397u | 512u].at("molecules"); const auto& b = cpu_by_rules[1933].at("molecules");
+        CHECK(field(a, "dropped") >= 1, "909: kUmiGeneCR drops the multi-gene UMI's G3 molecule");
+        CHECK(field(b, "unspliced") + 1 == field(a, "unspliced"), "1933: one unspliced molecule fewer than 909");
+        CHECK(field(b, "dropped") == field(a, "dropped") + 1, "1933: one more dropped molecule than 909");
     }
     {   // kFlank moves exactly one molecule (f5) from the intron to the exon matrix; the 6-base read and the dropped multimapper do not move
         const auto& a = cpu_by_rules[397]; const auto& b = cpu_by_rules[389];
