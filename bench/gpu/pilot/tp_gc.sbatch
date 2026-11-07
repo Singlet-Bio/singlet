@@ -62,12 +62,13 @@ POINTS=(${POINTS:-k1t28s1 k2t14s1 k3t9s1 k4t7s1});
 # SEQAB=A:B (tier 4, sequential stopping): instead of POINTS, blocks of points A B B A, each SEQTAG (default k8t7s2r1: one round of 8
 # runs), until bench/gpu/seqab/seqstop.py decides WIN, RULED-OUT or INCONCLUSIVE at SEQCAP runs per arm (default 40). SEQMETRIC (core |
 # held) is the primary metric and SEQTHETA (default 0.03) the smallest improvement of B worth adopting.
-SEQN=0
+SEQN=0; SEQSCHED=0   # blocks so far; runs scheduled per arm
 seq_block() {   # sets SEQNEXT to the next block's point tags (no subshell: SEQN counts blocks); the last block before the cap is A B
   local a=${SEQAB%%:*} b=${SEQAB##*:} t=${SEQTAG:-k8t7s2r1} per k
-  k=${t#k}; k=${k%%t*}; per=$(( SEQN * 2 * k ))
-  if [ $(( per + 2 * k )) -gt ${SEQCAP:-40} ]; then SEQN=$((SEQN + 1)); SEQNEXT="$t@$a#s$SEQN $t@$b#s$SEQN"
-  else SEQN=$((SEQN + 1)); SEQNEXT="$t@$a#s${SEQN}a $t@$b#s${SEQN}a $t@$b#s${SEQN}b $t@$a#s${SEQN}b"; fi
+  k=${t#k}; k=${k%%t*}; SEQNEXT=
+  [ $SEQSCHED -ge ${SEQCAP:-40} ] && return 0   # cap reached: no further block, even when failed runs left an arm short
+  if [ $(( SEQSCHED + 2 * k )) -gt ${SEQCAP:-40} ]; then SEQN=$((SEQN + 1)); SEQSCHED=$((SEQSCHED + k)); SEQNEXT="$t@$a#s$SEQN $t@$b#s$SEQN"
+  else SEQN=$((SEQN + 1)); SEQSCHED=$((SEQSCHED + 2 * k)); SEQNEXT="$t@$a#s${SEQN}a $t@$b#s${SEQN}a $t@$b#s${SEQN}b $t@$a#s${SEQN}b"; fi
 }
 [ -n "${SEQAB:-}" ] && { seq_block; POINTS=($SEQNEXT); }
 SAMPLE=${SAMPLE:-pbmc1k_v3}; MIX=(${MIX:-pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2})
@@ -401,7 +402,9 @@ while [ $pi -lt ${#POINTS[@]} ]; do pp=${POINTS[$pi]}; pi=$((pi + 1))
   for kv in $CFG_ENV; do unset "${kv%%=*}"; done
   if [ -n "${SEQAB:-}" ] && [ $pi -eq ${#POINTS[@]} ]; then
     dec=$(python3 $W/jobs/gpu-campaign/seqstop.py --res $RES0 --a ${SEQAB%%:*} --b ${SEQAB##*:} --metric ${SEQMETRIC:-core} --theta ${SEQTHETA:-0.03} --cap ${SEQCAP:-40} 2>&1 | tee -a $S | awk '/^DECISION/{print $2}')
-    if [ "$dec" = CONTINUE ]; then seq_block; POINTS+=($SEQNEXT); echo "seqstop: next block ${POINTS[*]:$pi}" | tee -a $S
+    [ "$dec" = CONTINUE ] && seq_block
+    if [ "$dec" = CONTINUE ] && [ -n "$SEQNEXT" ]; then POINTS+=($SEQNEXT); echo "seqstop: next block ${POINTS[*]:$pi}" | tee -a $S
+    elif [ "$dec" = CONTINUE ]; then echo "seqstop: stopped with INCONCLUSIVE (cap of ${SEQCAP:-40} runs per arm scheduled; failed runs left an arm short) after $SEQN blocks" | tee -a $S $RES0/seqstop.txt
     else echo "seqstop: stopped with $dec after $SEQN blocks" | tee -a $S $RES0/seqstop.txt; fi
   fi
 done

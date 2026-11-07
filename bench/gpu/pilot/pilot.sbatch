@@ -19,7 +19,8 @@
 # in filename order. A g1 item takes the first free GPU; a g2 item waits until both GPUs are free, and no g1 item behind it starts first.
 # Each item runs as its own srun step (its own cgroup, so CPU and memory accounting stay per item) with these variables set:
 #   PILOT=1 PILOT_JOB PILOT_NODE PILOT_GPU (0, 1 or both) PILOT_SHARED (1 while the other GPU may be busy) RUNID=<job>-g<gpu>-<name>
-#   and for a g1 item PINDEV=<gpu> CUDA_VISIBLE_DEVICES=<gpu>.
+#   and for a g1 item PINDEV=0 CUDA_VISIBLE_DEVICES=0: the step's cgroup exposes only the GPU Slurm gave it, which CUDA numbers 0
+#   (CUDA_VISIBLE_DEVICES=1 there names no device, and every run fell back to the CPU: pilot 803591, item 11-fb-b).
 # An item may declare "# PILOT-MINUTES: <n>" (default 240); it is not started when less time than that is left in the allocation.
 # Touch $QUEUE/STOP to end the pilot after the running items finish.
 set -uo pipefail
@@ -55,7 +56,7 @@ launch() {   # launch <lane> <item>
   if [ $(( $(date +%s) + mins * 60 )) -gt $END ]; then log "skip $it: needs $mins min, $(( (END - $(date +%s)) / 60 )) left"; return 1; fi
   mv $Q/new/$it $Q/running/$it
   if [ $l = both ]; then c=$NCPU; m=$((MEMG - 10)); g=2; env="PILOT_GPU=both PILOT_SHARED=0 RUNID=$SLURM_JOB_ID-gboth-$name"
-  else c=$HALF; m=$HALFMEM; g=1; env="PILOT_GPU=$l PILOT_SHARED=1 PINDEV=$l CUDA_VISIBLE_DEVICES=$l RUNID=$SLURM_JOB_ID-g$l-$name"; fi
+  else c=$HALF; m=$HALFMEM; g=1; env="PILOT_GPU=$l PILOT_SHARED=1 PINDEV=0 CUDA_VISIBLE_DEVICES=0 RUNID=$SLURM_JOB_ID-g$l-$name"; fi
   { echo "pilot job=$SLURM_JOB_ID node=$NODE gpu=$l item=$it cpus=$c mem=${m}G start=$(date -Is)"
     echo "env $env"; } > $Q/done/$name.log
   srun --exact -N1 -n1 -c $c --mem=${m}G --gres=gpu:nvidia_h100_nvl:$g --job-name=$name \

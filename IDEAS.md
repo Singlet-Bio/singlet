@@ -1,8 +1,10 @@
 # Ideas from the unmerged GPU branches: verdicts
 
 Each idea below was developed on a branch that never merged. It was redeveloped on `gpu/frontier`, tested, and adopted, kept off by default,
-or rejected. Rates name the sample, binary, node, GPU count and baseline. Every timing ran inside one Slurm job on one pinned H100 NVL
-(`CUDA_VISIBLE_DEVICES=0`) in an A/B/B/A design, with the fixed reference binary b0 = gpu/frontier at 9560b8db where a b0 arm is named.
+or rejected. Rates name the sample, binary, node, GPU count and baseline. Timing runs in an A/B/B/A design inside one Slurm job, with the
+fixed reference binary b0 = gpu/frontier at 9560b8db where a b0 arm is named. From the GPU pilot (`bench/gpu/pilot/`) on, each point runs
+on one pinned H100 NVL and its log shows the pin check. Earlier timing jobs exported `CUDA_VISIBLE_DEVICES=0`, but it never reached the
+runs, so their rates are per node with two GPUs.
 Identity means the 9-sample gate (`pr2-gate.sbatch`: out_equiv over every output, the ten Solo files, the mapping statistics, SJ.out.tab,
 the read files by sorted records, CellReads.stats by sorted rows) of the GPU engine against the CPU engine. Job logs are on Clipper under
 `$WORK/logs/`, harness results under `$WORK/jobs/gpu-integ/results/tp-<job>/` and `$WORK/jobs/gpu-campaign/results/`.
@@ -11,7 +13,7 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 
 | # | Idea | Source branch, tip | Verdict | Switch |
 |---|---|---|---|---|
-| 1 | Non-host GPU screen falls back to the CPU | bug, no branch | pending | `SINGLET_NONHOST_GPU_TRIES` |
+| 1 | Non-host GPU screen falls back to the CPU | bug, no branch | resolved: device wandering, gone on a pinned GPU; retry kept on | `SINGLET_NONHOST_GPU_TRIES` |
 | 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | adopted, off by default (diagnostic) | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
 | 3 | 512-base lift and lean-path memory (P3-MEM-03) | `perf/gpu-device`, a462be4d; `gpu/frontier-fold-device`, 7cc07dd4 | adopted: identical, cost-neutral, 1.2 G reads fit one H100 | default |
 | 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | pending | `SINGLET_GPU_SHARED_INDEX=1` |
@@ -21,6 +23,37 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 | 8 | WSHRINK | in the tree | pending | `SINGLET_BOLD_WSHRINK=1` |
 | 9 | k_resolve exon-multimapper fix | no source | pending | |
 | 10 | One device dedup | E12 and #145 | resolved: one remains | |
+| 11 | Prefill out of memory at 2 slots per GPU | bug, found by item 1 | open: confounds every 2-slot A/B | |
+
+## 1. Non-host GPU screen falls back to the CPU
+
+On the unpinned timing job 803458 (80 runs per arm on both GPUs of g051) the non-host screen fell back to the CPU in 14 runs with its OOM
+retry on, 31 with it off and 26 on b0. Every recovered run succeeded on its third attempt. Those jobs exported `CUDA_VISIBLE_DEVICES=0`,
+but the variable never reached the runs, so their processes spread over both GPUs and the screen's 26.5 GB index upload could land on a
+device that another process had just filled.
+
+On one truly pinned GPU the screen never falls back. Pilot 803591 (g051, GPU 0, binary 4ea9d1e9, item 10-fb-a) ran four points of 40
+pbmc1k_v3 runs at 8 in flight and 2 slots, A/B/B/A with the retry on (`base`) and off (`SINGLET_NONHOST_GPU_TRIES=1`). The pin check
+confirmed that every copy used GPU 0, and none of the 160 runs had a non-host fallback. The retry costs nothing measurable: on 803458,
+core-seconds per million read pairs with the retry off against on are +0.17 % [-0.75, +1.06] (paired bootstrap, 95 %), ruled out at a 3 %
+threshold.
+
+Verdict: the bug was device wandering on a two-GPU node, fixed by pinning. The retry stays on by default as a guard for a shared GPU.
+
+The same points expose a different fallback, which is item 11.
+
+## 11. Prefill out of memory at 2 slots per GPU
+
+In pilot item 10-fb-a, 8 of the 160 runs (2, 1, 2 and 3 per point) lost the GPU in the prefill, before mapping started: `cudaDeviceSetLimit
+(cudaLimitStackSize, ...)`, `dmal(&dWork, ...)` or an empty CUDA message, all out of memory. STAR then maps every read of that sample on
+the CPU, which takes 620 to 700 s against a mean of 265 s, so one such run sets the span of its point. The span rate per GPU tracks the
+count: 1.887 and 1.847 M read pairs/s for the points with 2 and 3 fallbacks, 1.974 and 1.975 for those with 1 and 2. In the 8-run blocks
+of the WSHRINK A/B (item 20-wsh-seq) a single fallback halves the span rate, and the host copy of the genome that a fallback run loads
+pushed the 340 GB step over its memory limit five times. Every A/B at 2 slots on a pinned GPU is confounded until this is fixed.
+
+The likely cause is the E17 budget: each of the 2 slots gets (total - 2 GB)/2 of device memory, while the non-host screen's 24.9 GB index
+sits outside the budget. With two samples in flight, a prefill that starts while the other slot holds the screen's index finds less memory
+than its budget promised.
 
 ## 2. Transfer ledger and NVTX ranges
 
