@@ -1989,6 +1989,29 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        // ── Write nonhost_candidates.tsv: every species the EM gives at least 10 reads, before the report thresholds ──
+        // (em_result above keeps only species with a mean hit rate of 0.30 and max(500, 0.5%) reads; the calibration of the infection probability
+        // and any taxon-specific check of a negative library need the evidence below those thresholds as well)
+        {
+            std::filesystem::create_directories(out_prefix + "/nonhost");
+            int cand_iter = 0;
+            auto cand = em_deconvolve(multi_hits, kingdom_map, /*max_iter=*/500, /*tol=*/1e-6f, /*min_abundance=*/0.0f,
+                                      /*min_prefilter_hr=*/0.05f, /*min_report_hr=*/0.0f, &cand_iter, /*min_abs_reads=*/10u);
+            std::unordered_set<uint32_t> confirmed_ids;
+            for (const auto& sa : em_result) confirmed_ids.insert(sa.species_id);
+            std::ofstream ctsv(out_prefix + "/nonhost/nonhost_candidates.tsv");
+            ctsv << "kingdom	species_id	species_name	reads_assigned	screened_reads	relative_abundance	mean_hit_rate	em_confirmed
+";
+            for (const auto& sa : cand) {
+                const char* kname = sa.kingdom == NonHostCategory::VIRAL ? "VIRAL" : sa.kingdom == NonHostCategory::BACTERIAL ? "BACTERIAL"
+                                  : sa.kingdom == NonHostCategory::FUNGAL ? "FUNGAL" : "UNKNOWN";
+                ctsv << kname << "	" << sa.species_id << "	" << species_name_lookup(sa.species_id) << "	" << sa.n_reads_assigned << "	"
+                     << n_total << "	" << std::fixed << std::setprecision(6) << sa.relative_abundance << "	" << sa.mean_hit_rate << "	"
+                     << (confirmed_ids.count(sa.species_id) ? 1 : 0) << "
+";
+            }
+        }
+
         // ── Write nonhost_em_abundance.tsv ───────────────────────────────────
         {
             std::filesystem::create_directories(out_prefix + "/nonhost");
