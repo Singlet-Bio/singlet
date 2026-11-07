@@ -82,8 +82,7 @@ struct ExportTimer {
     ~ExportTimer() {
         if (!on) return;
         const double w = std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count();
-        std::fprintf(stderr, "[export-timing] %s:%d wall %.2f s, thread cpu %.2f s
-", file, line, w, thread_cpu_s() - c0);
+        std::fprintf(stderr, "[export-timing] %s:%d wall %.2f s, thread cpu %.2f s\n", file, line, w, thread_cpu_s() - c0);
     }
     ExportTimer(const ExportTimer&) = delete;
     ExportTimer& operator=(const ExportTimer&) = delete;
@@ -108,8 +107,7 @@ struct PhaseClock {
     void flush() {
         if (!cur) return;
         const double w = std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count();
-        std::fprintf(stderr, "[export-timing] phase \"%s\": wall %.2f s, process cpu %.2f s
-", cur, w, process_cpu_s() - c0);
+        std::fprintf(stderr, "[export-timing] phase \"%s\": wall %.2f s, process cpu %.2f s\n", cur, w, process_cpu_s() - c0);
         cur = nullptr;
     }
     void next(const char* name) {
