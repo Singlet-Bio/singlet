@@ -48,6 +48,31 @@ and the top-level `donor_assignments.tsv` (no longer a header-only stub).
 | `nonhost/nonhost_per_cell.*` | table | written on a fresh output directory; only EM-confirmed species are counted per cell | `nonhost_summary.json` adds `per_cell_species` and `missing_reference_fasta` |
 | `nonhost/nonhost_confirmed_reads.bin` | binary (`SNCR` v1, `include/singlet/pileup/nonhost/nonhost_confirmed_reads.h`) | the cDNA reads (2-bit) with cell barcode, UMI and species id of EM-confirmed non-host species only; written only when `em_species_count > 0` and the host Bloom filter is loaded, and never a read with a host k-mer; absent on uninfected samples | the one place sequenced reads are kept |
 
+## Reads-per-UMI (Beta freeze, D-101)
+
+Reads are deleted after the Beta campaign, so the number of reads behind each molecule is kept with the counts. The engine writes
+three members whenever UMI collapse and a gene model are on (`--no-reads-matrix` turns them off). CPU and GPU outputs are byte
+identical (frontier gate 803937, pbmc1k_v3).
+
+| Output | Kind | What | In the `.s1` |
+|---|---|---|---|
+| `exon_reads.1pz`, `intron_reads.1pz` | matrix, same rows, columns and nonzeros as `exon_counts` / `intron_counts` | reads merged into each counted entry (uint32) | as `exon_reads_delta.bin` / `intron_reads_delta.bin`: reads minus UMIs on the called cells' nonzeros (`singlet.s1.readsvals.reads_matrix` rebuilds the matrix); the full matrices stay in the run directory |
+| `reads_per_umi_hist.tsv.gz` | table, one row per barcode | molecules with 1 to 15 reads and with 16 or more (`n1` .. `n15`, `n16plus`), over every molecule the counts emit (exon and intron) | member `reads_per_umi_hist`, called cells only (`bundle._reads_member`, `scripts/s1_campaign.py` `MODALITY_MEMBERS`) |
+
+Validation against Cell Ranger 3.0's `molecule_info.h5` read counts on pbmc1k_v3, over the 1,217 cells both callers keep
+(`bench/readlevel/rpu_vs_molinfo.py`, `bench/readlevel/README.md`):
+
+| Metric | Engine | Cell Ranger |
+|---|---|---|
+| Median of the per-cell mean reads per UMI | 3.59 | 3.65 |
+| Molecules with one read | 21.6% | 20.9% |
+| Sequencing saturation over these cells | 71.6% | 72.2% |
+| Per-cell mean reads per UMI, Pearson / Spearman | 0.967 / 0.961 | |
+| Pooled histogram, total variation distance | 0.014 | |
+
+The engine counts 1.48 times as many molecules per cell because its histogram includes intronic molecules, which Cell Ranger
+3.0 leaves out.
+
 ## Pipeline defaults that changed
 
 | Default | Before | Now | Why |
