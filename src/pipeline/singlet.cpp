@@ -8098,7 +8098,10 @@ static int singlet_main(int argc, char* argv[]) {
             // Score filter: absolute min=10 covers short-read protocols (e.g. DNBelab 30bp).
             // STAR's default outFilterScoreMinOverLread=0.66 handles long reads.
             // Combined: max(10, 0.66*readLen) → 20 for 30bp, 66 for 100bp.
-            args.push_back("--outFilterScoreMin");   args.push_back("10");
+            // --star-extra '--outFilterScoreMin N' replaces it (STAR refuses a parameter given twice).
+            if (std::none_of(star_extra.begin(), star_extra.end(), [](const std::string& a) { return a == "--outFilterScoreMin"; })) {
+                args.push_back("--outFilterScoreMin");   args.push_back("10");
+            }
             args.push_back("--soloCBmatchWLtype");
             if (solo_type_is_sam_tag_out || use_complex || use_complex_concat) {
                 args.push_back("Exact");  // CB_samTagOut / CB_UMI_Complex / concat: 1MM_multi not supported by CB_samTagOut; combinatorial 1MM is memory-prohibitive for CB_UMI_Complex

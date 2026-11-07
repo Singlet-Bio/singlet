@@ -7,7 +7,8 @@
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Count-parity run: one Singlet binary on one dataset (CPU engine unless ENGINE=gpu), same command as bench/exact_vs_pseudo.
-#   sbatch --export=ALL,BIN=<singlet>,DS=hgmm1k_v3,TAG=<name>[,RULES=<intron_rules>][,DUMP=1][,TEE=1][,ENGINE=gpu][,ARGS="--no-cr4"] run_singlet.sbatch
+#   sbatch --export=ALL,BIN=<singlet>,DS=hgmm1k_v3,TAG=<name>[,RULES=<intron_rules>][,DUMP=1][,TEE=1][,ENGINE=gpu][,GPUPILEUP=1][,ARGS="--no-cr4"] run_singlet.sbatch
+#   GPUPILEUP=1 runs the CPU aligner with the GPU pileup (SINGLET_GPU_PILEUP=on): submit with -p short-gpu --gres=gpu:nvidia_h100_nvl:1
 # Output: $W/count-parity/runs/<DS>/<TAG>/ (raw matrices, pileup_stats.json, molecules.tsv.gz with DUMP=1, stream.bam with TEE=1)
 set -euo pipefail
 : "${BIN:?}" "${DS:?}" "${TAG:?}"
@@ -30,6 +31,7 @@ export SINGLET_STALL_TIMEOUT=7200
 [ -n "${RULES:-}" ] && export SINGLET_INTRON_RULES=$RULES
 [ "${DUMP:-0}" = 1 ] && export SINGLET_MOLECULE_DUMP=$O/molecules.tsv.gz
 [ "${TEE:-0}" = 1 ] && export SINGLET_TEE_STREAM_BAM=$O/stream.bam
+[ "${GPUPILEUP:-0}" = 1 ] && export SINGLET_GPU_PILEUP=on
 EXTRA="${ARGS:-}"; [ "${ENGINE:-cpu}" = gpu ] && EXTRA="$EXTRA --engine gpu"
 cd $SCR
 /usr/bin/time -v -o $O/time.txt $BIN $ONEFQ --ref-base $REF --genome-dir $GENOME --exons $GTF \
