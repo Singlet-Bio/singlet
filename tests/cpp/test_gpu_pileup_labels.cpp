@@ -2,7 +2,7 @@
 // tests/cpp/test_gpu_pileup_labels.cpp
 //
 // The GPU pileup (SINGLET_GPU_PILEUP=on, src/engine_gpu/gpu_pileup) against the CPU pileup on a synthetic BAM, under the default intron
-// rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer) and under 389 (without kFlank). Compared: the exon / intron /
+// rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer), under 389 (without kFlank) and under 397 | 512 (kGeneFullSet). Compared: the exon / intron /
 // ambiguous accumulators (to_csc: indptr, indices, data), the molecule stats (spliced, unspliced, ambiguous, legacy_double, dropped) and the
 // per-barcode legacy_exon_extra. The fixture is test_molecule_labels.cpp's (G1 exon1 / intron / exon2, nested G2, G3; M1-M9) plus reads
 // for the alevin-fry USA labels (the CIGAR-N bit), kFlank (5 and 6 intronic bases), the kUnique / kNoSplicedIntron order and the legacy
@@ -92,6 +92,14 @@ bool write_inputs(const std::string& dir) {
     // multimapper counted through its secondary (R7; primary spliced and intergenic): no N bit, A
     f << sam_line("mur", 0, "chr2", 100, 3, "5M100N5M", 10, "TTGGTTGGTT", 2);
     f << sam_line("mur", 256, "chr1", 160, 3, "10M", 10, "TTGGTTGGTT", 2);
+    // intron_rule::kGeneFullSet (512). m6 (G2's exon inside G1's intron) is dropped. gfb: G3 exon primary, secondary in G1's intron only:
+    // gene-ambiguous. gfd: intergenic primary, G3 exon secondary (R7) and a third alignment in G1's intron: gene-ambiguous. Both count
+    // G3 without 512.
+    f << sam_line("gfb", 0, "chr2", 520, 3, "10M", 10, "CACACACACA", 2);
+    f << sam_line("gfb", 256, "chr1", 266, 3, "10M", 10, "CACACACACA", 2);
+    f << sam_line("gfd", 0, "chr2", 100, 3, "10M", 10, "GTGTCACACA", 3);
+    f << sam_line("gfd", 256, "chr2", 560, 3, "10M", 10, "GTGTCACACA", 3);
+    f << sam_line("gfd", 256, "chr1", 268, 3, "10M", 10, "GTGTCACACA", 3);
     f.close();
     const std::string cmd = "samtools sort -o " + dir + "/t.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/t.bam";
     return std::system(cmd.c_str()) == 0;
@@ -172,7 +180,7 @@ int main(int argc, char** argv) {
     self[n] = 0;
 
     std::map<uint32_t, std::map<std::string, std::string>> cpu_by_rules;
-    for (uint32_t rules : {397u, 389u}) {
+    for (uint32_t rules : {397u, 389u, 397u | 512u}) {
         const std::string tag = "rules " + std::to_string(rules);
         std::cout << "\n=== " << tag << " ===\n";
         const std::string cpu = run_dump(dir, rules);
@@ -201,6 +209,10 @@ int main(int argc, char** argv) {
         CHECK(sum_list(C.at("legacy_exon_extra")) == 3, tag + ": legacy_exon_extra = 3 (m3, merged m7, junction + intron)");
         CHECK(sum_list(C.at("mixed_exon data")) == 3 && sum_list(C.at("mixed_intron data")) == 3,
               tag + ": mixed_exon / mixed_intron hold the same 3 molecules (the pre-USA split's exon + 3 / intron - 3)");
+    }
+    {   // kGeneFullSet drops exactly the three gene-ambiguous molecules (m6, gfb, gfd)
+        auto total = [&](const std::string& m) { return field(m, "spliced") + field(m, "unspliced") + field(m, "ambiguous"); };
+        CHECK(total(cpu_by_rules[397].at("molecules")) == total(cpu_by_rules[397u | 512u].at("molecules")) + 3, "kGeneFullSet: 3 molecules fewer than 397");
     }
     {   // kFlank moves exactly one molecule (f5) from the intron to the exon matrix; the 6-base read and the dropped multimapper do not move
         const auto& a = cpu_by_rules[397]; const auto& b = cpu_by_rules[389];
