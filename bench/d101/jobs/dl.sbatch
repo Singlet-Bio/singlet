@@ -29,7 +29,7 @@ if [ $KIND = sc ]; then
   # b002, against 6 MB/s per stream from EBI, which throttles each connection), else from EBI. Either way it is fetched as 8 byte
   # ranges in parallel, each resumable, into project space, so a job killed at the time limit picks up where it stopped.
   ST=$W/data/d101/stage/$SC; P=$ST/parts; mkdir -p $P; BAMN=$(basename $URL); BAM=$ST/$BAMN
-  size() { curl -fsSIL "$1" 2>/dev/null | awk '{gsub(/[^[:print:]]/,"")} tolower($1)=="content-length:"{n=$2} END{print n+0}'; }
+  size() { { curl -fsSIL "$1" 2>/dev/null || true; } | awk '{gsub(/[^[:print:]]/,"")} tolower($1)=="content-length:"{n=$2} END{print n+0}'; }
   NE=$(size https://$URL); SRC=https://$URL
   for k in 1 2; do u=https://sra-pub-src-$k.s3.amazonaws.com/$SC/$BAMN.1; n=$(size $u); [ "$n" -gt 0 ] && [ "$n" = "$NE" ] && { SRC=$u; break; }; done
   [ "$NE" -gt 0 ] || { echo "cannot size $URL"; exit 4; }
