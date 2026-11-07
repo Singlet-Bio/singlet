@@ -1719,7 +1719,8 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                 std::cerr << "[nonhost] engine_gpu: device " << device << " (waited " << waited << " s), index "
                           << (gr.indexBytes >> 20) << " MB loaded in " << gr.secLoad << " s, " << n_total
                           << " reads classified in " << gr.secClassify << " s (" << gr.nMinimizers << " minimizers, "
-                          << gr.nHits << " hits, " << gr.nGroups << " groups)\n";
+                          << gr.nHits << " hits, " << gr.nGroups << " groups)"
+                          << (gr.attempts > 1 ? "; attempt " + std::to_string(gr.attempts) + " (" + gr.log + ")" : std::string()) << "\n";
             } else {
                 std::cerr << "[nonhost] engine_gpu: " << (ok ? std::string("inconsistent GPU results") : gr.log)
                           << "; screening on the CPU\n";

@@ -22,6 +22,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -268,7 +269,7 @@ unsigned ceil_log2(uint64_t v) { unsigned b = 0; while ((1ull << b) < v) ++b; re
 
 namespace singlet_engine_gpu {
 
-bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
+static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
     out = NonhostResult();
     const double t0 = now();
     singlet::NvtxChain nvch; nvch.next("nonhost: context");
@@ -403,6 +404,31 @@ bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& 
     }
     cudaDeviceReset();   // release the context and the 30 GB before the next sample's process may take the device
     return true;
+}
+
+// The screen creates its own context after the GPU pileup reset the process's primary context. Under several samples per GPU the first
+// CUDA calls of that new context fail now and then (cudaSetDevice: "device(s) busy or unavailable", cudaMalloc: "resource already mapped";
+// jobs 800983 to 800985: 12 of 40 runs at 2 slots, the reference binary included), and every such run screened on the CPU. The failure is
+// transient: the context is reset and the screen runs again, up to SINGLET_NONHOST_GPU_TRIES attempts (default 4) with a growing pause.
+// The result does not depend on the attempt (each attempt starts from nothing). out.log names every failed attempt.
+bool nonhostClassify(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
+    int tries = 4;
+    if (const char* e = std::getenv("SINGLET_NONHOST_GPU_TRIES")) tries = std::max(1, std::min(16, std::atoi(e)));
+    std::string failed;
+    for (int a = 0; a < tries; ++a) {
+        if (a > 0) std::this_thread::sleep_for(std::chrono::milliseconds(250 << std::min(a - 1, 4)));
+        if (nonhostClassifyOnce(reads, paths, device, loadThreads, out)) {
+            out.attempts = a + 1;
+            if (!failed.empty()) out.log = "after " + std::to_string(a) + " failed attempt(s): " + failed;
+            return true;
+        }
+        failed += (failed.empty() ? "" : " | ") + out.log;
+        if (out.log.find("too many reads") != std::string::npos || out.log.find("cannot open") != std::string::npos ||
+            out.log.find("unsupported index") != std::string::npos || out.log.find("not sorted") != std::string::npos) break;   // not transient
+    }
+    out.attempts = tries;
+    out.log = failed;
+    return false;
 }
 
 } // namespace singlet_engine_gpu

@@ -359,6 +359,7 @@ struct NonhostResult {
     std::vector<uint32_t> cnt;   // hits of the group
     uint64_t nMinimizers = 0, nHits = 0, nGroups = 0, indexBytes = 0;
     double secLoad = 0, secClassify = 0;
+    int attempts = 0;            // attempts used (a failed context start is reset and retried; SINGLET_NONHOST_GPU_TRIES)
     std::string log;
 };
 // loads the three indexes and the Bloom filter into HBM (loadThreads reader threads), classifies `reads` and frees the device.
