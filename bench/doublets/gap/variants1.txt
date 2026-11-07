@@ -1,0 +1,12 @@
+base
+het8 het=8
+het16 het=16
+m63 mask=63
+het8_m63 het=8 mask=63
+het16_m63 het=16 mask=63
+het8_m39 het=8 mask=39
+het8_m31 het=8 mask=31
+het8_m63_r3 het=8 mask=63 rounds=3
+het8_m63_s3 het=8 mask=63 simratio=3
+het8_m63_k2 het=8 mask=63 knn=2
+het8_m63_k05 het=8 mask=63 knn=0.5
