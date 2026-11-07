@@ -188,6 +188,40 @@ inline std::unordered_map<std::string, int> read_donors(const std::string& path,
     return m;
 }
 
+/// The same prefilter on FASTQ(.gz) input (the bulk benchmark, singlet hla-prefilter): keeps a pair when either mate hits.
+/// Writes <prefix>_1.fq (+ <prefix>_2.fq for pairs). Returns {pairs scanned, pairs kept}, or {0, 0} on an open failure.
+inline std::pair<uint64_t, uint64_t> prefilter_fastq(const KmerSet& ks, const std::string& r1, const std::string& r2, const std::string& prefix) {
+    gzFile g1 = gzopen(r1.c_str(), "rb"), g2 = r2.empty() ? nullptr : gzopen(r2.c_str(), "rb");
+    if (!g1 || (!r2.empty() && !g2)) { if (g1) gzclose(g1); if (g2) gzclose(g2); return {0, 0}; }
+    gzbuffer(g1, 1 << 20); if (g2) gzbuffer(g2, 1 << 20);
+    FILE* o1 = std::fopen((prefix + "_1.fq").c_str(), "wb");
+    FILE* o2 = g2 ? std::fopen((prefix + "_2.fq").c_str(), "wb") : nullptr;
+    auto getl = [](gzFile g, std::string& s) {
+        s.clear(); char b[4096];
+        while (gzgets(g, b, sizeof b)) { s += b; if (!s.empty() && s.back() == '\n') { s.pop_back(); if (!s.empty() && s.back() == '\r') s.pop_back(); return true; } }
+        return !s.empty();
+    };
+    auto rec = [&](gzFile g, std::string* r) { return getl(g, r[0]) && getl(g, r[1]) && getl(g, r[2]) && getl(g, r[3]); };
+    std::string a[4], b[4];
+    std::vector<uint8_t> c;
+    auto hit = [&](const std::string& s) {
+        c.resize(s.size());
+        for (size_t i = 0; i < s.size(); ++i) { const int x = KmerSet::code(s[i]); c[i] = x < 0 ? 4 : uint8_t(x); }
+        return ks.hits(c.data(), static_cast<int>(c.size()));
+    };
+    uint64_t n = 0, k = 0;
+    while (rec(g1, a) && (!g2 || rec(g2, b))) {
+        ++n;
+        if (!(hit(a[1]) || (g2 && hit(b[1])))) continue;
+        ++k;
+        std::fprintf(o1, "%s\n%s\n+\n%s\n", a[0].c_str(), a[1].c_str(), a[3].c_str());
+        if (o2) std::fprintf(o2, "%s\n%s\n+\n%s\n", b[0].c_str(), b[1].c_str(), b[3].c_str());
+    }
+    gzclose(g1); if (g2) gzclose(g2);
+    std::fclose(o1); if (o2) std::fclose(o2);
+    return {n, k};
+}
+
 inline Result run(const Config& cfg) {
     Result res;
     const std::string ref = cfg.t1k_dir + "/hlaidx/hlaidx_rna_seq.fa", runt1k = cfg.t1k_dir + "/bin/run-t1k";

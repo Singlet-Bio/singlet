@@ -1244,6 +1244,48 @@ static int cmd_encode(int argc, char* argv[]) {
 // singlet decode — .1fq → FASTQ pair (standalone, no alignment)
 // ════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════
+// singlet hla / hla-prefilter — D-101 HLA typing on its own (the same code as the --pipeline step)
+// ════════════════════════════════════════════════════════════
+// singlet hla --t1k DIR --out DIR [--donors donor_assignments.tsv] [--threads N] [--cdna-r1] RUN.1fq [RUN2.1fq ...]
+//   types HLA from .1fq input exactly as the pipeline does (private/hla/ under --out)
+// singlet hla-prefilter --t1k DIR -1 R1.fq[.gz] [-2 R2.fq[.gz]] -o PREFIX
+//   the prefilter alone on FASTQ (keeps a pair when either mate shares a 19-mer with the HLA index): PREFIX_1.fq [PREFIX_2.fq]
+static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
+    std::string t1k, out, donors, r1, r2, prefix;
+    std::vector<std::string> inputs;
+    int threads = 8; bool cdna_r1 = false;
+    for (int i = 0; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--t1k" && i + 1 < argc) t1k = argv[++i];
+        else if (a == "--out" && i + 1 < argc) out = argv[++i];
+        else if (a == "--donors" && i + 1 < argc) donors = argv[++i];
+        else if (a == "--threads" && i + 1 < argc) threads = std::atoi(argv[++i]);
+        else if (a == "--cdna-r1") cdna_r1 = true;
+        else if (a == "-1" && i + 1 < argc) r1 = argv[++i];
+        else if (a == "-2" && i + 1 < argc) r2 = argv[++i];
+        else if (a == "-o" && i + 1 < argc) prefix = argv[++i];
+        else if (!a.empty() && a[0] != '-') inputs.push_back(a);
+        else { std::cerr << "singlet hla: unknown argument " << a << "\n"; return 2; }
+    }
+    if (t1k.empty()) { std::cerr << "singlet hla: --t1k DIR is required\n"; return 2; }
+    if (prefilter_only) {
+        if (r1.empty() || prefix.empty()) { std::cerr << "usage: singlet hla-prefilter --t1k DIR -1 R1 [-2 R2] -o PREFIX\n"; return 2; }
+        singlet::hla::KmerSet ks; size_t na = 0;
+        if (!singlet::hla::load_fasta_kmers(t1k + "/hlaidx/hlaidx_rna_seq.fa", ks, na)) { std::cerr << "cannot read the HLA index\n"; return 1; }
+        const auto nk = singlet::hla::prefilter_fastq(ks, r1, r2, prefix);
+        std::cout << "{\"alleles\": " << na << ", \"kmers\": " << ks.size() << ", \"reads_scanned\": " << nk.first << ", \"reads_kept\": " << nk.second << "}" << std::endl;
+        return nk.first > 0 ? 0 : 1;
+    }
+    if (out.empty() || inputs.empty()) { std::cerr << "usage: singlet hla --t1k DIR --out DIR [--donors TSV] [--threads N] RUN.1fq ...\n"; return 2; }
+    singlet::hla::Config hc;
+    hc.t1k_dir = t1k; hc.onefq = inputs; hc.cdna_is_r1 = cdna_r1; hc.out_prefix = out; hc.donor_assignments = donors; hc.threads = threads;
+    mkdir_p(out);
+    const auto hr = singlet::hla::run(hc);
+    std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed << " donors typed\n";
+    return hr.ran ? 0 : 1;
+}
+
 static int cmd_decode(int argc, char* argv[]) {
     std::string input_path;
     std::string r1_path, r2_path;
@@ -3188,6 +3230,10 @@ static int singlet_main(int argc, char* argv[]) {
                 return cmd_atac(argc - 2, argv + 2);
             if (sub == "decode")
                 return cmd_decode(argc - 2, argv + 2);
+            if (sub == "hla")
+                return cmd_hla(argc - 2, argv + 2, false);
+            if (sub == "hla-prefilter")
+                return cmd_hla(argc - 2, argv + 2, true);
             if (sub == "archive")
                 return cmd_archive(argc - 2, argv + 2);
             if (sub == "genome")
