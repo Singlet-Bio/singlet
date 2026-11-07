@@ -1066,7 +1066,11 @@ bool available(std::string* why) {
     cudaError_t e = cudaGetDeviceCount(&n);
     if (e != cudaSuccess || n == 0) { if (why) *why = e != cudaSuccess ? cudaGetErrorString(e) : "no CUDA device"; return false; }
     cudaDeviceProp p; cudaGetDeviceProperties(&p, 0);
-    if (p.major < 8) { if (why) *why = std::string("device ") + p.name + " below compute capability 8.0"; return false; }
+    // SINGLET_ENGINE_GPU_MIN_CC (default 80): the lowest compute capability accepted, as major*10+minor. The engine's kernels compile for
+    // sm_70 and sm_75 too (CMAKE_CUDA_ARCHITECTURES="70;75;80;90"); 70 admits the V100S and RTX 8000 for identity checks
+    const char* mc = std::getenv("SINGLET_ENGINE_GPU_MIN_CC");
+    const int minCC = mc != nullptr && *mc ? std::atoi(mc) : 80;
+    if (p.major * 10 + p.minor < minCC) { if (why) *why = std::string("device ") + p.name + " below compute capability " + std::to_string(minCC / 10) + "." + std::to_string(minCC % 10); return false; }
     return true;
 }
 
