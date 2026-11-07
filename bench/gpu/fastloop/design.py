@@ -150,7 +150,7 @@ def main():
         f.write('W=%s; P2=$W/jobs/gpu-pr2; FL=$W/jobs/gpu-fastloop; N=%s\n' % (W, commit))
         f.write('export BINDIR=$P2/bin2/%s EXPECT_COMMIT=$N REFDIR=$P2/bin2/9560b8db REFCOMMIT=9560b8db ALLOW_NO_EMBED=1 IDENT=0 PINDEV=${PINDEV:-0}\n' % o.bin)
         f.write('export FL_IDEAS=$FL/ideas.tsv FL_SOLE=%d SAMPLE=%s\n' % (1 if o.sole else 0, T['sample']))
-        if o.sole and any('shidx' in pt or 'mps' in pt for pt in points):
+        if o.sole and any('shidx' in pt or 'mps' in pt or 'nhsrv' in pt for pt in points):
             # the one-GPU pilot is not exclusive: another job on the node would count the holder's memory in its budget, and ours its jobs
             # FL_NODE_OK=1 skips the check off the pilots (run_on.sbatch on a screening node): tp_gc stops only its own holders
             f.write('if [ "${PILOT:-0}" = 1 ] && [ -n "${PILOT_NODE:-}" ] && [ -n "${PILOT_JOB:-}" ] && [ "${FL_NODE_OK:-0}" != 1 ]; then\n')

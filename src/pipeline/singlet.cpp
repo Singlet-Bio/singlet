@@ -3164,6 +3164,13 @@ static int singlet_main(int argc, char* argv[]) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (sub == "gpu-holder")   // shared resident genome index, started by the first engine process or the job script (docs/gpu-engine/bold/SHARED-INDEX.md)
                 return singlet_engine_gpu::holderMain(argc - 2, argv + 2);
+            if (sub == "gpu-nhsrv") {   // E21's non-host server on its own (XC card): `singlet gpu-nhsrv SOCKET [DEVICE [THREADS]]`; samples
+                                        // reach it through SINGLET_NONHOST_SERVER=SOCKET. It loads the first request's index files and keeps
+                                        // them on the device until it is killed (bench/gpu/fastloop, atom nhsrv)
+                if (argc < 3) { std::cerr << "usage: singlet gpu-nhsrv SOCKET [DEVICE [THREADS]]\n"; return 2; }
+                const int dev = argc >= 4 ? std::atoi(argv[3]) : 0, th = argc >= 5 ? std::atoi(argv[4]) : 8;
+                return singlet_engine_gpu::nonhostServe(argv[2], dev, std::max(4, std::min(12, th)), singlet_engine_gpu::NonhostPaths{}, -1);
+            }
             if (sub == "gpu-probe") {   // E19: "ok" (exit 0) when CUDA sees a usable device, else the reason (exit 1); the pipeline's probe
                 std::string w;
                 const bool ok = singlet_engine_gpu::available(&w);
