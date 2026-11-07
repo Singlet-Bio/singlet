@@ -114,7 +114,7 @@ struct DoubletParams {
                                      ///< sep = median over cells of (distance to the nearest other centroid / distance to the own centroid).  Discrete
                                      ///< cell-type islands (a species mixture) make heterotypic pairs the identifiable doublets; continuous
                                      ///< PBMC-like manifolds do not
-    double   sep_lo         = 3.0, sep_hi = 5.0;   ///< Kang pools sit at 2.0 to 2.5, human + mouse mixtures at 7.3 and 11.0 (development libraries)
+    double   sep_lo         = 5.0, sep_hi = 6.5;   ///< development libraries: Kang pools 2.0 to 2.5, 10x PBMC and mouse libraries 2 to 4, human + mouse mixtures 7.3 and 11.0
     double   knn_scale      = 1.0;    ///< k = knn_scale * 0.5 * sqrt(n_cells)
     int      hvg_mode       = 0;      ///< 0: z-scored log dispersion in mean bins; 1: Scrublet v-score (percentile cut)
     double   vscore_pctl    = 85.0;   ///< hvg_mode 1: keep genes above this v-score percentile
