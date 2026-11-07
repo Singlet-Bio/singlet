@@ -275,7 +275,8 @@ bool mapDistinct(const m5::Params& P, const m5::GenomeView& host, uint64_t saByt
 // SINGLET_ENGINE_GPU_SLOTS. It bounds what the sample's process holds on the device in each phase: the prefill (context, index, reads, lanes,
 // records, E10/E11 products and keep: mapDistinct sizes its chunk and lane batches from it) and the pileup (its arena). The non-host screen's
 // index (24.9 GB, fixed) is outside it.
-// SINGLET_GPU_SHARED_INDEX=1: bytes of the genome index that a live holder process keeps on the device (0 without one). The budget below leaves them out.
+// SINGLET_GPU_SHARED_INDEX=1: bytes of the genome index that a live holder process keeps on the current device (0 without one). The budget below
+// leaves them out. Holders of the node's other devices do not count.
 uint64_t sharedIndexReserve();
 // `singlet gpu-holder --genome-dir D [--device N] [--idle S] | --stop ...`: the holder process of the shared device index (docs/gpu-engine/bold/SHARED-INDEX.md)
 int holderMain(int argc, char** argv);
