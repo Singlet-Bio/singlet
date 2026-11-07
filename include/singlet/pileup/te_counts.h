@@ -87,8 +87,12 @@ public:
             locus_start_.push_back(static_cast<int32_t>(s1 - 1));
             locus_end_.push_back(static_cast<int32_t>(e1));
             locus_strand_.push_back(line[c[5] + 1]);
+            // locus id: the GTF's transcript_id when it names the locus (older TEtranscripts files: AluY_dup123); the 2026 files repeat
+            // the subfamily there, so the id is then built from the coordinates: subfamily|chrom:start-end:strand (1-based, inclusive)
             std::string id = attr(attrs, "transcript_id");
-            locus_ids_.push_back(id.empty() ? sub + "_" + std::to_string(li) : std::move(id));
+            if (id.empty() || id == sub)
+                id = sub + "|" + chrom + ":" + std::to_string(s1) + "-" + std::to_string(e1) + ":" + line[c[5] + 1];
+            locus_ids_.push_back(std::move(id));
             chrom_intervals_[chrom].push_back(Interval{static_cast<int32_t>(s1 - 1), static_cast<int32_t>(e1), li});
         }
         gzclose(f);
