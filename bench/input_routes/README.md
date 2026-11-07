@@ -60,11 +60,10 @@ Each route then ran the CPU pipeline on the staged reads (`jobs/routes.sbatch`; 
 | auto (10x 3' v2, 94% whitelist) | Mereu nuclei, SRR9621777 | 1,475 | 76 | 0.53 |
 | `--protocol seqwell` | Gierahn Species Mixing 2, SRR5250841 | 396 | 393 | 0.66 |
 
-The Cell Ranger 1.x BAM (Kang 2018 batch 2 stim, SRR5398239, 10x v1; not a corpus row) is still open. ENA served the 22.8 GB file at
-about 0.6 MB/s, and the first attempt failed with a dropped TLS stream, which led to the resumable fetch. A run on the first 3 GB of the BAM
-(`ROUTE=bam_kang_head`, Clipper job 803380) was running when this was written. Its summary lands in
-`$W/jobs/input-routes/routes/bam_kang_head-803380/summary.txt`. The Kang rows (15-18) are marked yes on the strength of the CR3 BAM test,
-because the tags used (CR/CY/UR/UY) are the same in Cell Ranger 1.x.
+The Cell Ranger 1.x BAM (Kang 2018 batch 2 stim, SRR5398239, 10x v1; not a corpus row) came from ENA at under 1 MB/s, so the test used
+the first 3 GB of the 22.8 GB file, read by HTTP range (`ROUTE=bam_kang_head`). Those 22.1M reads staged as 10x-3p-v1 with a 24-nt barcode
+read and 72% exact whitelist barcodes, and 92% of them mapped. The cell count is not meaningful here, because a position-sorted prefix covers
+only the first chromosomes. The first full-file attempt failed with a dropped TLS stream, which led to the resumable fetch.
 
 CPU and GPU outputs match on pbmc1k_v3 and neuron1k_v3: all 65 files, with only the accepted run-dependent diffs (out_equiv 65/5/4).
 The gate ran on df7d680e (input paths) and again on 2cb9d941, which carries every engine change; the head adds only a test fix. ctest on the
