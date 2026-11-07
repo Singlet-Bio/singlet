@@ -12,7 +12,7 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 | # | Idea | Source branch, tip | Verdict | Switch |
 |---|---|---|---|---|
 | 1 | Non-host GPU screen falls back to the CPU | bug, no branch | pending | `SINGLET_NONHOST_GPU_TRIES` |
-| 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | pending | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
+| 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | adopted, off by default (diagnostic) | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
 | 3 | 512-base lift and lean-path memory (P3-MEM-03) | `perf/gpu-device`, a462be4d; `gpu/frontier-fold-device`, 7cc07dd4 | adopted: identical, cost-neutral, 1.2 G reads fit one H100 | default |
 | 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | pending | `SINGLET_GPU_SHARED_INDEX=1` |
 | 5 | E21 resident pool | `gpu/fable/pool`, 719fd650 (tag only) | pending | `singlet gpu-pool` |
@@ -21,6 +21,21 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 | 8 | WSHRINK | in the tree | pending | `SINGLET_BOLD_WSHRINK=1` |
 | 9 | k_resolve exon-multimapper fix | no source | pending | |
 | 10 | One device dedup | E12 and #145 | resolved: one remains | |
+
+## 2. Transfer ledger and NVTX ranges
+
+`perf/nvtx-host-ranges` (cacf6435) carried a ledger of every copy in engine_gpu.cu and NVTX ranges for mapDistinct's sections. The staging
+merge of the Fable line (82a38f53) dropped both. The redevelopment (5f7f2f61) puts the ledger in its own header, `gpu_ledger.h`, which
+wraps cudaMemcpy and cudaMemcpyAsync in every .cu file of the GPU path. It records file:line, bytes, host seconds and whether the host side
+is pinned, and prints one block per phase (prefill, hand-off, pileup, nonhost, solo) when `SINGLET_ENGINE_GPU_TRACE=1`. The NVTX ranges
+return for mapDistinct's index, reads, dedup and chunk sections and for the GPU and host lanes of each chunk (`SINGLET_NVTX=1`). Off, each
+copy costs one branch.
+
+Identity and cost: the gate 803456 runs pbmc1k_v3 twice, untraced and traced, and both are IDENTICAL to the CPU reference; wall is 124.4 s
+untraced and 125.4 s traced, one run each. What it shows on that run: the prefill uploads the 31.8 GB genome index (pinned, async), the
+non-host screen uploads its 26.5 GB index at 6.4 GB/s with the host blocked for 4.2 s, and the hand-off and pileup move 6.4 GB and 3.6 GB
+at 12.3 GB/s from pinned memory. The two index uploads happen once per sample, which makes a resident index (the VMM shared index, the E21
+server) the largest transfer saving on the table.
 
 ## 3. 512-base lift and lean-path memory (P3-MEM-03)
 
