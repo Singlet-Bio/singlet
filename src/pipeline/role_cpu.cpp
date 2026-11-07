@@ -39,6 +39,20 @@ constexpr int kRoles = 96;
 Role g_roles[kRoles];
 int g_nroles = 0;
 std::mutex g_mu;
+double thread_cpu() { timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
+// CPU already charged at renames, per thread: the exit recorder and the live scan count only what came after
+thread_local double t_mark = 0;
+struct Charged { long tid; double cpu; };
+constexpr int kCharged = 4096;
+Charged g_charged[kCharged];
+int g_ncharged = 0;
+long my_tid() { return (long) syscall(SYS_gettid); }
+void note_charged(long tid, double c) {   // under g_mu
+    for (int i = 0; i < g_ncharged; i++) if (g_charged[i].tid == tid) { g_charged[i].cpu += c; return; }
+    if (g_ncharged < kCharged) g_charged[g_ncharged++] = Charged{tid, c};
+}
+double charged_of(long tid) { for (int i = 0; i < g_ncharged; i++) if (g_charged[i].tid == tid) return g_charged[i].cpu; return 0; }
+void forget_charged(long tid) { for (int i = 0; i < g_ncharged; i++) if (g_charged[i].tid == tid) { g_charged[i] = g_charged[--g_ncharged]; return; } }
 void add_role_locked(const char* name, double cpu, long n) {
     for (int i = 0; i < g_nroles; i++)
         if (std::strncmp(g_roles[i].name, name, 16) == 0) { g_roles[i].cpu += cpu; g_roles[i].n += n; return; }
@@ -54,20 +68,6 @@ void charge_self(long n) {
     add_role_locked(nm, d > 0 ? d : 0, n);
     if (n) forget_charged(my_tid()); else note_charged(my_tid(), d > 0 ? d : 0);
 }
-double thread_cpu() { timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); return ts.tv_sec + ts.tv_nsec * 1e-9; }
-// CPU already charged at renames, per thread: the exit recorder and the live scan count only what came after
-thread_local double t_mark = 0;
-struct Charged { long tid; double cpu; };
-constexpr int kCharged = 4096;
-Charged g_charged[kCharged];
-int g_ncharged = 0;
-long my_tid() { return (long) syscall(SYS_gettid); }
-void note_charged(long tid, double c) {   // under g_mu
-    for (int i = 0; i < g_ncharged; i++) if (g_charged[i].tid == tid) { g_charged[i].cpu += c; return; }
-    if (g_ncharged < kCharged) g_charged[g_ncharged++] = Charged{tid, c};
-}
-double charged_of(long tid) { for (int i = 0; i < g_ncharged; i++) if (g_charged[i].tid == tid) return g_charged[i].cpu; return 0; }
-void forget_charged(long tid) { for (int i = 0; i < g_ncharged; i++) if (g_charged[i].tid == tid) { g_charged[i] = g_charged[--g_ncharged]; return; } }
 struct ExitRecorder {
     bool armed = false;
     ~ExitRecorder() {
