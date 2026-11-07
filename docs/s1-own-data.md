@@ -35,8 +35,15 @@ singlet.read_s1(path, *, member="counts", genes=None, dtype=numpy.float32) -> an
   not change the bytes.
 - **Reading.** `read_s1` returns `X` as CSR `float32`, which holds counts up to 2^24 exactly. Pass `dtype=numpy.uint32`
   or `float64` for deeper data.
-- **Gene packs.** `gene_pack="<16 hex>"` (or 8 bytes) stores the gene ids as a reference to a vocabulary pack instead of
-  inline. The reader then needs the pack, or `read_s1(path, genes=...)`.
+- **Gene packs.** `gene_pack="<pack id>"` (at least 16 of its 32 hex digits) stores the gene ids as a reference to a
+  vocabulary pack instead of inline. The ids must be exactly one of the pack's two lists, in order. The first is its gene
+  table, `[g for g, _ in pack.gene_table()]`, for a gene-level matrix; the member meta then records
+  `names.rows = {"pack": <id>, "member": "genes"}`. The second is its rows, `pack.names()` (exon or intron ids), with
+  `member` the pack's member. Any other ids raise `ValueError`, because the reference replaces them and they would be
+  lost. The pack comes from the installed packs, or is downloaded from data.singlet.bio; if it cannot be found,
+  `write_s1` raises `ValueError` rather than write a reference it cannot check. `read_s1` takes the ids from the
+  installed pack, or from `read_s1(path, genes=...)`. Files written by singlet 1.3.3 or earlier with gene-level ids and
+  a pack have no `names.rows`, so they read only with `genes=`.
 - **Loading.** `singlet.load(path)` (and `singlet.s1.client.load`) reads any `.s1` file that has no atlas members and
   one count matrix: the member `counts`, or else its only matrix member. Atlas sample objects keep their own reader.
 
@@ -55,6 +62,11 @@ read_s1(path, as = c("matrix", "sce", "seurat"), member = "counts", genes = NULL
 ```
 
 - **Orientation.** R matrices are **genes x cells**, the Bioconductor orientation.
+- **Gene packs.** `gene_pack` writes the same reference and `names.rows` meta as Python, and checks the ids the same way.
+  The pack is read from the R cache, or downloaded and checked against its sha256. Gene-level ids are compared with the
+  pack's gene table. Exon-level ids are checked against the sha256 of the exon names in the pack header, because the R
+  package does not expand exon names. Intron packs have no such hash, so R refers to their gene table only. R's
+  `read_s1` does not resolve packs: pass `genes =`.
 - **Inputs.** A `SingleCellExperiment` gives `assay(x, assay)`, and a Seurat object gives layer `assay` of its default
   assay.
 - **Encoder.** The R package calls the header-only C++ encoder (`inst/include/singlet/pz2/`) directly, with the options

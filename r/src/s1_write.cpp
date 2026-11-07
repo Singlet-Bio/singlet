@@ -6,6 +6,8 @@
 // computed from the matrix and its names), then lays out a sample object with one pz2 member as
 // python/singlet/s1/container.py S2Writer.build does. The two packages therefore write the same bytes for the same matrix;
 // tests/testthat/test-s1-write.R checks the layout and the Python suite checks byte identity on a shared fixture.
+// With a vocabulary pack (gene_pack) the row names are a reference to it and the member meta records which of its lists they
+// are (names.rows = {pack, member}), as singlet.write_s1 writes it; R/s1_write.R checks the ids against the pack first.
 //
 // s1_members_ parses the 64-byte header and the member table of an object (bytes of its first part) into an R list.
 
@@ -46,20 +48,43 @@ std::vector<std::string> as_strings(const Rcpp::CharacterVector& v) {
     return out;
 }
 
-pz::PackId parse_pack(const std::string& hx) {
-    if (hx.size() != 16) Rcpp::stop("gene_pack must be 16 hex characters");
+bool is_hex(const std::string& s) {
+    for (char c : s)
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+    return true;
+}
+
+pz::PackId parse_pack(const std::string& hx) {  // the first 8 bytes of a full 32-hex pack id
+    if (hx.size() != 32 || !is_hex(hx)) Rcpp::stop("gene_pack must be a full pack id (32 lowercase hex characters)");
     pz::PackId id{};
     for (int k = 0; k < 8; ++k) id[static_cast<size_t>(k)] = static_cast<uint8_t>(std::stoi(hx.substr(2 * k, 2), nullptr, 16));
     return id;
 }
 
+std::string sha256_hex(const std::vector<uint8_t>& b) {
+    pz::detail::Sha256 h;
+    h.update(b.data(), b.size());
+    uint8_t out[32];
+    h.final(out);
+    static const char* hx = "0123456789abcdef";
+    std::string s(64, '0');
+    for (int k = 0; k < 32; ++k) {
+        s[static_cast<size_t>(2 * k)] = hx[out[k] >> 4];
+        s[static_cast<size_t>(2 * k + 1)] = hx[out[k] & 15];
+    }
+    return s;
+}
+
 }  // namespace
 
 //' Encode a canonical CSC (genes x cells) as a .s1 sample object with one pz2 member; returns the object bytes.
+//' `gene_pack` is "" (row names inline) or a full 32-hex pack id; `rows_member` the pack list the row names are ("genes" or the
+//' pack's member); `rows_sha256`, when not "", the sha256 the NUL-terminated row names must have (the pack's sha256_names).
 //' @keywords internal
 // [[Rcpp::export]]
 Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::NumericVector x, int m, int n, Rcpp::CharacterVector rownames,
-                          Rcpp::CharacterVector colnames, std::string sample_id, std::string member, std::string gene_pack, int threads) {
+                          Rcpp::CharacterVector colnames, std::string sample_id, std::string member, std::string gene_pack,
+                          std::string rows_member, std::string rows_sha256, int threads) {
     if (m < 0 || n < 0) Rcpp::stop("negative dimensions");
     if (p.size() != static_cast<R_xlen_t>(n) + 1) Rcpp::stop("p must have ncol + 1 entries");
     if (rownames.size() != m || colnames.size() != n) Rcpp::stop("the matrix needs a name for every row and column");
@@ -107,6 +132,9 @@ Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::Nu
     } else {
         opt.row_names.kind = pz::NamesKind::Pack;
         opt.row_names.pack_id = parse_pack(gene_pack);
+        if (rows_member.empty() || rows_member.find_first_of("\"\\") != std::string::npos) Rcpp::stop("bad rows_member");
+        if (!rows_sha256.empty() && sha256_hex(row_blob) != rows_sha256)
+            Rcpp::stop("the gene ids are not the %s rows of pack %s, in order", rows_member.c_str(), gene_pack.c_str());
     }
     opt.col_names.kind = pz::NamesKind::Inline;
     opt.col_names.blob = col_blob;
@@ -125,7 +153,9 @@ Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::Nu
     }
 
     // one-member sample object, as container.py S2Writer.build lays it out
-    const std::string meta = "{\"modality\":\"counts\"}";  // canonical JSON (sorted keys, compact)
+    std::string meta = "{\"modality\":\"counts\"";  // canonical JSON (sorted keys, compact)
+    if (!gene_pack.empty()) meta += ",\"names\":{\"rows\":{\"member\":\"" + rows_member + "\",\"pack\":\"" + gene_pack + "\"}}";
+    meta += "}";
     if (member.empty() || member.size() > 0xFFFF) Rcpp::stop("bad member name");
     const uint64_t table_len = 2 + member.size() + kEntryFixed + meta.size();
     const uint64_t body_off = body.empty() ? 0 : align_up(kHeader + table_len);

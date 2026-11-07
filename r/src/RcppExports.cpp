@@ -169,8 +169,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // s1_write_
-Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::NumericVector x, int m, int n, Rcpp::CharacterVector rownames, Rcpp::CharacterVector colnames, std::string sample_id, std::string member, std::string gene_pack, int threads);
-RcppExport SEXP _singlet_s1_write_(SEXP pSEXP, SEXP iSEXP, SEXP xSEXP, SEXP mSEXP, SEXP nSEXP, SEXP rownamesSEXP, SEXP colnamesSEXP, SEXP sample_idSEXP, SEXP memberSEXP, SEXP gene_packSEXP, SEXP threadsSEXP) {
+Rcpp::RawVector s1_write_(Rcpp::IntegerVector p, Rcpp::IntegerVector i, Rcpp::NumericVector x, int m, int n, Rcpp::CharacterVector rownames, Rcpp::CharacterVector colnames, std::string sample_id, std::string member, std::string gene_pack, std::string rows_member, std::string rows_sha256, int threads);
+RcppExport SEXP _singlet_s1_write_(SEXP pSEXP, SEXP iSEXP, SEXP xSEXP, SEXP mSEXP, SEXP nSEXP, SEXP rownamesSEXP, SEXP colnamesSEXP, SEXP sample_idSEXP, SEXP memberSEXP, SEXP gene_packSEXP, SEXP rows_memberSEXP, SEXP rows_sha256SEXP, SEXP threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -184,8 +184,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type sample_id(sample_idSEXP);
     Rcpp::traits::input_parameter< std::string >::type member(memberSEXP);
     Rcpp::traits::input_parameter< std::string >::type gene_pack(gene_packSEXP);
+    Rcpp::traits::input_parameter< std::string >::type rows_member(rows_memberSEXP);
+    Rcpp::traits::input_parameter< std::string >::type rows_sha256(rows_sha256SEXP);
     Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(s1_write_(p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, threads));
+    rcpp_result_gen = Rcpp::wrap(s1_write_(p, i, x, m, n, rownames, colnames, sample_id, member, gene_pack, rows_member, rows_sha256, threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -215,7 +217,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_singlet_pz2_whitelist_barcodes_", (DL_FUNC) &_singlet_pz2_whitelist_barcodes_, 2},
     {"_singlet_pz2_cells_", (DL_FUNC) &_singlet_pz2_cells_, 3},
     {"_singlet_pz_read_1pz_raw", (DL_FUNC) &_singlet_pz_read_1pz_raw, 1},
-    {"_singlet_s1_write_", (DL_FUNC) &_singlet_s1_write_, 11},
+    {"_singlet_s1_write_", (DL_FUNC) &_singlet_s1_write_, 13},
     {"_singlet_s1_members_", (DL_FUNC) &_singlet_s1_members_, 1},
     {NULL, NULL, 0}
 };
