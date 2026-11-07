@@ -182,6 +182,7 @@ struct Input {
     NoInitVector<uint64_t> off{0};   // seq[off[i] .. off[i+1]) is sequence i
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
+    std::string genomeDir;              // the STAR genome directory behind `host` (SINGLET_GPU_SHARED_INDEX=1: it names the holder of the shared device index)
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
     // E20: with e2e, mapDistinct releases the device (release) once the lanes are done and calls reacquire for the records' device phase (E8's
     // buildRecords, E10's products, E11's keep) after the host lane and the host assembly; reacquire takes the same device again. Unset (or
@@ -271,11 +272,17 @@ bool mapDistinct(const m5::Params& P, const m5::GenomeView& host, uint64_t saByt
 // SINGLET_ENGINE_GPU_SLOTS. It bounds what the sample's process holds on the device in each phase: the prefill (context, index, reads, lanes,
 // records, E10/E11 products and keep: mapDistinct sizes its chunk and lane batches from it) and the pileup (its arena). The non-host screen's
 // index (24.9 GB, fixed) is outside it.
+// SINGLET_GPU_SHARED_INDEX=1: bytes of the genome index that a live holder process keeps on the device (0 without one). The budget below leaves them out.
+uint64_t sharedIndexReserve();
+// `singlet gpu-holder --genome-dir D [--device N] [--idle S] | --stop ...`: the holder process of the shared device index (docs/gpu-engine/bold/SHARED-INDEX.md)
+int holderMain(int argc, char** argv);
 inline uint64_t memBudget(uint64_t total) {
     if (const char* g = std::getenv("SINGLET_ENGINE_GPU_MEM_GB")) { const double v = std::atof(g); return v > 0 ? (uint64_t) (v * (double) (1ull << 30)) : 0; }
     const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
     const uint64_t slots = sl != nullptr ? (uint64_t) std::min(8, std::max(1, std::atoi(sl))) : 1, margin = 2ull << 30;
-    return (total > margin ? total - margin : total) / slots;
+    const uint64_t sh = sharedIndexReserve();
+    const uint64_t avail = (total > margin ? total - margin : total);
+    return (avail > sh ? avail - sh : avail) / slots;
 }
 // Samples per GPU: SINGLET_ENGINE_GPU_SLOTS (default 1 = one sample at a time) exclusive locks per device, named by PCI bus id so jobs that see different
 // GPUs under the same index do not wait for each other (slot k > 0 has ".k" appended to the lock file name). Each sample keeps its device memory within

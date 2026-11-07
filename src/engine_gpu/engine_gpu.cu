@@ -15,6 +15,7 @@
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
 #include <cuda_runtime.h>
+#include <cuda.h>   // types of the driver's virtual memory functions (shared_index.cuh); the functions come from cudaGetDriverEntryPoint, no libcuda link
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
@@ -37,6 +38,17 @@
 #include <thread>
 #include <vector>
 #include <condition_variable>
+#include <dirent.h>
+#include <glob.h>
+#include <poll.h>
+#include <signal.h>
+#include <spawn.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <cerrno>
+extern char** environ;
 #include <deque>
 #include <functional>
 #include <memory>
@@ -637,6 +649,7 @@ struct Budget {
     }
 };
 static Budget g_bud;
+static std::vector<void*> g_ipcPtrs;   // shared index: mappings imported from the holder (shared_index.cuh); cudaFree is invalid on them, so dfree leaves them alone
 static int g_waSlice = 160;   // aligns per read of lane B's pool (SINGLET_BOLD_WASLICE)
 static inline u64 budRound(u64 b) { return b < (1u << 20) ? (b + 511) & ~511ull : (b + (2u << 20) - 1) & ~((2ull << 20) - 1); }   // the driver's granularity
 static cudaError_t dmalv(void** p, u64 b) {
@@ -649,6 +662,7 @@ static cudaError_t dmalv(void** p, u64 b) {
 template <class T> static inline cudaError_t dmal(T** p, u64 b) { return dmalv((void**)p, b); }
 static void dfree(void* p) {
     if (p == nullptr) return;
+    if (std::find(g_ipcPtrs.begin(), g_ipcPtrs.end(), p) != g_ipcPtrs.end()) return;
     auto it = g_bud.sz.find(p);
     if (it != g_bud.sz.end()) { g_bud.used -= std::min(g_bud.used, it->second); g_bud.sz.erase(it); }
     cudaFree(p);
@@ -1057,6 +1071,7 @@ std::string deviceId(int device) {
     return s;
 }
 int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return 0; return n; }
+#include "shared_index.cuh"
 
 // P3-MEM-03: a record chunk's offsets shifted by the earlier chunks' counts (alignments, sequence bytes, operations); a read's record local
 // to the chunk [r0, r1) or NONE
@@ -1085,7 +1100,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // on failure, release everything this process holds on the device (STAR then maps every read on the CPU)
     // E17: the staging buffers' streams, events and page-locked memory are released before the reset (their handles are stale after it, and
     // their destructors would use them: a budget failure right after their init ended in a segmentation fault)
+    ShClient SHC;   // shared index: the imports from the holder (SINGLET_GPU_SHARED_INDEX=1), closed at the end or by fail
     auto fail = [&](const std::string& e) {
+        shClose(SHC);
         if (idxTh.joinable()) idxTh.join();
         out.log += "engine_gpu: " + e + "\n"; e9::soloKeepRelease(); out.e10.soloKept = false;
         g_d2h = nullptr; DR.release(); SR.release(); SI.release();
@@ -1134,6 +1151,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // the reads, clip and dedup) when the estimates below fit the budget; else "lean": the reads' phase without the index, E10's entries and
     // masks into the shared region as soon as they exist, the E11 keep of the reads' CR/UR at the records, the index after the dedup (only the
     // distinct sequences left on the device), the lanes' results not kept on the device (E8's records uploaded from the host assembly)
+    // shared index: before the budget is decided, because a mapped index is not this process's memory (IDX below is 0 and memBudget leaves the holder's bytes out)
+    { std::string shLog; shAcquire(in.genomeDir, H, saBytes, saiBytes, device, SHC, shLog); out.log += shLog; }
     size_t fB0 = 0, tB0 = 0; cudaMemGetInfo(&fB0, &tB0);
     const u64 cap = memBudget(tB0);
     const bool budDefault = std::getenv("SINGLET_ENGINE_GPU_MEM_GB") == nullptr;
@@ -1142,7 +1161,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 SLACK = 1ull << 30;   // what the tally does not see: the modules' temporaries (E8, E10, E11), the driver's local memory for the kernels
     const u64 n0 = in.off.size() - 1, S0 = in.seq.size();
     const bool e10W = in.e10.on && in.e2e != nullptr && in.e2e->base != nullptr && n0 > 0 && in.e10.nw >= 1 && in.e10.aux.size() == n0 * (2 + (u64)in.e10.nw);
-    const u64 IDX = budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
+    const u64 IDX = SHC.on && !SHC.priv ? 0 : budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
     const u64 TAB = ((u64)H.nChr * 2 + 1 + H.chrBinN + (u64)H.sjdbN * 4) * 8 + (u64)H.sjdbN * 4 + (24ull << 20);
     const u64 AUX = e10W ? in.e10.aux.size() * 8 : 0, ENT = e10W ? n0 * 24 : 0, QM = e10W && in.e10.wantMask ? n0 * qmBytes() : 0;
     const u64 KEEP = e10W && in.e10.soloModel != nullptr ? n0 * 16 : 0;
@@ -1193,6 +1212,12 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                           + budName + budHint);
     // the index: allocated here and copied from a second thread while the reads are uploaded, clipped and deduplicated (staged); E17 lean: after the dedup
     auto startIndex = [&]() -> bool {
+        if (SHC.on) {   // mapped from the holder: nothing to allocate or copy
+            dG1 = (char*) SHC.p[0]; dSA = (u64*) SHC.p[1]; dSAi = (u64*) SHC.p[2];
+            D.G = dG1 + PAD; D.SA = dSA; D.SAi = dSAi;
+            memMark("index(shared)");
+            return true;
+        }
         g_bud.at = "index";
         tIdx0 = now();
         if (staged) {
@@ -2712,6 +2737,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     cudaDeviceSynchronize();
     if (!e2e) for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
     dfree(dG1); dfree(dSA); dfree(dSAi); dfree(dSeq); dfree(dOff);
+    shClose(SHC);   // the imports end with the sample's device phase
     dfree(dcs); dfree(dcl); dfree(dcb); dfree(dss); dfree(dse); dfree(dsd); dfree(dsa);
     dfree(dsm); dfree(dsl); dfree(dsr); dfree(dst);
     step("free");
