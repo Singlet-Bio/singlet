@@ -1074,11 +1074,11 @@ static VBResult init_vb_pca_seeded(
     return result;
 }
 
-// Run VB from scratch (random initialisation), single-threaded.
+// Run VB from scratch (random initialisation) on nthreads threads (the result does not depend on the count: parallel_det_chunks).
 // Called from run_batch() which runs restarts in parallel.
 static VBResult run_vb(
     const CoveredSNPData& data, int K,
-    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter)
+    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter, int nthreads = 1)
 {
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
@@ -1101,7 +1101,7 @@ static VBResult run_vb(
         for (int k = 0; k < K; ++k) result.id_prob[c][k] *= inv;
     }
 
-    run_vb_inplace(data, K, cfg, result, max_iter, /*nthreads=*/1);
+    run_vb_inplace(data, K, cfg, result, max_iter, nthreads);
     return result;
 }
 
@@ -1120,6 +1120,9 @@ static VBResult fit_vb_k(
     const int n_inits = std::max(1, static_cast<int>(kinds.size()));
     std::vector<VBResult> init_results(n_inits);
     const int nw = std::max(1, std::min(threads, n_inits));
+    // Each restart runs on its share of the threads: one restart (every K=1 fit) used to run its pre-iterations on one thread while
+    // the others sat idle. The fit does not depend on the thread count (parallel_det_chunks), so outputs are unchanged.
+    const int per_t = std::max(1, threads / nw);
 
     auto run_batch = [&](int start, int end) {
         for (int i = start; i < end; ++i) {
@@ -1130,9 +1133,9 @@ static VBResult fit_vb_k(
             if (K > 1 && kind > 0) {
                 // PCA-seeded restart: prevents symmetric-init cluster collapse
                 init_results[i] = init_vb_pca_seeded(cov, K, cfg, init_seed, pca, quiet || i > 0, kind);
-                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, /*nthreads=*/1);
+                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, per_t);
             } else {
-                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre);
+                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre, per_t);
             }
         }
     };
