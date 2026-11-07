@@ -49,6 +49,7 @@ def main():
         "dumped (CR)": kept,
         "UmiGeneAll": ~multi,
         "CR + drop U/A of multi-gene UMIs": kept & ~(multi & d.label.isin(["U", "A"])),
+        "CR + drop U of multi-gene UMIs (velocyto unspliced)": kept & ~(multi & (d.label == "U")),
         "CR, reads>=2 (diagnostic)": kept & (d.reads >= 2),
         "CR, drop wrong-species with a bigger correct-species twin (oracle)": kept & ~(d.wrong & (d.max_corr > d.reads)),
     }

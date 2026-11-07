@@ -173,6 +173,9 @@ constexpr uint32_t kGeneFullSet     = 512;
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
 constexpr uint32_t kUmiGeneCR       = 128;  ///< UMI in >1 gene of a cell: keep the gene with most reads (ties: none)
+/// With kUmiGeneCR: a UMI in >1 gene of a cell also loses its unspliced molecule, as STARsolo Velocyto drops a UMI whose reads
+/// share no transcript (SoloFeature_countVelocyto). The spliced / ambiguous winner stays (Gene and GeneFull keep it).
+constexpr uint32_t kUmiGeneVelo     = 1024;
 constexpr uint32_t kMoleculeRules   = kUmiGene | kUmiGeneAll | kUmiGeneCR;
 }  // namespace intron_rule
 
@@ -4479,7 +4482,9 @@ private:
                             const auto& u = ug.find({m.umi, m.bc})->second;
                             bool d;
                             if (u.n_genes <= 1) d = false;
-                            else if (mrules & intron_rule::kUmiGeneCR) d = u.tie || m.gene != u.best_gene;
+                            else if (mrules & intron_rule::kUmiGeneCR)
+                                d = u.tie || m.gene != u.best_gene ||
+                                    ((config_.intron_rules & intron_rule::kUmiGeneVelo) && m.label() == D::MoleculeLabel::Unspliced);
                             else if (mrules & intron_rule::kUmiGeneAll) d = true;
                             else d = m.label() != D::MoleculeLabel::Spliced;   // kUmiGene
                             drop[i][k] = d ? 1 : 0;
