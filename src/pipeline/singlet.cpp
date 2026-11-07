@@ -2952,6 +2952,8 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --no-allsite           In --pipeline mode, skip the all-site allele counts (private/allsite/; D-101)\n"
+        << "  --allsite-min-alt-molecules N / --allsite-min-alt-cells N   All-site discovery: an ALT base needs N molecules / N barcodes (2 / 2)\n"
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
@@ -3294,6 +3296,7 @@ static int singlet_main(int argc, char* argv[]) {
     bool whitelist_missing = false;      // a 10x-type protocol (CB_UMI_Simple) was detected but no barcode whitelist file was found: the sorted path was taken because of it
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
+    bool no_allsite = false;             // --no-allsite: no private/allsite/ member (D-101) in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
     // Track B cascade (T-L2-7 CLI flags)
@@ -3317,6 +3320,9 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--exons" && i+1 < argc) config.exon_gtf_path = argv[++i];
         else if (arg == "--snps" && i+1 < argc) { config.snp_path = argv[++i]; snp_panel_source = "user"; }
         else if (arg == "--no-snps") no_default_snps = true;
+        else if (arg == "--no-allsite") no_allsite = true;
+        else if (arg == "--allsite-min-alt-molecules" && i+1 < argc) config.allsite_min_alt_molecules = std::atoi(argv[++i]);
+        else if (arg == "--allsite-min-alt-cells" && i+1 < argc) config.allsite_min_alt_cells = std::atoi(argv[++i]);
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -4120,6 +4126,9 @@ static int singlet_main(int argc, char* argv[]) {
             }
         }
     }
+    // D-101: per-cell allele counts at every nuclear site with alternate-allele evidence (private/allsite/), wherever a SNP panel is in
+    // use (the same donors and privacy class); the reference bases come from the STAR genome. GPU builds (allsite.h).
+    if (pipeline_mode && !no_allsite && !config.snp_path.empty() && !genome_dir.empty()) config.allsite_genome_dir = genome_dir;
     if (pipeline_mode && !config.umi_dedup_directional && !no_dir_dedup_explicit) config.umi_dedup_directional = true;
 
     // ── Track B cascade validation (T-L2-7) ─────────────────────────────────

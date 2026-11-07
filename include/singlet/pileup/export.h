@@ -1367,6 +1367,19 @@ inline ExportStats export_results(const PileupEngine& engine,
         write_threads.emplace_back([&]() { write_matrix("private/snp_ad", snp_ad_csc, engine.snp_names()); });
         write_threads.emplace_back([&]() { write_matrix("private/snp_dp", snp_dp_csc, engine.snp_names()); });
     }
+    // D-101: per-cell allele counts at every nuclear site with alternate-allele evidence (allsite.h), every barcode, private
+    if (engine.allsite_ready()) {
+        std::filesystem::create_directories(out_prefix + "/private/allsite");
+        write_threads.emplace_back([&]() {
+            const auto names = engine.allsite_names();
+            write_matrix("private/allsite/allele_ad", engine.allsite().ad, names);
+            write_matrix("private/allsite/allele_dp", engine.allsite().dp, names);
+            if (!allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names()))
+                record_failed_write("private/allsite/sites.tsv.gz");
+        });
+    } else if (engine.allsite_on()) {
+        std::cerr << "[allsite] WARNING: requested but not computed (see the [allsite] lines above; only the serial pass collects records)\n";
+    }
     // D-52: the per-cell callable-SNP matrices of the called cells in the cellsnp-lite layout (vireo reads it), private.
     if (!pileup_cfg.snp_path.empty() && !cc_result.cell_indices.empty() && snp_dp_csc.ncols > 0) {
         write_threads.emplace_back([&]() {
