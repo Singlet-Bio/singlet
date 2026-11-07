@@ -16,14 +16,14 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 | 1 | Non-host GPU screen falls back to the CPU | bug, no branch | resolved: device wandering, gone on a pinned GPU; retry kept on | `SINGLET_NONHOST_GPU_TRIES` |
 | 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | adopted, off by default (diagnostic) | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
 | 3 | 512-base lift and lean-path memory (P3-MEM-03) | `perf/gpu-device`, a462be4d; `gpu/frontier-fold-device`, 7cc07dd4 | adopted: identical, cost-neutral, 1.2 G reads fit one H100 | default |
-| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | pending | `SINGLET_GPU_SHARED_INDEX=1` |
+| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | identical at 2 and 3 slots; adoption A/B pending | `SINGLET_GPU_SHARED_INDEX=1` |
 | 5 | E21 resident pool | `gpu/fable/pool`, 719fd650 (tag only) | pending | `singlet gpu-pool` |
 | 6 | Heavy-read split | `gpu/bold-split`, 3c0ac3c2 (tag only) | pending | `SINGLET_ENGINE_GPU_STEPS_B=<n>\|auto` |
 | 7 | Single-donor demux screen | `gpu/bold-hostcut`, f04a64c7 (tag only) | pending | `SINGLET_DEMUX_SCREEN=1` |
 | 8 | WSHRINK | in the tree | pending | `SINGLET_BOLD_WSHRINK=1` |
 | 9 | k_resolve exon-multimapper fix | no source | pending | |
 | 10 | One device dedup | E12 and #145 | resolved: one remains | |
-| 11 | Prefill out of memory at 2 slots per GPU | bug, found by item 1 | open: confounds every 2-slot A/B | |
+| 11 | Prefill out of memory at 2 slots per GPU | bug, found by item 1 | resolved: the prefill retries every device failure; 0 fallbacks in 80 runs, all identical | `SINGLET_ENGINE_GPU_OOM_TRIES` (default 4) |
 
 ## 1. Non-host GPU screen falls back to the CPU
 
@@ -54,6 +54,29 @@ pushed the 340 GB step over its memory limit five times. Every A/B at 2 slots on
 The likely cause is the E17 budget: each of the 2 slots gets (total - 2 GB)/2 of device memory, while the non-host screen's 24.9 GB index
 sits outside the budget. With two samples in flight, a prefill that starts while the other slot holds the screen's index finds less memory
 than its budget promised.
+
+The fix retries instead of shrinking the budget, since the shortage is transient. When mapDistinct fails on the device, the prefill
+releases its slot, waits, takes the same device again, restores the shared region's header and runs mapDistinct from the start; its
+`fail()` has already reset the device. Three details came from the pilot. A failure does not always say out of memory: run c15 of item
+12-oom failed with an empty CUDA message while other processes held 51.5 GB, so every failure except E17's budget stop is retried. E10
+turning itself off for lack of memory must fail the call too: in run c7 of 12-oom the run went on without E10 after E8 had built the
+records on the device, and the GPU pileup's hand-off pass then failed (exit 9, no outputs). And waits of 5 and 10 s were too short;
+another slot's device hold lasts about 34 s. The final form (13f8f85c, `SINGLET_ENGINE_GPU_OOM_TRIES`, default 4) waits 15, 30 and
+45 s, and after the last attempt STAR maps every read, as before.
+
+Verdict: pilot item 14-oom3 (803591, g051, GPU 0, two points of 40 pbmc1k_v3 runs at 8 in flight and 2 slots) had no fallback in 80 runs,
+and every run is IDENTICAL to the same binary run alone. Three runs, each the first of its point while eight processes start together,
+failed twice and recovered on the third attempt in 360 to 385 s, against 620 to 700 s for a run that falls back. The points' cost is
+8.74 and 8.68 core-s/M, against 10.4 to 11.2 for the same points with fallbacks (803591, 10-fb-a and 40-shidx). Every 2-slot A/B from here
+on is free of this confounder.
+
+## 4. VMM shared index (identity)
+
+Pilot item 41-mps3 (803591, binary 4ea9d1e9, MPS, 3 slots) ran five points of 40 pbmc1k_v3 runs (mpsbase, mpsshidx, shidx at 2 slots,
+mpsshidx, mpsbase). Every run of every point is IDENTICAL to the same binary run alone and to the CPU reference (40/40 each). mpsshidx ran at
+2.57 and 2.66 M read pairs/s (core-s/M 8.83 and 8.71) against 2.43 and 2.25 for mpsbase (8.96 and 9.07). The shared-index points still had
+one fallback each (a prefill failure and a non-host screen allocation), so the adoption A/B runs on the retry binary. A shared-index item
+must have its node to itself, or two items' holders interfere (fixed for later items in f616eebb).
 
 ## 2. Transfer ledger and NVTX ranges
 
