@@ -223,7 +223,7 @@ public:
             if (sa.relative_abundance < abundance_threshold_) continue;
 
             // Resolve FASTA path
-            const std::string fna_path = fasta_path_for(sa.species_id, sa.kingdom);
+            const std::string fna_path = fasta_path_for(raw_species_id(sa.species_id), sa.kingdom);
 
             SpeciesRefIndex idx;
             if (!idx.build_from_fasta(fna_path)) {
@@ -232,7 +232,7 @@ public:
             }
 
             SecondaryAlignResult res;
-            res.species_id  = sa.species_id;
+            res.species_id  = raw_species_id(sa.species_id);   // the id in its own index (D-100)
             res.kingdom     = sa.kingdom;
             res.total_reads = n_reads;
 
