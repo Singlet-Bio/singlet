@@ -530,8 +530,8 @@ public:
     /// Nothing may read the groups after this (gene_root(), has_group(), collapse_molecules()).
     /// With threads > 1 the groups are listed once in the map's iteration order and cut into contiguous ranges that are
     /// collapsed side by side; each range's molecules are appended in range order, so `out` is the serial result element
-    /// for element. The per-cell statistics are integer sums per barcode, added up over the ranges. Each group's entries
-    /// are freed once collapsed (the map's nodes go at the end), as the serial path frees each group.
+    /// for element. The per-cell statistics are integer sums per barcode, added up over the ranges. The groups are freed
+    /// together afterwards, on this thread: freed from the workers, the main arena's lock made the collapse slower than serial.
     void consume_molecules(int umi_len, bool directional, std::vector<Molecule>& out, int threads = 1) {
         if (mol_groups_.empty()) return;
         if (threads > 1 && mol_groups_.size() >= kParallelMinGroups) {
@@ -562,9 +562,9 @@ private:
     }
 
     void consume_molecules_parallel(int umi_len, bool directional, std::vector<Molecule>& out, int threads) {
-        std::vector<std::pair<uint64_t, std::vector<MolEntry>*>> list;
+        std::vector<std::pair<uint64_t, const std::vector<MolEntry>*>> list;
         list.reserve(mol_groups_.size());
-        for (auto& kv : mol_groups_) list.push_back({kv.first, &kv.second});
+        for (const auto& kv : mol_groups_) list.push_back({kv.first, &kv.second});
         const size_t n = list.size();
         const size_t n_ranges = std::min<size_t>(n, static_cast<size_t>(threads) * 16);
         std::vector<std::vector<Molecule>> parts(n_ranges);
@@ -577,10 +577,9 @@ private:
             for (size_t r; (r = next.fetch_add(1)) < n_ranges;) {
                 const size_t b = r * n / n_ranges, e = (r + 1) * n / n_ranges;
                 for (size_t i = b; i < e; ++i) {
-                    std::vector<MolEntry>& entries = *list[i].second;
+                    const std::vector<MolEntry>& entries = *list[i].second;
                     add_group_stats(entries, umi_len, cell[t][static_cast<uint32_t>(list[i].first >> 32)], umi_counts);
                     col(list[i].first, entries, umi_len, directional, parts[r]);
-                    std::vector<MolEntry>().swap(entries);
                 }
             }
         };
@@ -588,7 +587,7 @@ private:
         for (int t = 1; t < nt; ++t) pool.emplace_back(worker, t);
         worker(0);
         for (auto& th : pool) th.join();
-        std::vector<std::pair<uint64_t, std::vector<MolEntry>*>>().swap(list);
+        std::vector<std::pair<uint64_t, const std::vector<MolEntry>*>>().swap(list);
         size_t total = out.size();
         for (const auto& p : parts) total += p.size();
         out.reserve(total);
