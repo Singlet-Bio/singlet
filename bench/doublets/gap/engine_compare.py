@@ -16,10 +16,13 @@ spec = importlib.util.spec_from_file_location("dbl_sweep", os.path.join(os.path.
 sw = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sw)
 SKIP = {"run.log", "time.txt", "command.txt", "exit.txt", "stream_path.txt", "node.txt", "provenance.json", "summary.json",
-        "metrics_summary.csv", "star_Log.out", "star_Log.final.out", "star_Log.progress.out", "star_Log.std.out", "binary_sha256.txt", "pileup_stats.json"}
+        "metrics_summary.csv", "read_stats.tsv", "star_Log.out", "star_Log.final.out", "star_Log.progress.out", "star_Log.std.out", "binary_sha256.txt", "pileup_stats.json"}
 
 
 def md5(p):
+    if p.endswith("ambient_contamination.json"):   # carries a wall-time field
+        import re
+        return hashlib.md5(re.sub(rb'"seconds": [0-9.e+-]+', b"", open(p, "rb").read())).hexdigest()
     h = hashlib.md5()
     with open(p, "rb") as f:
         for ch in iter(lambda: f.read(1 << 20), b""):
