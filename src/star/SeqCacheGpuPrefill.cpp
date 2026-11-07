@@ -1505,20 +1505,21 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // IDEAS.md item 11: with several samples per GPU the device can hold less free memory than this sample's E17 budget (other processes'
     // contexts, E11 keeps between their E20 holds), and an allocation fails with out of memory. That is transient: release the slot, wait, take
     // the same device again and run mapDistinct again from the start. Its fail() has reset the device; the shared region's header is restored, so
-    // nothing of the failed attempt is used. SINGLET_ENGINE_GPU_OOM_TRIES attempts (default 3; 1: STAR maps every read after the first, as before)
+    // nothing of the failed attempt is used. SINGLET_ENGINE_GPU_OOM_TRIES attempts (default 4; 1: STAR maps every read after the first, as before)
     singlet_engine_gpu::E2EHeader e2h0{};
     const bool e2hSaved = e2r.base != nullptr;
     if (e2hSaved) e2h0 = *e2r.hdr();
-    int oomTries = 3;
+    int oomTries = 4;
     if (const char *t = getenv("SINGLET_ENGINE_GPU_OOM_TRIES")) oomTries = std::max(1, atoi(t));
-    // E10's own out-of-memory turn-off fails the call too, except on the last attempt (in.oomFatal); dmal's failures say "out of device memory"
+    // E10's own out-of-memory turn-off fails the call too (in.oomFatal), on every attempt: a run that goes on without E10 after E8 built the
+    // records on the device ends in the GPU pileup's hand-off error (pilot item 12-oom, run c7), while a failed call leaves every read to STAR.
+    // dmal's failures say "out of device memory". The waits (15, 30, 45 s) cover another slot's device hold (about 34 s per pbmc1k_v3 run).
     auto oomLog = [](const std::string &l) { return l.find("out of memory") != std::string::npos || l.find("out of device memory") != std::string::npos; };
     in.oomFatal = oomTries > 1;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     for (int a = 2; !ok && !out.budgetFail && a <= oomTries && oomLog(out.log); a++) {
-        in.oomFatal = a < oomTries;
         in.release();
-        const int waitS = 5 * (a - 1);
+        const int waitS = 15 * (a - 1);
         P.inOut->logMain << "ENGINE_GPU: attempt " << a - 1 << " ran out of device memory; attempt " << a << " in " << waitS << " s. Its log:\n" << out.log << flush;
         singlet_tail::mark("prefill: device out of memory, attempt %d in %d s", a, waitS);
         std::this_thread::sleep_for(std::chrono::seconds(waitS));
