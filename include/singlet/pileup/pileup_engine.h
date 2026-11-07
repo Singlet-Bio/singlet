@@ -160,6 +160,11 @@ constexpr uint32_t kNoSplicedIntron = 4;    ///< a spliced read (CIGAR N) gives 
 constexpr uint32_t kFlank           = 8;    ///< <= 5 intronic bases of an exon-touching read are exonic (velocyto MIN_FLANK)
 constexpr uint32_t kMtPrefer        = 256;  ///< multimapper split between a chrM gene and a nuclear gene (NUMT): count the chrM gene
 constexpr uint32_t kNoExonPriority  = 16;   ///< an exonic read of gene A inside an intron of gene B is not counted
+// STARsolo GeneFull's gene set (Transcriptome::geneFullAlignOverlap + SoloReadFeature::record): the genes of a read are the same-strand
+// genes whose body (exons or introns) overlaps an aligned block of ANY of its alignments, primary or secondary. A read with more than one
+// such gene is not counted. It implies kNoExonPriority on the primary, makes an intron-only secondary in another gene, or a primary in the
+// introns of two genes, mark a multimapper gene-ambiguous, and otherwise leaves the assignment (gene, exon / intron, labels) unchanged.
+constexpr uint32_t kGeneFullSet     = 512;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
@@ -791,10 +796,12 @@ public:
                                 auto it = mm_buffer.find(qh);
                                 if (it != mm_buffer.end()) {
                                     // Entry exists — update gene tracking
-                                    auto hit = determine_exon_gene(b, tid);
+                                    auto hit = determine_exon_gene(b, tid, true);
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(it->second, hit.gene_idx);
                                         // Without a primary assignment, the smallest exon over the
@@ -814,12 +821,14 @@ public:
                                     }
                                 } else {
                                     // Not in buffer yet — create entry
-                                    auto hit = determine_exon_gene(b, tid);
+                                    auto hit = determine_exon_gene(b, tid, true);
                                     auto& entry = mm_buffer[qh];
                                     entry.seen++;
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(entry, hit.gene_idx);
                                         entry.gene_idx = hit.gene_idx;
@@ -1133,6 +1142,7 @@ public:
                         }
                     }
 
+                    if (gene_full_multi(exon_gene, primary_multigene, intron_overlaps)) entry.gene_ambiguous = true;
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                     note_gene(entry, aln_gene);
@@ -3305,6 +3315,7 @@ private:
         uint32_t gene_idx = UINT32_MAX;
         uint32_t exon_idx = UINT32_MAX;
         bool multi_gene = false;  // true if overlaps 2+ genes (vs intergenic)
+        uint32_t body_gene = UINT32_MAX;  // intron_rule::kGeneFullSet: the one gene whose introns an exon-free alignment lies in
     };
 
     // ── Hash functions for zero-allocation lookups ──
@@ -3384,7 +3395,7 @@ private:
         return h;
     }
 
-    GeneHit determine_exon_gene(bam1_t* b, int32_t tid) {
+    GeneHit determine_exon_gene(bam1_t* b, int32_t tid, bool body = false) {
         GeneHit result;
         if (!has_gene_model_) return result;
 
@@ -3433,7 +3444,11 @@ private:
             }
         }
 
-        if (mm_overlaps_.empty()) return result;
+        const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
+        if (mm_overlaps_.empty()) {
+            if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
+            return result;
+        }
 
         // Check single-gene (any-overlap-based)
         uint32_t gene = gene_model_.exon_to_gene(mm_overlaps_[0]);
@@ -3447,7 +3462,35 @@ private:
 
         result.gene_idx = gene;
         result.exon_idx = mm_overlaps_[0];
+        if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
         return result;
+    }
+
+    // intron_rule::kGeneFullSet for one secondary alignment: its blocks' same-strand intron overlaps extend the exon hit to STARsolo
+    // GeneFull's gene-body set. An intron of a second gene makes the hit multi-gene; an exon-free alignment inside the introns of exactly
+    // one gene reports it as body_gene, which marks ambiguity but is never assigned (intronic multimappers carry no evidence, kUnique).
+    void gene_full_extend(GeneHit& r, const std::vector<std::pair<int32_t, int32_t>>& blocks, int32_t tid, bool read_reverse,
+                          std::vector<uint32_t>& scratch) const {
+        if (r.multi_gene || !config_.count_introns) return;
+        uint32_t g0 = r.gene_idx;
+        for (const auto& [bs, be] : blocks) {
+            gene_model_.query_introns(tid, bs, be, scratch);
+            for (uint32_t idx : scratch) {
+                const uint32_t g = gene_model_.intron_to_gene(idx);
+                if (g == UINT32_MAX) continue;
+                if (config_.stranded) {
+                    const char gs = gene_model_.gene_strand(g);
+                    if (gs != '.') {
+                        bool expect_reverse = (gs == '-');
+                        if (config_.reverse_strand) expect_reverse = !expect_reverse;
+                        if (read_reverse != expect_reverse) continue;
+                    }
+                }
+                if (g0 == UINT32_MAX) g0 = g;
+                else if (g != g0) { r = GeneHit{}; r.multi_gene = true; return; }
+            }
+        }
+        if (r.gene_idx == UINT32_MAX) r.body_gene = g0;
     }
 
     static uint64_t pos_key(int32_t tid, int32_t pos) {
@@ -4028,7 +4071,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════
 
     // Thread-safe gene determination using per-worker scratch vectors
-    GeneHit determine_exon_gene_parallel(WorkerContext& wc, bam1_t* b, int32_t tid) {
+    GeneHit determine_exon_gene_parallel(WorkerContext& wc, bam1_t* b, int32_t tid, bool body = false) {
         GeneHit result;
         if (!has_gene_model_) return result;
 
@@ -4068,7 +4111,11 @@ private:
             }
         }
 
-        if (wc.mm_overlaps.empty()) return result;
+        const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
+        if (wc.mm_overlaps.empty()) {
+            if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
+            return result;
+        }
 
         uint32_t gene = gene_model_.exon_to_gene(wc.mm_overlaps[0]);
         for (size_t i = 1; i < wc.mm_overlaps.size(); ++i) {
@@ -4080,6 +4127,7 @@ private:
 
         result.gene_idx = gene;
         result.exon_idx = wc.mm_overlaps[0];
+        if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
         return result;
     }
 
@@ -4170,6 +4218,21 @@ private:
                             static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
     }
 
+    // intron_rule::kGeneFullSet on a primary alignment: more than one gene in its same-strand body set (exons of two genes, an exon of one
+    // gene and an intron of another, or introns of two genes). The multimapper buffer then treats the read as gene-ambiguous.
+    bool gene_full_multi(uint32_t exon_gene, bool exon_multigene, const std::vector<uint32_t>& intron_overlaps) const {
+        if (!(config_.intron_rules & intron_rule::kGeneFullSet)) return false;
+        if (exon_multigene) return true;
+        uint32_t g0 = exon_gene;
+        for (uint32_t idx : intron_overlaps) {
+            const uint32_t g = gene_model_.intron_to_gene(idx);
+            if (g == UINT32_MAX) continue;
+            if (g0 == UINT32_MAX) g0 = g;
+            else if (g != g0) return true;
+        }
+        return false;
+    }
+
     ReadFeatures classify_read(uint32_t exon_gene, uint32_t first_exon_idx, bool exon_multigene,
                                const std::vector<uint32_t>& intron_overlaps,
                                uint32_t intron_gene, uint32_t first_intron_idx,
@@ -4189,7 +4252,7 @@ private:
             }
             if (other_gene_intron) {
                 st.cross_gene_intron_reads++;
-                if (config_.intron_rules & intron_rule::kNoExonPriority) return ReadFeatures{};
+                if (config_.intron_rules & (intron_rule::kNoExonPriority | intron_rule::kGeneFullSet)) return ReadFeatures{};
                 rf.diag |= DirectionalUmiStore::kDiagOtherGene;
             }
             rf.flags = (rf.intron_idx == UINT32_MAX)
@@ -4618,10 +4681,12 @@ private:
                                 uint64_t qh = hash_qname(bam_get_qname(b));
                                 auto it = wc.mm_buffer.find(qh);
                                 if (it != wc.mm_buffer.end()) {
-                                    auto hit = determine_exon_gene_parallel(wc, b, tid);
+                                    auto hit = determine_exon_gene_parallel(wc, b, tid, true);
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(it->second, hit.gene_idx);
                                         note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
@@ -4640,12 +4705,14 @@ private:
                                         wc.mm_buffer.erase(it);
                                     }
                                 } else {
-                                    auto hit = determine_exon_gene_parallel(wc, b, tid);
+                                    auto hit = determine_exon_gene_parallel(wc, b, tid, true);
                                     auto& entry = wc.mm_buffer[qh];
                                     entry.seen++;
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(entry, hit.gene_idx);
                                         entry.gene_idx = hit.gene_idx;
@@ -4916,6 +4983,7 @@ private:
                     }
                 }
 
+                if (gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps)) entry.gene_ambiguous = true;
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                 note_gene(entry, aln_gene);
 
