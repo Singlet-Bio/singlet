@@ -74,7 +74,9 @@ typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;
 // gpu/bold-kern2 (on by default; SINGLET_BOLD_WSHRINK=0 turns it off): lane B with the windows' aligns in a per-batch pool (Work::waP) and smaller NWA / NKEEP.
 // A read that needs more than these capacities ends Overflow and goes to the host lane (STAR's limits), as lane B's own overflows do.
-typedef Caps<      160,     8,  128,   128,  32,    4096, 20,  32,   32,    4096, true> LaneBc;
+// Capacities raised from NW 128, NWA 32, NKEEP 32 (SINGLET_ENGINE_GPU_OVSTAT=1 on pbmc1k_v3: of lane B's 177,686 overflows at STEPS_B 8192,
+// 70,154 were keep, 67,260 wa and 39,995 win; nuclei2k_v2 mostly keep). A read over a capacity is mapped by the host pool, so results do not change.
+typedef Caps<      160,     8,  128,   192,  50,    4096, 20,  32,   64,    4096, true> LaneBc;
 
 // ---- dedup
 __global__ void k_hash(const char* seq, const u64* off, u64 n, u64* h1, u64* h2, uint8_t* hasN) {
