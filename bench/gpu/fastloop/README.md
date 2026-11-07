@@ -47,7 +47,7 @@ The RTX S1 tier agrees with the H100 on direction and stage for every anchor and
 | stepsauto | RTX S1 | no effect (the split never triggers at pbmc2m) | none | RULED OUT at small size; full A/B inconclusive |
 | demux screen | RTX S1 | none | −1.9% [−2.2, −1.5] | below the 3% bar |
 
-The resident server wins on every metric. Its non-host lock hold halves and the non-host references stop being loaded per run. Each nhsrv point starts a fresh server and drops its first run, so the effect is the warm steady state that one server per node would give. Because a server-plus-preload arm ran slower at 8 in flight, the k8 A/B decides adoption.
+The resident server wins on every metric. Its non-host lock hold halves and the non-host references stop being loaded per run. Each nhsrv point starts a fresh server and drops its first run, so the effect is the warm steady state that one server per node would give. Because a server-plus-preload arm ran slower at 8 in flight, the k8 A/B decides adoption. The campaign runs it as a sequential A/B on core-s/M at k8t7s2r1 (pilot item 33, freeze binary ee7fa54d). For scale, its item 27 measured one H100 with 54 cores at a steady 2.65, 2.57 and 3.12 M pairs/s at 8, 12 and 16 in flight (T7, 2 slots), with 24 to 31 cores busy.
 
 Time per verdict fell from about 90 H100-minutes for one sequential A/B to about 11 H100-minutes, with intervals of ±1% instead of ±2.8%. Six ideas were decided in about 2.5 H100-hours, including the calibration items. The RTX 8000 tier answered "does it act, and where" for four ideas in 31 minutes without H100 time.
 
