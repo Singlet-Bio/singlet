@@ -81,7 +81,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024 are implemented; qw: mask words per read (P3-ENG-14)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
@@ -660,7 +660,7 @@ static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t*
 // MX (when g_want_mixed): the mixed molecules (unspliced with an exon-only read) per (cell, exon) and (cell, intron)
 static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr, CsrDev32 RD[2] = nullptr,
                      CsrDev MX[2] = nullptr) {
-    Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup; L.velo = L.cr && (in.dp.rules & 1024) != 0;
+    Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup; L.velo = L.cr && (in.dp.rules & 1024) != 0; L.spl = L.cr && (in.dp.rules & 2048) != 0;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
     if (RD) RD[0] = RD[1] = CsrDev32{nullptr, nullptr, nullptr, 0};

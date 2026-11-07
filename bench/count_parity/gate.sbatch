@@ -9,13 +9,13 @@
 # Standing STARsolo gate (bench/count_parity/README.md). Runs a Singlet binary on the gate datasets, scores every counting axis
 # against frozen STARsolo 2.7.11b outputs with paired bootstrap CIs (parity_score.py) and writes the gate record named by the
 # counting-source hash of the commit the binary was built from. Exit 1 if any axis is worse than STARsolo beyond its CI.
-#   sbatch --export=ALL,BIN=<.../bin2/<commit8>/singlet-gpu>,BR=<branch>[,DATASETS="hgmm1k_v3 pbmc1k_cite_v3"][,ENGINE=gpu] gate.sbatch
+#   sbatch --export=ALL,BIN=<.../bin2/<commit8>/singlet-gpu>,BR=<branch>[,DATASETS="hgmm1k_v3 hgmm1k_v2 pbmc1k_cite_v3"][,ENGINE=gpu] gate.sbatch
 # The binary's directory holds commit-gpu (gd-build2.sbatch writes it). Record: $W/count-parity/gate/<hash16>.json. Commit it as
 # bench/count_parity/gate_results/<hash16>.json so that gate_check.py (CI) passes. ENGINE=gpu adds --engine gpu and the GPU pileup.
 set -euo pipefail
 : "${BIN:?}" "${BR:?}"
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
-DATASETS=${DATASETS:-"hgmm1k_v3 pbmc1k_cite_v3"}
+DATASETS=${DATASETS:-"hgmm1k_v3 hgmm1k_v2 pbmc1k_cite_v3"}
 COMMIT=$(cat "$(dirname "$BIN")/commit-gpu"); BARE=$W/repos/singlet-py.git; URL="$(git -C $BARE config remote.origin.url)"
 ( flock 9; git -C $BARE fetch -q "$URL" "+refs/heads/$BR:refs/cp/gate" ) 9>$BARE/.gn-fetch.lock
 git -C $BARE cat-file -e "$COMMIT" || { echo "commit $COMMIT of the binary is not in $BR"; exit 2; }

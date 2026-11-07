@@ -61,6 +61,6 @@ sbatch --export=ALL,BIN=$W/jobs/gpu-pr2/bin2/<commit8>/singlet-gpu,BR=<branch> j
 # then copy $W/count-parity/gate/<hash16>.json to bench/count_parity/gate_results/ and commit it
 ```
 
-The gate runs hgmm1k_v3 and pbmc1k_cite_v3 (about 15 minutes on 16 cores) against the frozen STARsolo outputs in
+The gate runs hgmm1k_v3, hgmm1k_v2 (10x v2 chemistry) and pbmc1k_cite_v3 (about 25 minutes on 16 cores) against the frozen STARsolo outputs in
 `$W/count-parity/starsolo-ref/`. `ENGINE=gpu` runs the GPU pileup instead; the CPU and GPU pileups are held
 byte-identical by `tests/cpp/test_gpu_pileup_labels.cpp` and the PR-2 identity gate.
