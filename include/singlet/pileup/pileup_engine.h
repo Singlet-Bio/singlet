@@ -2132,12 +2132,11 @@ public:
         const auto SEQ = singlet_engine_gpu::pileupCat<uint8_t>(in.preSeq, in.seq.data(), in.seq.size());
         const size_t nR = R.size();
         if (out.alnStat.size() != A.size()) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
-        uint64_t pd[16] = {0}; const bool pdbg = std::getenv("SINGLET_POLYA_DEBUG") != nullptr;   // diagnostics: why the poly(A) rebuild keeps or drops a read
         static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
         static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
         const int ulen = in.umiLen > 0 ? in.umiLen : 0;
         struct HostLocal {   // one chunk of reads: its counters and, in read order, its poly(A) records and V(D)J hits
-            PileupStats st; uint64_t pd[16] = {0}; std::vector<PolyARecord> polya; std::vector<uint32_t> ov;
+            PileupStats st; std::vector<PolyARecord> polya; std::vector<uint32_t> ov;
             struct VdjEv { uint32_t bc, vg, gene; int ulen; char umi[24]; };
             std::vector<VdjEv> vdj;
         };
@@ -2186,7 +2185,6 @@ public:
                 };
                 uint64_t key = 0; bool ok = false;
                 const uint32_t clip = r < gpu_clip_.size() ? gpu_clip_[r] : 0u;
-                L.pd[0]++; if (clip) L.pd[1]++;
                 if (clip) {
                     // a clipped read: the BAM sequence is the whole read and its CIGAR has the clipped bases as soft clips, so the 3' soft
                     // clip (in read orientation; the BAM's last op when forward, its first when reverse) is the record's own plus the tail
@@ -2197,11 +2195,9 @@ public:
                     const int nb = a.n_ops + ((c3 > 0 && s3 == 0) ? 1 : 0) + ((c5 > 0 && (o5 & 15) != BAM_CSOFT_CLIP) ? 1 : 0);
                     const int cl = s3 + c3;
                     auto rbase = [&](int j) -> uint8_t { return (rsq[j >> 1] >> ((j & 1) * 4)) & 15; };   // record, read orientation
-                    if (nb < 2) L.pd[2]++; else if (cl < 6 || cl > ql) L.pd[3]++;
                     if (nb >= 2 && cl >= 6 && cl <= ql) {
                         int na = nAt; for (int j = qlen - s3; j < qlen; ++j) na += rbase(j) == 1;
                         const bool firstA = s3 > 0 ? rbase(qlen - s3) == 1 : (clip & 2u) != 0;
-                        if (!(na >= 0.8 * cl)) L.pd[4]++; else if (!firstA) L.pd[5]++;
                         if (na >= 0.8 * cl && firstA) {
                             if (!rev) {
                                 int64_t end = a.pos;
@@ -2213,10 +2209,8 @@ public:
                 } else if (a.n_ops >= 2 && !rev) {
                     const uint32_t c = ops[a.n_ops - 1];
                     const int cl = static_cast<int>(c >> 4);
-                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { L.pd[9]++; if (cl >= 6) L.pd[10]++; if (cl > qlen) L.pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int na = 0; for (int i = qlen - cl; i < qlen; ++i) na += base(i) == 1;
-                        if (!(na >= 0.8 * cl)) L.pd[11]++; else if (base(qlen - cl) != 1) L.pd[12]++;
                         if (na >= 0.8 * cl && base(qlen - cl) == 1) {
                             int64_t end = a.pos;
                             for (int k = 0; k < a.n_ops; ++k) { const int op = ops[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += ops[k] >> 4; }
@@ -2226,15 +2220,12 @@ public:
                 } else if (a.n_ops >= 2) {
                     const uint32_t c = ops[0];
                     const int cl = static_cast<int>(c >> 4);
-                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { L.pd[9]++; L.pd[14]++; if (cl >= 6) L.pd[10]++; if (cl > qlen) L.pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int nt = 0; for (int i = 0; i < cl; ++i) nt += base(i) == 8;
-                        if (!(nt >= 0.8 * cl)) L.pd[11]++; else if (base(cl - 1) != 8) L.pd[12]++;
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) { L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); L.pd[clip ? 6 : 7]++; }
-                else if (!clip) L.pd[8]++;
+                if (ok) { L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); }
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2262,7 +2253,6 @@ public:
             HostLocal& L = hls[t];
             stats.strand_sense += L.st.strand_sense; stats.strand_antisense += L.st.strand_antisense; stats.wrong_strand += L.st.wrong_strand;
             stats.multigene_reads += L.st.multigene_reads; stats.cross_gene_intron_reads += L.st.cross_gene_intron_reads;
-            for (int k = 0; k < 16; k++) pd[k] += L.pd[k];
             polya_recs_.insert(polya_recs_.end(), L.polya.begin(), L.polya.end());
             for (const auto& ev : L.vdj) {
                 const char* us = ev.ulen > 0 ? ev.umi : nullptr;
@@ -2270,8 +2260,6 @@ public:
                 else { vdj_acc_.increment(ev.vg, ev.bc); stats.vdj_hits++; }
             }
         }
-        if (pdbg) std::cerr << "[polya-debug] eligible " << pd[0] << ", clipped " << pd[1] << ": nb<2 " << pd[2] << ", cl out of range " << pd[3]
-                            << ", A-fraction " << pd[4] << ", not firstA " << pd[5] << ", kept clipped " << pd[6] << "; unclipped kept " << pd[7] << ", unclipped dropped " << pd[8] << ", unclipped fwd/rev with S " << pd[9] << ", S>=6 " << pd[10] << ", A-fraction fail " << pd[11] << ", first base fail " << pd[12] << ", cl>qlen " << pd[13] << ", rev " << pd[14] << "\n";
         return true;
     }
     // W11 "on": the reads STAR wrote no BAM record for (hand-off records; ReadAlign_outputAlignments.cpp): what the serial loop does
