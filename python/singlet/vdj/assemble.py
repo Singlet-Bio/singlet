@@ -79,6 +79,10 @@ class Params:
     min_branch_umis: int = 2
     branch_frac: float = 0.20
     min_hits: int = 2  # exact 15-mer hits for a segment call on a read
+    # > 0: a read whose V, J or C call has fewer than min_hits 15-mer hits is scored once more with exact seeds of this length (11 is the
+    # intended value): somatic hypermutation breaks 15-mers of the V and J segments, a shorter seed survives it. Calls that exist at k = 15 never change.
+    rescue_k: int = 0
+    rescue_hits: int = 4  # hits of the shorter seed on one diagonal for the rescue call
     min_barcode_umis: int = 2  # barcodes with fewer V(D)J UMIs are not assembled
     min_umi_reads: int = 2  # mates of a molecule, at least
     min_contig_reads: int = 3  # mates of a kept contig
@@ -181,11 +185,33 @@ def _rc(s: bytes) -> bytes:
     return s.translate(_RC)[::-1]
 
 
-def _classify(ref: Reference, seqs: List[bytes], min_hits: int):
+def _rescue_index(ref: Reference, k: int):
+    if not hasattr(ref, "_rescue_idx"):
+        ref._rescue_idx = {}
+    if k not in ref._rescue_idx:
+        ref._rescue_idx[k] = K.build_index([s.seq for s in ref.segs], k)
+    return ref._rescue_idx[k]
+
+
+def _classify(ref: Reference, seqs: List[bytes], min_hits: int, rescue_k: int = 0, rescue_hits: int = 4):
     codes, off = _codes(seqs)
     out = K.classify(
         codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits, ref.seg_class
     )
+    if rescue_k > 0 and len(seqs):
+        # columns of K.classify: V seg, hits, diag | J seg, hits, diag | C seg, hits, diag | tie flags (1 C, 2 V, 4 J)
+        need = [out[:, 1] < min_hits, out[:, 4] < min_hits, out[:, 7] < min_hits]
+        rows = np.where(need[0] | need[1] | need[2])[0]
+        if len(rows):
+            km, sg, ps = _rescue_index(ref, rescue_k)
+            codes2, off2 = _codes([seqs[i] for i in rows])
+            o2 = K.classify(codes2, off2, rescue_k, km, sg, ps, ref.region, rescue_hits, ref.seg_class)
+            for reg, (c0, bit) in enumerate(((0, 2), (3, 4), (6, 1))):
+                take = need[reg][rows] & (o2[:, c0 + 1] >= rescue_hits)
+                r = rows[take]
+                if len(r):
+                    out[r, c0:c0 + 3] = o2[take, c0:c0 + 3]
+                    out[r, 9] = (out[r, 9] & ~bit) | (o2[take, 9] & bit)
     return codes, off, out
 
 
@@ -277,7 +303,7 @@ def run_library(
             mates += [(_rc(s) if orient["r1_rc"] else s) for s in ins]
             src.append(np.arange(len(r1)))
         src = np.concatenate(src)
-        codes, off, o = _classify(ref, mates, params.min_hits)
+        codes, off, o = _classify(ref, mates, params.min_hits, params.rescue_k, params.rescue_hits)
         hits = np.stack([o[:, 1], o[:, 4], o[:, 7]], axis=1)
         anyhit = hits.max(axis=1) > 0
         st["mates_with_segment"] += int(anyhit.sum())
