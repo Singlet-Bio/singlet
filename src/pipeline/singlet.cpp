@@ -65,6 +65,7 @@
 #include "singlet/pileup/nonhost/host_kmer_filter.h"
 #include "singlet/pileup/nonhost/nonhost_screener.h"
 #include "singlet/pileup/nonhost/nonhost_em.h"
+#include "singlet/pileup/nonhost/nonhost_calibration.h"
 #include "singlet/pileup/nonhost/nonhost_aligner.h"
 #include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
 #include "singlet/pileup/nonhost/nonhost_confirmed_reads.h"
@@ -1989,6 +1990,28 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        // ── Write nonhost_candidates.tsv: every species the EM gives at least 10 reads, before the report thresholds ──
+        // (em_result above keeps only species with a mean hit rate of 0.30 and max(500, 0.5%) reads; the calibration of the infection probability
+        // and any taxon-specific check of a negative library need the evidence below those thresholds as well)
+        {
+            std::filesystem::create_directories(out_prefix + "/nonhost");
+            int cand_iter = 0;
+            auto cand = em_deconvolve(multi_hits, kingdom_map, /*max_iter=*/500, /*tol=*/1e-6f, /*min_abundance=*/0.0f,
+                                      /*min_prefilter_hr=*/0.05f, /*min_report_hr=*/0.0f, &cand_iter, /*min_abs_reads=*/10u);
+            std::unordered_set<uint32_t> confirmed_ids;
+            for (const auto& sa : em_result) confirmed_ids.insert(sa.species_id);
+            std::ofstream ctsv(out_prefix + "/nonhost/nonhost_candidates.tsv");
+            ctsv << "kingdom\tspecies_id\tspecies_name\treads_assigned\tscreened_reads\trelative_abundance\tmean_hit_rate\tem_confirmed\tp_infected\n";
+            for (const auto& sa : cand) {
+                const char* kname = sa.kingdom == NonHostCategory::VIRAL ? "VIRAL" : sa.kingdom == NonHostCategory::BACTERIAL ? "BACTERIAL"
+                                  : sa.kingdom == NonHostCategory::FUNGAL ? "FUNGAL" : "UNKNOWN";
+                ctsv << kname << "\t" << sa.species_id << "\t" << species_name_lookup(sa.species_id) << "\t" << sa.n_reads_assigned << "\t"
+                     << n_total << "\t" << std::fixed << std::setprecision(6) << sa.relative_abundance << "\t" << sa.mean_hit_rate << "\t"
+                     << (confirmed_ids.count(sa.species_id) ? 1 : 0) << "\t" << std::setprecision(6)
+                     << singlet::nonhost::infection_probability(sa.n_reads_assigned, static_cast<double>(n_total), sa.mean_hit_rate) << "\n";
+            }
+        }
+
         // ── Write nonhost_em_abundance.tsv ───────────────────────────────────
         {
             std::filesystem::create_directories(out_prefix + "/nonhost");
@@ -2061,6 +2084,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                    << "  \"em_species_count\": "      << em_result.size() << ",\n"
                    << "  \"em_iterations\": "         << n_em_iter << ",\n"
                    << "  \"per_cell_species\": \"em_confirmed_only\",\n"
+                   << "  \"infection_probability_fit_set\": \"" << singlet::nonhost::kInfectionCalibrationFitSet << "\",\n"
                    << "  \"missing_reference_fasta\": [";
                 for (size_t mi = 0; mi < nonhost_missing_fasta.size(); ++mi)
                     jf << (mi ? ", " : "") << "\"" << nonhost_missing_fasta[mi] << "\"";
@@ -2081,7 +2105,9 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                        << ", \"species_name\": \"" << species_name_lookup(sa.species_id) << "\""
                        << ", \"kingdom\": \"" << kname << "\""
                        << ", \"relative_abundance\": " << sa.relative_abundance
-                       << ", \"reads_assigned\": "     << sa.n_reads_assigned << "}";
+                       << ", \"reads_assigned\": "     << sa.n_reads_assigned
+                       << ", \"p_infected\": " << std::setprecision(6)
+                       << singlet::nonhost::infection_probability(sa.n_reads_assigned, static_cast<double>(n)  , sa.mean_hit_rate) << "}";
                     if (pi + 1 < top_n) jf << ",";
                     jf << "\n";
                 }
