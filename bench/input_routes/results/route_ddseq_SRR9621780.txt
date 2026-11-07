@@ -1,0 +1,12 @@
+node=c007.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/aa47008f/singlet-gpu commit=aa47008f006403ec76327d9ef27e8dd0497d644c route=spec_ddseq 2026-11-06T17:54:29-05:00
+ddseq: exit 0 wall 1:14.14 size 118755941
+  ddseq | [1fq-encode] Protocol: ddseq (confidence: 4)
+  ddseq | [singlet-download] Done: 4000000 reads, 8 blocks
+  ddseq | [singlet-download] Protocol: ddseq (confidence: 4)
+  ddseq | [1fq-profile]   Protocol:     3.588s ( 4.8%)
+  ddseq header | [1fq-decode] File: /tmp/debruinz-ir-rt-803297/ddseq.1fq
+  ddseq header | [1fq-decode] Version: 4, Protocol: ddseq (id=17, confidence=4)
+  ddseq header | [1fq-decode] Reads: 4000000, Blocks: 8, Streams: 2
+  ddseq header | [1fq-decode] R1 length: 52, R2 length: 75
+ddseq pipeline: exit 5 wall 30:00.18
+done 2026-11-06T18:25:44-05:00

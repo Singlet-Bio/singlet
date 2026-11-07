@@ -29,6 +29,7 @@
 #include "mtx_writer.h"
 #include "pz_writer.h"
 #include "donor_demux.h"
+#include "genotype_export.h"
 #include "mt_heteroplasmy.h"
 #include "mt_event_caller.h"
 #include "provenance.h"
@@ -309,6 +310,8 @@ inline ExportStats export_results(const PileupEngine& engine,
     const bool use_h5ad = (export_cfg.output_format == "h5ad" || export_cfg.output_format == "all");
     const bool use_loom = (export_cfg.output_format == "loom");
     const auto& out_prefix = export_cfg.out_prefix;
+    // D-52: private/ (genotypes, chrM alleles) is created owner-only before anything is written into it
+    if (!pileup_cfg.snp_path.empty() || pileup_cfg.count_mt) genotype::make_private_dir(out_prefix + "/private");
 
     // ── Phase 1: COO → CSC (parallel) ──
     nvexp.next("export: Phase 1: COO  CSC (parallel)");
@@ -604,23 +607,65 @@ inline ExportStats export_results(const PileupEngine& engine,
         else if (export_cfg.cell_caller == "called_v2" && export_cfg.forced_cells <= 0) {
             auto t_v2 = std::chrono::high_resolution_clock::now();
             std::vector<int64_t> exon_tot(bc_totals.begin(), bc_totals.end());
+            const bool with_introns = intron_csc.ncols == exon_csc.ncols && intron_csc.ncols > 0;
+            // Nuclei libraries: most UMIs are intronic, so exon-only totals can put real nuclei and a cytoplasmic
+            // ambient plateau at the same depth, and the knee falls into the plateau (GSM7884577: 57 k calls at a
+            // 350-UMI knee against 16 k for STARsolo GeneFull; the excess barcodes have a median intron fraction of
+            // 0.06 against 0.53 for the nuclei). A library counts as nuclei when its top barcodes carry at least
+            // kNucleiIntronShare of their UMIs in introns (top 1,000: nuclei 0.60-0.64 for nuclei2k_v2, GSM7064234 and
+            // GSM7884577; whole cells 0.07-0.40). The knee and EmptyDrops_CR move to exon + intron counts only when the
+            // exon knee then calls more than kNucleiKneeExcess times the barcodes of the exon + intron knee, the
+            // signature of that plateau (GSM7884577 3.96; nuclei2k_v2 1.15 and GSM7064234 1.03, whose exon calls
+            // agree with Cell Ranger and CellBender and stay as they were).
+            constexpr double kNucleiIntronShare = 0.5;
+            constexpr size_t kNucleiTopBarcodes = 1000;
+            constexpr double kNucleiKneeExcess = 2.0;
+            bool nuclei_library = false;
+            size_t n_knee_exon = 0, n_knee_full = 0;
+            std::vector<int64_t> full_tot = exon_tot;
+            double intron_share = 0.0;
+            bool nuclei_counts = false;
+            if (with_introns) {
+                for (uint32_t j = 0; j < intron_csc.ncols; ++j)
+                    for (int32_t k = intron_csc.indptr[j]; k < intron_csc.indptr[j + 1]; ++k)
+                        full_tot[j] += static_cast<int64_t>(intron_csc.data[k]);
+                std::vector<uint32_t> ord(full_tot.size());
+                for (uint32_t j = 0; j < ord.size(); ++j) ord[j] = j;
+                const size_t ntop = std::min(kNucleiTopBarcodes, ord.size());
+                std::partial_sort(ord.begin(), ord.begin() + static_cast<std::ptrdiff_t>(ntop), ord.end(),
+                                  [&](uint32_t a, uint32_t b) { return full_tot[a] != full_tot[b] ? full_tot[a] > full_tot[b] : a < b; });
+                int64_t s_ex = 0, s_full = 0;
+                for (size_t r = 0; r < ntop; ++r) { s_ex += exon_tot[ord[r]]; s_full += full_tot[ord[r]]; }
+                intron_share = s_full > 0 ? 1.0 - static_cast<double>(s_ex) / static_cast<double>(s_full) : 0.0;
+                nuclei_library = intron_share >= kNucleiIntronShare;
+            }
             int64_t knee_umi_min = 0;
             std::vector<uint8_t> knee_called = calledv2::cellranger22(exon_tot, 3000, 0.99, 10, &knee_umi_min);
-            const bool with_introns = intron_csc.ncols == exon_csc.ncols && intron_csc.ncols > 0;
+            if (nuclei_library) {
+                int64_t full_umi_min = 0;
+                std::vector<uint8_t> knee_full = calledv2::cellranger22(full_tot, 3000, 0.99, 10, &full_umi_min);
+                for (uint8_t v : knee_called) n_knee_exon += v != 0;
+                for (uint8_t v : knee_full) n_knee_full += v != 0;
+                nuclei_counts = static_cast<double>(n_knee_exon) > kNucleiKneeExcess * static_cast<double>(n_knee_full);
+                if (nuclei_counts) { knee_called.swap(knee_full); knee_umi_min = full_umi_min; }
+            }
             calledv2::GeneCounts gx = calledv2::gene_counts(exon_csc, engine.exon_names(),
                                                               with_introns ? &intron_csc : nullptr,
                                                               with_introns ? &engine.intron_names() : nullptr);
-            // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input
-            calledv2::GeneCounts gx_exon = calledv2::gene_counts(
-                exon_csc, engine.exon_names(), static_cast<const decltype(exon_csc)*>(nullptr),
-                static_cast<const std::vector<std::string>*>(nullptr));
+            // is_cell is EmptyDrops_CR on exon-only counts (STARsolo's Gene counts), the reference tool's own input;
+            // on nuclei libraries on exon + intron counts (STARsolo GeneFull), i.e. gx itself
+            calledv2::GeneCounts gx_exon;
+            if (!nuclei_counts)
+                gx_exon = calledv2::gene_counts(
+                    exon_csc, engine.exon_names(), static_cast<const decltype(exon_csc)*>(nullptr),
+                    static_cast<const std::vector<std::string>*>(nullptr));
             std::string proto = export_cfg.protocol_name;
             if (proto.empty() || proto == "unknown") {
                 auto it = export_cfg.user_meta.find("protocol");
                 if (it != export_cfg.user_meta.end()) proto = it->second;
             }
             calledv2::Result cv = calledv2::call(gx, knee_called, proto, calledv2::Params(),
-                                                 std::max(1, export_cfg.threads), &gx_exon);
+                                                 std::max(1, export_cfg.threads), nuclei_counts ? &gx : &gx_exon);
             cv.seconds = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_v2).count();
             cc_result = CellCallResult{};
             for (uint32_t j = 0; j < cv.is_cell.size(); ++j)
@@ -631,13 +676,23 @@ inline ExportStats export_results(const PileupEngine& engine,
             result.n_knee_called = static_cast<uint64_t>(cv.n_called);
             {
                 std::ostringstream js;
-                js << "{\n    \"knee\": {\"method\": \"CellRanger2.2\", \"counts\": \"pileup exon\", "
+                js << "{\n    \"knee\": {\"method\": \"CellRanger2.2\", \"counts\": \""
+                   << (nuclei_counts ? "pileup exon+intron" : "pileup exon") << "\", "
                    << "\"n_expected\": 3000, \"max_percentile\": 0.99, \"max_min_ratio\": 10, \"umi_min\": "
-                   << knee_umi_min << ", \"n_called\": " << cv.n_called << "},\n    \"called_v2\": "
+                   << knee_umi_min << ", \"n_called\": " << cv.n_called << "},\n    \"nuclei_counts\": {\"intron_share_top\": "
+                   << intron_share << ", \"top_barcodes\": " << kNucleiTopBarcodes << ", \"threshold\": " << kNucleiIntronShare
+                   << ", \"nuclei_library\": " << (nuclei_library ? "true" : "false") << ", \"knee_exon_n\": " << n_knee_exon
+                   << ", \"knee_exon_intron_n\": " << n_knee_full << ", \"knee_excess\": " << kNucleiKneeExcess
+                   << ", \"applied\": " << (nuclei_counts ? "true" : "false") << "},\n    \"called_v2\": "
                    << calledv2::params_json(cv, "    ") << "\n  }";
                 result.cell_call_json = js.str();
             }
             calledv2::write_cell_calls_tsv(out_prefix + "/cell_calls.tsv", barcodes, bc_totals, cv, knee_called);
+            std::cerr << "[cell_calling] counts: intron share of top barcodes " << intron_share
+                      << (nuclei_counts ? " (nuclei: knee and EmptyDrops_CR on exon + intron)" : " (exon-only knee and EmptyDrops_CR)");
+            if (nuclei_library)
+                std::cerr << "; nuclei library, knee calls exon " << n_knee_exon << " vs exon+intron " << n_knee_full;
+            std::cerr << "\n";
             std::cerr << "[cell_calling] called_v2: knee umi_min=" << knee_umi_min << " called=" << cv.n_called
                       << " lower=" << cv.lower << " retain=" << cv.retain_total << " alpha=" << cv.alpha
                       << " tested=" << cv.n_tested << " is_cell=" << cv.n_is_cell << " lowrna=" << cv.n_lowrna
@@ -1245,13 +1300,17 @@ inline ExportStats export_results(const PileupEngine& engine,
                 dcfg.n_donors = export_cfg.n_donors;
                 dcfg.threads = export_cfg.threads;
                 dcfg.seed = 42;
-                demux_result = run_demux(
+                if (const char* e = std::getenv("SINGLET_DEMUX_SCREEN"))
+                    dcfg.screen_single_donor = std::atoi(e) != 0;
+                // run_demux, or one model per species on a barnyard (human + mouse) panel
+                demux_result = run_demux_by_species(
                     snp_ad_csc.nrows, snp_ad_csc.ncols,
                     snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
                     snp_ad_csc.data.size(),
                     snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data(),
                     snp_dp_csc.data.size(), dcfg,
-                    cc_result.cell_indices); // filter VB to EmptyDrops-called cells only
+                    cc_result.cell_indices, // filter VB to EmptyDrops-called cells only
+                    engine.snp_names());
             }
         });
     }
@@ -1301,6 +1360,15 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::filesystem::create_directories(out_prefix + "/donor");
         write_threads.emplace_back([&]() { write_matrix("private/snp_ad", snp_ad_csc, engine.snp_names()); });
         write_threads.emplace_back([&]() { write_matrix("private/snp_dp", snp_dp_csc, engine.snp_names()); });
+    }
+    // D-52: the per-cell callable-SNP matrices of the called cells in the cellsnp-lite layout (vireo reads it), private.
+    if (!pileup_cfg.snp_path.empty() && !cc_result.cell_indices.empty() && snp_dp_csc.ncols > 0) {
+        write_threads.emplace_back([&]() {
+            const long long n = genotype::write_cellsnp_dir(out_prefix + "/private/genotype/cellsnp", snp_ad_csc, snp_dp_csc,
+                                                            cc_result.cell_indices, barcodes, engine.snp_names());
+            if (n < 0) record_failed_write("private/genotype/cellsnp");
+            else std::cerr << "[genotype] cellsnp layout: " << n << " callable sites x " << cc_result.cell_indices.size() << " cells\n";
+        });
     }
 
     // N15: ASE — per-cell, per-SNP allele counts (both pipeline and non-pipeline).
@@ -1741,6 +1809,13 @@ inline ExportStats export_results(const PileupEngine& engine,
             std::filesystem::create_directories(out_prefix + "/private/donor");
             write_donor_vcfs(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
             write_donor_coverages(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
+        }
+        // D-52: one multi-sample VCF per sample (GT:GQ:AD:DP:PL per donor, called cells only), private.
+        if (demux_result.n_donors_k > 0) {
+            const long long n = genotype::write_donors_vcf(out_prefix + "/private/genotype/donors.vcf.gz", demux_result,
+                                                           snp_ad_csc, snp_dp_csc, cc_result.cell_indices, engine.snp_names());
+            if (n < 0) { record_failed_write("private/genotype/donors.vcf.gz"); result.failed_writes = failed_writes; }
+            else std::cerr << "[genotype] donors.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
         }
 
         // ── G6: Donor-aware mitochondrial outputs ──
@@ -2186,6 +2261,10 @@ inline ExportStats export_results(const PileupEngine& engine,
 
         std::cerr << "[export] Standardization stubs written for any missing files\n";
     }
+
+    // D-52: every directory below private/ 0700, every file 0600 (owner-only also after a mode-keeping copy)
+    if (const size_t n = genotype::secure_private_tree(out_prefix + "/private"))
+        std::cerr << "[genotype] private/: " << n << " entries owner-only\n";
 
     // ── Post-export validation ──
     nvexp.next("export: Post-export validation");

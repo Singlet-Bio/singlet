@@ -1,0 +1,434 @@
+{
+ "howitt2023_bal1": {
+  "cells": 24091,
+  "params": {
+   "confident_min": 0.25,
+   "doublet_nmads": 2.0,
+   "doublet_min": 1.0,
+   "veto": null
+  },
+  "cpp_vs_numpy_mismatches": 0,
+  "scores": {
+   "before": {
+    "f": 0.9192,
+    "dbl_singlet": 0.0612
+   },
+   "after": {
+    "f": 0.9151,
+    "dbl_singlet": 0.0583
+   },
+   "hashedDrops": {
+    "f": 0.9296,
+    "dbl_singlet": 0.1583
+   },
+   "hashedDrops_default": {
+    "f": 0.9075,
+    "dbl_singlet": 0.074
+   },
+   "hashsolo": {
+    "f": 0.92,
+    "dbl_singlet": 0.0955
+   },
+   "HTODemux": {
+    "f": 0.8924,
+    "dbl_singlet": 0.0524
+   },
+   "GMMDemux": {
+    "f": 0.9054,
+    "dbl_singlet": 0.0642
+   },
+   "deMULTIplex": {
+    "f": 0.9068,
+    "dbl_singlet": 0.0637
+   },
+   "BFF_raw": {
+    "f": 0.879,
+    "dbl_singlet": 0.0975
+   },
+   "BFF_cluster": {
+    "f": 0.9352,
+    "dbl_singlet": 0.5958
+   },
+   "demuxmix": {
+    "f": 0.9067,
+    "dbl_singlet": 0.051
+   }
+  },
+  "before": {
+   "f": {
+    "best_competitor": "BFF_cluster",
+    "best_value": 0.9352,
+    "singlet": 0.9192,
+    "diff": -0.0161,
+    "ci95": [
+     -0.0189,
+     -0.0131
+    ],
+    "tol": 0.0029,
+    "pass": false
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.051,
+    "singlet": 0.0612,
+    "diff": 0.0103,
+    "ci95": [
+     0.0017,
+     0.0188
+    ],
+    "tol": 0.0085,
+    "pass": false
+   }
+  },
+  "after": {
+   "f": {
+    "best_competitor": "BFF_cluster",
+    "best_value": 0.9352,
+    "singlet": 0.9151,
+    "diff": -0.0202,
+    "ci95": [
+     -0.023,
+     -0.0173
+    ],
+    "tol": 0.0028,
+    "pass": false
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.051,
+    "singlet": 0.0583,
+    "diff": 0.0073,
+    "ci95": [
+     -0.0025,
+     0.0183
+    ],
+    "tol": 0.0104,
+    "pass": true
+   }
+  }
+ },
+ "howitt2023_bal2": {
+  "cells": 48841,
+  "params": {
+   "confident_min": 0.25,
+   "doublet_nmads": 4.0,
+   "doublet_min": 1.0,
+   "veto": 0.95
+  },
+  "cpp_vs_numpy_mismatches": 0,
+  "scores": {
+   "before": {
+    "f": 0.8138,
+    "dbl_singlet": 0.104
+   },
+   "after": {
+    "f": 0.8529,
+    "dbl_singlet": 0.1931
+   },
+   "hashedDrops": {
+    "f": 0.8457,
+    "dbl_singlet": 0.413
+   },
+   "hashedDrops_default": {
+    "f": 0.6129,
+    "dbl_singlet": 0.1878
+   },
+   "hashsolo": {
+    "f": 0.7827,
+    "dbl_singlet": 0.2222
+   },
+   "HTODemux": {
+    "f": 0.7936,
+    "dbl_singlet": 0.1741
+   },
+   "GMMDemux": {
+    "f": 0.7704,
+    "dbl_singlet": 0.1391
+   },
+   "deMULTIplex": {
+    "f": 0.7909,
+    "dbl_singlet": 0.125
+   },
+   "BFF_raw": {
+    "f": 0.5388,
+    "dbl_singlet": 0.2471
+   },
+   "BFF_cluster": {
+    "f": 0.119,
+    "dbl_singlet": 0.7127
+   },
+   "demuxmix": {
+    "f": 0.8327,
+    "dbl_singlet": 0.0972
+   }
+  },
+  "before": {
+   "f": {
+    "best_competitor": "hashedDrops",
+    "best_value": 0.8457,
+    "singlet": 0.8138,
+    "diff": -0.0319,
+    "ci95": [
+     -0.0358,
+     -0.0272
+    ],
+    "tol": 0.0043,
+    "pass": false
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.0972,
+    "singlet": 0.104,
+    "diff": 0.0068,
+    "ci95": [
+     0.0005,
+     0.0127
+    ],
+    "tol": 0.0061,
+    "pass": false
+   }
+  },
+  "after": {
+   "f": {
+    "best_competitor": "hashedDrops",
+    "best_value": 0.8457,
+    "singlet": 0.8529,
+    "diff": 0.0072,
+    "ci95": [
+     0.0031,
+     0.0108
+    ],
+    "tol": 0.0038,
+    "pass": true
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.0972,
+    "singlet": 0.1931,
+    "diff": 0.0959,
+    "ci95": [
+     0.0883,
+     0.1029
+    ],
+    "tol": 0.0073,
+    "pass": false
+   }
+  }
+ },
+ "howitt2023_bal3": {
+  "cells": 62306,
+  "params": {
+   "confident_min": 0.25,
+   "doublet_nmads": 4.0,
+   "doublet_min": 1.0,
+   "veto": 0.95
+  },
+  "cpp_vs_numpy_mismatches": 0,
+  "scores": {
+   "before": {
+    "f": 0.7479,
+    "dbl_singlet": 0.145
+   },
+   "after": {
+    "f": 0.8021,
+    "dbl_singlet": 0.3091
+   },
+   "hashedDrops": {
+    "f": 0.785,
+    "dbl_singlet": 0.4974
+   },
+   "hashedDrops_default": {
+    "f": 0.5729,
+    "dbl_singlet": 0.2801
+   },
+   "hashsolo": {
+    "f": 0.7374,
+    "dbl_singlet": 0.2942
+   },
+   "HTODemux": {
+    "f": 0.7427,
+    "dbl_singlet": 0.2315
+   },
+   "GMMDemux": {
+    "f": 0.7202,
+    "dbl_singlet": 0.2041
+   },
+   "deMULTIplex": {
+    "f": 0.6244,
+    "dbl_singlet": 0.2084
+   },
+   "BFF_raw": {
+    "f": 0.466,
+    "dbl_singlet": 0.4495
+   },
+   "BFF_cluster": {
+    "f": 0.1878,
+    "dbl_singlet": 0.5911
+   },
+   "demuxmix": {
+    "f": 0.7751,
+    "dbl_singlet": 0.14
+   }
+  },
+  "before": {
+   "f": {
+    "best_competitor": "hashedDrops",
+    "best_value": 0.785,
+    "singlet": 0.7479,
+    "diff": -0.0372,
+    "ci95": [
+     -0.0407,
+     -0.0341
+    ],
+    "tol": 0.0033,
+    "pass": false
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.14,
+    "singlet": 0.145,
+    "diff": 0.005,
+    "ci95": [
+     0.0004,
+     0.0095
+    ],
+    "tol": 0.0045,
+    "pass": false
+   }
+  },
+  "after": {
+   "f": {
+    "best_competitor": "hashedDrops",
+    "best_value": 0.785,
+    "singlet": 0.8021,
+    "diff": 0.0171,
+    "ci95": [
+     0.0143,
+     0.02
+    ],
+    "tol": 0.0029,
+    "pass": true
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.14,
+    "singlet": 0.3091,
+    "diff": 0.169,
+    "ci95": [
+     0.1617,
+     0.1762
+    ],
+    "tol": 0.0073,
+    "pass": false
+   }
+  }
+ },
+ "howitt2023_cl": {
+  "cells": 45977,
+  "params": {
+   "confident_min": 0.25,
+   "doublet_nmads": 4.0,
+   "doublet_min": 1.0,
+   "veto": 0.95
+  },
+  "cpp_vs_numpy_mismatches": 0,
+  "scores": {
+   "before": {
+    "f": 0.726,
+    "dbl_singlet": 0.1201
+   },
+   "after": {
+    "f": 0.86,
+    "dbl_singlet": 0.3761
+   },
+   "hashedDrops": {
+    "f": 0.864,
+    "dbl_singlet": 0.6746
+   },
+   "hashedDrops_default": {
+    "f": 0.6632,
+    "dbl_singlet": 0.275
+   },
+   "hashsolo": {
+    "f": 0.8059,
+    "dbl_singlet": 0.5527
+   },
+   "HTODemux": {
+    "f": 0.7375,
+    "dbl_singlet": 0.419
+   },
+   "GMMDemux": {
+    "f": 0.8228,
+    "dbl_singlet": 0.2465
+   },
+   "deMULTIplex": {
+    "f": 0.8277,
+    "dbl_singlet": 0.2799
+   },
+   "BFF_raw": {
+    "f": 0.7912,
+    "dbl_singlet": 0.3745
+   },
+   "BFF_cluster": {
+    "f": 0.8743,
+    "dbl_singlet": 0.8317
+   },
+   "demuxmix": {
+    "f": 0.743,
+    "dbl_singlet": 0.2138
+   }
+  },
+  "before": {
+   "f": {
+    "best_competitor": "BFF_cluster",
+    "best_value": 0.8743,
+    "singlet": 0.726,
+    "diff": -0.1483,
+    "ci95": [
+     -0.1526,
+     -0.1444
+    ],
+    "tol": 0.0041,
+    "pass": false
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.2138,
+    "singlet": 0.1201,
+    "diff": -0.0936,
+    "ci95": [
+     -0.1043,
+     -0.083
+    ],
+    "tol": 0.0106,
+    "pass": true
+   }
+  },
+  "after": {
+   "f": {
+    "best_competitor": "BFF_cluster",
+    "best_value": 0.8743,
+    "singlet": 0.86,
+    "diff": -0.0143,
+    "ci95": [
+     -0.0168,
+     -0.0121
+    ],
+    "tol": 0.0024,
+    "pass": false
+   },
+   "dbl_singlet": {
+    "best_competitor": "demuxmix",
+    "best_value": 0.2138,
+    "singlet": 0.3761,
+    "diff": 0.1624,
+    "ci95": [
+     0.1515,
+     0.1752
+    ],
+    "tol": 0.0118,
+    "pass": false
+   }
+  }
+ }
+}

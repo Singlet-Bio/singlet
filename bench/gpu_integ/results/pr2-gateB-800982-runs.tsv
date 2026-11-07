@@ -1,0 +1,16 @@
+sample	mode	exit	wall_s	core_s	maxrss_gb	dev_peak_gb	lanes_peak_gb	level	ingest	fallback_lines	node
+pbmc5p_v1	cpu(kept)	0	728.863	2087.65	32.7	0.0	-	cpu	-	0	c007
+pbmc5p_v1	gpu	0	135.373	537.830	39.6	90.1	90.0	5 of 5	yes	1	g051
+pbmc5p_v1	gpuX1	0	135.093	549.643	39.7	89.2	57.4	5 of 5	yes	1	g051
+neuron1k_v3	cpu(kept)	0	747.757	2135.57	35.4	0.0	-	cpu	-	0	c007
+neuron1k_v3	gpu	0	107.665	511.208	60.7	89.6	90.0	5 of 5	yes	1	g051
+neuron1k_v3	gpuX1	0	110.515	605.882	61.2	89.2	62.3	5 of 5	yes	1	g051
+hgmm1k_v3	cpu(kept)	0	494.439	1856.62	62.4	0.0	-	cpu	-	0	c007
+hgmm1k_v3	gpu	0	91.5824	397.583	78.7	89.9	90.0	5 of 5	yes	1	g051
+hgmm1k_v3	gpuX1	0	91.4433	463.133	78.9	89.2	89.2	5 of 5	yes	1	g051
+nuclei2k_v2	cpu(kept)	0	771.693	4474.86	35.2	0.0	-	cpu	-	0	c007
+nuclei2k_v2	gpu	0	194.798	791.849	84.2	90.2	90.0	5 of 5	yes	1	g051
+nuclei2k_v2	gpuX1	0	205.134	1009.05	84.7	89.2	76.7	5 of 5	yes	1	g051
+pbmc2tvdj	cpu(kept)	0	360.997	2417.01	34.7	0.0	-	cpu	-	0	c007
+pbmc2tvdj	gpu	0	331.507	1451.03	38.7	90.2	90.0	0 of 5	declined: cDNA reads over 128 bases: the GPU pileup will be declined	10	g051
+pbmc2tvdj	gpuX1	0	336.058	1440.79	38.8	60.6	60.6	0 of 5	declined: cDNA reads over 128 bases: the GPU pileup will be declined	10	g051

@@ -1,0 +1,662 @@
+PROVENANCE job=802089 node=g051 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/singlet-gpu sha256=f1bbc00f86002a863d4f699b16ec39d8b5a10605a87286ff264b995c74ae8d4b commit=c8849bb278b1afee4858f87295ebc272b30d1269 expect=c8849bb2 embedded=yes scripts=0fdec57f T=points:k2t7s2r6@wshrink k2t14s2r6@wshrink k2t21s2r6@wshrink k2t27s2r6@wshrink 2026-11-06T16:15:26-05:00
+PROVENANCE-REF b0=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-bold/bin/b0/singlet-gpu sha256=76099338fa86ef15da6a9cdf81b1bfc0cb6ed2a52a108bf8b7ed657d7c64c243 commit=c3a6096c1ae8b9cb0eaf950968c7ee7ccce8283d
+node=g051.clipper.gvsu.edu job=802089 cpus=54 gpus=2 cpu_ref=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref points=k2t7s2r6@wshrink k2t14s2r6@wshrink k2t21s2r6@wshrink k2t27s2r6@wshrink nruns=by-tag sample=pbmc1k_v3
+  0, NVIDIA H100 NVL, 00000000:41:00.0, 95830 MiB, 610.43.02
+  1, NVIDIA H100 NVL, 00000000:42:00.0, 95830 MiB, 610.43.02
+  CPU(s):                                  56
+  Model name:                              Intel(R) Xeon(R) Gold 6238R CPU @ 2.20GHz
+  CPU(s) scaling MHz:                      36%
+  NUMA node0 CPU(s):                       0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54
+  NUMA node1 CPU(s):                       1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49,51,53,55
+                 total        used        free      shared  buff/cache   available
+  Mem:             750           9         466           0         279         740
+  Filesystem      Size  Used Avail Use% Mounted on
+  /dev/sda1       1.8T  296K  1.7T   1% /tmp
+  tmpfs           376G     0  376G   0% /dev/shm
+  /dev/sda1[/802089/.802089/_tmp] ext4    1.7T
+  cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_802089 memory.max 397284474880
+  always [madvise] never
+######## k2t7s2r6_wshrink: 2 in flight, T=7, 12 runs, items pbmc1k_v3 pbmc1k_v3 pbmc1k_v3...; SINGLET_ENGINE_GPU_SLOTS=2; cfg=wshrink args=[] env=[SINGLET_BOLD_WSHRINK=1]; 2026-11-06T16:15:27-05:00
+  ## start 2026-11-06T16:15:27-05:00
+  JOBID USER NAME CPUS TRES_PER_NODE
+  802089 debruinz gpr2-tp-threads 54 gres/gpu:nvidia_h100_nvl:1
+  /tmp use of the point before identity: 8.0K	/tmp/debruinz-gbtp-802089/k2t7s2r6_wshrink
+  /dev/sda1       1.8T  1.8G  1.7T   1% /tmp
+== point k2t7s2r6_wshrink: k=2 T=7 slots=2 env=SINGLET_ENGINE_GPU_SLOTS=2 node=g051.clipper.gvsu.edu
+   span 877.3 s (12 runs, 799.22 M pairs): 0.911 M pairs/s; cgroup 6825 core-s = 8.54 core-s/M (runs' own: 8.17); GPU util 10 %, a lock held 24 % of the span; host peak 91 GB (anon 81, shmem 13); device peak 51.0 GB
+   run   w sample        start   wall  core-s  c-s/M maxRSS  pkRSS  pkPSS  devMB  wait  held | prefill w/h | handoff h | solo w/h | pileup w/h | nonhost w/h | L5 pileup | stages (s)
+   c0    0 pbmc1k_v3       0.0  143.3     551   8.27   45.1   85.0   43.8  45610   0.0  28.1 | 0.0/17.8 | - | 0.0/0.6 | 0.0/2.6 | 0.0/5.4 | yes ok | start -0 scan 4 refs 15 STAR 9 stream 29 handoff 4 pileup 0 pileupfin 0 nonhost 20 export 17 demux 45
+        stage core-s (sampler): start 0 scan 21 refs 90 STAR 29 stream 145 handoff 20 pileup 0 pileupfin 0 nonhost 68 export 35 demux 142
+        prefill device phase 22.89 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.2 GB/s (waited 0.92 s), reads 6.3 GB/s; d2h 3.5 GB/s; steps: index 1.25 reads 1.02 e10 1.31 clip 0.73 dedup 0.41 laneA 3.84 laneM 3.33 laneB 3.07 lanes 0.52 hostlane 0.67 records 3.5 readRecord 0.71 e2e 1.48
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c1    1 pbmc1k_v3       0.0  143.8     550   8.26   45.0   84.8   43.6  45610   0.0  28.4 | 0.0/17.6 | - | 0.0/0.8 | 0.0/2.5 | 0.0/5.4 | yes ok | start -0 scan 4 refs 14 STAR 10 stream 28 handoff 4 pileup 1 pileupfin 0 nonhost 19 export 19 demux 45
+        stage core-s (sampler): start 0 scan 22 refs 90 STAR 33 stream 148 handoff 15 pileup 0 pileupfin 0 nonhost 68 export 37 demux 138
+        prefill device phase 22.71 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.4 GB/s (waited 0.79 s), reads 7.2 GB/s; d2h 3.4 GB/s; steps: index 1.38 reads 0.81 e10 1.05 clip 1.0 dedup 0.5 laneA 3.94 laneM 3.55 laneB 2.98 lanes 0.53 hostlane 0.6 records 3.36 readRecord 0.94 e2e 1.57
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c2    0 pbmc1k_v3     143.7  145.0     551   8.28   45.1   85.6   45.4  45616   0.0  29.1 | 0.0/18.2 | - | 0.0/0.6 | 0.0/2.5 | 0.0/5.4 | yes ok | start 0 scan 4 refs 15 STAR 9 stream 29 handoff 4 pileup 0 pileupfin 1 nonhost 19 export 18 demux 46
+        stage core-s (sampler): start 0 scan 23 refs 90 STAR 32 stream 141 handoff 22 pileup 0 pileupfin 28 nonhost 41 export 35 demux 139
+        prefill device phase 23.25 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 3.9 GB/s (waited 0.99 s), reads 5.4 GB/s; d2h 3.8 GB/s; steps: index 1.31 reads 1.12 e10 1.14 clip 1.05 dedup 0.44 laneA 3.65 laneM 3.36 laneB 3.07 lanes 0.55 hostlane 0.64 records 3.45 readRecord 0.67 e2e 1.9
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c3    1 pbmc1k_v3     144.2  145.7     552   8.29   45.1   85.7   43.2  45596   0.0  27.1 | 0.0/17.9 | - | 0.0/0.6 | 0.0/2.6 | 0.0/5.4 | yes ok | start 1 scan 4 refs 14 STAR 9 stream 29 handoff 4 pileup 1 pileupfin 0 nonhost 19 export 18 demux 47
+        stage core-s (sampler): start 1 scan 25 refs 86 STAR 35 stream 138 handoff 21 pileup 28 pileupfin 0 nonhost 41 export 35 demux 143
+        prefill device phase 23.24 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.1 GB/s (waited 0.92 s), reads 6.4 GB/s; d2h 3.4 GB/s; steps: index 1.48 reads 1.01 e10 1.37 clip 0.77 dedup 0.4 laneA 3.73 laneM 3.6 laneB 3.01 lanes 0.53 hostlane 0.51 records 3.5 readRecord 1.04 e2e 1.77
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c4    0 pbmc1k_v3     289.1  144.7     545   8.18   45.0   85.2   44.3  45624   0.0  27.4 | 0.0/16.8 | - | 0.0/0.7 | 0.0/2.6 | 0.0/4.4 | yes ok | start -0 scan 5 refs 14 STAR 9 stream 28 handoff 4 pileup 0 pileupfin 0 nonhost 19 export 19 demux 47
+        stage core-s (sampler): start 0 scan 26 refs 84 STAR 31 stream 155 handoff 12 pileup 0 pileupfin 0 nonhost 58 export 36 demux 143
+        prefill device phase 22.36 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.5 GB/s (waited 0.38 s), reads 6.6 GB/s; d2h 3.4 GB/s; steps: index 0.68 reads 1.04 e10 1.17 clip 1.17 dedup 0.46 laneA 3.53 laneM 3.43 laneB 3.07 lanes 0.54 hostlane 0.75 records 3.44 readRecord 0.8 e2e 1.71
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c5    1 pbmc1k_v3     290.2  145.6     548   8.24   45.1   84.0   44.2  45610   0.0  29.0 | 0.0/18.0 | - | 0.0/0.7 | 0.0/2.7 | 0.0/4.6 | yes ok | start 1 scan 4 refs 14 STAR 9 stream 29 handoff 5 pileup 0 pileupfin 0 nonhost 18 export 19 demux 47
+        stage core-s (sampler): start 1 scan 25 refs 85 STAR 36 stream 145 handoff 45 pileup 0 pileupfin 0 nonhost 32 export 36 demux 144
+        prefill device phase 23.62 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.2 GB/s (waited 1.01 s), reads 6.3 GB/s; d2h 2.8 GB/s; steps: index 1.38 reads 1.04 e10 1.3 clip 0.71 dedup 0.29 laneA 3.87 laneM 3.29 laneB 3.03 lanes 0.53 hostlane 0.73 records 3.9 readRecord 0.7 e2e 2.08
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c6    0 pbmc1k_v3     434.2  140.9     536   8.04   45.1   85.8   44.6  45616   0.0  25.0 | 0.0/16.7 | - | 0.0/0.6 | 0.0/2.5 | 0.0/4.4 | yes ok | start 1 scan 3 refs 15 STAR 9 stream 28 handoff 4 pileup 0 pileupfin 0 nonhost 18 export 18 demux 45
+        stage core-s (sampler): start 1 scan 20 refs 88 STAR 36 stream 146 handoff 9 pileup 0 pileupfin 0 nonhost 58 export 36 demux 140
+        prefill device phase 21.71 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.9 GB/s (waited 1.00 s), reads 10.5 GB/s; d2h 4.1 GB/s; steps: index 1.51 reads 0.64 e10 1.03 clip 0.67 dedup 0.44 laneA 3.8 laneM 3.33 laneB 3.05 lanes 0.54 hostlane 0.69 records 3.39 readRecord 0.68 e2e 1.45
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c7    1 pbmc1k_v3     436.2  155.9     558   8.37   45.2   85.7   43.4  45596   0.0  22.1 | 0.0/17.6 | - | 0.0/0.8 | 0.0/3.1 | - | yes ok | start 1 scan 3 refs 15 STAR 9 stream 29 handoff 5 pileup 0 pileupfin 0 nonhost 29 export 18 demux 47
+        stage core-s (sampler): start 2 scan 20 refs 88 STAR 36 stream 141 handoff 39 pileup 0 pileupfin 0 nonhost 50 export 36 demux 144
+        prefill device phase 23.32 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.5 GB/s (waited 0.90 s), reads 6.5 GB/s; d2h 3.3 GB/s; steps: index 1.23 reads 0.97 e10 1.28 clip 0.69 dedup 0.31 laneA 3.8 laneM 3.57 laneB 3.02 lanes 0.55 hostlane 0.76 records 4.06 readRecord 0.68 e2e 1.54
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c8    0 pbmc1k_v3     575.5  140.5     532   7.99   45.2   85.6   44.7  45624   0.0  27.2 | 0.0/16.6 | - | 0.0/0.8 | 0.0/2.5 | 0.0/3.4 | yes ok | start 0 scan 4 refs 13 STAR 9 stream 28 handoff 3 pileup 1 pileupfin 0 nonhost 18 export 18 demux 46
+        stage core-s (sampler): start 0 scan 25 refs 81 STAR 32 stream 148 handoff 12 pileup 0 pileupfin 0 nonhost 55 export 36 demux 142
+        prefill device phase 22.08 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 25.7, peak (lanes, records) 53.912537
+        uploads: index 5.5 GB/s (waited 0.63 s), reads 10.7 GB/s; d2h 3.6 GB/s; steps: index 0.92 reads 0.62 e10 1.14 clip 0.68 dedup 0.3 laneA 3.61 laneM 3.16 laneB 3.18 lanes 0.54 hostlane 0.5 records 3.96 readRecord 0.75 e2e 2.22
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c9    1 pbmc1k_v3     592.4  142.5     538   8.08   45.1   85.5   43.4  45070   0.0  27.1 | 0.0/17.2 | - | 0.0/0.6 | 0.0/2.4 | 0.0/3.4 | yes ok | start 0 scan 4 refs 14 STAR 9 stream 28 handoff 4 pileup 1 pileupfin 0 nonhost 18 export 18 demux 46
+        stage core-s (sampler): start 0 scan 21 refs 88 STAR 36 stream 132 handoff 38 pileup 13 pileupfin 0 nonhost 32 export 36 demux 143
+        prefill device phase 23.05 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 2.1, index 18.4, reads+clip 25.4, dedup 24.8, index+distinct 27.4, before-laneA 27.4, before-laneA 22.8, before-laneA 21.3, before-laneA 21.3, before-laneA 21.3, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 53.305115
+        uploads: index 5.1 GB/s (waited 0.96 s), reads 7.7 GB/s; d2h 3.5 GB/s; steps: index 1.26 reads 0.94 e10 0.79 clip 0.66 dedup 0.31 laneA 4.29 laneM 3.73 laneB 2.98 lanes 0.58 hostlane 0.3 records 4.18 readRecord 0.91 e2e 1.61
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c10   0 pbmc1k_v3     716.4  140.3     532   7.98   45.1   85.5   43.0  45616   0.0  27.2 | 0.0/15.9 | - | 0.0/0.6 | 0.0/2.4 | 0.0/3.4 | yes ok | start 1 scan 4 refs 14 STAR 9 stream 27 handoff 4 pileup 0 pileupfin 0 nonhost 18 export 18 demux 46
+        stage core-s (sampler): start 0 scan 24 refs 84 STAR 34 stream 144 handoff 16 pileup 0 pileupfin 0 nonhost 50 export 35 demux 143
+        prefill device phase 20.83 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.6 GB/s (waited 0.78 s), reads 8.1 GB/s; d2h 5.2 GB/s; steps: index 1.11 reads 0.89 e10 0.75 clip 0.72 dedup 0.29 laneA 3.56 laneM 3.15 laneB 2.74 lanes 0.54 hostlane 0.56 records 3.35 readRecord 0.67 e2e 1.87
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c11   1 pbmc1k_v3     735.6  141.7     534   8.02   45.0   85.3   43.3  45610   0.0  26.6 | 0.0/17.1 | - | 0.0/0.6 | 0.0/2.6 | 0.0/3.4 | yes ok | start 0 scan 4 refs 14 STAR 9 stream 28 handoff 4 pileup 1 pileupfin 0 nonhost 17 export 19 demux 45
+        stage core-s (sampler): start 0 scan 31 refs 79 STAR 34 stream 133 handoff 40 pileup 10 pileupfin 0 nonhost 31 export 36 demux 139
+        prefill device phase 22.34 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.8 GB/s (waited 1.34 s), reads 9.1 GB/s; d2h 4.1 GB/s; steps: index 1.94 reads 0.77 e10 0.81 clip 0.64 dedup 0.31 laneA 3.46 laneM 3.6 laneB 3.18 lanes 0.55 hostlane 0.16 records 3.75 readRecord 0.91 e2e 1.74
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+== lock intervals per run (sampler; tick 0.50 s)
+   c0: 4 intervals, held 27.6 s, device util > 0 for 26.1 s of it
+      ?        at   29.8 s: held  16.81 s, util mean 97.7 %, util > 0 16.81 s, device MB first 23549 peak 45619, run CPU 4.34 cores
+      ?        at   51.9 s: held   0.50 s, util mean 28.0 %, util > 0  0.50 s, device MB first 9391 peak 9391, run CPU 9.4 cores
+      ?        at   55.0 s: held   3.75 s, util mean 96.6 %, util > 0  3.75 s, device MB first 2079 peak 44667, run CPU 8.75 cores
+      ?        at   63.0 s: held   6.50 s, util mean 66.3 %, util > 0  5.00 s, device MB first 4 peak 28475, run CPU 4.75 cores
+   c1: 4 intervals, held 28.4 s, device util > 0 for 26.1 s of it
+      ?        at   29.8 s: held  15.81 s, util mean 97.9 %, util > 0 15.81 s, device MB first 23549 peak 45619, run CPU 4.56 cores
+      ?        at   49.6 s: held   2.80 s, util mean 14.0 %, util > 0  1.00 s, device MB first 6851 peak 9391, run CPU 3.47 cores
+      ?        at   54.5 s: held   4.25 s, util mean 94.7 %, util > 0  4.25 s, device MB first 2079 peak 44667, run CPU 7.41 cores
+      ?        at   63.5 s: held   5.50 s, util mean 78.4 %, util > 0  5.00 s, device MB first 8321 peak 28475, run CPU 5.03 cores
+   c2: 4 intervals, held 27.0 s, device util > 0 for 25.5 s of it
+      ?        at   30.4 s: held  16.41 s, util mean 92.0 %, util > 0 16.41 s, device MB first 23549 peak 45625, run CPU 4.46 cores
+      ?        at   52.2 s: held   1.00 s, util mean 99.0 %, util > 0  1.00 s, device MB first 6851 peak 6851, run CPU 4.98 cores
+      ?        at   55.5 s: held   3.60 s, util mean 34.0 %, util > 0  3.10 s, device MB first 2079 peak 44663, run CPU 8.41 cores
+      ?        at   63.5 s: held   6.00 s, util mean 75.7 %, util > 0  5.00 s, device MB first 41 peak 28475, run CPU 4.65 cores
+   c3: 5 intervals, held 25.0 s, device util > 0 for 25.0 s of it
+      prefill  at   30.0 s: held  16.41 s, util mean 92.0 %, util > 0 16.41 s, device MB first 23549 peak 45625, run CPU 4.35 cores
+      solo     at   51.8 s: held   1.00 s, util mean 99.0 %, util > 0  1.00 s, device MB first 6851 peak 6851, run CPU 5.92 cores
+      handoff  at   55.6 s: held   2.10 s, util mean 10.0 %, util > 0  2.10 s, device MB first 9273 peak 9273, run CPU 5.23 cores
+      pileup   at   58.2 s: held   0.50 s, util mean 75.0 %, util > 0  0.50 s, device MB first 44663 peak 44663, run CPU 7.66 cores
+      nonhost  at   64.0 s: held   5.00 s, util mean 90.8 %, util > 0  5.00 s, device MB first 8321 peak 28475, run CPU 5.06 cores
+   c4: 4 intervals, held 27.4 s, device util > 0 for 27.4 s of it
+      ?        at   30.3 s: held  14.77 s, util mean 96.3 %, util > 0 14.77 s, device MB first 23549 peak 45633, run CPU 4.83 cores
+      ?        at   50.2 s: held   2.27 s, util mean 74.0 %, util > 0  2.27 s, device MB first 6851 peak 9391, run CPU 3.64 cores
+      ?        at   52.9 s: held   5.82 s, util mean 34.5 %, util > 0  5.82 s, device MB first 9391 peak 44665, run CPU 6.05 cores
+      ?        at   62.2 s: held   4.51 s, util mean 57.0 %, util > 0  4.51 s, device MB first 1911 peak 26055, run CPU 4.0 cores
+   c5: 4 intervals, held 29.0 s, device util > 0 for 26.1 s of it
+      ?        at   29.2 s: held  16.80 s, util mean 96.0 %, util > 0 16.80 s, device MB first 23549 peak 45633, run CPU 4.34 cores
+      ?        at   51.8 s: held   1.81 s, util mean 1.0 %, util > 0  1.81 s, device MB first 9391 peak 9391, run CPU 1.29 cores
+      ?        at   54.6 s: held   5.92 s, util mean 29.1 %, util > 0  3.01 s, device MB first 44663 peak 44667, run CPU 5.66 cores
+      ?        at   64.1 s: held   4.50 s, util mean 58.2 %, util > 0  4.50 s, device MB first 26055 peak 28475, run CPU 3.98 cores
+   c6: 4 intervals, held 23.5 s, device util > 0 for 23.0 s of it
+      ?        at   30.2 s: held  15.01 s, util mean 89.8 %, util > 0 15.01 s, device MB first 529 peak 45625, run CPU 4.68 cores
+      ?        at   50.4 s: held   1.00 s, util mean 100.0 %, util > 0  1.00 s, device MB first 6851 peak 6851, run CPU 4.82 cores
+      ?        at   53.8 s: held   3.47 s, util mean 6.0 %, util > 0  2.97 s, device MB first 2081 peak 44663, run CPU 8.56 cores
+      ?        at   61.8 s: held   4.05 s, util mean 42.3 %, util > 0  4.05 s, device MB first 27156 peak 29017, run CPU 4.16 cores
+   c7: 4 intervals, held 22.1 s, device util > 0 for 21.6 s of it
+      ?        at   29.2 s: held  16.58 s, util mean 95.8 %, util > 0 16.58 s, device MB first 28901 peak 45625, run CPU 4.33 cores
+      ?        at   51.8 s: held   0.50 s, util mean 0.0 %, util > 0  0.00 s, device MB first 2081 peak 2081, run CPU 9.56 cores
+      ?        at   55.3 s: held   4.54 s, util mean 52.5 %, util > 0  4.54 s, device MB first 1105 peak 44105, run CPU 3.74 cores
+      ?        at   63.9 s: held   0.50 s, util mean 1.0 %, util > 0  0.50 s, device MB first 545 peak 545, run CPU 0.98 cores
+   c8: 3 intervals, held 27.2 s, device util > 0 for 25.6 s of it
+      ?        at   29.1 s: held  14.64 s, util mean 86.3 %, util > 0 14.14 s, device MB first 4 peak 45513, run CPU 4.9 cores
+      ?        at   48.8 s: held   8.18 s, util mean 91.3 %, util > 0  8.18 s, device MB first 28075 peak 52207, run CPU 5.02 cores
+      ?        at   60.4 s: held   4.40 s, util mean 72.8 %, util > 0  3.23 s, device MB first 24483 peak 41585, run CPU 3.89 cores
+   c9: 4 intervals, held 26.6 s, device util > 0 for 17.7 s of it
+      ?        at   29.3 s: held  15.82 s, util mean 73.4 %, util > 0 12.24 s, device MB first 25129 peak 52207, run CPU 4.45 cores
+      ?        at   50.9 s: held   1.50 s, util mean 66.7 %, util > 0  1.00 s, device MB first 1583 peak 9391, run CPU 3.87 cores
+      ?        at   54.2 s: held   5.24 s, util mean 8.5 %, util > 0  1.00 s, device MB first 2079 peak 44943, run CPU 8.49 cores
+      ?        at   62.5 s: held   4.00 s, util mean 44.4 %, util > 0  3.50 s, device MB first 4 peak 28843, run CPU 4.18 cores
+   c10: 4 intervals, held 26.7 s, device util > 0 for 25.7 s of it
+      ?        at   29.5 s: held  13.87 s, util mean 81.6 %, util > 0 12.87 s, device MB first 23 peak 45625, run CPU 4.84 cores
+      ?        at   48.8 s: held   2.07 s, util mean 100.0 %, util > 0  2.07 s, device MB first 23549 peak 23549, run CPU 2.54 cores
+      ?        at   51.3 s: held   6.26 s, util mean 97.8 %, util > 0  6.26 s, device MB first 21227 peak 44665, run CPU 6.34 cores
+      ?        at   60.1 s: held   4.50 s, util mean 100.0 %, util > 0  4.50 s, device MB first 21255 peak 45509, run CPU 3.88 cores
+   c11: 4 intervals, held 26.6 s, device util > 0 for 21.9 s of it
+      ?        at   29.5 s: held  15.85 s, util mean 91.9 %, util > 0 15.85 s, device MB first 23549 peak 45509, run CPU 4.6 cores
+      ?        at   50.7 s: held   1.50 s, util mean 66.7 %, util > 0  1.00 s, device MB first 1583 peak 9391, run CPU 4.33 cores
+      ?        at   54.1 s: held   5.24 s, util mean 14.5 %, util > 0  1.50 s, device MB first 2079 peak 44105, run CPU 9.12 cores
+      ?        at   62.3 s: held   4.00 s, util mean 36.4 %, util > 0  3.50 s, device MB first 4 peak 26055, run CPU 4.18 cores
+   span 877.3 s, 12 runs, 799.2 M pairs: 0.911 M pairs/s
+   steady (runs started after the first completion: 10): mean wall 144.3 s, k = 2: 0.923 M pairs/s; window (143.3, 856.7] s
+   lock held in the window: 0000_41_00_0 19 %, 0000_41_00_0.1 1 %, 0000_42_00_0 13 %, 0000_42_00_0.1 0 %
+   cgroup CPU in the window: 7.5 cores mean
+   GPU util in the window: 10 % mean
+== results k2t7s2r6_wshrink: span 877.3 s, span rate 0.911 M pairs/s, steady 0.923
+   windowed: (143.8, 735.6] s = 591.8 s, 8 completions, 0.900 M pairs/s; cores busy 7.9 in the window against 7.8 over the span
+   lock wait 0.0 s per run = 0.0 % of the mean wall 144.1 s, held 27.0 s; other jobs on the node, most in any minute: 0
+   identity: alone 0/0, cpu 0/0 (identical / checked)
+   fallback run c7 FALLBACK run.log: [nonhost] engine_gpu: engine_gpu nonhost: cudaSetDevice(device): CUDA-capable device(s) is/are busy or unavailable; screening on the CPU (allowed info lines: 1)
+POINT FAILED: 1 fallback runs
+  admit: runs 12; runs with a fallback line 0; OOM retries 0
+  admit: | phase | requests | mean wait s | max wait s | mean est GB | mean others reserved GB at arrival | mean entries at arrival |
+  admit: |---|---|---|---|---|---|---|
+  admit: total admission wait per run: mean 0.0 s, max 0.0 s
+######## k2t14s2r6_wshrink: 2 in flight, T=14, 12 runs, items pbmc1k_v3 pbmc1k_v3 pbmc1k_v3...; SINGLET_ENGINE_GPU_SLOTS=2; cfg=wshrink args=[] env=[SINGLET_BOLD_WSHRINK=1]; 2026-11-06T16:30:08-05:00
+  ## start 2026-11-06T16:30:08-05:00
+  JOBID USER NAME CPUS TRES_PER_NODE
+  802089 debruinz gpr2-tp-threads 54 gres/gpu:nvidia_h100_nvl:1
+  /tmp use of the point before identity: 8.0K	/tmp/debruinz-gbtp-802089/k2t14s2r6_wshrink
+  /dev/sda1       1.8T  1.8G  1.7T   1% /tmp
+== point k2t14s2r6_wshrink: k=2 T=14 slots=2 env=SINGLET_ENGINE_GPU_SLOTS=2 node=g051.clipper.gvsu.edu
+   span 810.3 s (12 runs, 799.22 M pairs): 0.986 M pairs/s; cgroup 7416 core-s = 9.28 core-s/M (runs' own: 8.92); GPU util 10 %, a lock held 28 % of the span; host peak 92 GB (anon 81, shmem 13); device peak 44.6 GB
+   run   w sample        start   wall  core-s  c-s/M maxRSS  pkRSS  pkPSS  devMB  wait  held | prefill w/h | handoff h | solo w/h | pileup w/h | nonhost w/h | L5 pileup | stages (s)
+   c0    0 pbmc1k_v3       0.0  134.4     599   8.99   45.7   86.4   44.3  45616   0.0  27.3 | 0.0/17.3 | - | 0.0/0.6 | 0.0/2.6 | 0.0/4.4 | yes ok | start 1 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 0 pileupfin 1 nonhost 18 export 18 demux 45
+        stage core-s (sampler): start 1 scan 27 refs 92 STAR 35 stream 161 handoff 32 pileup 0 pileupfin 10 nonhost 39 export 38 demux 164
+        prefill device phase 20.29 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.4 GB/s (waited 0.49 s), reads 5.2 GB/s; d2h 3.5 GB/s; steps: index 0.8 reads 1.47 e10 0.92 clip 0.77 dedup 0.53 laneA 3.57 laneM 3.39 laneB 3.13 lanes 0.55 hostlane 0.0 records 2.32 readRecord 0.47 e2e 1.86
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c1    1 pbmc1k_v3       0.0  144.8     604   9.06   45.8   87.7   46.1  45596   0.0  25.2 | 0.0/19.1 | - | 0.0/0.7 | 0.0/3.1 | - | yes ok | start 1 scan 3 refs 14 STAR 8 stream 26 handoff 4 pileup 1 pileupfin 0 nonhost 26 export 19 demux 43
+        stage core-s (sampler): start 1 scan 26 refs 92 STAR 52 stream 140 handoff 24 pileup 26 pileupfin 0 nonhost 44 export 39 demux 160
+        prefill device phase 22.46 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 3.3 GB/s; steps: index 0.29 reads 3.88 e10 0.71 clip 0.6 dedup 0.26 laneA 4.01 laneM 3.77 laneB 3.1 lanes 0.57 hostlane 0.0 records 2.61 readRecord 0.47 e2e 1.67
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c2    0 pbmc1k_v3     134.8  133.9     596   8.95   45.9   88.2   44.2  45624   0.0  28.5 | 0.0/16.5 | - | 0.0/0.6 | 0.0/2.6 | 0.0/5.4 | yes ok | start -0 scan 3 refs 14 STAR 8 stream 24 handoff 4 pileup 0 pileupfin 0 nonhost 19 export 19 demux 43
+        stage core-s (sampler): start 0 scan 21 refs 96 STAR 50 stream 145 handoff 38 pileup 0 pileupfin 0 nonhost 47 export 39 demux 160
+        prefill device phase 19.62 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 8.2 GB/s (waited 0.00 s), reads 3.7 GB/s; d2h 5.9 GB/s; steps: index 0.29 reads 2.04 e10 0.81 clip 0.6 dedup 0.24 laneA 3.54 laneM 3.35 laneB 2.97 lanes 0.53 hostlane 0.0 records 2.42 readRecord 0.45 e2e 1.85
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c3    1 pbmc1k_v3     145.3  132.9     595   8.93   45.9   87.8   44.0  45596   0.0  25.8 | 0.0/15.8 | - | 0.0/1.2 | 0.0/2.5 | 0.0/4.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 0 pileupfin 1 nonhost 17 export 19 demux 44
+        stage core-s (sampler): start 0 scan 25 refs 94 STAR 44 stream 150 handoff 17 pileup 0 pileupfin 27 nonhost 38 export 39 demux 162
+        prefill device phase 19.50 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.9 GB/s (waited 0.03 s), reads 6.9 GB/s; d2h 5.1 GB/s; steps: index 0.31 reads 1.06 e10 0.68 clip 0.62 dedup 0.37 laneA 3.72 laneM 3.34 laneB 2.9 lanes 0.58 hostlane 0.0 records 2.63 readRecord 0.49 e2e 1.9
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c4    0 pbmc1k_v3     269.1  133.9     591   8.88   45.8   87.6   44.7  45616   0.0  28.2 | 0.0/17.0 | - | 0.0/0.7 | 0.0/2.5 | 0.0/5.4 | yes ok | start 1 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 0 pileupfin 1 nonhost 18 export 19 demux 43
+        stage core-s (sampler): start 0 scan 24 refs 92 STAR 43 stream 151 handoff 13 pileup 0 pileupfin 27 nonhost 45 export 39 demux 157
+        prefill device phase 20.00 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 8.2 GB/s (waited 0.00 s), reads 3.8 GB/s; d2h 3.5 GB/s; steps: index 0.58 reads 2.01 e10 0.77 clip 0.57 dedup 0.26 laneA 3.44 laneM 3.17 laneB 3.47 lanes 0.56 hostlane 0.0 records 2.3 readRecord 0.46 e2e 1.89
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c5    1 pbmc1k_v3     278.6  134.4     599   9.00   45.7   87.0   44.0  44636   0.0  24.9 | 0.0/16.9 | - | 0.0/1.0 | 0.0/2.5 | 0.0/4.4 | yes ok | start 0 scan 3 refs 13 STAR 9 stream 25 handoff 3 pileup 1 pileupfin 0 nonhost 18 export 19 demux 43
+        stage core-s (sampler): start 0 scan 26 refs 91 STAR 50 stream 154 handoff 12 pileup 30 pileupfin 0 nonhost 40 export 39 demux 157
+        prefill device phase 20.35 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 11.9 GB/s (waited 0.00 s), reads 3.5 GB/s; d2h 4.7 GB/s; steps: index 0.29 reads 2.3 e10 0.86 clip 0.64 dedup 0.24 laneA 3.39 laneM 3.85 laneB 2.74 lanes 0.53 hostlane 0.0 records 2.63 readRecord 0.48 e2e 1.86
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c6    0 pbmc1k_v3     403.4  134.6     598   8.98   45.8   87.6   44.6  45616   0.0  26.6 | 0.0/17.1 | - | 0.0/0.6 | 0.0/2.5 | 0.0/5.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 1 pileupfin 0 nonhost 19 export 18 demux 44
+        stage core-s (sampler): start 0 scan 25 refs 90 STAR 34 stream 156 handoff 23 pileup 22 pileupfin 0 nonhost 45 export 38 demux 165
+        prefill device phase 20.16 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 10.6 GB/s (waited 0.00 s), reads 3.9 GB/s; d2h 3.3 GB/s; steps: index 0.29 reads 2.04 e10 0.66 clip 0.81 dedup 0.25 laneA 3.72 laneM 3.41 laneB 3.16 lanes 0.57 hostlane 0.0 records 2.4 readRecord 0.46 e2e 1.88
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c7    1 pbmc1k_v3     413.4  131.8     593   8.91   45.7   86.9   43.8  45616   0.0  25.6 | 0.0/15.4 | - | 0.0/0.5 | 0.0/2.7 | 0.0/4.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 23 handoff 4 pileup 1 pileupfin 0 nonhost 17 export 19 demux 43
+        stage core-s (sampler): start 0 scan 25 refs 89 STAR 46 stream 151 handoff 16 pileup 24 pileupfin 0 nonhost 38 export 39 demux 164
+        prefill device phase 18.66 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 7.0 GB/s (waited 0.00 s), reads 8.1 GB/s; d2h 4.9 GB/s; steps: index 0.28 reads 0.9 e10 0.67 clip 0.88 dedup 0.33 laneA 3.6 laneM 3.65 laneB 2.75 lanes 0.56 hostlane 0.0 records 2.57 readRecord 0.47 e2e 1.49
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c8    0 pbmc1k_v3     538.4  134.0     585   8.79   45.8   87.2   44.6  45616   0.0  28.3 | 0.0/16.7 | - | 0.0/0.7 | 0.0/2.6 | 0.0/4.5 | yes ok | start 0 scan 3 refs 14 STAR 8 stream 23 handoff 4 pileup 1 pileupfin 0 nonhost 19 export 18 demux 44
+        stage core-s (sampler): start 0 scan 22 refs 95 STAR 52 stream 121 handoff 30 pileup 28 pileupfin 0 nonhost 42 export 38 demux 159
+        prefill device phase 19.70 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 9.0 GB/s (waited 0.00 s), reads 4.1 GB/s; d2h 3.6 GB/s; steps: index 0.31 reads 1.83 e10 0.72 clip 0.94 dedup 0.23 laneA 3.64 laneM 3.17 laneB 3.12 lanes 0.6 hostlane 0.0 records 2.3 readRecord 0.45 e2e 1.87
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c9    1 pbmc1k_v3     545.6  132.7     592   8.88   45.7   87.5   44.9  44082   0.0  29.1 | 0.0/16.7 | - | 0.0/0.6 | 0.0/2.4 | 0.0/4.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 0 pileupfin 1 nonhost 18 export 18 demux 44
+        stage core-s (sampler): start 0 scan 25 refs 92 STAR 38 stream 153 handoff 44 pileup 0 pileupfin 3 nonhost 39 export 38 demux 159
+        prefill device phase 19.93 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 8.8 GB/s (waited 0.00 s), reads 3.6 GB/s; d2h 4.3 GB/s; steps: index 0.29 reads 1.86 e10 0.96 clip 0.59 dedup 0.23 laneA 3.38 laneM 3.64 laneB 2.74 lanes 0.56 hostlane 0.0 records 2.47 readRecord 0.47 e2e 1.9
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c10   0 pbmc1k_v3     672.8  133.7     587   8.82   45.9   87.5   45.6  45610   0.0  24.9 | 0.0/15.4 | - | 0.0/0.6 | 0.0/2.8 | 0.0/4.4 | yes ok | start -0 scan 3 refs 15 STAR 7 stream 24 handoff 4 pileup 0 pileupfin 1 nonhost 18 export 19 demux 43
+        stage core-s (sampler): start 0 scan 18 refs 102 STAR 33 stream 151 handoff 22 pileup 0 pileupfin 28 nonhost 39 export 39 demux 156
+        prefill device phase 18.52 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 7.8 GB/s (waited 0.03 s), reads 9.0 GB/s; d2h 4.1 GB/s; steps: index 0.34 reads 0.58 e10 0.86 clip 0.62 dedup 0.37 laneA 3.79 laneM 3.75 laneB 2.99 lanes 0.56 hostlane 0.0 records 2.44 readRecord 0.45 e2e 1.26
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c11   1 pbmc1k_v3     678.8  131.5     591   8.87   45.7   87.1   44.2  45596   0.0  27.8 | 0.0/16.3 | - | 0.0/0.6 | 0.0/2.4 | 0.0/4.4 | yes ok | start -0 scan 3 refs 14 STAR 8 stream 23 handoff 4 pileup 1 pileupfin 0 nonhost 18 export 18 demux 42
+        stage core-s (sampler): start 0 scan 19 refs 99 STAR 45 stream 140 handoff 40 pileup 0 pileupfin 0 nonhost 51 export 38 demux 158
+        prefill device phase 19.51 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 10.2 GB/s (waited 0.05 s), reads 4.0 GB/s; d2h 5.1 GB/s; steps: index 0.57 reads 1.99 e10 0.62 clip 0.58 dedup 0.24 laneA 3.68 laneM 3.42 laneB 2.8 lanes 0.55 hostlane 0.0 records 2.08 readRecord 0.91 e2e 1.55
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+== lock intervals per run (sampler; tick 0.50 s)
+   c0: 5 intervals, held 26.8 s, device util > 0 for 23.9 s of it
+      prefill  at   25.5 s: held  15.08 s, util mean 83.8 %, util > 0 15.08 s, device MB first 23549 peak 45625, run CPU 5.79 cores
+      solo     at   43.8 s: held   0.50 s, util mean 78.0 %, util > 0  0.50 s, device MB first 1583 peak 1583, run CPU 7.03 cores
+      handoff  at   47.1 s: held   2.40 s, util mean 39.0 %, util > 0  2.40 s, device MB first 7755 peak 7759, run CPU 11.53 cores
+      pileup   at   50.0 s: held   2.64 s, util mean 1.0 %, util > 0  2.64 s, device MB first 44665 peak 44665, run CPU 7.45 cores
+      nonhost  at   54.1 s: held   6.17 s, util mean 53.0 %, util > 0  3.23 s, device MB first 8325 peak 28481, run CPU 4.39 cores
+   c1: 4 intervals, held 22.6 s, device util > 0 for 20.4 s of it
+      ?        at   26.0 s: held  17.23 s, util mean 81.8 %, util > 0 15.58 s, device MB first 23549 peak 45625, run CPU 5.29 cores
+      ?        at   46.6 s: held   0.50 s, util mean 0.0 %, util > 0  0.00 s, device MB first 2079 peak 2079, run CPU 14.18 cores
+      ?        at   50.0 s: held   4.14 s, util mean 1.5 %, util > 0  4.14 s, device MB first 44665 peak 44665, run CPU 5.72 cores
+      ?        at   58.0 s: held   0.72 s, util mean 100.0 %, util > 0  0.72 s, device MB first 26061 peak 26061, run CPU 0.79 cores
+   c2: 4 intervals, held 28.0 s, device util > 0 for 23.2 s of it
+      ?        at   25.4 s: held  14.54 s, util mean 82.5 %, util > 0 14.04 s, device MB first 4 peak 45633, run CPU 5.92 cores
+      ?        at   43.1 s: held   1.88 s, util mean 92.0 %, util > 0  1.88 s, device MB first 21255 peak 21255, run CPU 3.74 cores
+      ?        at   46.0 s: held   6.20 s, util mean 26.7 %, util > 0  1.92 s, device MB first 42169 peak 44665, run CPU 7.42 cores
+      ?        at   55.3 s: held   5.41 s, util mean 44.5 %, util > 0  5.41 s, device MB first 8323 peak 44665, run CPU 5.88 cores
+   c3: 4 intervals, held 24.7 s, device util > 0 for 18.2 s of it
+      ?        at   24.8 s: held  13.92 s, util mean 77.6 %, util > 0 10.06 s, device MB first 41775 peak 45605, run CPU 6.42 cores
+      ?        at   42.1 s: held   2.61 s, util mean 50.0 %, util > 0  1.00 s, device MB first 6851 peak 9391, run CPU 3.05 cores
+      ?        at   46.5 s: held   3.65 s, util mean 39.3 %, util > 0  3.65 s, device MB first 26057 peak 44665, run CPU 8.81 cores
+      ?        at   55.1 s: held   4.50 s, util mean 42.4 %, util > 0  3.50 s, device MB first 1907 peak 28477, run CPU 5.53 cores
+   c4: 4 intervals, held 28.2 s, device util > 0 for 25.0 s of it
+      ?        at   24.9 s: held  15.25 s, util mean 83.6 %, util > 0 13.97 s, device MB first 529 peak 45619, run CPU 5.59 cores
+      ?        at   43.4 s: held   1.77 s, util mean 88.0 %, util > 0  1.77 s, device MB first 42839 peak 42839, run CPU 4.1 cores
+      ?        at   46.6 s: held   6.13 s, util mean 52.3 %, util > 0  4.21 s, device MB first 42059 peak 44667, run CPU 9.58 cores
+      ?        at   55.7 s: held   5.09 s, util mean 84.1 %, util > 0  5.09 s, device MB first 8323 peak 44663, run CPU 6.07 cores
+   c5: 5 intervals, held 24.9 s, device util > 0 for 22.2 s of it
+      prefill  at   25.6 s: held  14.35 s, util mean 81.3 %, util > 0 12.68 s, device MB first 42839 peak 45619, run CPU 6.62 cores
+      solo     at   43.8 s: held   1.90 s, util mean 20.7 %, util > 0  1.90 s, device MB first 6851 peak 9391, run CPU 3.79 cores
+      handoff  at   47.6 s: held   2.65 s, util mean 74.5 %, util > 0  2.65 s, device MB first 8323 peak 26057, run CPU 10.08 cores
+      pileup   at   50.8 s: held   1.00 s, util mean 99.0 %, util > 0  1.00 s, device MB first 44663 peak 44663, run CPU 2.94 cores
+      nonhost  at   56.1 s: held   5.00 s, util mean 34.8 %, util > 0  4.00 s, device MB first 23 peak 28477, run CPU 5.28 cores
+   c6: 4 intervals, held 26.1 s, device util > 0 for 22.8 s of it
+      ?        at   25.3 s: held  15.15 s, util mean 72.9 %, util > 0 15.15 s, device MB first 23549 peak 45625, run CPU 5.66 cores
+      ?        at   43.7 s: held   0.50 s, util mean 100.0 %, util > 0  0.50 s, device MB first 42839 peak 42839, run CPU 7.42 cores
+      ?        at   47.0 s: held   4.91 s, util mean 40.2 %, util > 0  3.91 s, device MB first 41497 peak 44667, run CPU 7.72 cores
+      ?        at   55.3 s: held   5.51 s, util mean 31.2 %, util > 0  3.23 s, device MB first 2079 peak 44665, run CPU 5.7 cores
+   c7: 5 intervals, held 24.6 s, device util > 0 for 21.8 s of it
+      prefill  at   24.7 s: held  14.11 s, util mean 92.6 %, util > 0 14.11 s, device MB first 41937 peak 45625, run CPU 6.21 cores
+      pileup   at   42.0 s: held   1.50 s, util mean 67.0 %, util > 0  1.50 s, device MB first 44667 peak 44667, run CPU 5.14 cores
+      solo     at   45.9 s: held   2.23 s, util mean 54.7 %, util > 0  2.23 s, device MB first 8323 peak 26057, run CPU 10.35 cores
+      handoff  at   48.6 s: held   2.28 s, util mean 0.0 %, util > 0  0.00 s, device MB first 44665 peak 44665, run CPU 2.29 cores
+      nonhost  at   53.9 s: held   4.50 s, util mean 66.9 %, util > 0  4.00 s, device MB first 4 peak 26057, run CPU 5.74 cores
+   c8: 4 intervals, held 27.8 s, device util > 0 for 25.0 s of it
+      ?        at   25.3 s: held  15.44 s, util mean 91.7 %, util > 0 15.44 s, device MB first 23549 peak 45629, run CPU 5.5 cores
+      ?        at   43.9 s: held   1.77 s, util mean 96.0 %, util > 0  1.77 s, device MB first 42847 peak 42847, run CPU 3.93 cores
+      ?        at   47.2 s: held   5.28 s, util mean 38.2 %, util > 0  3.46 s, device MB first 5635 peak 44667, run CPU 8.68 cores
+      ?        at   55.5 s: held   5.33 s, util mean 52.0 %, util > 0  4.33 s, device MB first 7197 peak 44105, run CPU 4.97 cores
+   c9: 4 intervals, held 28.6 s, device util > 0 for 27.6 s of it
+      ?        at   24.2 s: held  15.75 s, util mean 90.1 %, util > 0 15.75 s, device MB first 45629 peak 45629, run CPU 6.04 cores
+      ?        at   42.8 s: held   2.46 s, util mean 5.0 %, util > 0  2.46 s, device MB first 44667 peak 44667, run CPU 1.33 cores
+      ?        at   46.8 s: held   5.35 s, util mean 69.7 %, util > 0  5.35 s, device MB first 7195 peak 44105, run CPU 10.19 cores
+      ?        at   54.7 s: held   5.00 s, util mean 30.2 %, util > 0  4.00 s, device MB first 1909 peak 28477, run CPU 5.16 cores
+   c10: 4 intervals, held 24.9 s, device util > 0 for 23.9 s of it
+      ?        at   25.7 s: held  14.77 s, util mean 99.8 %, util > 0 14.77 s, device MB first 28127 peak 45619, run CPU 5.84 cores
+      ?        at   43.7 s: held   1.00 s, util mean 100.0 %, util > 0  1.00 s, device MB first 21255 peak 21255, run CPU 6.92 cores
+      ?        at   47.0 s: held   3.60 s, util mean 40.8 %, util > 0  3.60 s, device MB first 2079 peak 44665, run CPU 9.2 cores
+      ?        at   55.0 s: held   5.53 s, util mean 32.7 %, util > 0  4.52 s, device MB first 44105 peak 44105, run CPU 4.75 cores
+   c11: 3 intervals, held 27.2 s, device util > 0 for 25.2 s of it
+      ?        at   25.2 s: held  14.83 s, util mean 97.3 %, util > 0 14.83 s, device MB first 41753 peak 45619, run CPU 5.85 cores
+      ?        at   43.6 s: held   7.92 s, util mean 42.8 %, util > 0  5.92 s, device MB first 44665 peak 44665, run CPU 7.33 cores
+      ?        at   54.5 s: held   4.50 s, util mean 55.9 %, util > 0  4.50 s, device MB first 30013 peak 30013, run CPU 5.59 cores
+   span 810.3 s, 12 runs, 799.2 M pairs: 0.986 M pairs/s
+   steady (runs started after the first completion: 10): mean wall 133.4 s, k = 2: 0.999 M pairs/s; window (134.4, 806.5] s
+   lock held in the window: 0000_41_00_0 19 %, 0000_41_00_0.1 0 %, 0000_42_00_0 13 %, 0000_42_00_0.1 0 %
+   cgroup CPU in the window: 8.8 cores mean
+   GPU util in the window: 10 % mean
+== results k2t14s2r6_wshrink: span 810.3 s, span rate 0.986 M pairs/s, steady 0.999
+   windowed: (144.8, 678.8] s = 534.0 s, 8 completions, 0.998 M pairs/s; cores busy 9.2 in the window against 9.2 over the span
+   lock wait 0.0 s per run = 0.0 % of the mean wall 134.4 s, held 26.8 s; other jobs on the node, most in any minute: 0
+   identity: alone 0/0, cpu 0/0 (identical / checked)
+   fallback run c1 FALLBACK run.log: [nonhost] engine_gpu: engine_gpu nonhost: cudaMalloc(&p, std::max<size_t>(bytes, 16)): resource already mapped; screening on the CPU (allowed info lines: 1)
+POINT FAILED: 1 fallback runs
+  admit: runs 12; runs with a fallback line 0; OOM retries 0
+  admit: | phase | requests | mean wait s | max wait s | mean est GB | mean others reserved GB at arrival | mean entries at arrival |
+  admit: |---|---|---|---|---|---|---|
+  admit: total admission wait per run: mean 0.0 s, max 0.0 s
+######## k2t21s2r6_wshrink: 2 in flight, T=21, 12 runs, items pbmc1k_v3 pbmc1k_v3 pbmc1k_v3...; SINGLET_ENGINE_GPU_SLOTS=2; cfg=wshrink args=[] env=[SINGLET_BOLD_WSHRINK=1]; 2026-11-06T16:43:41-05:00
+  ## start 2026-11-06T16:43:41-05:00
+  JOBID USER NAME CPUS TRES_PER_NODE
+  802089 debruinz gpr2-tp-threads 54 gres/gpu:nvidia_h100_nvl:1
+  /tmp use of the point before identity: 8.0K	/tmp/debruinz-gbtp-802089/k2t21s2r6_wshrink
+  /dev/sda1       1.8T  1.8G  1.7T   1% /tmp
+== point k2t21s2r6_wshrink: k=2 T=21 slots=2 env=SINGLET_ENGINE_GPU_SLOTS=2 node=g051.clipper.gvsu.edu
+   span 842.6 s (12 runs, 799.22 M pairs): 0.948 M pairs/s; cgroup 8180 core-s = 10.24 core-s/M (runs' own: 9.86); GPU util 13 %, a lock held 23 % of the span; host peak 97 GB (anon 84, shmem 13); device peak 44.6 GB
+   run   w sample        start   wall  core-s  c-s/M maxRSS  pkRSS  pkPSS  devMB  wait  held | prefill w/h | handoff h | solo w/h | pileup w/h | nonhost w/h | L5 pileup | stages (s)
+   c0    0 pbmc1k_v3       0.0  140.0     654   9.82   46.6   90.3   45.3  45500   0.0  30.1 | 0.0/18.8 | - | 0.0/0.8 | 0.0/2.5 | 0.0/6.4 | yes ok | start -0 scan 3 refs 14 STAR 8 stream 26 handoff 5 pileup 0 pileupfin 1 nonhost 19 export 21 demux 43
+        stage core-s (sampler): start 0 scan 22 refs 105 STAR 55 stream 164 handoff 21 pileup 0 pileupfin 23 nonhost 58 export 43 demux 162
+        prefill device phase 21.56 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.2 GB/s; d2h 3.3 GB/s; steps: index 0.3 reads 3.75 e10 1.27 clip 0.63 dedup 0.32 laneA 3.3 laneM 3.44 laneB 3.07 lanes 0.54 hostlane 0.0 records 2.1 readRecord 0.45 e2e 1.8
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c1    1 pbmc1k_v3       0.0  139.2     654   9.82   46.6   89.9   45.1  45610   0.0  29.8 | 0.0/19.5 | - | 0.0/0.8 | 0.0/2.6 | 0.0/6.3 | yes ok | start -0 scan 3 refs 14 STAR 8 stream 27 handoff 4 pileup 1 pileupfin 0 nonhost 19 export 20 demux 43
+        stage core-s (sampler): start 0 scan 22 refs 108 STAR 56 stream 165 handoff 16 pileup 26 pileupfin 0 nonhost 57 export 42 demux 163
+        prefill device phase 22.46 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 1.9 GB/s; d2h 3.2 GB/s; steps: index 0.3 reads 4.3 e10 0.94 clip 0.66 dedup 0.24 laneA 3.85 laneM 3.83 laneB 3.12 lanes 0.54 hostlane 0.0 records 2.26 readRecord 0.42 e2e 1.37
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c2    1 pbmc1k_v3     139.6  137.5     658   9.88   46.5   89.6   45.8  45596   0.0  33.0 | 0.0/18.7 | - | 0.0/0.7 | 0.0/2.5 | 0.0/6.4 | yes ok | start 0 scan 3 refs 13 STAR 9 stream 26 handoff 4 pileup 0 pileupfin 0 nonhost 19 export 20 demux 43
+        stage core-s (sampler): start 1 scan 32 refs 97 STAR 57 stream 174 handoff 35 pileup 0 pileupfin 0 nonhost 59 export 42 demux 161
+        prefill device phase 21.97 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.2 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 4.1 GB/s; steps: index 0.3 reads 3.76 e10 1.04 clip 1.2 dedup 0.26 laneA 3.56 laneM 3.5 laneB 2.95 lanes 0.56 hostlane 0.0 records 1.81 readRecord 0.4 e2e 2.12
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c3    0 pbmc1k_v3     140.4  137.9     652   9.78   46.8   91.0   44.9  45500   0.0  32.0 | 0.0/18.5 | - | 0.0/0.7 | 0.0/2.5 | 0.0/6.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 25 handoff 4 pileup 0 pileupfin 1 nonhost 20 export 20 demux 43
+        stage core-s (sampler): start 1 scan 98 refs 27 STAR 56 stream 159 handoff 29 pileup 0 pileupfin 17 nonhost 60 export 42 demux 163
+        prefill device phase 21.24 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.2 GB/s; d2h 3.8 GB/s; steps: index 0.29 reads 3.74 e10 1.1 clip 0.63 dedup 0.24 laneA 3.29 laneM 3.43 laneB 3.05 lanes 0.52 hostlane 0.0 records 2.13 readRecord 0.41 e2e 1.89
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c4    1 pbmc1k_v3     277.5  139.6     663   9.95   46.5   89.3   45.8  45624   0.0  34.5 | 0.0/19.2 | - | 0.0/0.6 | 0.0/2.7 | 0.0/6.4 | yes ok | start 0 scan 3 refs 14 STAR 8 stream 26 handoff 4 pileup 1 pileupfin 1 nonhost 19 export 20 demux 43
+        stage core-s (sampler): start 0 scan 30 refs 100 STAR 52 stream 175 handoff 17 pileup 27 pileupfin 0 nonhost 57 export 42 demux 161
+        prefill device phase 22.44 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 2.0 GB/s; d2h 3.3 GB/s; steps: index 0.29 reads 3.92 e10 1.06 clip 1.11 dedup 0.31 laneA 3.55 laneM 3.43 laneB 3.13 lanes 0.52 hostlane 0.0 records 1.84 readRecord 0.68 e2e 1.79
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c5    0 pbmc1k_v3     278.7  139.2     667  10.02   46.6   88.8   45.4  45624   0.0  31.6 | 0.0/19.2 | - | 0.0/0.6 | 0.0/2.6 | 0.0/6.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 27 handoff 4 pileup 0 pileupfin 0 nonhost 20 export 21 demux 43
+        stage core-s (sampler): start 0 scan 28 refs 102 STAR 39 stream 198 handoff 36 pileup 0 pileupfin 0 nonhost 60 export 42 demux 162
+        prefill device phase 22.15 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 2.9 GB/s; steps: index 0.54 reads 3.74 e10 1.45 clip 0.62 dedup 0.24 laneA 3.36 laneM 3.35 laneB 3.01 lanes 0.52 hostlane 0.0 records 2.26 readRecord 0.42 e2e 2.09
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c6    1 pbmc1k_v3     417.5  140.3     669  10.05   46.6   89.4   45.7  45624   0.0  32.8 | 0.0/19.2 | - | 0.0/0.8 | 0.0/2.7 | 0.0/5.4 | yes ok | start 0 scan 3 refs 14 STAR 8 stream 27 handoff 4 pileup 1 pileupfin 0 nonhost 19 export 21 demux 43
+        stage core-s (sampler): start 0 scan 30 refs 103 STAR 46 stream 188 handoff 37 pileup 3 pileupfin 0 nonhost 55 export 43 demux 164
+        prefill device phase 22.02 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.5 GB/s (waited 0.00 s), reads 2.2 GB/s; d2h 3.4 GB/s; steps: index 0.37 reads 3.58 e10 1.34 clip 0.68 dedup 0.26 laneA 3.37 laneM 3.26 laneB 3.13 lanes 0.52 hostlane 0.0 records 2.22 readRecord 0.42 e2e 2.35
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c7    0 pbmc1k_v3     418.3  138.8     662   9.94   46.6   89.6   45.6  44636   0.0  33.3 | 0.0/19.4 | - | 0.0/0.7 | 0.0/2.4 | 0.0/6.4 | yes ok | start 1 scan 3 refs 13 STAR 8 stream 27 handoff 4 pileup 0 pileupfin 0 nonhost 20 export 20 demux 43
+        stage core-s (sampler): start 0 scan 29 refs 99 STAR 41 stream 194 handoff 37 pileup 0 pileupfin 0 nonhost 59 export 42 demux 160
+        prefill device phase 22.23 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 3.3 GB/s; steps: index 0.3 reads 3.92 e10 1.26 clip 0.6 dedup 0.24 laneA 3.45 laneM 3.4 laneB 2.74 lanes 0.55 hostlane 0.0 records 2.14 readRecord 0.42 e2e 2.4
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c8    0 pbmc1k_v3     557.5  147.0     640   9.60   46.5   89.4   45.3  45624   0.0  26.8 | 0.0/18.5 | - | 0.0/0.6 | 0.0/3.7 | - | yes ok | start 0 scan 3 refs 14 STAR 8 stream 26 handoff 5 pileup 1 pileupfin 0 nonhost 27 export 19 demux 44
+        stage core-s (sampler): start 1 scan 33 refs 98 STAR 56 stream 162 handoff 24 pileup 17 pileupfin 0 nonhost 45 export 41 demux 163
+        prefill device phase 21.24 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.0 GB/s (waited 0.00 s), reads 2.2 GB/s; d2h 4.0 GB/s; steps: index 0.32 reads 0.59 e10 4.01 clip 0.67 dedup 0.28 laneA 3.34 laneM 3.46 laneB 3.05 lanes 0.52 hostlane 0.0 records 2.08 readRecord 0.42 e2e 1.98
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c9    1 pbmc1k_v3     558.2  144.6     644   9.67   46.5   89.1   44.5  45500   0.0  26.3 | 0.0/18.3 | - | 0.0/0.6 | 0.0/3.5 | - | yes ok | start 1 scan 3 refs 13 STAR 9 stream 25 handoff 5 pileup 0 pileupfin 0 nonhost 26 export 20 demux 43
+        stage core-s (sampler): start 4 scan 93 refs 37 STAR 57 stream 167 handoff 26 pileup 0 pileupfin 0 nonhost 58 export 42 demux 160
+        prefill device phase 21.21 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.3 GB/s; d2h 4.0 GB/s; steps: index 0.29 reads 3.56 e10 0.92 clip 0.86 dedup 0.24 laneA 3.26 laneM 3.38 laneB 3.06 lanes 0.54 hostlane 0.0 records 2.29 readRecord 0.41 e2e 1.89
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c10   1 pbmc1k_v3     703.2  139.5     663   9.96   46.5   89.4   46.2  45624   0.0  31.4 | 0.0/18.7 | - | 0.0/0.6 | 0.0/2.5 | 0.0/5.4 | yes ok | start 1 scan 2 refs 14 STAR 9 stream 26 handoff 4 pileup 0 pileupfin 1 nonhost 19 export 20 demux 44
+        stage core-s (sampler): start 4 scan 22 refs 105 STAR 56 stream 180 handoff 13 pileup 0 pileupfin 0 nonhost 80 export 42 demux 161
+        prefill device phase 21.85 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.5 GB/s (waited 0.00 s), reads 2.2 GB/s; d2h 3.1 GB/s; steps: index 0.36 reads 3.57 e10 1.36 clip 0.92 dedup 0.25 laneA 3.49 laneM 3.45 laneB 3.14 lanes 0.55 hostlane 0.0 records 1.76 readRecord 0.42 e2e 2.06
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c11   0 pbmc1k_v3     704.9  137.6     655   9.84   46.2   88.7   45.8  45624   0.0  30.0 | 0.0/19.2 | - | 0.0/0.5 | 0.0/2.6 | 0.0/5.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 26 handoff 4 pileup 0 pileupfin 0 nonhost 20 export 20 demux 44
+        stage core-s (sampler): start 0 scan 27 refs 101 STAR 55 stream 179 handoff 13 pileup 0 pileupfin 0 nonhost 75 export 42 demux 163
+        prefill device phase 22.04 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 3.8 GB/s; steps: index 0.3 reads 3.92 e10 0.94 clip 0.89 dedup 0.24 laneA 3.48 laneM 3.17 laneB 2.92 lanes 0.53 hostlane 0.0 records 2.23 readRecord 0.41 e2e 2.11
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+== lock intervals per run (sampler; tick 0.50 s)
+   c0: 4 intervals, held 29.6 s, device util > 0 for 29.1 s of it
+      ?        at   25.8 s: held  16.95 s, util mean 84.7 %, util > 0 16.45 s, device MB first 4 peak 45619, run CPU 6.35 cores
+      ?        at   45.4 s: held   1.87 s, util mean 21.0 %, util > 0  1.87 s, device MB first 9391 peak 9391, run CPU 2.97 cores
+      ?        at   49.9 s: held   4.73 s, util mean 65.1 %, util > 0  4.73 s, device MB first 2098 peak 44667, run CPU 8.44 cores
+      ?        at   58.9 s: held   6.00 s, util mean 61.3 %, util > 0  6.00 s, device MB first 1911 peak 28477, run CPU 7.4 cores
+   c1: 4 intervals, held 29.8 s, device util > 0 for 29.3 s of it
+      ?        at   25.8 s: held  18.09 s, util mean 85.0 %, util > 0 17.59 s, device MB first 4 peak 45619, run CPU 5.73 cores
+      ?        at   46.8 s: held   1.50 s, util mean 73.7 %, util > 0  1.50 s, device MB first 9391 peak 9391, run CPU 5.47 cores
+      ?        at   50.4 s: held   4.23 s, util mean 74.7 %, util > 0  4.23 s, device MB first 1353 peak 44667, run CPU 8.62 cores
+      ?        at   58.9 s: held   6.00 s, util mean 61.3 %, util > 0  6.00 s, device MB first 1911 peak 28477, run CPU 7.22 cores
+   c2: 4 intervals, held 32.5 s, device util > 0 for 28.1 s of it
+      ?        at   24.8 s: held  17.67 s, util mean 86.9 %, util > 0 17.67 s, device MB first 529 peak 45633, run CPU 5.93 cores
+      ?        at   45.1 s: held   2.38 s, util mean 83.7 %, util > 0  2.38 s, device MB first 9391 peak 9391, run CPU 5.22 cores
+      ?        at   48.0 s: held   6.46 s, util mean 27.2 %, util > 0  3.05 s, device MB first 2615 peak 44667, run CPU 7.15 cores
+      ?        at   57.6 s: held   6.00 s, util mean 73.7 %, util > 0  5.00 s, device MB first 1909 peak 28477, run CPU 7.03 cores
+   c3: 4 intervals, held 31.0 s, device util > 0 for 27.1 s of it
+      ?        at   25.0 s: held  16.64 s, util mean 89.9 %, util > 0 16.64 s, device MB first 529 peak 45633, run CPU 6.25 cores
+      ?        at   44.2 s: held   1.88 s, util mean 99.0 %, util > 0  1.88 s, device MB first 9391 peak 9391, run CPU 3.38 cores
+      ?        at   47.1 s: held   5.96 s, util mean 31.1 %, util > 0  3.05 s, device MB first 2615 peak 44667, run CPU 7.98 cores
+      ?        at   56.7 s: held   6.50 s, util mean 74.1 %, util > 0  5.50 s, device MB first 1909 peak 28477, run CPU 7.11 cores
+   c4: 4 intervals, held 33.5 s, device util > 0 for 29.2 s of it
+      ?        at   25.6 s: held  17.65 s, util mean 87.1 %, util > 0 17.65 s, device MB first 23549 peak 45633, run CPU 5.95 cores
+      ?        at   45.9 s: held   2.42 s, util mean 79.3 %, util > 0  2.42 s, device MB first 9391 peak 9647, run CPU 5.22 cores
+      ?        at   48.8 s: held   6.95 s, util mean 42.9 %, util > 0  3.12 s, device MB first 2081 peak 44665, run CPU 9.53 cores
+      ?        at   59.1 s: held   6.50 s, util mean 69.1 %, util > 0  6.00 s, device MB first 4 peak 28477, run CPU 6.85 cores
+   c5: 4 intervals, held 31.6 s, device util > 0 for 29.2 s of it
+      ?        at   24.4 s: held  17.65 s, util mean 87.1 %, util > 0 17.65 s, device MB first 23549 peak 45633, run CPU 6.2 cores
+      ?        at   44.7 s: held   2.42 s, util mean 79.3 %, util > 0  2.42 s, device MB first 9391 peak 9647, run CPU 4.77 cores
+      ?        at   49.5 s: held   5.01 s, util mean 50.0 %, util > 0  3.12 s, device MB first 2081 peak 44665, run CPU 8.73 cores
+      ?        at   57.8 s: held   6.50 s, util mean 69.1 %, util > 0  6.00 s, device MB first 4 peak 28477, run CPU 7.15 cores
+   c6: 4 intervals, held 32.3 s, device util > 0 for 29.8 s of it
+      ?        at   25.7 s: held  17.51 s, util mean 83.0 %, util > 0 17.51 s, device MB first 529 peak 45633, run CPU 6.08 cores
+      ?        at   46.1 s: held   2.36 s, util mean 19.3 %, util > 0  1.86 s, device MB first 1583 peak 9391, run CPU 5.35 cores
+      ?        at   49.5 s: held   6.43 s, util mean 10.9 %, util > 0  4.39 s, device MB first 5097 peak 44667, run CPU 8.21 cores
+      ?        at   59.4 s: held   6.00 s, util mean 63.3 %, util > 0  6.00 s, device MB first 1911 peak 28477, run CPU 6.99 cores
+   c7: 4 intervals, held 32.8 s, device util > 0 for 29.8 s of it
+      ?        at   24.8 s: held  17.51 s, util mean 83.0 %, util > 0 17.51 s, device MB first 529 peak 45633, run CPU 5.88 cores
+      ?        at   45.3 s: held   2.36 s, util mean 19.3 %, util > 0  1.86 s, device MB first 1583 peak 9391, run CPU 5.37 cores
+      ?        at   48.6 s: held   6.43 s, util mean 10.9 %, util > 0  4.39 s, device MB first 5097 peak 44667, run CPU 9.14 cores
+      ?        at   58.1 s: held   6.50 s, util mean 58.5 %, util > 0  6.00 s, device MB first 4 peak 28477, run CPU 6.95 cores
+   c8: 4 intervals, held 26.3 s, device util > 0 for 23.4 s of it
+      ?        at   25.1 s: held  17.23 s, util mean 86.0 %, util > 0 17.23 s, device MB first 529 peak 45633, run CPU 5.77 cores
+      ?        at   45.4 s: held   1.84 s, util mean 37.0 %, util > 0  1.84 s, device MB first 9647 peak 9647, run CPU 4.07 cores
+      ?        at   48.3 s: held   6.72 s, util mean 52.5 %, util > 0  4.29 s, device MB first 1353 peak 45200, run CPU 6.01 cores
+      ?        at   59.1 s: held   0.50 s, util mean 0.0 %, util > 0  0.00 s, device MB first 543 peak 543, run CPU 0.96 cores
+   c9: 4 intervals, held 25.8 s, device util > 0 for 22.8 s of it
+      ?        at   26.0 s: held  16.22 s, util mean 92.8 %, util > 0 16.22 s, device MB first 23549 peak 45633, run CPU 6.44 cores
+      ?        at   44.8 s: held   2.34 s, util mean 38.0 %, util > 0  2.34 s, device MB first 9647 peak 10311, run CPU 3.41 cores
+      ?        at   47.7 s: held   6.72 s, util mean 52.5 %, util > 0  4.29 s, device MB first 1353 peak 45200, run CPU 5.95 cores
+      ?        at   58.5 s: held   0.50 s, util mean 0.0 %, util > 0  0.00 s, device MB first 543 peak 543, run CPU 8.06 cores
+   c10: 4 intervals, held 31.4 s, device util > 0 for 31.4 s of it
+      ?        at   25.5 s: held  17.56 s, util mean 84.3 %, util > 0 17.56 s, device MB first 529 peak 45633, run CPU 6.05 cores
+      ?        at   45.7 s: held   2.38 s, util mean 69.3 %, util > 0  2.38 s, device MB first 10357 peak 10357, run CPU 5.41 cores
+      ?        at   48.6 s: held   5.99 s, util mean 48.2 %, util > 0  5.99 s, device MB first 2105 peak 44665, run CPU 7.29 cores
+      ?        at   58.9 s: held   5.50 s, util mean 76.1 %, util > 0  5.50 s, device MB first 8321 peak 28845, run CPU 6.78 cores
+   c11: 4 intervals, held 30.0 s, device util > 0 for 29.0 s of it
+      ?        at   23.8 s: held  17.56 s, util mean 84.3 %, util > 0 17.56 s, device MB first 529 peak 45633, run CPU 6.22 cores
+      ?        at   43.9 s: held   2.38 s, util mean 69.3 %, util > 0  2.38 s, device MB first 10357 peak 10357, run CPU 4.52 cores
+      ?        at   48.7 s: held   4.09 s, util mean 64.0 %, util > 0  4.09 s, device MB first 4871 peak 44665, run CPU 9.19 cores
+      ?        at   56.2 s: held   6.00 s, util mean 69.7 %, util > 0  5.00 s, device MB first 23 peak 28477, run CPU 6.39 cores
+   span 842.6 s, 12 runs, 799.2 M pairs: 0.948 M pairs/s
+   steady (runs started after the first completion: 10): mean wall 140.2 s, k = 2: 0.950 M pairs/s; window (139.2, 842.5] s
+   lock held in the window: 0000_41_00_0 19 %, 0000_41_00_0.1 0 %, 0000_42_00_0 19 %, 0000_42_00_0.1 0 %
+   cgroup CPU in the window: 8.8 cores mean
+   GPU util in the window: 13 % mean
+== results k2t21s2r6_wshrink: span 842.6 s, span rate 0.948 M pairs/s, steady 0.950
+   windowed: (140.0, 704.9] s = 564.9 s, 8 completions, 0.943 M pairs/s; cores busy 9.7 in the window against 9.7 over the span
+   lock wait 0.0 s per run = 0.0 % of the mean wall 140.1 s, held 31.0 s; other jobs on the node, most in any minute: 0
+   identity: alone 0/0, cpu 0/0 (identical / checked)
+   fallback run c8 FALLBACK run.log: [nonhost] engine_gpu: engine_gpu nonhost: cudaMalloc(&p, std::max<size_t>(bytes, 16)): resource already mapped; screening on the CPU (allowed info lines: 1)
+   fallback run c9 FALLBACK run.log: [nonhost] engine_gpu: engine_gpu nonhost: cudaMalloc(&p, std::max<size_t>(bytes, 16)): resource already mapped; screening on the CPU (allowed info lines: 1)
+POINT FAILED: 2 fallback runs
+  admit: runs 12; runs with a fallback line 0; OOM retries 0
+  admit: | phase | requests | mean wait s | max wait s | mean est GB | mean others reserved GB at arrival | mean entries at arrival |
+  admit: |---|---|---|---|---|---|---|
+  admit: total admission wait per run: mean 0.0 s, max 0.0 s
+######## k2t27s2r6_wshrink: 2 in flight, T=27, 12 runs, items pbmc1k_v3 pbmc1k_v3 pbmc1k_v3...; SINGLET_ENGINE_GPU_SLOTS=2; cfg=wshrink args=[] env=[SINGLET_BOLD_WSHRINK=1]; 2026-11-06T16:57:47-05:00
+  ## start 2026-11-06T16:57:47-05:00
+  JOBID USER NAME CPUS TRES_PER_NODE
+  802089 debruinz gpr2-tp-threads 54 gres/gpu:nvidia_h100_nvl:1
+  /tmp use of the point before identity: 8.0K	/tmp/debruinz-gbtp-802089/k2t27s2r6_wshrink
+  /dev/sda1       1.8T  1.8G  1.7T   1% /tmp
+== point k2t27s2r6_wshrink: k=2 T=27 slots=2 env=SINGLET_ENGINE_GPU_SLOTS=2 node=g051.clipper.gvsu.edu
+   span 850.8 s (12 runs, 799.22 M pairs): 0.939 M pairs/s; cgroup 8406 core-s = 10.52 core-s/M (runs' own: 10.12); GPU util 11 %, a lock held 23 % of the span; host peak 101 GB (anon 87, shmem 13); device peak 45.1 GB
+   run   w sample        start   wall  core-s  c-s/M maxRSS  pkRSS  pkPSS  devMB  wait  held | prefill w/h | handoff h | solo w/h | pileup w/h | nonhost w/h | L5 pileup | stages (s)
+   c0    0 pbmc1k_v3       0.0  142.8     673  10.10   47.8   94.5   46.8  45624   0.0  30.3 | 0.0/18.6 | - | 0.0/1.1 | 0.0/2.7 | 0.0/6.4 | yes ok | start 0 scan 3 refs 14 STAR 8 stream 26 handoff 5 pileup 0 pileupfin 1 nonhost 19 export 22 demux 44
+        stage core-s (sampler): start 0 scan 34 refs 101 STAR 61 stream 162 handoff 21 pileup 0 pileupfin 27 nonhost 56 export 44 demux 167
+        prefill device phase 21.55 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 3.6 GB/s; steps: index 0.29 reads 3.75 e10 1.23 clip 0.6 dedup 0.24 laneA 3.77 laneM 3.57 laneB 2.85 lanes 0.55 hostlane 0.0 records 2.28 readRecord 0.39 e2e 1.53
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c1    1 pbmc1k_v3       0.0  140.9     675  10.14   47.8   95.1   47.1  45624   0.0  28.8 | 0.0/18.3 | - | 0.0/1.0 | 0.0/2.6 | 0.0/6.4 | yes ok | start 0 scan 3 refs 13 STAR 9 stream 26 handoff 4 pileup 1 pileupfin 0 nonhost 20 export 21 demux 44
+        stage core-s (sampler): start 0 scan 36 refs 96 STAR 63 stream 165 handoff 18 pileup 0 pileupfin 0 nonhost 88 export 44 demux 166
+        prefill device phase 21.11 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.5 GB/s (waited 0.00 s), reads 1.9 GB/s; d2h 4.6 GB/s; steps: index 0.3 reads 0.97 e10 4.08 clip 0.57 dedup 0.27 laneA 3.83 laneM 3.2 laneB 2.83 lanes 0.52 hostlane 0.0 records 2.13 readRecord 0.43 e2e 1.47
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c2    1 pbmc1k_v3     141.2  142.1     679  10.19   47.7   94.1   48.1  45624   0.0  28.1 | 0.0/19.2 | - | 0.0/0.6 | 0.0/2.6 | 0.0/5.4 | yes ok | start 0 scan 3 refs 15 STAR 8 stream 26 handoff 5 pileup 0 pileupfin 1 nonhost 19 export 21 demux 44
+        stage core-s (sampler): start 0 scan 29 refs 108 STAR 59 stream 165 handoff 34 pileup 0 pileupfin 0 nonhost 79 export 44 demux 160
+        prefill device phase 21.71 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.7 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 3.3 GB/s; steps: index 0.31 reads 1.03 e10 4.08 clip 0.67 dedup 0.31 laneA 3.54 laneM 3.66 laneB 2.87 lanes 0.55 hostlane 0.0 records 1.94 readRecord 0.4 e2e 1.84
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c3    0 pbmc1k_v3     143.2  138.5     675  10.14   47.9   94.0   48.0  45374   0.0  28.6 | 0.0/19.7 | - | 0.0/0.7 | 0.0/2.5 | 0.0/5.4 | yes ok | start 0 scan 3 refs 13 STAR 9 stream 26 handoff 4 pileup 0 pileupfin 0 nonhost 19 export 21 demux 43
+        stage core-s (sampler): start 0 scan 100 refs 28 STAR 61 stream 172 handoff 30 pileup 0 pileupfin 0 nonhost 76 export 45 demux 164
+        prefill device phase 22.46 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 2.0 GB/s; d2h 3.0 GB/s; steps: index 0.6 reads 4.06 e10 1.35 clip 0.6 dedup 0.24 laneA 3.43 laneM 3.86 laneB 2.75 lanes 0.54 hostlane 0.0 records 2.13 readRecord 0.38 e2e 1.94
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c4    0 pbmc1k_v3     282.1  142.9     687  10.31   47.9   95.0   47.9  45610   0.0  33.7 | 0.0/20.1 | - | 0.0/0.6 | 0.0/2.4 | 0.0/5.4 | yes ok | start 0 scan 3 refs 15 STAR 9 stream 26 handoff 4 pileup 1 pileupfin 1 nonhost 19 export 21 demux 44
+        stage core-s (sampler): start 0 scan 30 refs 109 STAR 64 stream 180 handoff 30 pileup 11 pileupfin 2 nonhost 53 export 44 demux 162
+        prefill device phase 22.76 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 4.3 GB/s (waited 0.00 s), reads 2.0 GB/s; d2h 2.5 GB/s; steps: index 0.3 reads 1.12 e10 4.07 clip 0.7 dedup 0.25 laneA 4.07 laneM 3.94 laneB 3.15 lanes 0.57 hostlane 0.0 records 2.09 readRecord 0.32 e2e 1.56
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c5    1 pbmc1k_v3     283.9  141.7     683  10.25   47.7   94.1   47.2  45500   0.0  32.0 | 0.0/19.3 | - | 0.0/0.6 | 0.0/2.5 | 0.0/5.4 | yes ok | start 0 scan 3 refs 13 STAR 9 stream 26 handoff 4 pileup 0 pileupfin 1 nonhost 20 export 21 demux 44
+        stage core-s (sampler): start 0 scan 31 refs 99 STAR 62 stream 181 handoff 38 pileup 0 pileupfin 3 nonhost 57 export 44 demux 167
+        prefill device phase 21.80 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.1 GB/s; d2h 2.7 GB/s; steps: index 0.3 reads 3.75 e10 1.36 clip 0.62 dedup 0.28 laneA 3.3 laneM 3.59 laneB 3.1 lanes 0.55 hostlane 0.0 records 1.88 readRecord 0.41 e2e 2.07
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c6    0 pbmc1k_v3     425.4  141.7     662   9.94   47.8   95.3   48.2  45500   0.0  24.6 | 0.0/18.7 | - | 0.0/0.6 | 0.0/2.5 | 0.0/5.4 | yes ok | start 0 scan 3 refs 15 STAR 8 stream 27 handoff 4 pileup 0 pileupfin 1 nonhost 19 export 21 demux 44
+        stage core-s (sampler): start 0 scan 25 refs 118 STAR 65 stream 167 handoff 14 pileup 0 pileupfin 30 nonhost 40 export 44 demux 160
+        prefill device phase 21.47 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.4 GB/s (waited 0.00 s), reads 2.2 GB/s; d2h 3.7 GB/s; steps: index 0.31 reads 3.73 e10 0.73 clip 0.95 dedup 0.3 laneA 3.3 laneM 3.69 laneB 3.08 lanes 0.61 hostlane 0.0 records 2.12 readRecord 0.36 e2e 1.7
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c7    1 pbmc1k_v3     426.0  150.7     672  10.10   47.7   94.8   47.2  45624   0.0  27.0 | 0.0/19.4 | - | 0.0/0.6 | 0.0/3.4 | - | yes ok | start 0 scan 3 refs 13 STAR 10 stream 27 handoff 4 pileup 1 pileupfin 0 nonhost 26 export 21 demux 45
+        stage core-s (sampler): start 0 scan 31 refs 104 STAR 62 stream 175 handoff 17 pileup 22 pileupfin 0 nonhost 45 export 44 demux 170
+        prefill device phase 22.05 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 5.9 GB/s (waited 0.00 s), reads 2.0 GB/s; d2h 3.9 GB/s; steps: index 0.3 reads 4.22 e10 0.78 clip 1.12 dedup 0.23 laneA 3.62 laneM 3.86 laneB 2.73 lanes 0.56 hostlane 0.0 records 1.6 readRecord 0.32 e2e 2.1
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c8    0 pbmc1k_v3     567.4  140.5     670  10.07   47.8   95.4   47.5  45624   0.0  25.5 | 0.0/17.5 | - | 0.0/0.6 | 0.0/2.7 | 0.0/5.4 | yes ok | start -0 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 1 pileupfin 0 nonhost 20 export 23 demux 44
+        stage core-s (sampler): start 0 scan 24 refs 117 STAR 60 stream 172 handoff 35 pileup 7 pileupfin 0 nonhost 44 export 46 demux 164
+        prefill device phase 20.12 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 7.1 GB/s (waited 0.00 s), reads 4.1 GB/s; d2h 2.7 GB/s; steps: index 0.32 reads 1.91 e10 0.84 clip 0.62 dedup 0.27 laneA 4.14 laneM 3.49 laneB 3.12 lanes 0.57 hostlane 0.0 records 2.06 readRecord 0.36 e2e 1.87
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c9    1 pbmc1k_v3     577.0  138.0     673  10.11   47.9   95.9   48.4  45624   0.0  24.0 | 0.0/16.0 | - | 0.0/0.9 | 0.0/2.7 | 0.0/4.4 | yes ok | start 0 scan 2 refs 13 STAR 9 stream 22 handoff 5 pileup 0 pileupfin 0 nonhost 18 export 22 demux 47
+        stage core-s (sampler): start 0 scan 23 refs 117 STAR 60 stream 179 handoff 38 pileup 0 pileupfin 0 nonhost 40 export 45 demux 170
+        prefill device phase 18.48 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 7.1 GB/s (waited 0.00 s), reads 4.8 GB/s; d2h 4.0 GB/s; steps: index 0.28 reads 1.61 e10 0.93 clip 0.6 dedup 0.24 laneA 3.9 laneM 3.18 laneB 2.79 lanes 0.57 hostlane 0.0 records 1.9 readRecord 0.39 e2e 1.55
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c10   0 pbmc1k_v3     708.3  136.9     675  10.14   47.8   94.5   47.9  45616   0.0  29.3 | 0.0/16.4 | - | 0.0/0.6 | 0.0/2.4 | 0.0/4.4 | yes ok | start 0 scan 3 refs 13 STAR 8 stream 23 handoff 4 pileup 1 pileupfin 1 nonhost 19 export 21 demux 44
+        stage core-s (sampler): start 0 scan 27 refs 114 STAR 48 stream 189 handoff 23 pileup 0 pileupfin 0 nonhost 63 export 44 demux 166
+        prefill device phase 18.95 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.7 GB/s (waited 0.00 s), reads 6.9 GB/s; d2h 3.0 GB/s; steps: index 0.3 reads 1.07 e10 1.39 clip 0.61 dedup 0.25 laneA 3.84 laneM 3.71 laneB 2.75 lanes 0.57 hostlane 0.0 records 1.54 readRecord 0.81 e2e 1.58
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+   c11   1 pbmc1k_v3     715.4  135.4     663   9.96   47.8   94.2   47.8  45624   0.0  24.0 | 0.0/16.5 | - | 0.0/0.5 | 0.0/2.4 | 0.0/4.4 | yes ok | start -0 scan 3 refs 13 STAR 8 stream 24 handoff 4 pileup 0 pileupfin 1 nonhost 18 export 21 demux 43
+        stage core-s (sampler): start 0 scan 29 refs 113 STAR 60 stream 175 handoff 12 pileup 0 pileupfin 28 nonhost 39 export 44 demux 163
+        prefill device phase 19.25 s; E12 lanes (new): batches 524288 / 393216 / 131072; dump None s; pileup GPU None ms, peak None GB
+        engine memory marks (device-wide): start 0.5, index 16.9, reads+clip 23.9, dedup 20.7, index+distinct 20.7, before-laneA 20.7, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, before-laneA 20.8, released 1.5, relocked 1.5, peak (lanes, records) 44.563354
+        uploads: index 6.8 GB/s (waited 0.00 s), reads 5.7 GB/s; d2h 3.2 GB/s; steps: index 0.28 reads 1.35 e10 0.73 clip 1.0 dedup 0.24 laneA 3.82 laneM 3.75 laneB 2.89 lanes 0.61 hostlane 0.0 records 2.04 readRecord 0.43 e2e 1.57
+        log: Shared memory is not used for genomes. Allocated a private copy of the genome.
+== lock intervals per run (sampler; tick 0.50 s)
+   c0: 4 intervals, held 27.7 s, device util > 0 for 27.2 s of it
+      ?        at   26.5 s: held  17.12 s, util mean 90.7 %, util > 0 16.62 s, device MB first 529 peak 45633, run CPU 5.88 cores
+      ?        at   46.7 s: held   0.50 s, util mean 100.0 %, util > 0  0.50 s, device MB first 6851 peak 6851, run CPU 17.44 cores
+      ?        at   50.4 s: held   3.61 s, util mean 59.5 %, util > 0  3.61 s, device MB first 44665 peak 44667, run CPU 5.7 cores
+      ?        at   59.0 s: held   6.50 s, util mean 52.0 %, util > 0  6.50 s, device MB first 1911 peak 28477, run CPU 6.75 cores
+   c1: 4 intervals, held 28.8 s, device util > 0 for 26.7 s of it
+      ?        at   25.4 s: held  17.73 s, util mean 87.1 %, util > 0 16.12 s, device MB first 529 peak 45633, run CPU 5.81 cores
+      ?        at   46.2 s: held   1.00 s, util mean 100.0 %, util > 0  1.00 s, device MB first 6851 peak 6851, run CPU 8.48 cores
+      ?        at   49.9 s: held   4.11 s, util mean 47.6 %, util > 0  3.61 s, device MB first 2081 peak 44667, run CPU 10.06 cores
+      ?        at   59.0 s: held   6.00 s, util mean 56.0 %, util > 0  6.00 s, device MB first 1911 peak 28477, run CPU 7.49 cores
+   c2: 4 intervals, held 28.1 s, device util > 0 for 26.5 s of it
+      ?        at   26.5 s: held  18.21 s, util mean 85.0 %, util > 0 16.61 s, device MB first 23549 peak 45633, run CPU 6.06 cores
+      ?        at   47.3 s: held   1.00 s, util mean 100.0 %, util > 0  1.00 s, device MB first 6851 peak 6851, run CPU 11.76 cores
+      ?        at   51.3 s: held   3.41 s, util mean 92.5 %, util > 0  3.41 s, device MB first 10883 peak 46181, run CPU 10.03 cores
+      ?        at   60.3 s: held   5.50 s, util mean 76.3 %, util > 0  5.50 s, device MB first 8323 peak 28819, run CPU 6.61 cores
+   c3: 4 intervals, held 28.1 s, device util > 0 for 25.5 s of it
+      ?        at   24.5 s: held  18.21 s, util mean 85.0 %, util > 0 16.61 s, device MB first 23549 peak 45633, run CPU 6.03 cores
+      ?        at   45.8 s: held   0.50 s, util mean 100.0 %, util > 0  0.50 s, device MB first 6851 peak 6851, run CPU 24.5 cores
+      ?        at   49.3 s: held   3.41 s, util mean 92.5 %, util > 0  3.41 s, device MB first 10883 peak 46181, run CPU 8.63 cores
+      ?        at   57.3 s: held   6.00 s, util mean 69.8 %, util > 0  5.00 s, device MB first 1907 peak 28477, run CPU 6.45 cores
+   c4: 3 intervals, held 33.7 s, device util > 0 for 31.9 s of it
+      ?        at   27.8 s: held  18.43 s, util mean 90.4 %, util > 0 17.93 s, device MB first 4 peak 45619, run CPU 5.94 cores
+      ?        at   47.7 s: held   9.28 s, util mean 55.8 %, util > 0  7.99 s, device MB first 9391 peak 44945, run CPU 8.33 cores
+      ?        at   60.8 s: held   6.00 s, util mean 68.7 %, util > 0  6.00 s, device MB first 1913 peak 30011, run CPU 6.69 cores
+   c5: 4 intervals, held 31.5 s, device util > 0 for 29.2 s of it
+      ?        at   26.0 s: held  17.21 s, util mean 90.1 %, util > 0 16.71 s, device MB first 4 peak 45619, run CPU 6.43 cores
+      ?        at   45.9 s: held   1.96 s, util mean 52.0 %, util > 0  1.96 s, device MB first 9391 peak 9391, run CPU 1.85 cores
+      ?        at   48.9 s: held   6.32 s, util mean 58.0 %, util > 0  5.03 s, device MB first 5415 peak 44945, run CPU 10.65 cores
+      ?        at   58.6 s: held   6.00 s, util mean 67.2 %, util > 0  5.50 s, device MB first 4 peak 30011, run CPU 7.06 cores
+   c6: 3 intervals, held 24.6 s, device util > 0 for 24.1 s of it
+      ?        at   27.8 s: held  16.84 s, util mean 87.9 %, util > 0 16.84 s, device MB first 529 peak 45605, run CPU 6.31 cores
+      ?        at   50.9 s: held   3.23 s, util mean 75.0 %, util > 0  3.23 s, device MB first 7755 peak 11493, run CPU 8.64 cores
+      ?        at   60.8 s: held   4.50 s, util mean 62.7 %, util > 0  4.00 s, device MB first 543 peak 26059, run CPU 5.47 cores
+   c7: 4 intervals, held 26.5 s, device util > 0 for 26.0 s of it
+      ?        at   27.2 s: held  16.84 s, util mean 87.9 %, util > 0 16.84 s, device MB first 529 peak 45605, run CPU 6.16 cores
+      ?        at   47.0 s: held   2.26 s, util mean 50.0 %, util > 0  2.26 s, device MB first 10311 peak 10311, run CPU 3.28 cores
+      ?        at   50.3 s: held   6.88 s, util mean 61.0 %, util > 0  6.88 s, device MB first 7755 peak 11493, run CPU 6.33 cores
+      ?        at   60.1 s: held   0.50 s, util mean 0.0 %, util > 0  0.00 s, device MB first 543 peak 543, run CPU 1.26 cores
+   c8: 4 intervals, held 25.0 s, device util > 0 for 22.3 s of it
+      ?        at   24.4 s: held  15.56 s, util mean 86.1 %, util > 0 15.06 s, device MB first 4 peak 45633, run CPU 6.64 cores
+      ?        at   42.8 s: held   0.50 s, util mean 91.0 %, util > 0  0.50 s, device MB first 45633 peak 45633, run CPU 10.1 cores
+      ?        at   46.2 s: held   5.24 s, util mean 69.2 %, util > 0  3.03 s, device MB first 41361 peak 44665, run CPU 8.25 cores
+      ?        at   55.0 s: held   3.74 s, util mean 50.3 %, util > 0  3.74 s, device MB first 2473 peak 44105, run CPU 6.82 cores
+   c9: 4 intervals, held 24.0 s, device util > 0 for 22.0 s of it
+      ?        at   24.9 s: held  14.28 s, util mean 93.8 %, util > 0 14.28 s, device MB first 41937 peak 45633, run CPU 7.36 cores
+      ?        at   41.8 s: held   1.50 s, util mean 0.0 %, util > 0  0.00 s, device MB first 44665 peak 44665, run CPU 6.67 cores
+      ?        at   45.4 s: held   3.74 s, util mean 50.3 %, util > 0  3.74 s, device MB first 2473 peak 44105, run CPU 10.79 cores
+      ?        at   53.9 s: held   4.50 s, util mean 66.0 %, util > 0  4.00 s, device MB first 4 peak 28477, run CPU 5.6 cores
+   c10: 4 intervals, held 29.3 s, device util > 0 for 28.3 s of it
+      ?        at   23.6 s: held  16.38 s, util mean 89.5 %, util > 0 16.38 s, device MB first 23549 peak 45625, run CPU 7.35 cores
+      ?        at   41.5 s: held   2.95 s, util mean 87.5 %, util > 0  2.95 s, device MB first 21255 peak 45513, run CPU 5.44 cores
+      ?        at   45.9 s: held   4.74 s, util mean 50.3 %, util > 0  3.74 s, device MB first 45513 peak 45513, run CPU 10.46 cores
+      ?        at   54.7 s: held   5.26 s, util mean 43.0 %, util > 0  5.26 s, device MB first 44103 peak 44105, run CPU 4.88 cores
+   c11: 4 intervals, held 24.0 s, device util > 0 for 22.5 s of it
+      ?        at   25.1 s: held  14.68 s, util mean 87.6 %, util > 0 14.68 s, device MB first 41765 peak 45619, run CPU 6.69 cores
+      ?        at   42.6 s: held   1.00 s, util mean 0.0 %, util > 0  0.00 s, device MB first 44665 peak 44665, run CPU 11.25 cores
+      ?        at   46.6 s: held   3.81 s, util mean 47.7 %, util > 0  3.81 s, device MB first 793 peak 44105, run CPU 10.58 cores
+      ?        at   55.3 s: held   4.50 s, util mean 48.7 %, util > 0  4.00 s, device MB first 4 peak 28477, run CPU 5.68 cores
+   span 850.8 s, 12 runs, 799.2 M pairs: 0.939 M pairs/s
+   steady (runs started after the first completion: 10): mean wall 140.8 s, k = 2: 0.946 M pairs/s; window (140.9, 845.2] s
+   lock held in the window: 0000_41_00_0 18 %, 0000_41_00_0.1 0 %, 0000_42_00_0 15 %, 0000_42_00_0.1 0 %
+   cgroup CPU in the window: 8.9 cores mean
+   GPU util in the window: 11 % mean
+== results k2t27s2r6_wshrink: span 850.8 s, span rate 0.939 M pairs/s, steady 0.946
+   windowed: (142.8, 715.4] s = 572.6 s, 8 completions, 0.931 M pairs/s; cores busy 10.0 in the window against 9.9 over the span
+   lock wait 0.0 s per run = 0.0 % of the mean wall 141.0 s, held 28.0 s; other jobs on the node, most in any minute: 0
+   identity: alone 0/0, cpu 0/0 (identical / checked)
+   fallback run c7 FALLBACK run.log: [nonhost] engine_gpu: engine_gpu nonhost: cudaMalloc(&p, std::max<size_t>(bytes, 16)): resource already mapped; screening on the CPU (allowed info lines: 1)
+POINT FAILED: 1 fallback runs
+  admit: runs 12; runs with a fallback line 0; OOM retries 0
+  admit: | phase | requests | mean wait s | max wait s | mean est GB | mean others reserved GB at arrival | mean entries at arrival |
+  admit: |---|---|---|---|---|---|---|
+  admit: total admission wait per run: mean 0.0 s, max 0.0 s
+=== mapDistinct records (E6 dumps) per sample
+| point | runs | k | T | slots | span s | M pairs | **pairs/s (M)** | wall s (min / mean / max) | core-s/M (cgroup) | lock wait s (mean per run) | lock held s (mean per run) | GPU held % of span | GPU util % | host peak GB | device peak GB |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| k2t7s2r6_wshrink | 12 | 2 | 7 | 2 | 877.3 | 799.2 | **0.911** | 140.3 / 144.1 / 155.9 | 8.54 | 0.0 | 27.0 | 24 | 10 | 91 | 51.0 |
+| k2t14s2r6_wshrink | 12 | 2 | 14 | 2 | 810.3 | 799.2 | **0.986** | 131.5 / 134.4 / 144.8 | 9.28 | 0.0 | 26.8 | 28 | 10 | 92 | 44.6 |
+| k2t21s2r6_wshrink | 12 | 2 | 21 | 2 | 842.6 | 799.2 | **0.948** | 137.5 / 140.1 / 147.0 | 10.24 | 0.0 | 31.0 | 23 | 13 | 97 | 44.6 |
+| k2t27s2r6_wshrink | 12 | 2 | 27 | 2 | 850.8 | 799.2 | **0.939** | 135.4 / 141.0 / 150.7 | 10.52 | 0.0 | 28.0 | 23 | 11 | 101 | 45.1 |
+=== results.tsv
+job     node  bin                                                                                     bin_sha256                                                        build_commit                              scripts_commit  T   point              k  slots  runs  failed_runs  span_s  span_rate  steady_rate  win_rate  win_n  win_s  core_s_per_M  cores_span  cores_win  lock_wait_s  lock_wait_frac  lock_held_s  gpu_util  host_peak_gb  dev_peak_gb  fallback_runs  ident_alone  ident_cpu  other_jobs_max  mean_wall_s
+802089  g051  /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/singlet-gpu  f1bbc00f86002a863d4f699b16ec39d8b5a10605a87286ff264b995c74ae8d4b  c8849bb278b1afee4858f87295ebc272b30d1269  0fdec57f        7   k2t7s2r6_wshrink   2  2      12    0            877.3   0.911      0.923        0.900     8      591.8  8.54          7.8         7.9        0.0          0.000           27.0         10        91            51.0         1              0/0          0/0        0               144.1
+802089  g051  /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/singlet-gpu  f1bbc00f86002a863d4f699b16ec39d8b5a10605a87286ff264b995c74ae8d4b  c8849bb278b1afee4858f87295ebc272b30d1269  0fdec57f        14  k2t14s2r6_wshrink  2  2      12    0            810.3   0.986      0.999        0.998     8      534.0  9.28          9.2         9.2        0.0          0.000           26.8         10        92            44.6         1              0/0          0/0        0               134.4
+802089  g051  /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/singlet-gpu  f1bbc00f86002a863d4f699b16ec39d8b5a10605a87286ff264b995c74ae8d4b  c8849bb278b1afee4858f87295ebc272b30d1269  0fdec57f        21  k2t21s2r6_wshrink  2  2      12    0            842.6   0.948      0.950        0.943     8      564.9  10.24         9.7         9.7        0.0          0.000           31.0         13        97            44.6         2              0/0          0/0        0               140.1
+802089  g051  /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/singlet-gpu  f1bbc00f86002a863d4f699b16ec39d8b5a10605a87286ff264b995c74ae8d4b  c8849bb278b1afee4858f87295ebc272b30d1269  0fdec57f        27  k2t27s2r6_wshrink  2  2      12    0            850.8   0.939      0.946        0.931     8      572.6  10.52         9.9         10.0       0.0          0.000           28.0         11        101           45.1         1              0/0          0/0        0               141.0
+PROVENANCE job=802089 node=g051 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/singlet-gpu sha256=f1bbc00f86002a863d4f699b16ec39d8b5a10605a87286ff264b995c74ae8d4b commit=c8849bb278b1afee4858f87295ebc272b30d1269 scripts=0fdec57f
+done 2026-11-06T17:12:01-05:00

@@ -1,0 +1,19 @@
+sample	mode	exit	wall_s	core_s	maxrss_gb	dev_peak_gb	lanes_peak_gb	level	ingest	fallback_lines	node
+pbmc2m	cpu(kept)	0	50.1117	158.120	25.9	0.0	-	cpu	-	0	c007
+pbmc2m	gpu	0	34.1681	120.101	21.9	35.8	42.5	5 of 5	yes	1	g051
+pbmc2m	gpuX1	0	34.1847	124.623	21.8	35.8	37.5	5 of 5	yes	1	g051
+pbmc10m	cpu(kept)	0	104.453	522.312	26.8	0.0	-	cpu	-	0	c007
+pbmc10m	gpu	0	47.6294	184.349	25.2	89.3	85.7	5 of 5	yes	1	g051
+pbmc10m	gpuX1	0	47.9560	201.485	25.5	89.1	49.1	5 of 5	yes	1	g051
+pbmc1k_v3	cpu(kept)	0	553.265	2543.30	29.9	0.0	-	cpu	-	0	c007
+pbmc1k_v3	gpu	0	125.789	563.849	46.0	90.1	89.9	5 of 5	yes	1	g051
+pbmc1k_v3	gpuX1	0	127.914	656.747	46.5	89.2	57.3	5 of 5	yes	1	g051
+pbmc1k_v2	cpu(kept)	0	544.227	2756.08	29.6	0.0	-	cpu	-	0	c007
+pbmc1k_v2	gpu	0	108.654	484.112	47.7	90.0	89.9	5 of 5	yes	1	g051
+pbmc1k_v2	gpuX1	0	113.910	597.676	48.0	89.2	60.5	5 of 5	yes	1	g051
+pbmc1k_cite_v3	cpu(kept)	0	430.987	1694.99	28.4	0.0	-	cpu	-	0	c007
+pbmc1k_cite_v3	gpu	0	82.8259	373.099	38.7	90.0	89.8	5 of 5	yes	1	g051
+pbmc1k_cite_v3	gpuX1	0	84.4121	441.261	38.9	89.2	56.1	5 of 5	yes	1	g051
+pbmc1k_cite_v3_adt	cpu(kept)	0	148.308	1230.87	33.0	0.0	-	cpu	-	0	c007
+pbmc1k_cite_v3_adt	gpu	0	73.1514	268.003	30.1	90.1	89.9	5 of 5	yes	1	g051
+pbmc1k_cite_v3_adt	gpuX1	0	74.6500	334.089	30.1	89.1	60.5	5 of 5	yes	1	g051

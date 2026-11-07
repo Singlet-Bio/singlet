@@ -1,0 +1,20 @@
+node=c006.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/82ac5a96/singlet-gpu commit=82ac5a96bc751b1ce77eddaef8aaf558630e13e0 route=spec_celseq2-u6b8 2026-11-06T17:59:42-05:00
+celseq2-u6b8: exit 0 wall 1:01.68 size 103142481
+  celseq2-u6b8 | [1fq-encode] Protocol: celseq2-u6b8 (confidence: 4)
+  celseq2-u6b8 | [singlet-download] Done: 4000000 reads, 8 blocks
+  celseq2-u6b8 | [singlet-download] Protocol: celseq2-u6b8 (confidence: 4)
+  celseq2-u6b8 | [1fq-profile]   Protocol:     0.013s ( 0.0%)
+  celseq2-u6b8 header | [1fq-decode] File: /tmp/debruinz-ir-rt-803306/celseq2-u6b8.1fq
+  celseq2-u6b8 header | [1fq-decode] Version: 4, Protocol: celseq2-u6b8 (id=26, confidence=4)
+  celseq2-u6b8 header | [1fq-decode] Reads: 4000000, Blocks: 8, Streams: 2
+  celseq2-u6b8 header | [1fq-decode] R1 length: 14, R2 length: variable
+celseq2-u6b8 pipeline: exit 0 wall 1:54.43
+  celseq2-u6b8 | protocol_id 26
+  celseq2-u6b8 | protocol_name celseq2-u6b8
+  celseq2-u6b8 | n_cells_called 198
+  celseq2-u6b8 | median_umi_per_cell 1405
+  celseq2-u6b8 | median_genes_per_cell 839
+  celseq2-u6b8 | mapping_rate 0.61244
+  celseq2-u6b8 | median_umis_per_cell 1405
+  celseq2-u6b8 | fraction_reads_in_cells 0.893411
+done 2026-11-06T18:02:38-05:00

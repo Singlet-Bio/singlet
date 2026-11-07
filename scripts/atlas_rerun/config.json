@@ -45,6 +45,7 @@
       "mode": "per_sample",
       "account": "debruinz",
       "root": "/mnt/projects/debruinz_project/debruinz/singlet/atlas-rerun/campaign",
+      "genotype_dir": "/mnt/projects/debruinz_project/debruinz/singlet/genotypes/beta",
       "scratch": "/tmp",
       "ref_base": "/mnt/projects/debruinz_project/cellarium/reference", "species_filters": "/mnt/projects/debruinz_project/debruinz/singlet/reference-extra/species_filters",
       "whitelist_dir": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists",

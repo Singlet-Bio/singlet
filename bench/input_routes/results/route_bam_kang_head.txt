@@ -1,0 +1,23 @@
+node=c006.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/2cb9d941/singlet-gpu commit=2cb9d94132a8251067bf72e461280fbc2f64a3be route=bam_kang_head 2026-11-06T18:50:38-05:00
+prefix bytes 3000000001
+kang: exit 0 wall 2:42.33 size 578683157
+  kang | [singlet-download] input spec: bam:/tmp/debruinz-ir-rt-803380/kh/2.2.head.bam
+  kang | [1fq-encode] Protocol: 10x-3p-v1 (confidence: 3)
+  kang | [1fq-encode] barcodes: 15983673 whitelist-exact, 6087759 raw (72.42% exact)
+  kang | [singlet-download] Done: 22071432 reads, 45 blocks
+  kang | [singlet-download] Protocol: 10x-3p-v1 (confidence: 3)
+  kang | [1fq-profile]   Protocol:     0.276s ( 0.3%)
+  kang header | [1fq-decode] File: /tmp/debruinz-ir-rt-803380/kang.1fq
+  kang header | [1fq-decode] Version: 4, Protocol: 10xv1 (id=3, confidence=3)
+  kang header | [1fq-decode] Reads: 22071432, Blocks: 45, Streams: 2
+  kang header | [1fq-decode] R1 length: 24, R2 length: variable
+kang pipeline: exit 0 wall 3:11.00
+  kang | protocol_id 3
+  kang | protocol_name 10xv1
+  kang | n_cells_called 13893
+  kang | median_umi_per_cell 211
+  kang | median_genes_per_cell 112
+  kang | mapping_rate 0.919136
+  kang | median_umis_per_cell 211
+  kang | fraction_reads_in_cells 0.951522
+done 2026-11-06T20:02:47-05:00

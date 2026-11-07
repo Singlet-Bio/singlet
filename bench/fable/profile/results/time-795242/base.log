@@ -1,0 +1,32 @@
+device NVIDIA H100 NVL, 132 SMs; sizeof Work: A 46104, B 635248, host 45382896
+genomic length score: 10 breakpoints
+index + genome arrays loaded in 19.5 s; sjdbN 386483, chr 194
+truth: 1991926 distinct reads (4118999 reads), loaded in 0.6 s
+lane A (staged): 1991926 reads, batches of 262144, work 46104 B/read (12.09 GB)
+  lane A run 0: 270.6 ms (phase 1 106.6, scan 17.2, phase 3 146.7)
+  lane A run 1: 268.4 ms (phase 1 105.7, scan 16.8, phase 3 145.7)
+  lane A run 2: 268.6 ms (phase 1 105.7, scan 16.8, phase 3 146.1)
+  lane A run 3: 268.7 ms (phase 1 105.7, scan 16.9, phase 3 146.0)
+  lane A thread cycles: seeds 51.6%, windows 8.4%, stitching 39.1%, select+encode 0.9%; 450.5 SA entries per read
+  lane A inside stitching: stitchAlignToTranscript 1.8%, finalization 10.7% (of which recording 2.2%), copies 1.1%
+lane M (staged): 524577 reads, batches of 262144, work 82552 B/read (21.64 GB)
+  lane M run 0: 347.2 ms (phase 1 84.1, scan 21.1, phase 3 242.0)
+  lane M run 1: 336.7 ms (phase 1 79.3, scan 17.9, phase 3 239.6)
+  lane M run 2: 337.4 ms (phase 1 79.0, scan 17.9, phase 3 240.4)
+  lane M run 3: 339.8 ms (phase 1 79.2, scan 17.9, phase 3 242.6)
+  lane M thread cycles: seeds 16.4%, windows 15.1%, stitching 68.3%, select+encode 0.2%; 1933.0 SA entries per read
+  lane M inside stitching: stitchAlignToTranscript 2.4%, finalization 21.1% (of which recording 4.9%), copies 1.5%
+lane B (staged): 90740 reads, batches of 65536, work 635248 B/read (41.63 GB)
+  lane B run 0: 262.1 ms (phase 1 43.4, scan 7.3, phase 3 211.4)
+  lane B run 1: 254.7 ms (phase 1 38.6, scan 6.8, phase 3 209.3)
+  lane B run 2: 255.0 ms (phase 1 38.9, scan 6.8, phase 3 209.3)
+  lane B run 3: 254.3 ms (phase 1 38.8, scan 6.8, phase 3 208.7)
+  lane B thread cycles: seeds 7.0%, windows 15.1%, stitching 77.8%, select+encode 0.1%; 3116.9 SA entries per read
+  lane B inside stitching: stitchAlignToTranscript 2.8%, finalization 13.8% (of which recording 2.2%), copies 1.1%
+
+M5: 1991926 / 1991926 distinct reads identical (100.000000%), reads weighted 4118999 / 4118999 (100.000000%); differ 0 (unmapType only 0)
+    unmapped by STAR: 151095 (151095 identical), mapped: 1840831 (1840831 identical)
+    GPU lane A 268.6 ms (1991926 reads), lane M 337.4 ms (524577 reads), lane B 254.7 ms (90740 reads) = 2.31 M distinct reads/s on the GPU
+    lane M overflow why: win=75712 wa=13739 wtr=43 keep=1246
+    lane A overflow why: win=510638 wa=2792 winbin=1 wtr=546 keep=10574 steps=26
+    heavy lane: 5304 reads (0.2663%), 0.14 s on 24 host threads, failures 0; why: win=2622 wtr=143 keep=316 steps=2223

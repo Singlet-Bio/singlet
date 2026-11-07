@@ -5,6 +5,9 @@
 #define PILEUP_NO_MAIN
 #include "gpu_pileup/pileup/pileup.cu"
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14
+#include "singlet/tail_trace.h"   // E16: the level-5 switches (digest)
+#include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 static_assert(sizeof(IV) == sizeof(singlet_engine_gpu::PileupIv), "IV layout");
 static_assert(sizeof(SnpRow) == sizeof(singlet_engine_gpu::PileupSnpRow), "SnpRow layout");
@@ -18,10 +21,17 @@ static void copyT3(const std::vector<T3>& a, std::vector<PileupTriplet>& b) {
 }
 
 bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
+    ::singlet::gpu_ledger::Phase ledger_phase("pileup");
     po = PileupOutput();
     const double t0 = now_s();
+    // E16: wall time of each host-side step (the GPU time is po.msGpu); appended to po.log
+    std::string e16; double e16t = t0;
+    auto e16step = [&](const char* nm) { const double t = now_s(); char b[64]; snprintf(b, sizeof b, "%s %.3f, ", nm, t - e16t); e16 += b; e16t = t; };
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);
+    cudaGetLastError();   // E16: the hand-off pass may have kept its context (E2EPassIn::keepPinned): then the initialisation fails, harmlessly
     if (cudaSetDevice(device) != cudaSuccess) { po.log = "cannot select device"; return false; }
+    cudaFree(0);   // the context now, so that its creation is timed on its own
+    e16step("context");
     if (pi.umiLen > 13) { po.log = "UMI longer than 13 nt"; return false; }
     // ---- the research program's Par / Anno from the engine's structures
     Par par;
@@ -37,24 +47,32 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (size_t t = 0; t < pi.snps.size(); t++) { an.snp[t].resize(pi.snps[t].size()); if (!an.snp[t].empty()) memcpy(an.snp[t].data(), pi.snps[t].data(), an.snp[t].size() * sizeof(SnpRow)); }
     an.e2g = pi.exonToGene; an.i2g = pi.intronToGene; an.gstr = pi.geneStrand;
     { uint32_t mx = 0; for (auto& v : an.snp) for (auto& sr : v) mx = std::max(mx, sr.idx + 1); par.n_snps = std::max(par.n_snps, mx); }
-    const size_t nS = pi.sigs.size() / sizeof(SigRec), nA = pi.alns.size() / sizeof(AlnRec), nR = pi.reads.size() / sizeof(ReadRec);
+    // E16: an array's leading part may be read in place (PileupInput::Pre), the vector holding the rest
+    const size_t nS = (pi.preSigs.n + pi.sigs.size()) / sizeof(SigRec), nA = (pi.preAlns.n + pi.alns.size()) / sizeof(AlnRec),
+                 nR = (pi.preReads.n + pi.reads.size()) / sizeof(ReadRec);
+    e16step("annotation copied");
     // ---- device memory: one arena, sized from the free memory (the research program reserved 80 GB; pbmc1k_v3 peaks at ~25 GB
     // without the annotation bug)
     size_t freeB = 0, totB = 0; cudaMemGetInfo(&freeB, &totB);
     // a sample whose working set exceeds the device (GSM7656149: 223 M barcoded reads needed ~100 GB of 94) runs again in unified
     // memory twice the device's size: the part beyond the device pages to the host, the results are the same
+    size_t arenaB = 0;   // E17: the device arena's size (logged)
     for (int attempt = 0; attempt < 2; attempt++) {
     Arena A;
     try {
     if (attempt == 0) {
         size_t arena = freeB > (size_t(3) << 30) ? freeB - (size_t(3) << 30) : freeB / 2;
+        // E17 (docs/gpu-engine/fable/E17-budget.md): within the sample's device memory budget (singlet_engine_gpu::memBudget; less 3 GB for
+        // this process's context and STAR's, which may still hold the E11 keep), not the free memory another sample's prefill races for
+        if (const uint64_t bud = singlet_engine_gpu::memBudget(totB)) arena = std::min<size_t>(arena, bud > (uint64_t(3) << 30) ? bud - (uint64_t(3) << 30) : bud / 2);
         // SINGLET_GPU_PILEUP_ARENA_GB: cap the arena (samples sharing the GPU; the partitions K adapt to it)
         if (const char* ag = getenv("SINGLET_GPU_PILEUP_ARENA_GB")) arena = std::min<size_t>(arena, (size_t) (atof(ag) * (1ull << 30)));
-        A.init(arena);
+        A.init(arena); arenaB = arena;
     }
     else A.init_managed(2 * totB);
+    e16step("arena");
     Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges;
-    in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual};
+    in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual, (int) singlet_qmask::words()};
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
     in.gmt = to_dev(A, pi.geneIsMt); in.ngmt = (uint32_t)pi.geneIsMt.size();
     if ((pi.intronRules & 8) && !pi.geneStart.empty()) {   // kFlank: the gene bodies and their merged exons
@@ -71,31 +89,54 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         in.SN.pos = to_dev(A, P); in.SN.idx = to_dev(A, I); in.SN.alt = to_dev(A, alt); in.SN.ref = to_dev(A, ref); in.SN.off = to_dev(A, off);
         in.SN.n = to_dev(A, n); in.SN.ntid = (int)an.snp.size();
     }
+    e16step("annotation H2D");
     auto devBytes = [&](const std::vector<uint8_t>& v) { uint8_t* d = A.alloc<uint8_t>(std::max<size_t>(1, v.size())); if (!v.empty()) CK(cudaMemcpy(d, v.data(), v.size(), cudaMemcpyHostToDevice)); return d; };
+    // E16: [pre part | vector part] into one device array (the same bytes, the same arena allocation as the vector alone would take)
+    auto devCat = [&](const PileupInput::Pre& pre, const void* v, size_t vb, size_t elem) {
+        uint8_t* d = A.alloc<uint8_t>(std::max<size_t>(1, pre.n + vb));
+        if (pre.n) CK(cudaMemcpy(d, pre.p, pre.n, cudaMemcpyHostToDevice));
+        if (vb) CK(cudaMemcpy(d + pre.n, v, vb, cudaMemcpyHostToDevice));
+        (void) elem; return d;
+    };
+    const bool cat = pi.preSigs.n || pi.preAlns.n || pi.preOps.n || pi.preSeq.n || pi.preReads.n || pi.preLowq.n;
+    if (!cat) {
     in.S = (SigRec*)devBytes(pi.sigs); in.Al = (AlnRec*)devBytes(pi.alns); in.R = (ReadRec*)devBytes(pi.reads);
     in.ops = to_dev(A, pi.ops); in.seq = devBytes(pi.seq);
-    in.Q = pi.useQual ? (const uint64_t*) devBytes(pi.lowq) : nullptr;   // 16 bytes per read (PileupInput::lowq)
+    in.Q = pi.useQual ? (const uint64_t*) devBytes(pi.lowq) : nullptr;   // singlet_qmask::words() words per read (PileupInput::lowq)
+    } else {
+    in.S = (SigRec*) devCat(pi.preSigs, pi.sigs.data(), pi.sigs.size(), sizeof(SigRec));
+    in.Al = (AlnRec*) devCat(pi.preAlns, pi.alns.data(), pi.alns.size(), sizeof(AlnRec));
+    in.R = (ReadRec*) devCat(pi.preReads, pi.reads.data(), pi.reads.size(), sizeof(ReadRec));
+    in.ops = (uint32_t*) devCat(pi.preOps, pi.ops.data(), pi.ops.size() * 4, 4);
+    in.seq = devCat(pi.preSeq, pi.seq.data(), pi.seq.size(), 1);
+    in.Q = pi.useQual ? (const uint64_t*) devCat(pi.preLowq, pi.lowq.data(), pi.lowq.size(), 8 * singlet_qmask::words()) : nullptr;
+    }
+    e16step("records H2D");
     // ---- one run with outputs
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
     g_want_reads = pi.wantReads != 0;
     g_want_mixed = true;   // the engine's mixed_exon / mixed_intron (export.h's pre-USA exon / intron split)
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
-    const double tUp = now_s();
+    g_e16_aasplit = singlet_tail::cut("aasplit");   // E16 (level 5): the per-alignment results split on the device before their download
+    g_e16_fetchpar = singlet_tail::cut("fetchpar");
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
-    const double tRun = now_s();
+    e16step("run_pipeline");
     unsigned long long ms[5]; CK(cudaMemcpyFromSymbol(ms, g_molstat, sizeof ms));
     po.molDropped = ms[4]; po.molSpliced = ms[0]; po.molUnspliced = ms[1]; po.molAmbiguous = ms[2]; po.molLegacyDouble = ms[3];
     po.peakGB = A.peak / 1e9;
-    // the last device work is done: free the device and let the next sample have the GPU while the host post-processing (digest, result copies) runs
+    // the last device work is done (run_pipeline downloaded every output): free the arena and let the next sample have the GPU while the host
+    // post-processing (digest, result copies) runs. E16 "resetbg" (level 5) leaves the reset and the unlock to the caller's thread instead.
     cudaFree(A.base);
-    cudaDeviceReset();
-    const double tReset = now_s();
-    if (pi.release) pi.release();
-    { char b[200]; snprintf(b, sizeof b, "hold phases: setup+upload %.2f s, pipeline %.2f s, free+reset %.2f s; ", tUp - t0, tRun - tUp, tReset - tRun); po.log += b; }
-    {   // digest of everything the run returns (the partition-invariance gate compares it across K)
+    e16step("arena freed");
+    if (singlet_tail::cut("resetbg")) po.resetDeferred = true;   // the caller's thread resets it (pileupRelease) and then unlocks the device
+    else { cudaDeviceReset(); if (pi.release) pi.release(); }
+    e16step(po.resetDeferred ? "device reset deferred" : "device reset, lock released");
+    // E16 "digest" (level 5): skipped; it hashes every output tuple (4.3 GB of chrM tuples on pbmc1k_v3: 2.4 s) for a log line only
+    if (singlet_tail::cut("digest")) po.log += "digest skipped (E16); ";
+    else {   // digest of everything the run returns (the partition-invariance gate compares it across K)
         Sha256 h; h.update(sha_out(o).data(), 64);
         { auto ind = o.indels; std::sort(ind.begin(), ind.end()); h.update(ind.data(), ind.size() * 16); }   // as a set: their order follows the stream's read order
         h.update(o.cell_reads.data(), o.cell_reads.size() * 4); h.update(o.cell_mol.data(), o.cell_mol.size() * 4);
@@ -105,16 +146,30 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         long long n[4] = {o.n_gene_tuples, o.n_sj_tuples, o.n_snp_tuples, o.n_mt_tuples}; h.update(n, sizeof n);
         po.log += "digest " + h.hex() + "; ";
     }
+    e16step("digest");
     po.snpHits = (uint64_t) o.n_snp_tuples; po.sjHits = o.sj_raw_sum; po.mtBases = (uint64_t) o.n_mt_tuples;
     po.cellReads.swap(o.cell_reads); po.cellMolecules.swap(o.cell_mol); po.cellMixed.swap(o.cell_mixed);
     po.hitsExon = o.hits[0]; po.hitsIntron = o.hits[1]; po.umiRecorded = o.hits[2]; po.mtRescued = o.hits[3];
     po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
+    // E16 "copypar" (level 5): the eight tuple arrays copied on threads, beside the rest of this and the device's release (joined at the end)
+    std::vector<std::thread> e16cp;
+    if (singlet_tail::cut("copypar")) {
+        std::vector<std::pair<const std::vector<T3>*, std::vector<PileupTriplet>*>> cp = {{&o.exon, &po.exon}, {&o.intron, &po.intron}, {&o.amb, &po.amb},
+            {&o.sj, &po.sj}, {&o.snp_ad, &po.snpAd}, {&o.snp_dp, &po.snpDp}, {&o.mt, &po.mt}, {&o.mt_rev, &po.mtRev},
+            {&o.mixed_exon, &po.mixedExon}, {&o.mixed_intron, &po.mixedIntron}};   // campaign's pre-USA exon / intron split
+        if (pi.wantReads) {   // campaign's reads per molecule
+            cp.push_back({&o.exon_reads, &po.exonReads}); cp.push_back({&o.intron_reads, &po.intronReads});
+            po.histCell.swap(o.hist_cell); po.hist.swap(o.hist);
+        }
+        for (const auto& c : cp) e16cp.emplace_back([c]() { copyT3(*c.first, *c.second); });
+    } else {
     copyT3(o.exon, po.exon); copyT3(o.intron, po.intron); copyT3(o.amb, po.amb); copyT3(o.sj, po.sj);
     copyT3(o.mixed_exon, po.mixedExon); copyT3(o.mixed_intron, po.mixedIntron);
     if (pi.wantReads) { copyT3(o.exon_reads, po.exonReads); copyT3(o.intron_reads, po.intronReads); po.histCell.swap(o.hist_cell); po.hist.swap(o.hist); }
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
+    }
     po.sjtab = o.sjtab; po.indels = o.indels;
     {   // R9 per gene: the merged gene-store UMIs, (cell, gene, umi) order
         std::sort(o.merges.begin(), o.merges.end(), [](const auto& x, const auto& y) { return std::tie(x.cell, x.gene, x.umi) < std::tie(y.cell, y.gene, y.umi); });
@@ -122,9 +177,14 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         for (size_t i = 0; i < o.merges.size(); i++) po.geneMerges[i] = PileupGeneMerge{o.merges[i].cell, o.merges[i].gene, o.merges[i].umi, o.merges[i].root};
     }
     po.snpMolecules = g_snp_stat[0]; po.snpAmbiguous = g_snp_stat[1]; po.snpOther = g_snp_stat[2];
+    if (attempt == 0) { char ab[96]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
+                                              singlet_engine_gpu::memBudget(totB) / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
+    e16step("outputs copied");
+    if (!e16cp.empty()) { for (auto& t : e16cp) t.join(); e16step("tuple copies joined"); }
     po.msTotal = (now_s() - t0) * 1e3;
+    po.log += "e16 steps (s): " + e16 + "; ";
     if (attempt > 0) po.log += "unified memory (the device arena was too small); ";
     return true;
     } catch (const ArenaExhausted& e) {
@@ -138,6 +198,11 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     }
     return false;
+}
+
+void pileupRelease(int device) {
+    cudaSetDevice(device);
+    cudaDeviceReset();
 }
 
 } // namespace singlet_engine_gpu

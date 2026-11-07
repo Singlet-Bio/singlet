@@ -29,3 +29,19 @@ struct StarReadSource {
                       uint64_t readMapNumber, uint32_t readFilesIndex) = 0;
 };
 extern StarReadSource* g_starReadSource;
+
+// singlet E14 (docs/gpu-engine/fable/E14-probe.md): the genome index read once per process tree.
+// star_genome_preload(dir, threads, log) reads Genome, SA and SAindex of a STAR index into private memory (threads parallel
+// readers, transparent hugepages advised as in STAR's own load) in the layout of STAR's NoSharedMemory load. A STAR run in
+// this process, or in any process forked after the call, takes these arrays instead of reading the files when the directory
+// and the sizes match (--genomeLoad NoSharedMemory without sequence or junction insertion); forked processes share the pages
+// copy-on-write. star_genome_preload_release() drops this process's references (children keep theirs). log: what was done.
+#include <string>
+bool star_genome_preload(const std::string& dir, int threads, std::string& log);
+void star_genome_preload_release();
+// E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool` keeps genomes for the processes it forks. star_genome_preload_resident reads one
+// (as star_genome_preload) and keeps it aside: the pool's own process has no preload of its own. star_genome_preload_select, in a forked
+// process, makes the resident genome of `dir` (same directory device and inode) this process's preload; false (log: why) when none matches,
+// and the process then reads its own as before.
+bool star_genome_preload_resident(const std::string& dir, int threads, std::string& log);
+bool star_genome_preload_select(const std::string& dir, std::string& log);
