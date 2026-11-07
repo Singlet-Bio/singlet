@@ -37,6 +37,7 @@
 #include "saturation_curve.h"
 #include "cell_calling.h"
 #include "../nvtx.h"
+#include "../thread_name.h"
 #include "called_v2.h"
 #include "sex_calling.h"
 #include "cell_cycle.h"
@@ -315,6 +316,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 1: COO → CSC (parallel) ──
     nvexp.next("export: Phase 1: COO  CSC (parallel)");
+    singlet::set_thread_name("sg-export");   // each phase's pool inherits the name (per-thread CPU by role)
     auto csc_t0 = std::chrono::high_resolution_clock::now();
 
     SparseAccumulator<uint16_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
@@ -570,6 +572,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 1.7: Cell calling (N5, EmptyDrops-style) ──
     nvexp.next("export: Phase 1.7: Cell calling (N5, EmptyDrops-style)");
+    singlet::set_thread_name("sg-cellcall");
     // Declare outside so Phase 1.75 (ambient correction) and N8 (provenance) can access them.
     std::vector<uint64_t> bc_totals;
     CellCallResult cc_result;
@@ -1048,6 +1051,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 1.76: Doublet detection (N12) ──
     nvexp.next("export: Phase 1.76: Doublet detection (N12)");
+    singlet::set_thread_name("sg-doublet");
     // Runs when we have called cells OR when --barcodes was provided (all barcodes
     // are treated as cells in that case, cc_result.cell_indices is empty).
     // Score: Scrublet-style simulation (8000 HVG genes of exon + intron counts, 30 PCs, simulated pair-sums, kNN) plus a
@@ -1132,6 +1136,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 1.8: Write unified cell_qc_metrics.tsv ──
     nvexp.next("export: Phase 1.8: Write unified cellqcmetrics.tsv");
+    singlet::set_thread_name("sg-export");
     // Merges data from Phase 1.5 (QC), 1.57 (cell cycle), 1.58 (read stats),
     // 1.6 (saturation), and 1.76 (doublet) into the schema-compliant TSV.
     // Aligner-level per-cell counts (lost once the BAM is deleted): STARsolo CellReads.stats (unmapped, antisense,
@@ -1283,6 +1288,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 3: Demux + parallel writes ──
     nvexp.next("export: Phase 3: Demux + parallel writes");
+    singlet::set_thread_name("sg-demux");
     std::thread demux_thread;
     DemuxResult demux_result;
     if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
@@ -1851,6 +1857,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── G-RRNA: rRNA contamination report ──
     nvexp.next("export: G-RRNA: rRNA contamination report");
+    singlet::set_thread_name("sg-export");
     // Written whenever pileup_stats has rRNA sampling data (always, when stats are available).
     if (export_cfg.pileup_stats != nullptr
         && export_cfg.pileup_stats->rrna_reads_sampled > 0) {

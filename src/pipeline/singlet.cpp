@@ -94,6 +94,7 @@
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/nvtx.h"
+#include "singlet/thread_name.h"
 #include "singlet/pileup/nonhost/nonhost_sample.h"
 #include "singlet/pileup/tagged_bam.h"
 #include "singlet/pileup/cb_tag_scan.h"
@@ -4215,6 +4216,7 @@ static int singlet_main(int argc, char* argv[]) {
     // This overlaps reference loading with STAR's genome load when using
     // --genomeLoad LoadAndKeep (genome already in shared memory).
     singlet::nvtx_mark("main: loading pileup references");
+    singlet::set_thread_name("sg-refs");   // the reference loaders inherit it (per-thread CPU by role)
     std::cerr << "[singlet] Loading pileup references...\n";
     StopWatch ref_sw;
 
@@ -4236,6 +4238,7 @@ static int singlet_main(int argc, char* argv[]) {
     if (genome_load == "NoSharedMemory" && !genome_dir.empty() && genome_preload_on && !sra_mode) {
         const int pthreads = std::max(2, std::min(8, (star_threads > 0 ? star_threads : 8) / 2));
         genome_preload.t = std::thread([&gp = genome_preload, dir = genome_dir, pthreads]() {
+            singlet::set_thread_name("sg-gpreload");
             gp.ok = star_genome_preload(dir, pthreads, gp.log);
         });
     }
@@ -4947,6 +4950,7 @@ static int singlet_main(int argc, char* argv[]) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (ingest_req && !use_fifo_decode) {
             std::cerr << "[1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)\n";
+            singlet::ThreadNameScope tn_scan("sg-scan");
             StopWatch ingest_sw;
             std::string why;
             const char* gp = getenv("SINGLET_GPU_PILEUP");
@@ -8306,6 +8310,7 @@ static int singlet_main(int argc, char* argv[]) {
                                 g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(
                                     onefq_files, ingest_on ? ingest_fmt : read_fmt, dthreads, /*cdna_first=*/true);
                             }
+                            singlet::set_thread_name("star-probe");
                             _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
                         }
                     };
@@ -8395,6 +8400,7 @@ static int singlet_main(int argc, char* argv[]) {
 #endif
 
             // Call bundled STAR directly — no exec, no external binary needed.
+            singlet::set_thread_name("star-main");   // STAR's child: its threads inherit it or rename (star-map, star-prefill)
             int rc = star_main_impl(
                 static_cast<int>(args.size()) - 1,
                 const_cast<char**>(args.data())
@@ -9002,6 +9008,7 @@ static int singlet_main(int argc, char* argv[]) {
                sra_mode ? "STAR pipe (SRA stream)" : "STAR pipe")
             : "BAM file";
         singlet::nvtx_mark("main: pileup streaming from STAR starts");
+        singlet::set_thread_name("sg-stream");
         std::cerr << "[singlet] Pileup: streaming from " << source_desc << "...\n";
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
@@ -9053,6 +9060,7 @@ static int singlet_main(int argc, char* argv[]) {
                     return 3;  // exit code 3 = star_fatal
                 }
                 singlet::nvtx_mark("main: STAR completed");
+                singlet::set_thread_name("sg-post");   // hand-off, GPU pileup, finish
                 std::cerr << "[singlet] STAR completed\n";
             } else if (WIFSIGNALED(wstatus)) {
                 std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus)
@@ -9196,6 +9204,7 @@ static int singlet_main(int argc, char* argv[]) {
         }
         {
             SINGLET_NVTX("main: non-host screen");
+            singlet::name_omp_pool("sg-nonhost");   // STAR's child has exited: the screen's OpenMP pool too
             run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
                 nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
         }

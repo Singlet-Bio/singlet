@@ -12,6 +12,7 @@
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include <chrono>
 #include "singlet/engine_gpu.h"
+#include "singlet/thread_name.h"   // per-thread CPU by role
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/fq/fg2_runset.h"
 #include "singlet/engine_gpu_ingest.h"   // E13: the reads from the .1fq, decoded here (SeqCacheGpuIngest.cpp)
@@ -1312,6 +1313,7 @@ bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
 } // namespace
 
 void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptome *tr) {
+    singlet::ThreadNameScope tnPrefill("star-prefill");   // the prefill's threads inherit it; mapDistinct renames its own (gpu-map)
     const char *e = getenv("SINGLET_ENGINE_GPU");
     if (e == nullptr || e[0] != '1' || cache == nullptr) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -2036,7 +2038,7 @@ void seqCacheGpuEarly(Parameters &P) {
     IngPrep *W = ingPrep;
     W->started = true;
     Parameters *pp = &P;
-    W->th = std::thread([W, pp]() { ingPrepare(*pp, *W); });
+    W->th = std::thread([W, pp]() { singlet::set_thread_name("star-ingest"); ingPrepare(*pp, *W); });
 #else
     (void) P;
 #endif

@@ -12,6 +12,7 @@
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/nvtx.h"
+#include "singlet/thread_name.h"
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
 #include <cuda_runtime.h>
@@ -1100,6 +1101,7 @@ __global__ void k_local_rr(const uint32_t* g, u64 n, uint32_t r0, uint32_t r1, u
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
     ::singlet::gpu_ledger::Phase ledger_phase("prefill");
+    singlet::ThreadNameScope tnMap("gpu-map");   // mapDistinct's host threads inherit it (per-thread CPU by role)
     singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");   // NVTX ranges of the phases (SINGLET_NVTX=1; the d164b34d ranges, redeveloped)
     std::string err;
     Stager SR, SI;   // E12: staged uploads of the reads (this thread) and of the index (idxTh); declared first: destroyed after the join
@@ -2004,6 +2006,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     auto gpuPart = [&](const std::vector<uint32_t>& repc, u64 c0) -> bool {
         // ---- lanes
         SINGLET_NVTX("mapDistinct: lanes of one chunk (GPU)");
+        singlet::ThreadNameScope tnLanes("gpu-lanes");
         double tc0 = now();
         Lane A, M, B;
         memMark("before-laneA");
@@ -2171,6 +2174,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         const std::vector<uint32_t>& repH = cr.repH;
         // ---- host lane (STAR's limits)
         SINGLET_NVTX("mapDistinct: host lane of one chunk");
+        singlet::ThreadNameScope tnHost("gpu-hostlane");
         double th0 = now();
         std::vector<std::vector<uint8_t>>& hout = cr.hout; std::vector<uint8_t>& hst = cr.hst;
         if (pool) {   // E12: mapped by the pool while the device ran; wait for what is left of this chunk
