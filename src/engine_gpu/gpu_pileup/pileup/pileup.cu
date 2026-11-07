@@ -81,7 +81,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 128, 256 are implemented; qw: mask words per read (P3-ENG-14)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
@@ -134,8 +134,15 @@ struct IntronCb {
         uint32_t g = idx < ni ? i2g[idx] : MAXU; if (wrong_strand(*S, g)) return;
         if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) same = false;
         if (exon_gene != MAXU && g == exon_gene && match_idx == MAXU) match_idx = idx;
-        if (exon_gene != MAXU && g != exon_gene) other = true; }   // classify_read's other_gene_intron
-    bool other = false; };
+        if (exon_gene != MAXU && g != exon_gene) other = true;   // classify_read's other_gene_intron
+        if (g != MAXU) { if (g0b == MAXU) g0b = g; else if (g != g0b) bmulti = true; } }   // gene_full_multi (kGeneFullSet), seeded with the exon gene
+    bool other = false; uint32_t g0b = MAXU; bool bmulti = false; };
+// intron_rule::kGeneFullSet on a secondary (the engine's gene_full_extend): same-strand intron genes extend the exon hit to the gene-body set
+struct BodyCb {
+    const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t g0; bool multi;
+    __device__ void operator()(uint32_t idx) {
+        uint32_t g = idx < ni ? i2g[idx] : MAXU; if (g == MAXU || wrong_strand(*S, g)) return;
+        if (g0 == MAXU) g0 = g; else if (g != g0) multi = true; } };
 
 __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out,
                            DGene GM = DGene{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0}) {
@@ -154,9 +161,23 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
     }
     AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0};
     r.exg = (ec.any && ec.same) ? ec.first_gene : MAXU;   // the engine's determine_exon_gene (single gene; multi-gene -> none)
-    if (!prim) { if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; } out[a] = r; return; }
+    if (!prim) {
+        if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; }
+        if ((P.rules & 512) && P.count_introns && !r.multi) {   // kGeneFullSet: an intron of another gene makes the secondary multi-gene;
+            BodyCb bc{&SP, i2g, ni, r.gene, false};              // an exon-free one in one gene's introns notes that gene (aln_gene) but never assigns it
+            rpos = x.pos;
+            for (int i = 0; i < x.n_ops; i++) {
+                uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+                if (op == 0 || op == 7 || op == 8) { tree_query(IN, x.tid, rpos, rpos + len, bc); rpos += len; }
+                else if (op == 2 || op == 3) rpos += len;
+            }
+            if (bc.multi) { r.gene = MAXU; r.exon = MAXU; r.multi = 1; }
+            else if (r.gene == MAXU) r.aln_gene = bc.g0;
+        }
+        out[a] = r; return;
+    }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
-    IntronCb ic{&SP, i2g, ni, exon_gene, false, true, MAXU, MAXU, MAXU};
+    IntronCb ic{&SP, i2g, ni, exon_gene, false, true, MAXU, MAXU, MAXU}; ic.g0b = exon_gene;
     if (P.count_introns) {
         rpos = x.pos;
         for (int i = 0; i < x.n_ops; i++) {
@@ -166,7 +187,8 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
     }
     uint32_t intron_gene = (ic.any && ic.same && ic.first_gene != MAXU) ? ic.first_gene : MAXU;
-    if (pm) { }
+    const bool bm = (P.rules & 512) && !pm && ic.bmulti;   // kGeneFullSet: more than one gene in the primary's body set -> gene-ambiguous
+    if (pm || ((P.rules & (16 | 512)) && exon_gene != MAXU && ic.other)) { }   // kNoExonPriority / kGeneFullSet: classify_read drops the read
     else if (exon_gene != MAXU) { r.gene = exon_gene; r.exon = ec.first_idx; r.intron = ic.match_idx; r.flags = ic.match_idx == MAXU ? 5 : 6; }
     else if (intron_gene != MAXU) { r.gene = intron_gene; r.intron = ic.first_idx; r.flags = 2; }
     if ((P.rules & 8) && r.flags == 6 && r.gene < GM.ng) {
@@ -188,7 +210,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         r.flank = (in_body - in_exon <= 5) ? 1u : 0u;
     }
-    r.multi = pm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
+    r.multi = pm || bm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
     if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
     // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
     // (no accepted exon overlap although a block had only wrong-strand exons), 8 cross_gene_intron (classify_read), 16 multigene
@@ -248,6 +270,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                     note(x.aln_gene);
                 } else {
                     if (x.multi) amb = true;
+                    else if ((P.rules & 512) && x.gene == MAXU && x.aln_gene != MAXU) note(x.aln_gene);   // kGeneFullSet: an intron-only secondary
                     else if (x.gene != MAXU) {
                         note(x.gene);
                         if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; }   // R7: else the smallest secondary exon
