@@ -158,12 +158,16 @@ def _find(sorted_arr, x):
 
 
 @njit(cache=True)
-def _codon_at(codes, a, L, st, which):
+def _codon_at(codes, a, L, st, which, relax):
     """Codon check around an anchor, among st, st-1, st+1 (an indel or a V allele can move the diagonal by one).
 
     ``which`` 0: Cys104 (TGT/TGC). ``which`` 1: Phe/Trp118 followed by the Gly of the J motif F/W-G-X-G
     (TTY/TGG + GG): without the Gly a poly-T run (``...CTGTTTTTTGG``) accepts the codon one base early. Returns the
-    codon start or -1."""
+    codon start or -1.
+
+    ``relax`` (``which`` 1 only): when no offset carries a canonical codon, the codon at offset 0 is accepted if it is not a stop
+    codon and the J motif continues (GG at +3 and +4, and at +9 and +10 when the read reaches them): a somatic mutation of
+    Phe118 (Val, Leu, ...) must not remove the chain."""
     for d in (0, -1, 1):
         q = st + d
         if q < 0 or q + 3 > L:
@@ -181,6 +185,17 @@ def _codon_at(codes, a, L, st, which):
                 and codes[a + q + 3] == 2
                 and codes[a + q + 4] == 2
             ):
+                return q
+    if relax and which == 1:
+        q = st
+        if q >= 0 and q + 5 <= L:
+            c0, c1, c2 = codes[a + q], codes[a + q + 1], codes[a + q + 2]
+            if c0 > 3 or c1 > 3 or c2 > 3:
+                return -1
+            stop = c0 == 3 and ((c1 == 0 and (c2 == 0 or c2 == 2)) or (c1 == 2 and c2 == 0))  # TAA TAG TGA
+            if not stop and codes[a + q + 3] == 2 and codes[a + q + 4] == 2:
+                if q + 11 <= L and not (codes[a + q + 9] == 2 and codes[a + q + 10] == 2):
+                    return -1
                 return q
     return -1
 
@@ -233,6 +248,7 @@ def assemble_group(
     branch_frac,
     max_paths,
     max_len,
+    fw_relax,
 ):
     """Junction contigs of one (cell, chain).
 
@@ -321,7 +337,7 @@ def assemble_group(
         for which in range(2):
             if (which == 0 and cys[t] < 0) or (which == 1 and fw[t] < 0):
                 continue
-            q = _codon_at(codes, a, L, cys[t] if which == 0 else fw[t], which)
+            q = _codon_at(codes, a, L, cys[t] if which == 0 else fw[t], which, fw_relax)
             if q < 0:
                 continue
             st = q if which == 0 else q + 3 - ka

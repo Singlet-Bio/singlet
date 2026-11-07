@@ -108,6 +108,8 @@ class Params:
     ig_top_light_only: bool = True  # ig_top_min_umis gives back light chains only (not an ambient plasma-cell IGH)
     # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
     ig_lone_spread: int = 5
+    # True: a Phe/Trp118 codon mutated to another non-stop codon still ends the junction when the J motif continues (_codon_at)
+    asm_fw_relax: bool = False
     threads: int = 8
 
 
@@ -474,6 +476,7 @@ def run_library(
             params.branch_frac,
             MAX_PATHS,
             MAX_JUNCTION,
+            params.asm_fw_relax,
         )
         return k, rows, res
 

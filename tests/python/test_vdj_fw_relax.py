@@ -1,0 +1,42 @@
+"""Terminal anchor of the V(D)J assembly graph: a mutated Phe118 codon is accepted only with fw_relax."""
+import os
+import sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "python"))
+from singlet.vdj import _kernels as K  # noqa: E402
+
+_C = {"A": 0, "C": 1, "G": 2, "T": 3}
+
+
+def _codes(s):
+    return np.array([_C[c] for c in s], np.uint8)
+
+
+def test_canonical_codon_unchanged():
+    s = _codes("ACCTGGGTGTTCGGCGGAGGGACC")  # ...TGG GTG TTC GGC GGA GGG: Phe at 9
+    assert K._codon_at(s, 0, len(s), 9, 1, False) == 9
+    assert K._codon_at(s, 0, len(s), 9, 1, True) == 9
+
+
+def test_mutated_phe_needs_relax():
+    s = _codes("ACCTGGGTGGTCGGCGGAGGGACC")  # Phe118 TTC -> GTC (Val)
+    assert K._codon_at(s, 0, len(s), 9, 1, False) == -1
+    assert K._codon_at(s, 0, len(s), 9, 1, True) == 9
+
+
+def test_relax_rejects_stop_and_broken_motif():
+    stop = _codes("ACCTGGGTGTAGGGCGGAGGGACC")  # TAG
+    assert K._codon_at(stop, 0, len(stop), 9, 1, True) == -1
+    nomotif = _codes("ACCTGGGTGGTCAACGGAGGGACC")  # no Gly after the codon
+    assert K._codon_at(nomotif, 0, len(nomotif), 9, 1, True) == -1
+    far = _codes("ACCTGGGTGGTCGGCAAAAAAACC")  # Gly-X-Gly broken at +9
+    assert K._codon_at(far, 0, len(far), 9, 1, True) == -1
+
+
+def test_cys_unaffected_by_relax():
+    s = _codes("GGGTGTAAAA")
+    assert K._codon_at(s, 0, len(s), 3, 0, True) == 3
+    mut = _codes("GGGTCTAAAA")
+    assert K._codon_at(mut, 0, len(mut), 3, 0, True) == -1
