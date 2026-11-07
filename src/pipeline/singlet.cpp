@@ -4972,7 +4972,7 @@ static int singlet_main(int argc, char* argv[]) {
             if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
             else if (std::string pw; !e19probe::usable(pw)) why = "no usable GPU (" + pw + "): the GPU pileup will be declined";
             else if (onefq_r2_bound > (int) singlet_qmask::maxBases()) why = "cDNA reads over " + std::to_string(singlet_qmask::maxBases()) + " bases: the GPU pileup will be declined";
-            else if (ir & ~(1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397
+            else if (ir & ~(1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u | 4096u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397, kExonPrecedence (4096) to 7053
             else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
             else if (stream_unsorted == 0 || parallel_pileup == 1 || tagged_bam_enabled || !bam_file.empty() || getenv("SINGLET_KEEP_STAR_BAM"))
                 why = "the sorted-BAM path: no GPU pileup on STAR's stream";
@@ -5936,7 +5936,8 @@ static int singlet_main(int argc, char* argv[]) {
     }
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
-    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced; rules 2957)
+    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced,
+    // kExonPrecedence; rules 7053)
     // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the mixed molecules behind the pre-USA split (mixed_exon / mixed_intron)
     // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
     // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
@@ -5945,7 +5946,7 @@ static int singlet_main(int argc, char* argv[]) {
         unsetenv("SINGLET_GPU_PILEUP");
     }
     if (getenv("SINGLET_GPU_PILEUP")) {
-        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u;
+        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u | 4096u;
         uint32_t rules = config.intron_rules;
         if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (rules & ~kGpuRules) {

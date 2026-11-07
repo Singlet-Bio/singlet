@@ -129,3 +129,19 @@ log files); the molecule counters (spliced / unspliced / ambiguous / legacy_doub
 
 Cost, pbmc1k_v3 (one run each): CPU engine 7:28 wall, 2802 core-s, pileup stage 391 s; GPU engine + GPU pileup 4:02 wall, 1001 core-s,
 pileup stage 175 s, of which `pileupRun` 9.6 s (GPU kernels 2.2 s).
+
+## kExonPrecedence on the GPU (2026-11-07)
+
+Branch `gpu/exon-rule`. `intron_rule::kExonPrecedence` (4096) joins the default rules (7053 = 2957 + 4096) and `kGpuRules`. A multimapper with
+an exonic alignment is judged on its exonic alignments only, as STARsolo Gene, Space Ranger and Cell Ranger count it
+(`spatial-exon-multimapper.md`). Rules without the bit reproduce the previous outputs.
+
+| CPU (`pileup_engine.h`) | GPU (`pileup.cu`) |
+|---|---|
+| Each multimapper entry keeps, beside the all-alignment state, the same state over its exonic alignments: `ex_seen`, `ex_first` / `ex_second` / `ex_ambiguous` / `ex_has_nuc` (`note_ex_gene`, order-free like `note_gene`), and R7 over the exonic alignments in `xa_*` (the primary's features when the primary is exonic and kept, else the smallest secondary exon). An exonic alignment has a non-empty same-strand exon overlap list (`GeneHit::exonic` for secondaries). `note_primary_exonic` / `note_secondary_exonic` fill it on the serial and the per-worker paths; `merge_exonic` joins worker entries in the cross-worker merge. `mt_ex` marks an exonic chrM alignment. `mm_verdict` decides the outcome for the serial `resolve_mm`, `resolve_mm_parallel` and the merge: with the bit and an exonic alignment the read is judged on the exonic set, else on all alignments as before | `k_annotate` sets bit 1 of `AA.multi` for an alignment with a same-strand exon overlap (bit 0 stays the multi-gene flag), so `AA` keeps its 48 bytes. `k_resolve` keeps `xs`, `xfg` / `xsec` / `xamb` / `xnuc` and `xg` / `xex` / `xin` / `xfl` (R7 over the exonic alignments) and `mexo` beside the existing state, and applies `mm_verdict`'s order: the chrM tie on the judged set, then ambiguity, then the counted features |
+| The kMtPrefer tie on the exonic set needs an exonic chrM alignment and a nuclear exonic gene | same (`mexo`, `xnuc`) |
+| G-EM pairs of reads ambiguous among exonic genes are the two smallest exonic genes | The GPU pileup produces no G-EM pairs, as before |
+
+`tests/cpp/test_exon_precedence.cpp` pins the serial run over seven record orders and `run_parallel` over five worker splits to one result
+under 2957 and 7053. `test_gpu_pileup_labels` compares the GPU pileup with the CPU pileup under 7053 as well (fixture read `xpi`: intronic primary,
+exonic secondary). The CPU = GPU gate on real data is still to run.

@@ -96,6 +96,7 @@ add_pileup_test(test_umi_consume)
 add_pileup_test(test_umi_seeds)         # SINGLET_UMI_COLLAPSE=seed: order-free seed-based directional collapse
 add_pileup_test(test_mt_numt_tie)
 add_pileup_test(test_gene_full_set)
+add_pileup_test(test_exon_precedence)   # intron_rule::kExonPrecedence: exonic alignments of a multimapper take precedence; order-free
 add_pileup_test(test_pileup_workers)   # run_parallel: counts independent of the worker count
 # GPU pileup vs CPU pileup (labels, kFlank, legacy_exon_extra) under intron rules 397 and 389. Built in every configuration; it prints SKIP
 # and exits 77 (ctest: skipped) in a CPU-only build or without a usable CUDA device. The GPU engine library exists when the pipeline is built

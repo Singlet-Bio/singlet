@@ -81,10 +81,12 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048 are implemented; qw: mask words per read (P3-ENG-14)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
+// multi: bit 0 = multi-gene (as the engine's multi_gene / primary_multigene / gene_full_multi), bit 1 = the alignment has a same-strand exon
+// overlap (an exonic alignment, intron_rule::kExonPrecedence; the engine's GeneHit::exonic, or a primary's non-empty exon_overlaps)
 struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
@@ -174,6 +176,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
             if (bc.multi) { r.gene = MAXU; r.exon = MAXU; r.multi = 1; }
             else if (r.gene == MAXU) r.aln_gene = bc.g0;
         }
+        if (ec.any) r.multi |= 2u;   // an exonic alignment (kExonPrecedence)
         out[a] = r; return;
     }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
@@ -210,7 +213,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         r.flank = (in_body - in_exon <= 5) ? 1u : 0u;
     }
-    r.multi = pm || bm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
+    r.multi = (pm || bm ? 1u : 0u) | (ec.any ? 2u : 0u); r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
     if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
     // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
     // (no accepted exon overlap although a block had only wrong-strand exons), 8 cross_gene_intron (classify_read), 16 multigene
@@ -226,6 +229,10 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
 // After the drops: kFlank (8) makes an exon-touching intronic primary with <= 5 intronic bases exonic (flags 5, no intron), and the
 // counted primary's CIGAR N goes into flags bit 8 (refine_read's kDiagSpliced, which the molecule label reads). A gene a secondary
 // assigned (R7) or a chrM secondary carries no diag, as the mm_buffer's (read_diag / mt_diag stay 0).
+// kExonPrecedence (4096): the same state is kept over the exonic alignments (AA.multi bit 1) only: xs = some exonic alignment, xfg / xsec /
+// xamb / xnuc as fg / sec / amb / nuc (the engine's ex_first / ex_second / ex_ambiguous / ex_has_nuc), xg.. = R7 over the exonic alignments
+// (xa_*: the primary's when it is exonic and kept, else the smallest secondary exon), mexo = the chrM alignment is exonic (mt_ex). With an
+// exonic alignment the read is judged on those (mm_verdict), else as before.
 __device__ __forceinline__ void refine_primary(AA& x, const DPar& P) {
     if (x.gene == MAXU) return;
     if ((P.rules & 8) && x.flags == 6 && x.flank) { x.flags = 5; x.intron = MAXU; }
@@ -244,41 +251,65 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                 if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
         } else {
             bool amb = false, pa = false, nuc = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
-            // the genes the alignments touch, order-free (the engine's note_gene): fg/sec = the two smallest distinct genes, nuc = some non-chrM gene was touched
-            auto note = [&](uint32_t g) {
+            bool xs = false, xamb = false, xnuc = false, xpa = false, mexo = false; uint32_t xfg = MAXU, xsec = MAXU, xg = MAXU, xex = MAXU, xin = MAXU, xfl = 0;   // kExonPrecedence
+            // the genes the alignments touch, order-free (the engine's note_gene_set): first / second = the two smallest distinct genes, nuc = some non-chrM gene was touched
+            auto note_set = [&](uint32_t g, uint32_t& first, uint32_t& second, bool& am, bool& nu) {
                 if (g == MAXU) return;
-                if (!is_mt(g)) nuc = true;
-                if (g == fg || g == sec) return;
-                if (fg == MAXU) { fg = g; return; }
-                amb = true;
-                if (g < fg) { sec = fg; fg = g; } else if (sec == MAXU || g < sec) sec = g;
+                if (!is_mt(g)) nu = true;
+                if (g == first || g == second) return;
+                if (first == MAXU) { first = g; return; }
+                am = true;
+                if (g < first) { second = first; first = g; } else if (second == MAXU || g < second) second = g;
             };
+            auto note = [&](uint32_t g) { note_set(g, fg, sec, amb, nuc); };
+            auto notex = [&](uint32_t g) { note_set(g, xfg, xsec, xamb, xnuc); };
             uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
+                const bool multi = (x.multi & 1u) != 0, exo = (x.multi & 2u) != 0;
                 if (A[sg.aln_off + k].flags & 2) {
                     if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here
                     refine_primary(x, P);
                     if (x.gene != MAXU) {
                         gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; pa = true;
-                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = x.intron; mfl = x.flags; }
+                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = x.intron; mfl = x.flags; mexo = x.exg != MAXU; }
                     }
-                    if (x.multi) {
+                    if (multi) {
                         amb = true;
                         if (x.pg_a != MAXU) { note(x.pg_a); if (x.pg_b != MAXU) note(x.pg_b); }
                     }
                     note(x.aln_gene);
+                    if (exo) {   // note_primary_exonic: exg == MAXU here means exons of several genes (pm)
+                        xs = true;
+                        if (x.exg == MAXU) { xamb = true; if (x.pg_a != MAXU) { notex(x.pg_a); if (x.pg_b != MAXU) notex(x.pg_b); } }
+                        else {
+                            if (multi) xamb = true;   // kGeneFullSet: the exon of one gene inside another gene's intron
+                            notex(x.exg);
+                            if (x.gene != MAXU) { xpa = true; xg = x.gene; xex = x.exon; xin = x.intron; xfl = x.flags; }
+                        }
+                    }
                 } else {
-                    if (x.multi) amb = true;
+                    if (multi) amb = true;
                     else if ((P.rules & 512) && x.gene == MAXU && x.aln_gene != MAXU) note(x.aln_gene);   // kGeneFullSet: an intron-only secondary
                     else if (x.gene != MAXU) {
                         note(x.gene);
                         if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; }   // R7: else the smallest secondary exon
-                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = MAXU; mfl = 5; }
+                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = MAXU; mfl = 5; mexo = true; }
+                    }
+                    if (exo) {   // note_secondary_exonic
+                        xs = true;
+                        if (multi) xamb = true;
+                        else {
+                            notex(x.gene);
+                            if (x.gene != MAXU && !xpa && (xg == MAXU || x.exon < xex)) { xg = x.gene; xex = x.exon; xin = MAXU; xfl = 5; }
+                        }
                     }
                 }
             }
-            if (amb && mg != MAXU && nuc) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
+            const bool X = (P.rules & 4096) && xs;   // mm_verdict: judged on the exonic alignments
+            const bool am = X ? xamb : amb;
+            if (am && mg != MAXU && (X ? (xnuc && mexo) : nuc)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
+            else if (X) { if (!xamb && xfg != MAXU && xg != MAXU) { r.gene = xg; r.exon = xex; r.intron = xin; r.flags = xfl ? xfl : 5; } }
             else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
         }
     }
