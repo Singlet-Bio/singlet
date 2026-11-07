@@ -1090,6 +1090,29 @@ inline AmbientCorrectionResult correct_ambient_gene_level_split(
     }
     cfg.estimate_features.assign(2 * static_cast<size_t>(G), 0);
     std::fill(cfg.estimate_features.begin(), cfg.estimate_features.begin() + G, 1);
+    // Median intronic fraction of the called cells: it decides the intron-rich skip below, and it depends on the counts
+    // only, so it is known before the fit.
+    double median_intronic = std::numeric_limits<double>::quiet_NaN();
+    if (cfg.intron_rich_skip > 0.0 && !cell_indices.empty()) {
+        std::vector<double> fr;
+        fr.reserve(cell_indices.size());
+        for (uint32_t b : cell_indices) {
+            if (b >= B) continue;
+            double e = 0.0, in = 0.0;
+            for (int32_t k = exon_genes.indptr[b]; k < exon_genes.indptr[b + 1]; ++k) e += static_cast<double>(exon_genes.data[k]);
+            for (int32_t k = intron_genes.indptr[b]; k < intron_genes.indptr[b + 1]; ++k) in += static_cast<double>(intron_genes.data[k]);
+            if (e + in > 0.0) fr.push_back(in / (e + in));
+        }
+        if (!fr.empty()) {
+            std::nth_element(fr.begin(), fr.begin() + static_cast<std::ptrdiff_t>(fr.size() / 2), fr.end());
+            median_intronic = fr[fr.size() / 2];
+        }
+    }
+    const bool skip_estimate = std::isfinite(median_intronic) && median_intronic >= cfg.intron_rich_skip;
+    // A skipped library keeps only what member 0 of the R10c consensus produces (clusters, cluster counts, the pool
+    // profile); rho, removals and the corrected matrix are replaced below. Fitting members 1..M-1 changes no output, so
+    // they are not fitted (on a 1.2 G-read nuclei sample the 32-member consensus cost ~270 s for nothing).
+    if (skip_estimate) { cfg.ensemble = 1; cfg.cluster_salt = 0; }
     AmbientCorrectionResult R = correct_ambient_gene_level(S, cell_indices, cfg);
     // fold 2G -> G
     for (uint32_t g = 0; g < G && !R.profile.gene_fractions.empty(); ++g) R.exon_profile_share += R.profile.gene_fractions[g];
@@ -1142,19 +1165,9 @@ inline AmbientCorrectionResult correct_ambient_gene_level_split(
     // Intron-rich (nuclei) libraries: no estimate (see AmbientDecontConfig::intron_rich_skip). The pool profile is still
     // written; the corrected matrix is the raw gene-level counts (exon + intron) of the called cells.
     if (cfg.intron_rich_skip > 0.0 && R.ok && !cell_indices.empty()) {
-        std::vector<double> fr;
-        fr.reserve(cell_indices.size());
-        for (uint32_t b : cell_indices) {
-            if (b >= B) continue;
-            double e = 0.0, in = 0.0;
-            for (int32_t k = exon_genes.indptr[b]; k < exon_genes.indptr[b + 1]; ++k) e += static_cast<double>(exon_genes.data[k]);
-            for (int32_t k = intron_genes.indptr[b]; k < intron_genes.indptr[b + 1]; ++k) in += static_cast<double>(intron_genes.data[k]);
-            if (e + in > 0.0) fr.push_back(in / (e + in));
-        }
-        if (!fr.empty()) {
-            std::nth_element(fr.begin(), fr.begin() + static_cast<std::ptrdiff_t>(fr.size() / 2), fr.end());
-            R.median_intronic_fraction = fr[fr.size() / 2];
-            if (R.median_intronic_fraction >= cfg.intron_rich_skip) {
+        if (std::isfinite(median_intronic)) {
+            R.median_intronic_fraction = median_intronic;
+            if (skip_estimate) {
                 const double nan = std::numeric_limits<double>::quiet_NaN();
                 R.skipped_reason = "intron_rich_library";
                 R.method = "skipped_intron_rich_library";
