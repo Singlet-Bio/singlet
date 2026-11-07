@@ -10,4 +10,6 @@
 
 **Falsifier.** The advisor's falsifier for option 5 is that device hold fails to fall 10% at 3 slots with the shared index. Two more outcomes would also end the card: nuclei2k_v2 still drops out of level 5 at 3 slots after step 2, or the 3-slot rate is no higher than the 2-slot rate on either sample.
 
-**Result.** Pending. Step 1 is pilot item 26-slots3-shidx.
+**Step 2 code.** `f7daed65` adds `SINGLET_ENGINE_GPU_ADMIT=1`, off by default. At the E20 relock, a run whose records' phase needs more than one share asks for as many slots as its need spans. It holds no slot while it waits, so no two runs can block each other. It collects the slots under a per-device admission gate that every other acquirer passes before trying a slot, which hands the slots that come free to the collector. The records' cap then grows to the slots' shares, bounded by the device's free memory less 512 MB. If the slots do not come within `SINGLET_ENGINE_GPU_ADMIT_WAIT` seconds (default 120), the run keeps the slots it holds, and the old budget stop decides as before.
+
+**Result.** Step 1 (item 70, binary 120c8e4f) reproduced the stop on nuclei2k_v2 at 3 slots: the records needed 35.6 GB against a 30.4 GB share, E8, E10 and E11 dropped out, and the run alone took 430 s. Item 71 measures pbmc1k_v3 at 3 slots on ee7fa54d. Item 72 runs step 2 on nuclei2k_v2 against base on f7daed65.

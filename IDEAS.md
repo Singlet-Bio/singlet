@@ -16,7 +16,7 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 | 1 | Non-host GPU screen falls back to the CPU | bug, no branch | resolved: device wandering, gone on a pinned GPU; retry kept on | `SINGLET_NONHOST_GPU_TRIES` |
 | 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | adopted, off by default (diagnostic) | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
 | 3 | 512-base lift and lean-path memory (P3-MEM-03) | `perf/gpu-device`, a462be4d; `gpu/frontier-fold-device`, 7cc07dd4 | adopted: identical, cost-neutral, 1.2 G reads fit one H100 | default |
-| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | identical at 2 and 3 slots; adoption A/B on the whole node (item 25; item 24 could not run it on one GPU) | `SINGLET_GPU_SHARED_INDEX=1` |
+| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | identical at 2 and 3 slots; no gain at 2 slots (item 25), stays off; 3 slots in card SL | `SINGLET_GPU_SHARED_INDEX=1` |
 | 5 | E21 resident pool | `gpu/fable/pool`, 719fd650 (tag only) | rejected: the non-host server and genome preload cost 15 % of pairs/s and 17 % more core-s/M | `singlet gpu-pool` (server and preload off) |
 | 6 | Heavy-read split | `gpu/bold-split`, 3c0ac3c2 (tag only) | rejected: auto steps 4 % slower over three blocks | `SINGLET_ENGINE_GPU_STEPS_B=<n>\|auto` |
 | 7 | Single-donor demux screen | `gpu/bold-hostcut`, f04a64c7 (tag only) | dropped at the tuning stop (D-103): its truth tolerance check would not finish in time | `SINGLET_DEMUX_SCREEN=1` |
@@ -77,6 +77,11 @@ mpsshidx, mpsbase). Every run of every point is IDENTICAL to the same binary run
 2.57 and 2.66 M read pairs/s (core-s/M 8.83 and 8.71) against 2.43 and 2.25 for mpsbase (8.96 and 9.07). The shared-index points still had
 one fallback each (a prefill failure and a non-host screen allocation), so the adoption A/B runs on the retry binary. A shared-index item
 must have its node to itself, or two items' holders interfere (fixed for later items in f616eebb).
+
+Item 25-shidx-g2 then ran the adoption A/B on the whole of g051 (binary 120c8e4f, 8 in flight, T=7, 2 slots, A B B A). The shared index made
+1.86 and 1.80 M pairs/s against 1.79 and 1.78 for base, a gain under the 3 % threshold, and seqstop ruled it out after one block. At two
+slots the index copy is not what limits the device, so the shared index stays off. It returns only with a third slot (card SL), where each
+slot's share of device memory is tight.
 
 ## 2. Transfer ledger and NVTX ranges
 
@@ -161,3 +166,12 @@ against 1.43 and 1.68 for base, about 9 % more, at 9.4 to 9.5 core-s/M in both, 
 fast loop's RTX 8000 screen pointed the same way (held time down 4 %). WSHRINK keeps lane B's window aligns in a per-batch pool, so
 the lane fits more reads per pass. It is the default from the next frontier commit, gated on all nine samples;
 `SINGLET_BOLD_WSHRINK=0` restores the old lane B.
+
+## Fast-loop calibration on the H100
+
+The fast-loop session screens a change on one RTX 8000 run before it reaches the pilots. Items 60 to 62 ran its three screens on one H100
+of g052 at one run in flight, so each could be checked against the pilots' verdicts. The shared index cost 20 % (S1), 29 % (S2) and 6 %
+(S3) of the single-run rate, which agrees with the pilots, where it never paid at two slots. WSHRINK moved a single run by under 2 % either
+way (+0.9 % in S1, -1.6 % in S3); its 9 % gain in item 22 is a concurrency effect, since a smaller lane B sends work to the host lane while
+other runs hold the device. The non-host retry left the rate unchanged (-0.9 %), and the demux screen saved 1.9 % of core-s/M. The fast
+loop therefore ranks memory and per-run changes well, and a change whose benefit comes from sharing the device still needs a pilot.
