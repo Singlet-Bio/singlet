@@ -1,0 +1,9 @@
+probe het=16 hetmix=0
+a12_20 het=16 hetauto=1 seplo=1.2 sephi=2.0
+a15_25 het=16 hetauto=1 seplo=1.5 sephi=2.5
+a15_20 het=16 hetauto=1 seplo=1.5 sephi=2.0
+a20_30 het=16 hetauto=1 seplo=2.0 sephi=3.0
+a12_30 het=16 hetauto=1 seplo=1.2 sephi=3.0
+a10_20 het=16 hetauto=1 seplo=1.0 sephi=2.0
+a15_25_k8 het=8 hetauto=1 seplo=1.5 sephi=2.5
+a15_25_k32 het=32 hetauto=1 seplo=1.5 sephi=2.5

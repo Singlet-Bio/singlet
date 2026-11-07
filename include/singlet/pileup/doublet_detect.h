@@ -104,7 +104,17 @@ struct DoubletParams {
     double   clf_exclude    = 1.5;    ///< ... namely the top clf_exclude * rho * n observed cells
     double   clf_ridge      = 0.01;   ///< ridge (x n_queries) on all coefficients: keeps separable data from blowing the weights up
     double   clf_size_ridge = 0.05;   ///< extra ridge (x n_queries) on the two library-size coefficients
-    uint32_t clf_mask       = 7;     ///< classifier features: bit 0 sim-neighbour logit, 1 log T, 2 log T minus observed neighbours
+    uint32_t clf_mask       = 7;     ///< classifier features: bit 0 sim-neighbour logit, 1 log T, 2 log T minus observed neighbours,
+                                     ///< 3 sim-neighbour logit within the nearest half of the k_adj neighbours, 4 within the nearest quarter,
+                                     ///< 5 log ratio of the distances to the nearest observed and the nearest simulated point
+    uint32_t het_clusters   = 0;     ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
+                                     ///< different clusters (scDblFinder's heterotypic doublets), the rest are random pairs
+    double   het_mix        = 1.0;   ///< share of the simulated doublets forced heterotypic (het_clusters > 0)
+    bool     het_auto       = false; ///< het_mix from the separation of the clusters instead: clamp((sep - sep_lo) / (sep_hi - sep_lo), 0, 1), where
+                                     ///< sep = median over cells of (distance to the nearest other centroid / distance to the own centroid).  Discrete
+                                     ///< cell-type islands (a species mixture) make heterotypic pairs the identifiable doublets; continuous
+                                     ///< PBMC-like manifolds do not
+    double   sep_lo         = 5.0, sep_hi = 6.5;   ///< development libraries: Kang pools 2.0 to 2.5, 10x PBMC and mouse libraries 2 to 4, human + mouse mixtures 7.3 and 11.0
     double   knn_scale      = 1.0;    ///< k = knn_scale * 0.5 * sqrt(n_cells)
     int      hvg_mode       = 0;      ///< 0: z-scored log dispersion in mean bins; 1: Scrublet v-score (percentile cut)
     double   vscore_pctl    = 85.0;   ///< hvg_mode 1: keep genes above this v-score percentile
@@ -118,6 +128,8 @@ struct DoubletSummary {
     double   expected_rate = 0.0;
     double   null_score = -1.0;       ///< score of the 95th-percentile observed singlet (the detectable-fraction threshold)
     double   detectable_fraction = 0.0;
+    double   cluster_separation = -1.0;   ///< median ratio of the distance to the nearest other centroid over the own one (het_clusters > 0)
+    double   het_mix_used = 0.0;
     double   seconds = 0.0;
     bool     used_fallback = false;
     std::vector<uint32_t> sim_hist, obs_hist;  ///< 20-bin histograms of the simulated / observed scores on [0, 1]
@@ -638,14 +650,98 @@ inline std::vector<DoubletResult> detect_doublets(
     uint32_t n_sim = static_cast<uint32_t>(std::min<double>(std::ceil(prm.sim_ratio * n), prm.max_sim));
     n_sim = std::max(n_sim, 10u);
     std::vector<std::pair<uint32_t, uint32_t>> parents(n_sim);
+    double het_share = 1.0;                          // share of random pairs that are heterotypic (1 when clustering is off)
+    double sep = -1.0, mix_used = prm.het_mix;
+    std::vector<char> sim_het(n_sim, 1);             // simulated doublet pairs cells of different clusters
+    std::vector<uint32_t> het_cl;
     {
         std::mt19937_64 rng(prm.seed * 0x2545F4914F6CDD1DULL + 12345u);
+        std::vector<uint32_t> cl;
+        if (prm.het_clusters > 1 && n >= 4u * prm.het_clusters) {
+            // k-means (k-means++ start, up to 25 Lloyd rounds, fixed seed) on the observed cells' PC coordinates
+            const uint32_t Kc = prm.het_clusters;
+            std::vector<float> X(size_t(n) * n_pc);
+            for (uint32_t i = 0; i < n; ++i)
+                for (uint32_t p = 0; p < n_pc; ++p)
+                    X[size_t(i) * n_pc + p] = static_cast<float>(cell_scale[i] * R[size_t(i) * n_pc + p] - offs[p]);
+            auto d2 = [&](const float* a, const float* b) {
+                float s2 = 0;
+                for (uint32_t p = 0; p < n_pc; ++p) { const float d = a[p] - b[p]; s2 += d * d; }
+                return s2;
+            };
+            std::vector<float> C(size_t(Kc) * n_pc), best(n, 3.4e38f);
+            std::mt19937_64 rk(prm.seed * 0x9E3779B97F4A7C15ULL + 77u);
+            const uint32_t first = static_cast<uint32_t>(rk() % n);
+            std::copy(&X[size_t(first) * n_pc], &X[size_t(first) * n_pc] + n_pc, &C[0]);
+            for (uint32_t c = 1; c < Kc; ++c) {
+                double tot = 0.0;
+                for (uint32_t i = 0; i < n; ++i) {
+                    best[i] = std::min(best[i], d2(&X[size_t(i) * n_pc], &C[size_t(c - 1) * n_pc]));
+                    tot += best[i];
+                }
+                const double u = (rk() >> 11) * (1.0 / 9007199254740992.0) * tot;
+                double acc = 0.0;
+                uint32_t pick = n - 1;
+                for (uint32_t i = 0; i < n; ++i) { acc += best[i]; if (acc >= u) { pick = i; break; } }
+                std::copy(&X[size_t(pick) * n_pc], &X[size_t(pick) * n_pc] + n_pc, &C[size_t(c) * n_pc]);
+            }
+            cl.assign(n, 0);
+            for (int it = 0; it < 25; ++it) {
+                bool moved = false;
+                for (uint32_t i = 0; i < n; ++i) {
+                    uint32_t bc = 0;
+                    float bd = 3.4e38f;
+                    for (uint32_t c = 0; c < Kc; ++c) {
+                        const float d = d2(&X[size_t(i) * n_pc], &C[size_t(c) * n_pc]);
+                        if (d < bd) { bd = d; bc = c; }
+                    }
+                    if (bc != cl[i]) moved = true;
+                    cl[i] = bc;
+                }
+                std::vector<double> sum(size_t(Kc) * n_pc, 0.0);
+                std::vector<uint32_t> cnt(Kc, 0);
+                for (uint32_t i = 0; i < n; ++i) {
+                    ++cnt[cl[i]];
+                    for (uint32_t p = 0; p < n_pc; ++p) sum[size_t(cl[i]) * n_pc + p] += X[size_t(i) * n_pc + p];
+                }
+                for (uint32_t c = 0; c < Kc; ++c)
+                    if (cnt[c])
+                        for (uint32_t p = 0; p < n_pc; ++p)
+                            C[size_t(c) * n_pc + p] = static_cast<float>(sum[size_t(c) * n_pc + p] / cnt[c]);
+                if (!moved) break;
+            }
+            std::vector<uint32_t> cnt(Kc, 0);
+            for (uint32_t i = 0; i < n; ++i) ++cnt[cl[i]];
+            double same = 0.0;
+            for (uint32_t c = 0; c < Kc; ++c) { const double pc = double(cnt[c]) / n; same += pc * pc; }
+            het_share = std::max(0.05, 1.0 - same);
+            std::vector<float> ratio(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                float own = 3.4e38f, oth = 3.4e38f;
+                for (uint32_t c = 0; c < Kc; ++c) {
+                    const float d = d2(&X[size_t(i) * n_pc], &C[size_t(c) * n_pc]);
+                    if (c == cl[i]) own = d; else oth = std::min(oth, d);
+                }
+                ratio[i] = std::sqrt(oth / std::max(own, 1e-12f));
+            }
+            std::nth_element(ratio.begin(), ratio.begin() + n / 2, ratio.end());
+            sep = ratio[n / 2];
+        }
+        if (prm.het_auto && sep > 0.0) mix_used = std::min(1.0, std::max(0.0, (sep - prm.sep_lo) / (prm.sep_hi - prm.sep_lo)));
         for (uint32_t s = 0; s < n_sim; ++s) {
             const uint32_t a = static_cast<uint32_t>(rng() % n);
             uint32_t b = static_cast<uint32_t>(rng() % (n - 1));
             if (b >= a) ++b;
+            const bool force_het = !cl.empty() && (mix_used >= 1.0 || (mix_used > 0.0 && (rng() >> 11) * (1.0 / 9007199254740992.0) < mix_used));
+            if (force_het)
+                for (int tries = 0; tries < 50 && cl[b] == cl[a]; ++tries) {
+                    b = static_cast<uint32_t>(rng() % (n - 1));
+                    if (b >= a) ++b;
+                }
             parents[s] = { a, b };
+            sim_het[s] = (!cl.empty() && cl[a] != cl[b]) ? 1 : 0;
         }
+        het_cl = std::move(cl);
     }
     const uint32_t N = n + n_sim;
     std::vector<float> P(size_t(n_pc) * N);   // structure of arrays: P[c * N + point]
@@ -670,7 +766,7 @@ inline std::vector<DoubletResult> detect_doublets(
     const uint32_t n_q_sim = std::min(n_sim, prm.sim_query_cap);
     const uint32_t NQ = n + n_q_sim;
     std::vector<uint32_t> n_sim_nb(NQ, 0u);
-    constexpr uint32_t NF = 3;                       // features per query (classifier): sim-neighbour logit, log T, log T - neighbours'
+    constexpr uint32_t NF = 6;                       // features per query (classifier, see clf_mask)
     std::vector<float> feat(size_t(NQ) * NF, 0.0f);
     std::vector<float> logT(N, 0.0f);                // log library size of every point (simulated: parents' sum)
     for (uint32_t i = 0; i < n; ++i) logT[i] = static_cast<float>(std::log(std::max(1.0, T[i])));
@@ -722,6 +818,25 @@ inline std::vector<DoubletResult> detect_doublets(
                 fq[0] = static_cast<float>(std::log((cnt + 0.5) / (heap.size() - cnt + 0.5)));
                 fq[1] = logT[q];
                 fq[2] = n_obs_nb ? static_cast<float>(logT[q] - sum_lt / n_obs_nb) : 0.0f;
+                if (prm.clf_mask & 0x38u) {
+                    std::sort(heap.begin(), heap.end());   // ascending squared distance, ties by id: deterministic
+                    auto frac_at = [&](size_t m) {
+                        m = std::max<size_t>(1, std::min(m, heap.size()));
+                        uint32_t c2 = 0;
+                        for (size_t j = 0; j < m; ++j) c2 += heap[j].second >= n ? 1u : 0u;
+                        return static_cast<float>(std::log((c2 + 0.5) / (m - c2 + 0.5)));
+                    };
+                    fq[3] = frac_at(heap.size() / 2);
+                    fq[4] = frac_at(heap.size() / 4);
+                    float dobs = heap.empty() ? 0.0f : heap.back().first, dsim = dobs;
+                    bool fo = false, fs2 = false;
+                    for (const auto& e : heap) {
+                        if (e.second >= n) { if (!fs2) { dsim = e.first; fs2 = true; } }
+                        else if (!fo) { dobs = e.first; fo = true; }
+                        if (fo && fs2) break;
+                    }
+                    fq[5] = 0.5f * std::log((dobs + 1e-6f) / (dsim + 1e-6f));
+                }
                 n_sim_nb[q] = cnt;
             }
         });
@@ -774,7 +889,8 @@ inline std::vector<DoubletResult> detect_doublets(
         for (int round = 0; round < rounds; ++round) {
         uint32_t n_neg = 0;
         for (uint32_t i = 0; i < n; ++i) n_neg += excl[i] ? 0u : 1u;
-        const double wo = (1.0 - rho) / std::max(1u, n_neg) * NQ, ws = rho / n_q_sim * NQ;
+        const double rho_c = rho;
+        const double wo = (1.0 - rho_c) / std::max(1u, n_neg) * NQ, ws = rho_c / n_q_sim * NQ;
         for (double& b : beta) b = 0.0;
         for (int it = 0; it < 40; ++it) {
             double g[D] = {0}, Hm[D][D] = {{0}};
@@ -790,7 +906,7 @@ inline std::vector<DoubletResult> detect_doublets(
                 }
             }
             for (uint32_t d = 1; d < D; ++d) {
-                const double lam = 1e-2 + prm.clf_ridge * NQ + (d >= 2 ? prm.clf_size_ridge * NQ : 0.0);   // d = 2, 3: the library-size features
+                const double lam = 1e-2 + prm.clf_ridge * NQ + ((d == 2 || d == 3) ? prm.clf_size_ridge * NQ : 0.0);   // d = 2, 3: the library-size features
                 g[d] += lam * beta[d]; Hm[d][d] += lam;
             }
             // solve Hm * delta = g (Gaussian elimination, partial pivoting)
@@ -852,9 +968,18 @@ inline std::vector<DoubletResult> detect_doublets(
         const size_t qi = static_cast<size_t>(std::floor(0.95 * (1.0 - rho) * (n - 1)));
         std::nth_element(o.begin(), o.begin() + qi, o.end());
         const float thr = o[qi];
-        uint32_t above = 0;
-        for (float v : sim_stat) if (v > thr) ++above;
-        h = static_cast<double>(above) / std::max<size_t>(1, sim_stat.size());
+        if (het_cl.empty() || mix_used <= 0.0) {   // no heterotypic simulation: the plain share, as before the change
+            uint32_t above = 0;
+            for (float v : sim_stat) if (v > thr) ++above;
+            h = static_cast<double>(above) / std::max<size_t>(1, sim_stat.size());
+        } else {
+            // detectable share per stratum (heterotypic / same-cluster pairs), weighted by the share of random pairs in each stratum
+            uint32_t ah = 0, nh = 0, ao = 0, no = 0;
+            for (size_t q = 0; q < sim_stat.size(); ++q) {
+                if (sim_het[q]) { ++nh; ah += sim_stat[q] > thr ? 1u : 0u; } else { ++no; ao += sim_stat[q] > thr ? 1u : 0u; }
+            }
+            h = het_share * (nh ? double(ah) / nh : 0.0) + (1.0 - het_share) * (no ? double(ao) / no : 0.0);
+        }
         null_score = stat_to_score(thr);
     }
     sm.sim_hist.assign(20, 0u); sm.obs_hist.assign(20, 0u);
@@ -862,7 +987,7 @@ inline std::vector<DoubletResult> detect_doublets(
     for (const auto& rr : results) sm.obs_hist[std::min(19, int(rr.score * 20))]++;
     call_cells(-1.0, h);
     sm.n_sim = n_sim; sm.n_hvg = H; sm.n_pcs = n_pc; sm.k = k_adj;
-    sm.null_score = null_score; sm.detectable_fraction = h;
+    sm.null_score = null_score; sm.detectable_fraction = h; sm.cluster_separation = sep; sm.het_mix_used = mix_used;
     finish();
     return results;
 }

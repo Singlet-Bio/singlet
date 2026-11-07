@@ -1,0 +1,16 @@
+base mask=7
+f3 mask=15
+f4 mask=23
+f5 mask=39
+f34 mask=31
+f35 mask=47
+f45 mask=55
+f345 mask=63
+f345_sr0 mask=63 sridge=0.0
+f345_sr2 mask=63 sridge=0.2
+f345_rd01 mask=63 ridge=0.1
+f345_ex mask=63 rounds=2
+f345_k2 mask=63 knn=2
+f345_pc50 mask=63 pcs=50
+f345_h4k mask=63 hvg=4000
+f345_s4 mask=63 simratio=4
