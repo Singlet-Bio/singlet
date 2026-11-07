@@ -16,10 +16,10 @@ using namespace singlet;
 
 namespace {
 
-void fill(DirectionalUmiStore& st) {
+void fill(DirectionalUmiStore& st, int reads = 40000, uint32_t n_bc = 300, uint32_t n_gene = 40) {
     std::mt19937_64 rng(7);
-    for (int i = 0; i < 40000; ++i) {
-        const uint32_t bc = static_cast<uint32_t>(rng() % 300), gene = static_cast<uint32_t>(rng() % 40);
+    for (int i = 0; i < reads; ++i) {
+        const uint32_t bc = static_cast<uint32_t>(rng() % n_bc), gene = static_cast<uint32_t>(rng() % n_gene);
         uint64_t umi = (rng() % 6) * 5 + (rng() % 4);            // clustered, so 1-mismatch neighbours occur
         if (rng() % 3 == 0) umi ^= (1u << (2 * (rng() % 12)));
         st.record_read(bc, gene, umi & 0xffffffu, gene, gene, static_cast<uint8_t>(1 + rng() % 3), 0);
@@ -54,6 +54,26 @@ int main() {
             if (it == sb.end() || it->second.total_reads != s.total_reads || it->second.unique_umis != s.unique_umis) st_eq = false;
         }
         CHECK(st_eq, "per-cell saturation stats survive consume");
+    }
+    // Above kParallelMinGroups groups, consume_molecules on several threads: the serial molecules, in the same order.
+    for (bool directional : {true, false}) {
+        DirectionalUmiStore a, b;
+        fill(a, 600000, 4000, 60);
+        fill(b, 600000, 4000, 60);
+        std::vector<DirectionalUmiStore::Molecule> ma, mb;
+        a.collapse_molecules(12, directional, ma);
+        const auto sa = a.per_cell_molecule_stats(12);
+        b.consume_molecules(12, directional, mb, 4);
+        const auto sb = b.per_cell_molecule_stats(12);
+        bool eq = ma.size() == mb.size() && a.n_molecule_groups() > (1u << 16);
+        for (size_t i = 0; eq && i < ma.size(); ++i) eq = same(ma[i], mb[i]);
+        CHECK(eq, "consume_molecules on 4 threads gives the serial molecules in order");
+        bool st_eq = sa.size() == sb.size();
+        for (const auto& [bc, s] : sa) {
+            auto it = sb.find(bc);
+            if (it == sb.end() || it->second.total_reads != s.total_reads || it->second.unique_umis != s.unique_umis) st_eq = false;
+        }
+        CHECK(st_eq, "per-cell saturation stats on 4 threads equal the serial ones");
     }
     DirectionalUmiStore empty;
     std::vector<DirectionalUmiStore::Molecule> m;

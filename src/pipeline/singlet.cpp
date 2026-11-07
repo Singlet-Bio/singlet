@@ -1956,8 +1956,12 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             const std::string mate2_path = out_prefix + "/star_Unmapped.out.mate2";
             struct stat mate2_st{};
             if (stat(mate2_path.c_str(), &mate2_st) == 0 && mate2_st.st_size > 0) {
-                auto tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                    mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                // Only EM-confirmed species are counted and only they use the reads below, so with none confirmed (most samples)
+                // the table is empty whatever the reads are: the two unmapped files (tens of GB on a deep sample) are not read.
+                std::vector<singlet::nonhost::TaggedRead> tagged;
+                if (!em_result.empty())
+                    tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
+                        mate1_path, mate2_path, cb_len, umi_len, nh_selected);
 
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
@@ -4092,6 +4096,12 @@ static int singlet_main(int argc, char* argv[]) {
         config.whitelist_path = whitelist_file;
     config.threads = pileup_threads;
     config.finalize_threads = std::max(1, star_threads);   // --threads: the finalize steps after the stream
+    // the R11 stream's records are decoded and their CBs resolved on a reader thread beside the serial loop (same records, same order,
+    // same CBs); SINGLET_PILEUP_LOOKAHEAD=0 keeps the loop reading the stream itself
+    {
+        const char* la = std::getenv("SINGLET_PILEUP_LOOKAHEAD");
+        config.stream_lookahead = star_threads >= 2 && !(la && la[0] == '0');
+    }
     config.umi_len = umi_len;
     if (pipeline_mode) config.count_mt = true;
     if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
@@ -6035,16 +6045,39 @@ static int singlet_main(int argc, char* argv[]) {
         for (size_t w = 0; w < cnt.size(); ++w) cnt[w] = cb_corrector.exact_count(static_cast<int64_t>(w));
         static constexpr char kNtU[5] = {'A', 'C', 'G', 'T', 'N'};
         const int L = cb_corrector.length();
-        uint64_t n_corrected = 0, n_lost = 0;
-        for (const auto& [key, n] : cbx_nonexact) {
-            char raw[32], fixed_bc[40];
-            uint64_t k = key;
-            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
-            raw[L] = '\0';
-            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
-            if (st < 0) { n_lost += n; continue; }
-            const int64_t w = cb_corrector.find(std::string(fixed_bc, L).c_str());
-            if (w >= 0) { cnt[w] += n; n_corrected += n; }
+        // Every distinct non-exact barcode is resolved on its own and only integer counts are summed, so the work is split over the
+        // hash table's buckets on star_threads threads with the same result (a 1.2 G-read sample spent ~86 s here on one thread,
+        // before STAR starts). cnt[] is added to atomically; resolve() is const and thread-safe once settled (exact_count above).
+        std::atomic<uint64_t> n_corrected{0}, n_lost{0};
+        {
+            const size_t nbk = cbx_nonexact.bucket_count();
+            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk, 1024))));
+            std::atomic<size_t> next_bk{0};
+            auto work = [&]() {
+                uint64_t corr = 0, lost = 0;
+                char raw[32], fixed_bc[40];
+                constexpr size_t kChunk = 4096;
+                for (size_t b0; (b0 = next_bk.fetch_add(kChunk)) < nbk;) {
+                    const size_t b1 = std::min(nbk, b0 + kChunk);
+                    for (size_t bk = b0; bk < b1; ++bk)
+                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) {
+                            const uint64_t n = it->second;
+                            uint64_t k = it->first;
+                            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+                            raw[L] = '\0';
+                            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+                            if (st < 0) { lost += n; continue; }
+                            fixed_bc[L] = '\0';
+                            const int64_t w = cb_corrector.find(fixed_bc);
+                            if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
+                        }
+                }
+                n_corrected += corr; n_lost += lost;
+            };
+            std::vector<std::thread> pool;
+            for (int t = 1; t < nt_u; ++t) pool.emplace_back(work);
+            work();
+            for (auto& t : pool) t.join();
         }
         std::vector<char> bc(L + 1);
         for (size_t w = 0; w < cnt.size(); ++w) {
@@ -6054,7 +6087,7 @@ static int singlet_main(int argc, char* argv[]) {
         }
         std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
         std::cerr << "[singlet] barcode universe: " << out.size() << " whitelist barcodes with >= " << bc_min_reads << " reads after R11 correction ("
-                  << n_corrected << " reads corrected onto a barcode, " << n_lost << " uncorrectable)" << std::endl;
+                  << n_corrected.load() << " reads corrected onto a barcode, " << n_lost.load() << " uncorrectable)" << std::endl;
     };
     if (engine_ptr && config.cb_from_cr) {
         std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
