@@ -107,8 +107,9 @@ struct DoubletParams {
     uint32_t clf_mask       = 7;     ///< classifier features: bit 0 sim-neighbour logit, 1 log T, 2 log T minus observed neighbours,
                                      ///< 3 sim-neighbour logit within the nearest half of the k_adj neighbours, 4 within the nearest quarter,
                                      ///< 5 log ratio of the distances to the nearest observed and the nearest simulated point
-    uint32_t het_clusters   = 0;     ///< > 0: simulated doublets pair cells of different k-means clusters (scDblFinder's heterotypic doublets);
-                                     ///< the call cap and the classifier prior then use the heterotypic share 1 - sum p_c^2 of all pairs
+    uint32_t het_clusters   = 0;     ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
+                                     ///< different clusters (scDblFinder's heterotypic doublets), the rest are random pairs
+    double   het_mix        = 1.0;   ///< share of the simulated doublets forced heterotypic (het_clusters > 0)
     double   knn_scale      = 1.0;    ///< k = knn_scale * 0.5 * sqrt(n_cells)
     int      hvg_mode       = 0;      ///< 0: z-scored log dispersion in mean bins; 1: Scrublet v-score (percentile cut)
     double   vscore_pctl    = 85.0;   ///< hvg_mode 1: keep genes above this v-score percentile
@@ -643,6 +644,8 @@ inline std::vector<DoubletResult> detect_doublets(
     n_sim = std::max(n_sim, 10u);
     std::vector<std::pair<uint32_t, uint32_t>> parents(n_sim);
     double het_share = 1.0;                          // share of random pairs that are heterotypic (1 when clustering is off)
+    std::vector<char> sim_het(n_sim, 1);             // simulated doublet pairs cells of different clusters
+    std::vector<uint32_t> het_cl;
     {
         std::mt19937_64 rng(prm.seed * 0x2545F4914F6CDD1DULL + 12345u);
         std::vector<uint32_t> cl;
@@ -709,13 +712,15 @@ inline std::vector<DoubletResult> detect_doublets(
             const uint32_t a = static_cast<uint32_t>(rng() % n);
             uint32_t b = static_cast<uint32_t>(rng() % (n - 1));
             if (b >= a) ++b;
-            if (!cl.empty())
+            if (!cl.empty() && (rng() >> 11) * (1.0 / 9007199254740992.0) < prm.het_mix)
                 for (int tries = 0; tries < 50 && cl[b] == cl[a]; ++tries) {
                     b = static_cast<uint32_t>(rng() % (n - 1));
                     if (b >= a) ++b;
                 }
             parents[s] = { a, b };
+            sim_het[s] = (!cl.empty() && cl[a] != cl[b]) ? 1 : 0;
         }
+        het_cl = std::move(cl);
     }
     const uint32_t N = n + n_sim;
     std::vector<float> P(size_t(n_pc) * N);   // structure of arrays: P[c * N + point]
@@ -863,7 +868,7 @@ inline std::vector<DoubletResult> detect_doublets(
         for (int round = 0; round < rounds; ++round) {
         uint32_t n_neg = 0;
         for (uint32_t i = 0; i < n; ++i) n_neg += excl[i] ? 0u : 1u;
-        const double rho_c = rho * het_share;   // heterotypic simulation only: homotypic pairs are not simulated
+        const double rho_c = rho;
         const double wo = (1.0 - rho_c) / std::max(1u, n_neg) * NQ, ws = rho_c / n_q_sim * NQ;
         for (double& b : beta) b = 0.0;
         for (int it = 0; it < 40; ++it) {
@@ -942,9 +947,18 @@ inline std::vector<DoubletResult> detect_doublets(
         const size_t qi = static_cast<size_t>(std::floor(0.95 * (1.0 - rho) * (n - 1)));
         std::nth_element(o.begin(), o.begin() + qi, o.end());
         const float thr = o[qi];
-        uint32_t above = 0;
-        for (float v : sim_stat) if (v > thr) ++above;
-        h = het_share * static_cast<double>(above) / std::max<size_t>(1, sim_stat.size());
+        if (het_cl.empty()) {
+            uint32_t above = 0;
+            for (float v : sim_stat) if (v > thr) ++above;
+            h = static_cast<double>(above) / std::max<size_t>(1, sim_stat.size());
+        } else {
+            // detectable share per stratum (heterotypic / same-cluster pairs), weighted by the share of random pairs in each stratum
+            uint32_t ah = 0, nh = 0, ao = 0, no = 0;
+            for (size_t q = 0; q < sim_stat.size(); ++q) {
+                if (sim_het[q]) { ++nh; ah += sim_stat[q] > thr ? 1u : 0u; } else { ++no; ao += sim_stat[q] > thr ? 1u : 0u; }
+            }
+            h = het_share * (nh ? double(ah) / nh : 0.0) + (1.0 - het_share) * (no ? double(ao) / no : 0.0);
+        }
         null_score = stat_to_score(thr);
     }
     sm.sim_hist.assign(20, 0u); sm.obs_hist.assign(20, 0u);

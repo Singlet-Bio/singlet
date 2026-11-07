@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
         else if (k == "clf") prm.classifier = v != 0;
         else if (k == "mask") prm.clf_mask = (uint32_t)v;
         else if (k == "het") prm.het_clusters = (uint32_t)v;
+        else if (k == "hetmix") prm.het_mix = v;
         else if (k == "simcap") prm.sim_query_cap = (uint32_t)v;
         else if (k == "tile") tile = (int)v;
         else if (k == "ridge") prm.clf_ridge = v;
