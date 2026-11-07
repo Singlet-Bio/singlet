@@ -2,7 +2,7 @@
 
 This file records the branch consolidation of 2026-11-06 for every branch outside the GPU line. Each remote branch got one action. A branch was deleted when its tip was reachable from `prod/campaign`, `main` or `gpu/frontier`, or after its tip was tagged `archive/2026-11-06/<branch>`. The GPU branches are listed in `GPU_BRANCHES.md` on `gpu/frontier`.
 
-Remote branches before: 273. Deleted here: 122. Left to the GPU line: 60. Kept here: 91. Remote branches after this pass: 151 (fewer once the GPU deletions land).
+Remote branches before: 273. Deleted here: 122. Left to the GPU line: 60. Kept here: 91. Remote branches after this pass: 151. With the GPU line's own deletions, 98 remote branches remained at merge time.
 
 Restore any deleted branch from its SHA with `git push origin <sha>:refs/heads/<branch>`, or from its tag with `git push origin archive/2026-11-06/<branch>:refs/heads/<branch>`.
 
@@ -121,6 +121,9 @@ The dependabot pull requests #183, #184 and #185 pass CI and stay open.
 
 | Branch | Tip SHA | Last commit | Kept by |
 |---|---|---|---|
+| `cleanup/star-header-duplicates` | 9fe1b5a4ea0966d14c24b1af3bd7983ad6c5cf9f | 2026-11-06 | merged into gpu/frontier (#204) |
+| `cleanup/test-drop-reads-hook` | 27d5f6ea5dfab0ef48f377704692c290348ee8b5 | 2026-11-06 | merged into gpu/frontier (#203) |
+| `cleanup/txfirst-header` | 60cbfdec547198c882ebcba71474767692a706db | 2026-11-06 | merged into gpu/frontier (#202) |
 | `bench/bam-stream` | 68646bb3d535c7839ddcb0e8a9bfb2f9bd985dd0 | 2026-10-30 | tag `archive/2026-11-06/bench/bam-stream` |
 | `bench/mtdna-lineage` | d08c7c856d980050e368a83b1468dfde37da86a9 | 2026-10-26 | reachable from prod/campaign, main, gpu/frontier |
 | `bench/release-gate` | 5577bd7f97d56caee0904266683e448bc3e35af6 | 2026-10-29 | tag `archive/2026-11-06/bench/release-gate` |
