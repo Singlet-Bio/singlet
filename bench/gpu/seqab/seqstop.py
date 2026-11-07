@@ -31,12 +31,17 @@ def runs_of(res, cfg):
         if m.get('cfg') != cfg:
             continue
         vals = {'core': [], 'held': [], 'fallback': 0}
+        fbc = set()
+        try:
+            fbc = {l.split('	')[0] for l in open(os.path.join(os.path.dirname(meta), 'fallback.txt')) if l.split('	')[1:2] == ['FALLBACK']}
+        except OSError:
+            pass
         for r in pj.get('runs', []):
             if r.get('rc', 0) != 0 or not r.get('pairs'):
                 continue
             # a run that fell back to the CPU costs about three times the core-seconds of a GPU run; it would set the point's mean, so it
             # is counted (FALLBACK line) and left out of the timing (bench/gpu/fastloop/README.md: fallbacks are a failure, not a time)
-            if r.get('engine_failed') or not r.get('level5', True) or not r.get('gpu_pileup_ok', True):
+            if r.get('engine_failed') or not r.get('level5', True) or not r.get('gpu_pileup_ok', True) or r.get('copy') in fbc:
                 vals['fallback'] += 1
                 continue
             vals['core'].append(r['core_s'] / r['pairs'] * 1e6)
