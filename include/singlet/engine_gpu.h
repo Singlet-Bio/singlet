@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include "singlet/nvtx.h"
@@ -186,8 +187,9 @@ struct Input {
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
     // E20: with e2e, mapDistinct releases the device (release) once the lanes are done and calls reacquire for the records' device phase (E8's
     // buildRecords, E10's products, E11's keep) after the host lane and the host assembly; reacquire takes the same device again. Unset (or
-    // SINGLET_ENGINE_GPU_SPLIT=0): one hold, as before
-    std::function<void()> reacquire;
+    // SINGLET_ENGINE_GPU_SPLIT=0): one hold, as before. Its argument is the number of slots the records' phase asks for (SL step 2, admitOn: more
+    // than 1 when it needs more than one slot's share); it returns the number it holds
+    std::function<int(int)> reacquire;
     // IDEAS.md item 11: E10 turning itself off for lack of device memory fails mapDistinct instead (the caller retries the whole call, and after
     // its last attempt STAR maps every read); unset with SINGLET_ENGINE_GPU_OOM_TRIES=1, where the run goes on without E10 as before
     bool oomFatal = false;
@@ -298,6 +300,22 @@ inline uint64_t memBudget(uint64_t total) {
 // NVTX: the wait for the lock and its hold (from lockDevice to unlockDevice, which may run in another thread) are ranges of their own
 inline std::map<int, unsigned long long>& lockRanges() { static std::map<int, unsigned long long> m; return m; }
 inline std::mutex& lockRangesMutex() { static std::mutex m; return m; }
+// SL step 2 (bench/gpu/cards/SL-more-slots.md): SINGLET_ENGINE_GPU_ADMIT=1 lets a sample whose records' phase needs more than one slot's share
+// of the device take several slots of that device at the E20 relock (lockDeviceSlots below), so the records are built on the device where the
+// fixed share would have stopped them. It holds no slot while it waits for them, and while it collects them it holds the device's admission gate
+// exclusively; every other acquirer passes the gate (shared, then let go) before it tries a slot, so the slots that come free go to the
+// collector. The extra slots are released with the first (unlockDevice).
+inline bool admitOn() { const char* a = std::getenv("SINGLET_ENGINE_GPU_ADMIT"); return a != nullptr && a[0] == '1'; }
+inline int gpuSlots() { const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS"); return sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1; }
+inline std::map<int, std::vector<int>>& extraLocks() { static std::map<int, std::vector<int>> m; return m; }
+inline std::mutex& extraLocksMutex() { static std::mutex m; return m; }
+inline std::string admitPath(int device) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + ".admit"; }
+inline void admitTurnstile(int device) {
+    if (!admitOn()) return;
+    const int fd = open(admitPath(device).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+    if (fd < 0) return;
+    flock(fd, LOCK_SH); flock(fd, LOCK_UN); close(fd);
+}
 inline int lockDeviceImpl(int* lockFd) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
@@ -308,6 +326,7 @@ inline int lockDeviceImpl(int* lockFd) {
     *lockFd = -1;
     if (dv != nullptr) {
         device = std::atoi(dv);
+        admitTurnstile(device);
         for (int k = 0; k < slots; k++) {
             int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return device; }
@@ -319,11 +338,13 @@ inline int lockDeviceImpl(int* lockFd) {
     }
     for (int k = 0; k < slots; k++)
         for (int d = 0; d < nDev; d++) {
+            admitTurnstile(d);
             int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
             if (fd >= 0) close(fd);
         }
     device = (int) (getpid() % nDev);
+    admitTurnstile(device);
     *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
@@ -342,6 +363,9 @@ inline void unlockDevice(int lockFd) {
         unsigned long long id = 0;
         { std::lock_guard<std::mutex> g(lockRangesMutex()); auto it = lockRanges().find(lockFd); if (it != lockRanges().end()) { id = it->second; lockRanges().erase(it); } }
         singlet::nvtx_end(id);
+        std::vector<int> extra;
+        { std::lock_guard<std::mutex> g(extraLocksMutex()); auto it = extraLocks().find(lockFd); if (it != extraLocks().end()) { extra.swap(it->second); extraLocks().erase(it); } }
+        for (int fd : extra) { flock(fd, LOCK_UN); close(fd); }
         flock(lockFd, LOCK_UN);
         close(lockFd);
     }
@@ -353,6 +377,7 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     *lockFd = -1;
+    admitTurnstile(device);
     for (int k = 0; k < slots; k++) {
         int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return; }
@@ -360,6 +385,35 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     }
     *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
+}
+// SL step 2: `want` slots of `device` (see admitOn above): the first free slots, collected under the device's admission gate; after waitS
+// seconds with at least one slot it keeps what it has. Returns the number of slots held (*lockFd is the first; unlockDevice releases them all).
+// Without SINGLET_ENGINE_GPU_ADMIT=1, or for one slot, it is lockDeviceSlot.
+inline int lockDeviceSlots(int device, int want, double waitS, int* lockFd) {
+    const int slots = gpuSlots();
+    want = std::max(1, std::min(want, slots));
+    if (want == 1 || !admitOn()) { lockDeviceSlot(device, lockFd); return 1; }
+    auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
+    const int gate = open(admitPath(device).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+    if (gate >= 0) flock(gate, LOCK_EX);
+    std::vector<int> got;
+    std::vector<char> mine(slots, 0);
+    const auto t0 = std::chrono::steady_clock::now();
+    for (;;) {
+        for (int k = 0; k < slots && (int) got.size() < want; k++) {
+            if (mine[k]) continue;
+            const int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+            if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { got.push_back(fd); mine[k] = 1; }
+            else if (fd >= 0) close(fd);
+        }
+        if ((int) got.size() >= want) break;
+        if (!got.empty() && std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() >= waitS) break;
+        usleep(20000);
+    }
+    if (gate >= 0) { flock(gate, LOCK_UN); close(gate); }
+    *lockFd = got[0];
+    if (got.size() > 1) { std::lock_guard<std::mutex> g(extraLocksMutex()); extraLocks()[got[0]] = std::vector<int>(got.begin() + 1, got.end()); }
+    return (int) got.size();
 }
 
 // ---- non-host screen (nonhost_gpu.cu): Phases A-C of NonHostScreener::classify_multi_batch_filtered on the GPU

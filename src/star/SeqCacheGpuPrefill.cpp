@@ -1496,13 +1496,16 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         heldS += h; singlet_engine_gpu::unlockDevice(lockFd); lockFd = -1;
         singlet_tail::mark("prefill: device released (held %.3f s)", h);
     };
-    in.reacquire = [&]() {
+    double admitWaitS = 120;   // SL step 2: how long the relock waits for more than one slot (SINGLET_ENGINE_GPU_ADMIT_WAIT, seconds)
+    if (const char *aw = getenv("SINGLET_ENGINE_GPU_ADMIT_WAIT")) admitWaitS = std::max(0.0, atof(aw));
+    in.reacquire = [&](int want) -> int {
         const auto t = std::chrono::steady_clock::now();
-        singlet_engine_gpu::lockDeviceSlot(device, &lockFd);
+        const int got = singlet_engine_gpu::lockDeviceSlots(device, want, admitWaitS, &lockFd);
         tHeld0 = std::chrono::steady_clock::now();
         wait2 = std::chrono::duration<double>(tHeld0 - t).count(); unheld = std::chrono::duration<double>(tHeld0 - tRel).count();
         lockReleased = false;
-        singlet_tail::mark("prefill: device taken again (waited %.3f s)", wait2);
+        singlet_tail::mark("prefill: device taken again (waited %.3f s, slots %d of %d asked)", wait2, got, want);
+        return got;
     };
     // IDEAS.md item 11: with several samples per GPU the device can hold less free memory than this sample's E17 budget (other processes'
     // contexts, E11 keeps between their E20 holds), and an allocation fails with out of memory. That is transient: release the slot, wait, take
@@ -1526,7 +1529,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         P.inOut->logMain << "ENGINE_GPU: attempt " << a - 1 << " failed on the device; attempt " << a << " in " << waitS << " s. Its log:\n" << out.log << flush;
         singlet_tail::mark("prefill: device attempt failed, attempt %d in %d s", a, waitS);
         std::this_thread::sleep_for(std::chrono::seconds(waitS));
-        in.reacquire();
+        in.reacquire(1);
         if (e2hSaved) *e2r.hdr() = e2h0;
         out = singlet_engine_gpu::Output{};
         out.log = "engine_gpu: retry: attempt " + std::to_string(a) + " of " + std::to_string(oomTries) + "\n";

@@ -2304,6 +2304,15 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         for (auto& v : hk) hookList.insert(hookList.end(), v.begin(), v.end());
         stepAdd("e2e.entries.host", now() - t0e);
     };
+    // E17: the records' phase need (the tally, the records' arrays, buildRecords' output, E10's products, E11's keep and the slack), and its
+    // cap: one slot's share, or (SL step 2, admitOn) the slots the relock took, within what the device holds free then
+    auto recNeed = [&]() -> u64 {
+        const u64 nRec = out.seqOff.size() - 1, nB0 = out.blob.size(), nS0 = out.seq.size();
+        const u64 eIn = nRec * 28 + nB0 + nS0, eBuild = nRec * 101 + nS0 / 2, eProd = e10 ? nRec * 24 + n * 4 + (256ull << 20) : 0;
+        const u64 eKeep = e10 && in.e10.soloModel != nullptr ? (keepLate ? AUX + n * 16 : 0) + n * 4 + nRec * 8 : 0;
+        return g_bud.used + eIn + eBuild + eProd + eKeep + SLACK;
+    };
+    u64 capRec = cap; int recSlots = 1;
     auto e2eBuild = [&](std::string& why) -> bool {
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const u64 nRec = out.seqOff.size() - 1;
@@ -2311,12 +2320,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         g_bud.at = "records";
         struct DevFree { std::vector<void*> p; ~DevFree() { for (void* x : p) dfree(x); } } df;
         auto dal = [&](u64 bytes) -> void* { void* p = nullptr; if (dmalv(&p, bytes + 64) != cudaSuccess) { cudaGetLastError(); return nullptr; } df.p.push_back(p); return p; };
-        // E17: what this phase adds (estimates: the records' arrays, buildRecords' output, E10's products, E11's keep)
+        // E17: what this phase adds (estimates: the records' arrays, buildRecords' output, E10's products, E11's keep); recNeed below
         const u64 nB0 = out.blob.size(), nS0 = out.seq.size();
-        const u64 eIn = nRec * 28 + nB0 + nS0, eBuild = nRec * 101 + nS0 / 2, eProd = e10 ? nRec * 24 + n * 4 + (256ull << 20) : 0;
-        const u64 eKeep = e10 && in.e10.soloModel != nullptr ? (keepLate ? AUX + n * 16 : 0) + n * 4 + nRec * 8 : 0;
-        if (cap && g_bud.used + eIn + eBuild + eProd + eKeep + SLACK > cap) {
-            why = "E17 budget: the records' phase needs about " + gbs(g_bud.used + eIn + eBuild + eProd + eKeep + SLACK) + " of device memory, more than " + budName;
+        if (cap && recNeed() > capRec) {
+            why = "E17 budget: the records' phase needs about " + gbs(recNeed()) + " of device memory, more than " + (capRec == cap ? budName : gbs(capRec) + " (" + std::to_string(recSlots) + " slots of " + budName + ")");
             return false;
         }
         if (keepLate && e10 && in.e10.soloModel != nullptr) {   // E17 lean: the reads' CR/UR kept for E11 now (their aux uploaded again)
@@ -2755,8 +2762,21 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (e10) fillReadRecord();   // E10: the products need it on the device
         step("readRecord");
         if (e10 && entHost) { entHostPass(hkPre); entPre = true; tS = now(); }
-        in.reacquire();
+        int want = 1;
+        if (cap && budDefault && !RC && singlet_engine_gpu::admitOn() && out.seqOff.size() > 1) {
+            const u64 need = recNeed();
+            if (need > cap) want = (int) std::min<u64>((u64) singlet_engine_gpu::gpuSlots(), (need + cap - 1) / cap);
+        }
+        recSlots = in.reacquire(want);
         if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select the device again");
+        if (recSlots > 1) {   // SL step 2: the slots' shares, within the device's free memory now (less 512 MB)
+            size_t fR = 0, tR = 0; cudaMemGetInfo(&fR, &tR);
+            const u64 room = g_bud.used + (fR > (512ull << 20) ? fR - (512ull << 20) : 0);
+            capRec = std::max(cap, std::min(cap * (u64) recSlots, room)); g_bud.cap = capRec;
+            char ab[200]; snprintf(ab, sizeof ab, "engine_gpu: SL admission: the records' phase needs %.1f GB; %d of %d slots taken, cap %.1f GB (free %.1f GB)\n",
+                                   b2gb(recNeed()), recSlots, want, b2gb(capRec), b2gb(fR));
+            out.log += ab;
+        } else if (want > 1) out.log += "engine_gpu: SL admission: " + std::to_string(want) + " slots asked, 1 taken\n";
         step("split.relock");
         memMark("relocked");
         gatherDev = false;
