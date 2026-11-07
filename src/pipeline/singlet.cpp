@@ -9071,6 +9071,13 @@ static int singlet_main(int argc, char* argv[]) {
         }
         // Join FIFO writer thread (if FIFO decode mode) after STAR completes
         if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+        // SINGLET_BENCH_EXIT_AFTER=star (benchmarks only; bench/gpu/fastloop): stop once STAR, the GPU prefill and the pileup are done, so a
+        // timing run of a GPU idea skips the host stages after them (non-host screen, export, demux). The outputs are incomplete on purpose.
+        if (const char* xa = getenv("SINGLET_BENCH_EXIT_AFTER"); xa && std::string(xa) == "star") {
+            std::cerr << "[singlet] SINGLET_BENCH_EXIT_AFTER=star: stopping after STAR and the pileup (benchmark run, outputs incomplete)\n";
+            std::cerr.flush(); fflush(stdout); fflush(stderr);
+            std::_Exit(0);
+        }
 
         // Stream (order-free-rules R5): the pass was counted in the protocol orientation. A pipe cannot be
         // re-read, so a library whose reads contradict that orientation goes to the sorted path, where the
