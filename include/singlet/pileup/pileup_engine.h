@@ -680,6 +680,11 @@ public:
             uint32_t first_gene  = UINT32_MAX;   // the smallest gene any alignment touched (note_gene: not the first one met)
             uint32_t second_gene = UINT32_MAX;   // the second smallest distinct gene, for EM rescue
             bool has_nuc = false;                // some alignment touched a non-chrM gene (intron_rule::kMtPrefer)
+            bool partial = false;                // multimap record: the read's gene set is not {first_gene, second_gene} (multimap_record.h)
+            uint32_t body_a = UINT32_MAX, body_b = UINT32_MAX;   // multimap record only: a gene-ambiguous primary's gene-body set (record_set)
+            bool body_more = false;              // ... with more than two genes (never read by the counting)
+            bool ex_partial = false, body_ex = false;   // multimap record under kExonPrecedence: the exonic gene set is not {ex_first, ex_second};
+                                                 // the primary is exonic, so its body set joins the exonic set
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
@@ -703,16 +708,12 @@ public:
                 st.mt_numt_rescued++;
             } else if (v.kind == MmVerdict::kAmbig) {
                 // G-EM: collect for post-pileup EM rescue
-                em_rescue::AmbigRead ar;
-                ar.bc_idx  = e.bc_idx;
-                ar.umi_len = e.umi_len;
-                std::memcpy(ar.umi, e.umi, e.umi_len);
-                ar.gene_a  = v.gene_a;
-                ar.gene_b  = v.gene_b;
-                ambig_reads_.push_back(ar);
+                record_mm(e, v, ambig_reads_);   // multimap record: the verdict decides (no double count with kCount)
             } else if (v.kind == MmVerdict::kCount) {
                 count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
                            v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+            } else {
+                record_mm(e, v, ambig_reads_);   // gene-ambiguous without a G-EM pair (kNone): uncounted, the record may hold it
             }
         };
 
@@ -840,6 +841,7 @@ public:
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                        it->second.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -868,6 +870,7 @@ public:
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                        entry.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -1142,6 +1145,8 @@ public:
                     // ── Unique read: count (molecules are labelled at finalize) ──
                     count_read(mol_store_, exon_acc_, intron_acc_, stats,
                                static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
+                    if (primary_multigene || gene_full_multi(exon_gene, primary_multigene, intron_overlaps))
+                        note_unique_multigene(ambig_reads_, exon_overlaps, intron_overlaps, bc_idx, umi_str, umi_len);
                 } else {
                     // ── Multi-mapped primary: buffer for cross-alignment resolution ──
                     uint64_t qh = hash_qname(bam_get_qname(b));
@@ -1173,20 +1178,22 @@ public:
                         entry.gene_ambiguous = true;
                         // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from exon_overlaps
                         if (!exon_overlaps.empty()) {
-                            uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+                            uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]), gb = UINT32_MAX;
                             if (ga != UINT32_MAX) {
                                 note_gene(entry, ga);
-                                for (size_t _i = 1; _i < exon_overlaps.size(); ++_i) {
-                                    uint32_t gb = gene_model_.exon_to_gene(exon_overlaps[_i]);
-                                    if (gb != UINT32_MAX && gb != ga) {
-                                        note_gene(entry, gb); break;
-                                    }
-                                }
+                                gb = second_exon_gene(exon_overlaps, ga);
+                                if (gb != UINT32_MAX) note_gene(entry, gb);
                             }
+                            if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(exon_overlaps, ga, gb)) entry.partial = true;
                         }
                     }
 
                     if (gf_multi) entry.gene_ambiguous = true;
+                    if (primary_multigene || gf_multi) {   // multimap record: the primary's gene-body set
+                        const RecSet bs = record_set(exon_overlaps, intron_overlaps);
+                        note_body(entry, bs.a); note_body(entry, bs.b);
+                        if (bs.more) entry.body_more = true;
+                    }
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                     note_gene(entry, aln_gene);
@@ -1441,6 +1448,10 @@ public:
             uint32_t first_gene  = UINT32_MAX;
             uint32_t second_gene = UINT32_MAX;  // the second smallest distinct gene, for EM rescue (note_gene)
             bool has_nuc = false;
+            bool partial = false;               // multimap record: the gene set is not {first_gene, second_gene}
+            uint32_t body_a = UINT32_MAX, body_b = UINT32_MAX;   // multimap record only (record_set)
+            bool body_more = false;
+            bool ex_partial = false, body_ex = false;   // multimap record under kExonPrecedence
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
@@ -1692,6 +1703,9 @@ public:
                     note_gene(m, wentry.first_gene);
                     note_gene(m, wentry.second_gene);
                     if (wentry.has_nuc) m.has_nuc = true;
+                    if (wentry.partial) m.partial = true;
+                    note_body(m, wentry.body_a); note_body(m, wentry.body_b);
+                    if (wentry.body_more) m.body_more = true;
                     if (wentry.gene_ambiguous) {
                         m.gene_ambiguous = true;
                     } else {
@@ -1727,16 +1741,10 @@ public:
                 const MmVerdict v = mm_verdict(m);
                 if (v.kind == MmVerdict::kAmbig) {
                     // G-EM: collect cross-worker ambiguous reads for rescue
-                    em_rescue::AmbigRead ar;
-                    ar.bc_idx  = m.bc_idx;
-                    ar.umi_len = m.umi_len;
-                    std::memcpy(ar.umi, m.umi, m.umi_len);
-                    ar.gene_a  = v.gene_a;
-                    ar.gene_b  = v.gene_b;
-                    ambig_reads_.push_back(ar);
+                    record_mm(m, v, ambig_reads_);   // multimap record: the verdict decides
                     continue;
                 }
-                if (v.kind == MmVerdict::kNone) continue;
+                if (v.kind == MmVerdict::kNone) { record_mm(m, v, ambig_reads_); continue; }
 
                 const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
                 int target = 0;  // no store has this (bc, gene) yet: any store is the only one
@@ -2156,6 +2164,21 @@ public:
             const bool ok_in = g == c; all = all && ok_in;
             std::cerr << "[gpu_pileup] mt_indels " << (ok_in ? "identical" : "DIFFERENT") << " (gpu " << g.size() << ", cpu " << c.size() << ")\n";
         }
+        {   // multimap record: the ambiguous reads as a multiset of (cell, gene pair, UMI)
+            std::vector<em_rescue::AmbigRead> g;
+            gpu_ambig_reads(out.ambig, in.umiLen, g);
+            typedef std::tuple<int32_t, uint32_t, uint32_t, std::string> K;
+            auto key = [](const em_rescue::AmbigRead& a) {
+                return K(a.bc_idx, std::min(a.gene_a, a.gene_b), std::max(a.gene_a, a.gene_b), std::string(a.umi, std::min<int>(a.umi_len, 15)));
+            };
+            std::vector<K> kc, kg;
+            for (const auto& a : ambig_reads_) kc.push_back(key(a));
+            for (const auto& a : g) kg.push_back(key(a));
+            std::sort(kc.begin(), kc.end()); std::sort(kg.begin(), kg.end());
+            const bool same = kc == kg;
+            all = all && same;
+            std::cerr << "[gpu_pileup] multimap reads: CPU " << kc.size() << ", GPU " << kg.size() << (same ? " identical" : " DIFFERENT") << "\n";
+        }
         std::cerr << "[gpu_pileup] RESULT " << (all ? "IDENTICAL" : "DIFFERENT") << "\n";
     }
 
@@ -2163,6 +2186,18 @@ public:
     // intron and ambiguous accumulators (molecules), junctions (rows in (contig, donor, acceptor) order, the R7 order), SNP AD/DP (R1),
     // chrM allele counts and indels, and the counters those steps keep. The molecule label counts are applied after the CPU finalize.
     DirectionalUmiStore::MoleculeStats gpu_ms_{};
+    // multimap record: the GPU's ambiguous reads as the CPU engine collects them (em_rescue::AmbigRead, UMI characters from the 3-bit code)
+    static void gpu_ambig_reads(const std::vector<singlet_engine_gpu::PileupAmbig>& v, int umi_len, std::vector<em_rescue::AmbigRead>& out) {
+        static const char UMI_CH[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+        const int ul = std::max(0, std::min(umi_len, 15));
+        out.reserve(out.size() + v.size());
+        for (const auto& a : v) {
+            em_rescue::AmbigRead ar;
+            ar.bc_idx = a.bc; ar.gene_a = a.geneA; ar.gene_b = a.geneB; ar.umi_len = static_cast<uint8_t>(ul);
+            for (int i = 0; i < ul; ++i) ar.umi[i] = UMI_CH[(a.umi3 >> (3 * i)) & 7];
+            out.push_back(ar);
+        }
+    }
     std::vector<uint32_t> gpu_clip_;   // per read of the GPU pileup's input: its hand-off clip flags (0: not clipped)
     template <typename V>
     static void gpu_put(SparseAccumulator<V>& acc, const std::vector<singlet_engine_gpu::PileupTriplet>& v) {
@@ -2916,6 +2951,7 @@ public:
                     if (out.cellMixed[c]) mixed_bc_[c].fetch_add(out.cellMixed[c], std::memory_order_relaxed);
             }
             gpu_merges_.swap(out.geneMerges);
+            gpu_ambig_reads(out.ambig, in.umiLen, ambig_reads_);   // the multimap record's reads (the CPU steps that collect them were skipped)
             stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
             if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
                 const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
@@ -4302,16 +4338,12 @@ private:
             wc.stats.mt_numt_rescued++;
         } else if (v.kind == MmVerdict::kAmbig) {
             // G-EM: collect for post-pileup EM rescue
-            em_rescue::AmbigRead ar;
-            ar.bc_idx  = e.bc_idx;
-            ar.umi_len = e.umi_len;
-            std::memcpy(ar.umi, e.umi, e.umi_len);
-            ar.gene_a  = v.gene_a;
-            ar.gene_b  = v.gene_b;
-            wc.ambig_reads.push_back(ar);
+            record_mm(e, v, wc.ambig_reads);   // multimap record: the verdict decides (no double count with kCount)
         } else if (v.kind == MmVerdict::kCount) {
             count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
                        v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+        } else {
+            record_mm(e, v, wc.ambig_reads);   // gene-ambiguous without a G-EM pair (kNone)
         }
     }
 
@@ -4355,8 +4387,77 @@ private:
         if (g < first) { second = first; first = g; }
         else if (second == UINT32_MAX || g < second) second = g;
     }
+    // multimap record (multimap_record.h): the second and a third distinct gene among a primary's strand-filtered exon overlaps, in
+    // overlap order (the GPU's ExonCb::second_gene and ExonCb::more)
+    uint32_t second_exon_gene(const std::vector<uint32_t>& ov, uint32_t ga) const {
+        for (size_t i = 1; i < ov.size(); ++i) { const uint32_t g = gene_model_.exon_to_gene(ov[i]); if (g != UINT32_MAX && g != ga) return g; }
+        return UINT32_MAX;
+    }
+    bool third_exon_gene(const std::vector<uint32_t>& ov, uint32_t ga, uint32_t gb) const {
+        for (size_t i = 1; i < ov.size(); ++i) { const uint32_t g = gene_model_.exon_to_gene(ov[i]); if (g != UINT32_MAX && g != ga && g != gb) return true; }
+        return false;
+    }
+    // multimap record: a gene set of up to two genes (more = a third). record_set is a primary alignment's same-strand gene-body set, STARsolo
+    // GeneFull's: the genes of its exon overlaps, and with intron_rule::kGeneFullSet the genes of its intron overlaps (the GPU's AA::ba / bb / pmore)
+    struct RecSet {
+        uint32_t a = UINT32_MAX, b = UINT32_MAX; bool more = false;
+        void add(uint32_t g) {
+            if (g == UINT32_MAX || g == a || g == b) return;
+            if (a == UINT32_MAX) a = g; else if (b == UINT32_MAX) b = g; else more = true;
+        }
+    };
+    RecSet record_set(const std::vector<uint32_t>& ex, const std::vector<uint32_t>& in) const {
+        RecSet r;
+        for (uint32_t idx : ex) { const uint32_t g = gene_model_.exon_to_gene(idx); if (g == UINT32_MAX) r.more = true; else r.add(g); }
+        if ((config_.intron_rules & intron_rule::kGeneFullSet) && config_.count_introns)
+            for (uint32_t idx : in) r.add(gene_model_.intron_to_gene(idx));
+        return r;
+    }
     template <class E>
-    void note_gene(E& e, uint32_t g) const { note_gene_set(e.first_gene, e.second_gene, e.gene_ambiguous, e.has_nuc, g); }
+    static void note_body(E& e, uint32_t g) {   // record-only: never touches the fields the counting reads (has_nuc, gene_ambiguous)
+        if (g == UINT32_MAX || g == e.body_a || g == e.body_b) return;
+        if (e.body_a == UINT32_MAX) e.body_a = g; else if (e.body_b == UINT32_MAX) e.body_b = g; else e.body_more = true;
+    }
+    // the record pair of a gene-ambiguous multimapper, exactly two genes: the genes its alignments touched (note_gene) and its primary's body
+    // set; under intron_rule::kExonPrecedence (the gene set mm_verdict judges) the exonic alignments' genes and, when the primary is exonic,
+    // its body set
+    template <class E>
+    bool rec_pair(const E& e, uint32_t& ga, uint32_t& gb) const {
+        RecSet r;
+        if ((config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen) {
+            if (e.ex_partial || (e.body_ex && e.body_more)) return false;
+            r.add(e.ex_first); r.add(e.ex_second);
+            if (e.body_ex) { r.add(e.body_a); r.add(e.body_b); }
+        } else {
+            if (e.partial || e.body_more) return false;
+            r.add(e.first_gene); r.add(e.second_gene); r.add(e.body_a); r.add(e.body_b);
+        }
+        if (r.more || r.b == UINT32_MAX) return false;
+        ga = std::min(r.a, r.b); gb = std::max(r.a, r.b);
+        return true;
+    }
+    // a uniquely mapped read that is gene-ambiguous (exons of two genes, or with kGeneFullSet a gene-body set of two genes) is one record read
+    // (STARsolo counts it as a multi-gene read)
+    void note_unique_multigene(std::vector<em_rescue::AmbigRead>& out, const std::vector<uint32_t>& ex, const std::vector<uint32_t>& in,
+                               int32_t bc_idx, const char* umi, int umi_len) const {
+        if (bc_idx < 0) return;
+        const RecSet r = record_set(ex, in);
+        if (r.more || r.b == UINT32_MAX) return;
+        em_rescue::AmbigRead ar;
+        ar.bc_idx = bc_idx;
+        const int clen = umi ? std::min(umi_len, 15) : 0;
+        if (clen > 0) std::memcpy(ar.umi, umi, clen);
+        ar.umi_len = static_cast<uint8_t>(clen);
+        ar.gene_a = std::min(r.a, r.b);
+        ar.gene_b = std::max(r.a, r.b);
+        out.push_back(ar);
+    }
+    template <class E>
+    void note_gene(E& e, uint32_t g) const {
+        if (g != UINT32_MAX && g != e.first_gene && g != e.second_gene && e.second_gene != UINT32_MAX)
+            e.partial = true;   // multimap record: a third distinct gene, the two smallest are not the read's gene set
+        note_gene_set(e.first_gene, e.second_gene, e.gene_ambiguous, e.has_nuc, g);
+    }
     template <class E>
     static ReadFeatures mt_rescue_features(const E& e) {
         return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
@@ -4368,7 +4469,10 @@ private:
     // in the same way) and the R7 assignment restricted to them (xa_*: the primary's features when the primary is exonic and kept by the
     // read-level rules, else the smallest secondary exon). The state is kept whatever the rules; only mm_verdict reads it, under the rule.
     template <class E>
-    void note_ex_gene(E& e, uint32_t g) const { note_gene_set(e.ex_first, e.ex_second, e.ex_ambiguous, e.ex_has_nuc, g); }
+    void note_ex_gene(E& e, uint32_t g) const {
+        if (g != UINT32_MAX && g != e.ex_first && g != e.ex_second && e.ex_second != UINT32_MAX) e.ex_partial = true;   // multimap record
+        note_gene_set(e.ex_first, e.ex_second, e.ex_ambiguous, e.ex_has_nuc, g);
+    }
     // the primary alignment: exon_gene / exon_multigene as the primary path computed them, gf_multi = gene_full_multi (kGeneFullSet's
     // single-alignment rule: an exon of one gene inside another gene's intron stays ambiguous), rf after classify_read and refine_read
     template <class E>
@@ -4376,17 +4480,18 @@ private:
                              const ReadFeatures& rf) const {
         if (exon_overlaps.empty()) return;   // intron-only or intergenic: not an exonic alignment
         e.ex_seen = true;
+        e.body_ex = true;                    // multimap record: the primary's body set belongs to the exonic gene set
         if (exon_multigene) {
             e.ex_ambiguous = true;
             // its first two exon genes, as the all-alignment set takes them (G-EM candidates)
             const uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+            uint32_t gb = UINT32_MAX;
             if (ga != UINT32_MAX) {
                 note_ex_gene(e, ga);
-                for (size_t i = 1; i < exon_overlaps.size(); ++i) {
-                    const uint32_t gb = gene_model_.exon_to_gene(exon_overlaps[i]);
-                    if (gb != UINT32_MAX && gb != ga) { note_ex_gene(e, gb); break; }
-                }
+                gb = second_exon_gene(exon_overlaps, ga);
+                if (gb != UINT32_MAX) note_ex_gene(e, gb);
             }
+            if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(exon_overlaps, ga, gb)) e.ex_partial = true;   // multimap record
             return;
         }
         if (gf_multi) e.ex_ambiguous = true;
@@ -4402,7 +4507,7 @@ private:
     void note_secondary_exonic(E& e, const GeneHit& hit) const {
         if (!hit.exonic) return;
         e.ex_seen = true;
-        if (hit.multi_gene) { e.ex_ambiguous = true; return; }
+        if (hit.multi_gene) { e.ex_ambiguous = true; e.ex_partial = true; return; }   // ex_partial: its genes are not noted (multimap record)
         note_ex_gene(e, hit.gene_idx);
         if (hit.gene_idx != UINT32_MAX && !e.xa_primary && (e.xa_gene == UINT32_MAX || hit.exon_idx < e.xa_exon)) {
             e.xa_gene = hit.gene_idx; e.xa_exon = hit.exon_idx; e.xa_intron = UINT32_MAX; e.xa_flags = kExonicReadFlags; e.xa_diag = 0;
@@ -4415,6 +4520,8 @@ private:
         m.ex_seen = true;
         if (w.ex_ambiguous) m.ex_ambiguous = true;
         if (w.ex_has_nuc) m.ex_has_nuc = true;
+        if (w.ex_partial) m.ex_partial = true;   // multimap record
+        if (w.body_ex) m.body_ex = true;
         note_ex_gene(m, w.ex_first);
         note_ex_gene(m, w.ex_second);
         if (w.xa_gene != UINT32_MAX && !m.xa_primary && (w.xa_primary || m.xa_gene == UINT32_MAX || w.xa_exon < m.xa_exon)) {
@@ -4461,6 +4568,25 @@ private:
         v.rf.diag = static_cast<uint8_t>(v.rf.diag | DirectionalUmiStore::kDiagMulti);
         v.kind = MmVerdict::kCount;
         return v;
+    }
+
+    // multimap record: a completed multimapper the verdict leaves uncounted and gene-ambiguous (kAmbig, or kNone without a G-EM pair) is one
+    // record read when its gene set (rec_pair) is exactly two genes. Counted verdicts (kCount, kMt) never reach the record, so a read rescued
+    // by intron_rule::kExonPrecedence is counted once.
+    template <class E>
+    void record_mm(const E& e, const MmVerdict& v, std::vector<em_rescue::AmbigRead>& out) const {
+        if (e.bc_idx < 0 || v.kind == MmVerdict::kCount || v.kind == MmVerdict::kMt) return;
+        const bool ex = (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen;
+        if (!(ex ? e.ex_ambiguous : e.gene_ambiguous)) return;
+        uint32_t ra, rb;
+        if (!rec_pair(e, ra, rb)) return;
+        em_rescue::AmbigRead ar;
+        ar.bc_idx  = e.bc_idx;
+        ar.umi_len = e.umi_len;
+        std::memcpy(ar.umi, e.umi, e.umi_len);
+        ar.gene_a  = ra;
+        ar.gene_b  = rb;
+        out.push_back(ar);
     }
 
     // intron_rule::kGeneFullSet on a primary alignment: more than one gene in its same-strand body set (exons of two genes, an exon of one
@@ -4933,6 +5059,7 @@ private:
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                        it->second.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -4960,6 +5087,7 @@ private:
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                        entry.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -5195,6 +5323,8 @@ private:
             if (nh == 1) {
                 count_read(wc.mol_store, wc.exon, wc.intron, wc.stats,
                            static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
+                if (primary_multigene || gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps))
+                    note_unique_multigene(wc.ambig_reads, wc.exon_overlaps, wc.intron_overlaps, bc_idx, umi_str, umi_len);
             } else {
                 uint64_t qh = hash_qname(bam_get_qname(b));
                 auto& entry = wc.mm_buffer[qh];
@@ -5222,20 +5352,22 @@ private:
                     entry.gene_ambiguous = true;
                     // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from wc.exon_overlaps
                     if (!wc.exon_overlaps.empty()) {
-                        uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]);
+                        uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]), gb = UINT32_MAX;
                         if (ga != UINT32_MAX) {
                             note_gene(entry, ga);
-                            for (size_t _i = 1; _i < wc.exon_overlaps.size(); ++_i) {
-                                uint32_t gb = gene_model_.exon_to_gene(wc.exon_overlaps[_i]);
-                                if (gb != UINT32_MAX && gb != ga) {
-                                    note_gene(entry, gb); break;
-                                }
-                            }
+                            gb = second_exon_gene(wc.exon_overlaps, ga);
+                            if (gb != UINT32_MAX) note_gene(entry, gb);
                         }
+                        if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(wc.exon_overlaps, ga, gb)) entry.partial = true;
                     }
                 }
 
                 if (gf_multi) entry.gene_ambiguous = true;
+                if (primary_multigene || gf_multi) {   // multimap record: the primary's gene-body set
+                    const RecSet bs = record_set(wc.exon_overlaps, wc.intron_overlaps);
+                    note_body(entry, bs.a); note_body(entry, bs.b);
+                    if (bs.more) entry.body_more = true;
+                }
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                 note_gene(entry, aln_gene);
 

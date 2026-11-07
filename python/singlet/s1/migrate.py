@@ -48,6 +48,7 @@ ANNDATA_MEMBERS = ("exon_counts.1pz", "intron_counts.1pz", "cell_calls.tsv")
 NEVER_DERIVED = (
     "exon_counts.1pz",
     "intron_counts.1pz",
+    "multimap_counts.1pz",  # the multi-mapping record (D-104): read-level, never rebuilt from other members
 )  # always pz2: recipes are not asked about them
 KIND_LABEL = {
     C.KIND_PZ2: "pz2",

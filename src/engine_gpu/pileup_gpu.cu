@@ -153,6 +153,29 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
+    // multimap record: every barcoded read of a signature k_resolve marked (the CPU engine's AmbigRead per read), in read order. Host work
+    // after the device's release, on 8 threads (chunks of the read array, joined in chunk order), beside the tuple copies below.
+    std::thread mmth([&]() {
+        const auto R = pileupCat<ReadRec>(pi.preReads, pi.reads.data(), pi.reads.size());
+        const uint64_t n = R.size(), nsig = o.amb_sig.size();
+        constexpr int K = 8;
+        std::vector<std::vector<PileupAmbig>> part(K);
+        std::vector<std::thread> th;
+        for (int k = 0; k < K; k++)
+            th.emplace_back([&, k]() {
+                for (uint64_t r = n * k / K, e = n * (k + 1) / K; r < e; r++) {
+                    const ReadRec& x = R[r];
+                    if (x.bc < 0 || x.sig >= nsig) continue;
+                    const uint2 g = o.amb_sig[x.sig];
+                    if (g.x != MAXU) part[k].push_back(PileupAmbig{x.bc, g.x, g.y, x.umi3});
+                }
+            });
+        for (auto& t : th) t.join();
+        size_t tot = 0;
+        for (const auto& v : part) tot += v.size();
+        po.ambig.reserve(tot);
+        for (const auto& v : part) po.ambig.insert(po.ambig.end(), v.begin(), v.end());
+    });
     // E16 "copypar" (level 5): the eight tuple arrays copied on threads, beside the rest of this and the device's release (joined at the end)
     std::vector<std::thread> e16cp;
     if (singlet_tail::cut("copypar")) {
@@ -183,6 +206,9 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (auto& l : g_parts_log) po.log += l + "; ";
     e16step("outputs copied");
     if (!e16cp.empty()) { for (auto& t : e16cp) t.join(); e16step("tuple copies joined"); }
+    mmth.join();
+    std::vector<uint2>().swap(o.amb_sig);
+    e16step("multimap reads joined");
     po.msTotal = (now_s() - t0) * 1e3;
     po.log += "e16 steps (s): " + e16 + "; ";
     if (attempt > 0) po.log += "unified memory (the device arena was too small); ";
