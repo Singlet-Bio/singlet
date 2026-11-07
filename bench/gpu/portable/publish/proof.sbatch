@@ -35,5 +35,5 @@ echo "## downloaded files against Clipper's"
 sed "s|^W=/mnt/projects/debruinz_project/debruinz/singlet; PB=\$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference|W=/mnt/projects/debruinz_project/debruinz/singlet; PB=\$W/pipeline-benchmark; REF=$D/ref|" \
   $W/jobs/gpu-pr2/pr2-gate.sbatch > $SCR/gate.sh
 grep -q "REF=$D/ref" $SCR/gate.sh || { echo "gate REF not replaced"; exit 2; }
-export BINDIR REFD T=18 SAMPLES=pbmc2m MODES="cpu gpu" SINGLET_ENGINE_GPU_MIN_CC=70
+export BINDIR REFD T=18 SAMPLES=pbmc2m MODES="cpu gpu" SINGLET_ENGINE_GPU_MIN_CC=70 BRANCH=${BRANCH:-gpu/frontier}
 bash $SCR/gate.sh

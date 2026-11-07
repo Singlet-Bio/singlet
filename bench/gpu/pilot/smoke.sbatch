@@ -5,6 +5,7 @@
 # (gc-build.sbatch builds "70;75;90" by default). Exit 0 and no POINT FAILED line: the item may go to the H100 queue.
 #   sbatch --export=ALL,ITEM=$WORK/jobs/gpu-campaign/items/<item>.g1.sh smoke.sbatch            (RTX 8000)
 #   sbatch --gres=gpu:tesla_v100s:1 -c 11 --export=ALL,ITEM=... smoke.sbatch                      (V100S: at most 11 cores per GPU)
+# Items with NSYS_ITEMS smoke on the RTX 8000 only: nsys has no GPU metrics for Volta and refuses to start on the V100S.
 #SBATCH --job-name=gc-smoke
 #SBATCH --account=debruinz
 #SBATCH --partition=gpu
