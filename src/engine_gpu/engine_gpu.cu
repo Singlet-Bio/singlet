@@ -556,6 +556,13 @@ __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
     }
     if (lane == 0) { bst[k] = (uint8_t)s; outLen[o] = (uint16_t)bl.n; }
 }
+// SINGLET_ENGINE_GPU_OVSTAT=1: per lane, its overflowed reads by reason (OvWhy), logged with the lane's configuration (diagnostic only)
+static bool ovStatOn() { static const bool on = [] { const char* e = std::getenv("SINGLET_ENGINE_GPU_OVSTAT"); return e && e[0] == '1'; }(); return on; }
+template <class C> __global__ void k_ovhist(u64 nb, const Work<C>* work, const uint8_t* st, unsigned long long* hist) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= nb || st[k] != (uint8_t)Status::Overflow) return;
+    atomicAdd(hist + ((unsigned)work[k].ov & 15u), 1ull);
+}
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k < n) dst[k] = s[k];
@@ -761,6 +768,8 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     }
     devNote();
     const double tK = now(); stepAdd(sn + ".alloc", tK - tA);
+    unsigned long long* dOvH = nullptr;
+    if (ovStatOn()) { EG_CK(dmal(&dOvH, 16 * 8)); EG_CK(cudaMemset(dOvH, 0, 16 * 8)); }
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
@@ -805,6 +814,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
         }
         EG_CK(cudaGetLastError());
+        if (dOvH) k_ovhist<C><<<G, T>>>(nb, dWork, dSt + b0, dOvH);
         if (onBatch && *onBatch) {   // the batch's statuses now (the next batch's kernels wait for the host for this copy's duration)
             std::vector<uint8_t> hs(nb);
             EG_CK(d2h(hs.data(), dSt + b0, nb));
@@ -821,6 +831,13 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     if constexpr (C::COMPACT) {
         char b[160]; snprintf(b, sizeof b, "[wshrink: %llu pool rounds, %llu read-rounds deferred] ", (unsigned long long)nRounds, (unsigned long long)nDeferred); g_laneLog += b;
         dfree(dPool); dfree(dNeed); dfree(dWb); dfree(dWkey); dfree(dPend); dfree(dWcnt);
+    }
+    if (dOvH) {
+        unsigned long long h[16]; EG_CK(d2h(h, dOvH, 16 * 8)); dfree(dOvH);
+        static const char* why[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
+        std::string o = "[ov " + sn + ":";
+        for (int i = 0; i < 16; i++) if (h[i]) { char b[48]; snprintf(b, sizeof b, " %s %llu", i < 12 ? why[i] : "?", h[i]); o += b; }
+        g_laneLog += o + "] ";
     }
     dfree(dCtr); dfree(dKey); dfree(dPerm);
     dfree(dIdx); dfree(dWork); dfree(dRbuf); dfree(dBst); dfree(dNent); dfree(dBase); dfree(dBits);   // E17: before the packed results
