@@ -7,7 +7,9 @@
 #include "singlet/tail_trace.h"   // E16: the level-5 switches (dlpar, regpar)
 #include <cuda_runtime.h>
 #include <sched.h>
+#include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <thread>
@@ -225,7 +227,7 @@ enum : int { PC_ALN = 0, PC_SEC, PC_RSAMP, PC_RHOOK, PC_CHRM, PC_NOBC, PC_BARCOD
 __device__ unsigned long long g_pc[PC_N];
 
 struct PassDev {
-    const uint32_t* rr; const e6::ReadEntry* E; const u64* Q; u64 n; uint32_t qw;   // qw: mask words per read (P3-ENG-14)
+    const uint32_t* rr; const e6::ReadEntry* E; const u64* Q; u64 n; uint32_t qw; u64 i0;   // qw: mask words per read (P3-ENG-14); i0: the chunk's first read (P3-MEM-03)
     const SigRec* sigs; const AlnRec* alns; const uint32_t* ops; const uint16_t* nm;
     e6::PassParams pp; const u64* keys; const e6::CrVal* vals; u64 nKeys;
     uint32_t* cellReads; uint32_t* cellUnique; uint32_t* cellMulti; unsigned long long* cellMism; unsigned long long* cellBases;
@@ -241,7 +243,7 @@ __global__ void k_pass_eval(PassDev d, uint32_t* keep) {
     if (i < d.n) {
         const e6::ReadEntry e = d.E[i];
         e6::PassRes r;
-        e6::readPass(i, d.rr[i], d.sigs, d.alns, e, d.pp, d.keys, d.vals, d.nKeys, r);
+        e6::readPass(d.i0 + i, d.rr[i], d.sigs, d.alns, e, d.pp, d.keys, d.vals, d.nKeys, r);
         keep[i] = r.kind == e6::PK_KEEP;
         if (r.kind != e6::PK_NOREC && r.kind != e6::PK_UNMAPPED) {
             atomicAdd(&sc[PC_ALN], (unsigned long long) r.nAln);
@@ -297,7 +299,7 @@ __global__ void k_pass_scatter(PassDev d, const uint32_t* keep, const uint32_t* 
     if (d.rr[i] == 0xFFFFFFFFu) return;
     const e6::ReadEntry e = d.E[i];
     e6::PassRes r;
-    e6::readPass(i, d.rr[i], d.sigs, d.alns, e, d.pp, d.keys, d.vals, d.nKeys, r);
+    e6::readPass(d.i0 + i, d.rr[i], d.sigs, d.alns, e, d.pp, d.keys, d.vals, d.nKeys, r);
     if (r.rrna & 4) { const u64 k = atomicAdd(&g_app[1], 1ULL); if (k < nRhost) rhost[k] = ((u64) d.rr[i] << 1) | r.rev; }
     if (r.kind == e6::PK_NOTINSET && r.wlCount && (uint32_t) r.wl < d.nWl && d.pp.wlPend) {
         const u64 k = atomicAdd(&g_app[0], 1ULL);
@@ -383,7 +385,10 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const uint32_t QW = singlet_qmask::words(); const u64 QB = 8ull * QW;   // P3-ENG-14: mask words and bytes per read
     SigRec* dS; AlnRec* dA; uint16_t* dNm; e6::CrVal* dV; ReadRec* dOut;
     unsigned long long *dCellMis, *dCellB;
-    {   // the region's arrays to the device: page-locked in place when the driver allows it (the pages exist: the STAR child wrote them)
+    // P3-MEM-03: the records stay on the device; the reads' arrays (record map, entries, masks) and the kept reads go through by read chunks
+    // of m0 reads, all at once when they fit (as before). SINGLET_E2E_PASS_CHUNK forces a chunk size.
+    u64 m0 = std::max<u64>(n, 1), nCh = 1;
+    {   // the region's records to the device: page-locked in place when the driver allows it (the pages exist: the STAR child wrote them)
         const double tu = now();
         // E16 "regpar" (keepPinned, level 5): this process's mapping of the region populated by several threads before the page-locking
         if (in.keepPinned && singlet_tail::cut("regpar")) { e16Touch(R.base, std::min<u64>(R.cap, H.used), false); e16pre = now() - tu; }
@@ -391,21 +396,54 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         pinned = cudaHostRegister(R.base, std::min<u64>(R.cap, (H.used + 4095) & ~4095ull), cudaHostRegisterDefault) == cudaSuccess;
         if (!pinned) cudaGetLastError();
         e16reg = now() - tr;
-        EP_CK(B.alloc(dRR, n * 4)); EP_CK(cudaMemcpy(dRR, R.at<uint8_t>(H.oReadRecord), n * 4, cudaMemcpyHostToDevice));
-        EP_CK(B.alloc(dE, n * 24)); EP_CK(cudaMemcpy(dE, R.at<uint8_t>(H.oEntries), n * 24, cudaMemcpyHostToDevice));
-        if (H.oQMask) { EP_CK(B.alloc(dQ, n * QB)); EP_CK(cudaMemcpy(dQ, R.at<uint8_t>(H.oQMask), n * QB, cudaMemcpyHostToDevice)); }
         EP_CK(B.alloc(dS, nRec * 16)); EP_CK(cudaMemcpy(dS, R.at<uint8_t>(H.oSigs), nRec * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dA, nAln * 16)); EP_CK(cudaMemcpy(dA, R.at<uint8_t>(H.oAlns), nAln * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dOps, nOps * 4)); EP_CK(cudaMemcpy(dOps, R.at<uint8_t>(H.oOps), nOps * 4, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dNm, nAln * 2)); EP_CK(cudaMemcpy(dNm, R.at<uint8_t>(H.oNm), nAln * 2, cudaMemcpyHostToDevice));
+        // per read on the device: record map, entry, mask, keep flag, scan, kept read, clip, kept mask, and the CR sort's keys and their buffer
+        const u64 perRead = 4 + 24 + (H.oQMask ? QB : 0) + 4 + 4 + 16 + 4 + QB + 16;
+        const u64 fixedB = (u64) in.nCells * 4 + (u64) in.nCellsQc * 32 + (u64) in.nWl * 4 + (4ull << 30);   // cell tables, CR table, margin
+        size_t freeB = 0, totB = 0;
+        if (cudaMemGetInfo(&freeB, &totB) != cudaSuccess) { cudaGetLastError(); freeB = 0; }
+        const char* fc = getenv("SINGLET_E2E_PASS_CHUNK");
+        if (fc && atoll(fc) > 0) m0 = (u64) atoll(fc);
+        else if (n && freeB && (u64) freeB < fixedB + n * perRead) m0 = std::max<u64>(1ull << 20, ((u64) freeB > fixedB ? (u64) freeB - fixedB : 0) / perRead);
+        m0 = std::max<u64>(1, std::min<u64>(m0, std::max<u64>(n, 1)));
+        nCh = n ? (n + m0 - 1) / m0 : 1;
+        EP_CK(B.alloc(dRR, m0 * 4)); EP_CK(B.alloc(dE, m0 * 24));
+        if (H.oQMask) EP_CK(B.alloc(dQ, m0 * QB));
         out.msUpload = (now() - tu) * 1e3;
     }
+    const uint8_t* hRR = R.at<uint8_t>(H.oReadRecord);
+    const uint8_t* hE = R.at<uint8_t>(H.oEntries);
+    const uint8_t* hQ = H.oQMask ? R.at<uint8_t>(H.oQMask) : nullptr;
+    u64 upAt = ~0ull; bool qUp = false;   // the chunk whose reads are on the device, and whether its masks are
+    auto upChunk = [&](u64 i0, u64 m, bool q) -> cudaError_t {
+        const double t = now();
+        cudaError_t e = cudaSuccess;
+        if (upAt != i0) {
+            upAt = ~0ull; qUp = false;
+            if ((e = cudaMemcpy(dRR, hRR + i0 * 4, m * 4, cudaMemcpyHostToDevice)) != cudaSuccess) return e;
+            if ((e = cudaMemcpy(dE, hE + i0 * 24, m * 24, cudaMemcpyHostToDevice)) != cudaSuccess) return e;
+            upAt = i0;
+        }
+        if (q && hQ && !qUp) { if ((e = cudaMemcpy(dQ, hQ + i0 * QB, m * QB, cudaMemcpyHostToDevice)) != cudaSuccess) return e; qUp = true; }
+        out.msUpload += (now() - t) * 1e3;
+        return e;
+    };
     std::vector<uint64_t> keys; std::vector<E2ECrVal> vals;
-    {   // the distinct CRs of the reads with a record (E6 distinctBarcodes), then the caller's table
+    {   // the distinct CRs of the reads with a record (E6 distinctBarcodes, by chunks, merged here), then the caller's table
         const double tk = now();
         std::string err;
         float ms = 0;
-        if (!singlet_records_gpu::distinctBarcodes(dRR, dE, n, H.cbL, keys, ms, err)) { out.log += err + "; "; if (pinned) cudaHostUnregister(R.base); return false; }
+        for (u64 i0 = 0; i0 < n; i0 += m0) {
+            const u64 m = std::min(m0, n - i0);
+            EP_CK(upChunk(i0, m, false));
+            std::vector<uint64_t> kc;
+            if (!singlet_records_gpu::distinctBarcodes(dRR, dE, m, H.cbL, kc, ms, err)) { out.log += err + "; "; if (pinned) cudaHostUnregister(R.base); return false; }
+            if (nCh == 1) keys.swap(kc); else keys.insert(keys.end(), kc.begin(), kc.end());
+        }
+        if (nCh > 1) { std::sort(keys.begin(), keys.end()); keys.erase(std::unique(keys.begin(), keys.end()), keys.end()); }
         out.msKeys = (now() - tk) * 1e3;
         const double tt = now();
         vals.assign(keys.size(), E2ECrVal{-2, -1, 0});
@@ -418,13 +456,12 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
             EP_CK(cudaMemcpy(dV, vals.data(), vals.size() * sizeof(e6::CrVal), cudaMemcpyHostToDevice));
         }
     }
-    const unsigned T = 256, G = (unsigned) ((n + T - 1) / T);
+    const unsigned T = 256;
     PassDev d{};
     unsigned long long pc[PC_N] = {};
     double e16unreg = 0, e16reset = 0;
     u64 nKeep = 0;
     {
-        const double te = now();
         const u64 nc = in.nCells, nq = in.nCellsQc, nw = in.nWl;
         EP_CK(B.alloc(dCellR, nc * 4)); EP_CK(cudaMemset(dCellR, 0, nc * 4 + 4));
         EP_CK(B.alloc(dCellU, nq * 4)); EP_CK(cudaMemset(dCellU, 0, nq * 4 + 4));
@@ -432,46 +469,67 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         EP_CK(B.alloc(dCellMis, nq * 8)); EP_CK(cudaMemset(dCellMis, 0, nq * 8 + 8));
         EP_CK(B.alloc(dCellB, nq * 8)); EP_CK(cudaMemset(dCellB, 0, nq * 8 + 8));
         EP_CK(B.alloc(dWl, nw * 4)); EP_CK(cudaMemset(dWl, 0, nw * 4 + 4));
-        EP_CK(B.alloc(dKeep, n * 4)); EP_CK(B.alloc(dPos, n * 4));
-        d.rr = dRR; d.E = dE; d.Q = dQ; d.n = n; d.qw = QW; d.sigs = dS; d.alns = dA; d.ops = dOps; d.nm = dNm;
+        EP_CK(B.alloc(dKeep, m0 * 4)); EP_CK(B.alloc(dPos, m0 * 4));
+        EP_CK(B.alloc(dOut, m0 * 16)); EP_CK(B.alloc(dClip, m0 * 4)); EP_CK(B.alloc(dLowq, m0 * QB));
+        d.qw = QW; d.sigs = dS; d.alns = dA; d.ops = dOps; d.nm = dNm;
         d.pp = e6::PassParams{H.cbL, H.umiL, in.chrmTid, in.minMapq, in.cbc ? 1u : 0u, in.wlOn ? 1u : 0u, in.wlPend ? 1u : 0u};
         d.keys = dK; d.vals = dV; d.nKeys = keys.size();
         d.cellReads = dCellR; d.cellUnique = dCellU; d.cellMulti = dCellM; d.cellMism = dCellMis; d.cellBases = dCellB;
         d.nCells = in.nCells; d.nCellsQc = in.nCellsQc; d.nWl = in.nWl; d.wl = dWl;
         { unsigned long long z[PC_N] = {}; EP_CK(cudaMemcpyToSymbol(g_pc, z, sizeof z)); }
-        if (n) k_pass_eval<<<G, T>>>(d, dKeep);
-        EP_CK(cudaGetLastError());
-        EP_CK(cudaMemcpyFromSymbol(pc, g_pc, sizeof pc));
-        if (n) {
-            thrust::exclusive_scan(thrust::device_ptr<uint32_t>(dKeep), thrust::device_ptr<uint32_t>(dKeep + n), thrust::device_ptr<uint32_t>(dPos));
+        if (nCh > 1) { out.reads.reserve(n * 16); out.clip.reserve(n); out.lowq.reserve(n * QB); }   // untouched capacity: no copies as they grow
+        std::vector<uint32_t> pend;
+        u64 pend0 = 0, rhost0 = 0;
+        out.msEval = out.msScatter = out.msDownload = 0;
+        for (u64 i0 = 0; i0 < n; i0 += m0) {
+            const u64 m = std::min(m0, n - i0);
+            const unsigned G = (unsigned) ((m + T - 1) / T);
+            EP_CK(upChunk(i0, m, true));
+            const double te = now();
+            d.rr = dRR; d.E = dE; d.Q = dQ; d.n = m; d.i0 = i0;
+            k_pass_eval<<<G, T>>>(d, dKeep);
+            EP_CK(cudaGetLastError());
+            EP_CK(cudaMemcpyFromSymbol(pc, g_pc, sizeof pc));
+            thrust::exclusive_scan(thrust::device_ptr<uint32_t>(dKeep), thrust::device_ptr<uint32_t>(dKeep + m), thrust::device_ptr<uint32_t>(dPos));
             uint32_t lastP = 0, lastK = 0;
-            EP_CK(cudaMemcpy(&lastP, dPos + n - 1, 4, cudaMemcpyDeviceToHost)); EP_CK(cudaMemcpy(&lastK, dKeep + n - 1, 4, cudaMemcpyDeviceToHost));
-            nKeep = (u64) lastP + lastK;
+            EP_CK(cudaMemcpy(&lastP, dPos + m - 1, 4, cudaMemcpyDeviceToHost)); EP_CK(cudaMemcpy(&lastK, dKeep + m - 1, 4, cudaMemcpyDeviceToHost));
+            const u64 mKeep = (u64) lastP + lastK;
+            out.msEval += (now() - te) * 1e3;
+            const double ts = now();
+            const u64 nPend = pc[PC_PEND] - pend0, nRhost = pc[PC_RHOST] - rhost0;
+            pend0 = pc[PC_PEND]; rhost0 = pc[PC_RHOST];
+            EP_CK(B.alloc(dPend, nPend * 8)); EP_CK(B.alloc(dRhost, nRhost * 8));
+            { unsigned long long z[2] = {0, 0}; EP_CK(cudaMemcpyToSymbol(g_app, z, sizeof z)); }
+            k_pass_scatter<<<G, T>>>(d, dKeep, dPos, dOut, dClip, dLowq, dPend, nPend, dRhost, nRhost);
+            EP_CK(cudaGetLastError());
+            EP_CK(cudaDeviceSynchronize());
+            out.msScatter += (now() - ts) * 1e3;
+            const double td = now();
+            if (nCh == 1 && in.keepPinned && singlet_tail::cut("dlpar")) {   // E16 "dlpar" (level 5): the kept reads' arrays first touched by several threads
+                // (their capacity, reserved and zero-filled in parallel; resize then fills pages that exist instead of faulting them in one by one)
+                auto pre = [](auto& v, u64 n) { v.reserve(n); e16Touch((uint8_t*) v.data(), n * sizeof(v[0]), true); };
+                pre(out.reads, mKeep * 16); pre(out.clip, mKeep); pre(out.lowq, mKeep * QB);
+                e16dl = now() - td;
+            }
+            out.reads.resize((nKeep + mKeep) * 16); out.clip.resize(nKeep + mKeep); out.lowq.resize((nKeep + mKeep) * QB);
+            if (mKeep) {
+                EP_CK(d2h(out.reads.data() + nKeep * 16, dOut, mKeep * 16, nCh == 1 && in.keepPinned));
+                EP_CK(d2h(out.clip.data() + nKeep, dClip, mKeep * 4));
+                EP_CK(d2h(out.lowq.data() + nKeep * QB, dLowq, mKeep * QB, nCh == 1 && in.keepPinned));
+            }
+            const size_t p0 = pend.size();
+            pend.resize(p0 + nPend * 2);
+            if (nPend) EP_CK(cudaMemcpy(pend.data() + p0, dPend, nPend * 8, cudaMemcpyDeviceToHost));
+            const size_t h0 = out.rrnaHost.size();
+            out.rrnaHost.resize(h0 + nRhost);
+            if (nRhost) EP_CK(cudaMemcpy(out.rrnaHost.data() + h0, dRhost, nRhost * 8, cudaMemcpyDeviceToHost));
+            out.msDownload += (now() - td) * 1e3;
+            nKeep += mKeep;
         }
-        out.msEval = (now() - te) * 1e3;
-    }
-    {
-        const double ts = now();
-        const u64 nPend = pc[PC_PEND], nRhost = pc[PC_RHOST];
-        EP_CK(B.alloc(dOut, nKeep * 16)); EP_CK(B.alloc(dClip, nKeep * 4)); EP_CK(B.alloc(dLowq, nKeep * QB));
-        EP_CK(B.alloc(dPend, nPend * 8)); EP_CK(B.alloc(dRhost, nRhost * 8));
-        { unsigned long long z[2] = {0, 0}; EP_CK(cudaMemcpyToSymbol(g_app, z, sizeof z)); }
-        if (n) k_pass_scatter<<<G, T>>>(d, dKeep, dPos, dOut, dClip, dLowq, dPend, nPend, dRhost, nRhost);
-        EP_CK(cudaGetLastError());
-        EP_CK(cudaDeviceSynchronize());
-        out.msScatter = (now() - ts) * 1e3;
         const double td = now();
-        if (in.keepPinned && singlet_tail::cut("dlpar")) {   // E16 "dlpar" (level 5): the kept reads' arrays first touched by several threads
-            // (their capacity, reserved and zero-filled in parallel; resize then fills pages that exist instead of faulting them in one by one)
-            auto pre = [](auto& v, u64 n) { v.reserve(n); e16Touch((uint8_t*) v.data(), n * sizeof(v[0]), true); };
-            pre(out.reads, nKeep * 16); pre(out.clip, nKeep); pre(out.lowq, nKeep * QB);
-            e16dl = now() - td;
-        }
-        out.reads.resize(nKeep * 16); out.clip.resize(nKeep); out.lowq.resize(nKeep * QB);
-        if (nKeep) {
-            EP_CK(d2h(out.reads.data(), dOut, nKeep * 16, in.keepPinned));
-            EP_CK(d2h(out.clip.data(), dClip, nKeep * 4));
-            EP_CK(d2h(out.lowq.data(), dLowq, nKeep * QB, in.keepPinned));
+        if (nCh > 1 && in.keepPinned && nKeep) {   // as the one-chunk pass leaves them: the kept reads and masks page-locked for the pileup
+            if (cudaHostRegister(out.reads.data(), nKeep * 16, cudaHostRegisterDefault) != cudaSuccess) cudaGetLastError();
+            if (cudaHostRegister(out.lowq.data(), nKeep * QB, cudaHostRegisterDefault) != cudaSuccess) cudaGetLastError();
         }
         out.cellReads.resize(in.nCells); out.cellUnique.resize(in.nCellsQc); out.cellMulti.resize(in.nCellsQc);
         out.cellMism.resize(in.nCellsQc); out.cellBases.resize(in.nCellsQc); out.wlCounts.resize(in.nWl);
@@ -483,13 +541,11 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
             EP_CK(cudaMemcpy(out.cellBases.data(), dCellB, (u64) in.nCellsQc * 8, cudaMemcpyDeviceToHost));
         }
         if (in.nWl) EP_CK(cudaMemcpy(out.wlCounts.data(), dWl, (u64) in.nWl * 4, cudaMemcpyDeviceToHost));
-        std::vector<uint32_t> pend(nPend * 2);
-        if (nPend) EP_CK(cudaMemcpy(pend.data(), dPend, nPend * 8, cudaMemcpyDeviceToHost));
-        out.wlPending.resize(nPend);
-        for (u64 k = 0; k < nPend; k++) out.wlPending[k] = {pend[2 * k], pend[2 * k + 1]};
-        out.rrnaHost.resize(nRhost);
-        if (nRhost) EP_CK(cudaMemcpy(out.rrnaHost.data(), dRhost, nRhost * 8, cudaMemcpyDeviceToHost));
-        out.msDownload = (now() - td) * 1e3;
+        const u64 nPendAll = pend.size() / 2;
+        out.wlPending.resize(nPendAll);
+        for (u64 k = 0; k < nPendAll; k++) out.wlPending[k] = {pend[2 * k], pend[2 * k + 1]};
+        out.msDownload += (now() - td) * 1e3;
+        if (nCh > 1) out.log += "read chunks " + std::to_string(nCh) + " of " + std::to_string(m0) + " (P3-MEM-03); ";
     }
 #undef EP_CK
     { const double tq = now(); if (pinned && !in.keepPinned) cudaHostUnregister(R.base); e16unreg = now() - tq; }
