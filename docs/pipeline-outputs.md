@@ -19,6 +19,10 @@ goes to **`<out>/private/`**:
 | `private/mt_allele_counts.*`, `private/mt_allele_counts_rev.*` | raw per-cell chrM allele counts, all reads and the reverse-strand subset (forward = total - reverse); features `chrM:<pos>:<A/C/G/T>`; columns of non-called barcodes empty |
 | `private/mt/donorN_mt_variants.vcf`, `donorN_mt_consensus.fa`, `het_site_donor_af.tsv` | mt haplotypes per donor (homoplasmic calls with DP/AD/AF/SB/NC) |
 | `private/mt_sites.tsv` | every chrM site the caller looked at, with its class and the filters it failed |
+| `private/hla/hla_genotype.tsv`, `hla_allele.tsv`, `hla_allele.vcf` | sample HLA genotype from T1K (class I and II genes, allele, abundance, quality), T1K's own formats |
+| `private/hla/donors/donorK_genotype.tsv` | the same per assigned donor (cells with label `donorK` and prob_max >= 0.9) |
+| `private/hla/hla_candidate_reads.fq.gz` | the reads that reached T1K (k-mer prefilter on the IPD-IMGT/HLA sequences), named `idx_CB`, kept so HLA can be typed again with a newer index |
+| `private/hla/hla_summary.json` | reads scanned and kept, alleles in the index, donors typed, timings, T1K and IPD-IMGT/HLA versions |
 
 `python/singlet/_restricted.py` treats everything under `private/` as restricted (as it already did for `donor/` except
 `donor_assignments.tsv`, `mt/` except `mt_summary.tsv`, `snp_*`, VCFs), so the legacy packer (`bundle.py`) puts these in
@@ -56,6 +60,7 @@ and the top-level `donor_assignments.tsv` (no longer a header-only stub).
 | `--bam-sort-mode` | auto (in-RAM sort OOM at 80 GB on 182 M reads) | disk | identical output, no measured time penalty |
 | SNP panel in `--pipeline` | none unless `--snps` | `<ref-base>/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz` (human), `mus_musculus.vcf.gz` (mouse), none for mixed or other species; `--no-snps` | donor demux and genotype doublets need it; `provenance.snp_panel` |
 | `--no-adapter-clip` | n/a | new flag: skip STAR `--clip3pAdapterSeq` (the protocol TSO on 5' kits) | see the 5' timing note in the PR |
+| HLA typing in `--pipeline` | none | human non-barnyard runs type HLA with T1K v1.0.10 (MIT) and the index at `<ref-base>/hla/t1k` (IPD-IMGT/HLA, `manifest.json`); `--hla-t1k DIR`, `--no-hla`; also `singlet hla` and `singlet hla-prefilter` on a finished run | D-101; reads only the input .1fq, so CPU and GPU runs give the same calls; all outputs owner-only |
 
 ## What the v2 packer needs (python/singlet/v2 is unchanged)
 
