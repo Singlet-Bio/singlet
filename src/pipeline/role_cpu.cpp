@@ -109,6 +109,9 @@ struct Init {
 } g_init;
 }  // namespace
 
+// a process that ends with _exit (STAR's child) skips atexit: it calls this first. Nothing without SINGLET_ROLE_CPU=1.
+extern "C" void singlet_role_cpu_report() { if (role_on()) report(); }
+
 extern "C" int pthread_create(pthread_t* t, const pthread_attr_t* a, void* (*fn)(void*), void* arg) noexcept {
     create_fn real = real_create();
     if (!role_on()) return real(t, a, fn, arg);
@@ -119,4 +122,6 @@ extern "C" int pthread_create(pthread_t* t, const pthread_attr_t* a, void* (*fn)
     if (rc != 0) std::free(s);
     return rc;
 }
+#else
+extern "C" void singlet_role_cpu_report() {}
 #endif

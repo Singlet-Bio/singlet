@@ -3080,6 +3080,7 @@ static int restart_on_sorted_path(const singlet::PileupStats& stats, bool revers
 // them: the forked STAR child inherits the handler and must leave the files to the pileup.
 static std::string g_handoff_dir;
 static pid_t g_handoff_owner = -1;
+extern "C" void singlet_role_cpu_report();   // src/pipeline/role_cpu.cpp
 static void remove_handoff_at_exit() {
     if (getpid() == g_handoff_owner && !g_handoff_dir.empty()) singlet::remove_handoff_files(g_handoff_dir);
 }
@@ -8444,6 +8445,7 @@ static int singlet_main(int argc, char* argv[]) {
                 const_cast<char**>(args.data())
             );
             singlet_tail::mark("STAR child: _exit(%d)", rc);   // E16 (level 5 only)
+            singlet_role_cpu_report();   // SINGLET_ROLE_CPU=1: the child's roles (src/pipeline/role_cpu.cpp); _exit skips atexit
             _exit(rc);
         }
 
