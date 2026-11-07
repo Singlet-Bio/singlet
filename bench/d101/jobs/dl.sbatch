@@ -8,7 +8,8 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # D-101 validation data, Oetjen et al. 2018 human bone marrow (GSE120221 10x 3' v2, GSE120446 bulk RNA-seq of the same donors).
 # Not in the NM corpus (sprint/intel/corpus-engine-touch.md). Row SLURM_ARRAY_TASK_ID of bench/d101/libs.tsv (1-based, header excluded).
-#   KIND=sc   : `singlet download <sc_run>` -> $W/data/d101/sc/<sc_run>.1fq
+#   KIND=sc   : the run was deposited as a Cell Ranger BAM, so `singlet download --bam <ENA submitted BAM>` -> $W/data/d101/sc/<sc_run>.1fq
+#               (barcode read from CR+UR, cDNA from the read; SRA's own FASTQ has the cDNA read only)
 #   KIND=bulk : fasterq-dump <bulk_run> (paired, 2 x 150) -> $W/data/d101/bulk/<bulk_run>_{1,2}.fastq.gz
 # BIN: any singlet binary with `download` (default: the gpu/frontier build 654109ad). LIBS: path of libs.tsv on Clipper.
 set -euo pipefail
@@ -22,7 +23,9 @@ if [ $KIND = sc ]; then
   D=$W/data/d101/sc; mkdir -p $D; O=$D/$SC.1fq
   [ -s $O ] && { echo "have $O"; exit 0; }
   echo "donor $DONOR $SC ($SCG)"
-  ( cd $SCR && $BIN download $SC --vdb-threads 4 -o $SCR/$SC.1fq ) 2>&1 | tail -25
+  URL=$(curl -fsS "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=$SC&result=read_run&fields=submitted_ftp" | tail -1 | cut -f2 | tr ';' '\n' | grep '\.bam$')
+  [ -n "$URL" ] || { echo "no submitted BAM for $SC"; exit 4; }
+  ( cd $SCR && $BIN download --bam https://$URL --staging-dir $SCR/stage -o $SCR/$SC.1fq ) 2>&1 | tail -25
   mv $SCR/$SC.1fq $O.part && mv $O.part $O
   ls -l $O
 else
