@@ -56,6 +56,19 @@ def fell_back(r):
     return bool(r.get('engine_failed')) or not r.get('level5', True) or not r.get('gpu_pileup_ok', True)
 
 
+def fallback_copies(d):
+    """Copies that tp_gc's fallback.py marks FALLBACK (any stage: prefill, pileup, the non-host screen), from <point>/fallback.txt."""
+    out = set()
+    try:
+        for l in open(os.path.join(d, 'fallback.txt')):
+            f = l.split('	')
+            if len(f) > 1 and f[1] == 'FALLBACK':
+                out.add(f[0])
+    except OSError:
+        pass
+    return out
+
+
 def inv(A):
     n = len(A)
     M = [row[:] + [1.0 if i == j else 0.0 for j in range(n)] for i, row in enumerate(A)]
@@ -75,6 +88,7 @@ def inv(A):
 
 def load(res, ideas, drop_first):
     rows, excl = [], {'fallback': 0, 'failed': 0, 'warmup': 0, 'nopoint': 0}
+    load.tally = []   # (x, fell back or failed) of every run, for the fallback rate per idea
     for mf in sorted(glob.glob(os.path.join(res, '*', 'meta.json'))):
         d = os.path.dirname(mf)
         try:
@@ -90,11 +104,14 @@ def load(res, ideas, drop_first):
         mb = re.search(r'_b(\d+)$', meta.get('tag', ''))
         block = int(mb.group(1)) if mb else 1
         runs = sorted(pj.get('runs', []), key=lambda r: r.get('start', 0))
+        fb = fallback_copies(d)
         for j, r in enumerate(runs):
+            bad = r.get('rc', 1) != 0 or not r.get('pairs') or fell_back(r) or r.get('copy') in fb
+            load.tally.append((x, bad))
             if r.get('rc', 1) != 0 or not r.get('pairs'):
                 excl['failed'] += 1
                 continue
-            if fell_back(r):
+            if fell_back(r) or r.get('copy') in fb:
                 excl['fallback'] += 1
                 continue
             if drop_first and int(meta.get('k', 1)) == 1 and j == 0:
@@ -241,6 +258,14 @@ def main():
         hits.sort(reverse=True)
         txt = '; '.join('%s %+.2f s (%+.0f%%) [%+.2f, %+.2f]' % (m, e['eff'], 100 * e['rel'], e['lo'], e['hi']) for _, m, e in hits[:8])
         print('- **%s**: %s' % (i, txt or 'no stage moved beyond its CI'))
+    if any(b for _, b in load.tally):
+        print()
+        print('Runs that failed or fell back to the CPU (left out of the timing above), with each idea on and off:')
+        print()
+        for j, i in enumerate(ideas):
+            on = [b for x, b in load.tally if x[j] > 0]
+            off = [b for x, b in load.tally if x[j] < 0]
+            print('- %s: on %d of %d, off %d of %d' % (i, sum(on), len(on), sum(off), len(off)))
     if o.twofi and 'held' in out:
         print()
         print('Two-way interactions on held and core-s/M (2 gamma: the extra change when both are on; 95 % CI).')
