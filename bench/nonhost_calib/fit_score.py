@@ -5,7 +5,7 @@
 
 J holds runs/<id>/nonhost/nonhost_candidates.tsv (engine, run_dev.sbatch) and kraken/<id>/{report.txt,reads.txt} (Kraken2 PlusPF
 k2_pluspf_20261022, confidence 0.1, 50 M reads, kraken_pf.sbatch). Truth is taxon specific: a pair (library, taxon) is a positive when the
-library is infected with the taxon (SARS-CoV-2 in ravindra dpi1 and dpi2, EBV in the two lymphoblastoid lines) and a negative when the
+library is infected with the taxon (SARS-CoV-2 in ravindra dpi1 and dpi2; no EBV positive: the lymphoblastoid libraries of the corpus are not droplet data) and a negative when the
 taxon is known absent (SARS-CoV-2, influenza A and Salmonella enterica in every other library; EBV is no negative anywhere: it is latent
 in blood cells). Singlet's evidence for a pair is the reads and the hit-rate of the EM candidates whose names match the taxon; Kraken2's
 is the clade reads of the taxon. Each tool's map to a probability is a logistic regression (ridge 1.0 on the slopes), fitted on the pairs
@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 J, OUT = sys.argv[1:3]
-POS = {"ravindra2021_dpi1": "sars2", "ravindra2021_dpi2": "sars2", "lcl_gse230239_HG01277": "ebv", "lcl_gse230239_HG00362": "ebv"}
+POS = {"ravindra2021_dpi1": "sars2", "ravindra2021_dpi2": "sars2"}  # the two lymphoblastoid libraries (GSE230239) are 2 x 101 nt reads, not droplet libraries: no EBV positive could be run
 NEG_LIBS = ["ravindra2021_mock", "pbmc1k_v3", "pbmc1k_v2", "pbmc5p_v1", "hgmm1k_v3", "neuron1k_v3", "nuclei2k_v2", "kang2018_ctrl"]
 LIBS = list(POS) + NEG_LIBS
 TAXA = {"sars2": (re.compile(r"NC_045512|coronavirus 2", re.I), 694009), "ebv": (re.compile(r"gammaherpesvirus 4|Epstein", re.I), 10376),
