@@ -17,6 +17,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; export PATH=$W/envs/sratools/
 D=$W/data/readlevel/te; mkdir -p $D; cd $D; TMP=/tmp/$USER-tf-$SLURM_JOB_ID; trap 'rm -rf $TMP' EXIT
 for w in ${WHAT:-a375_10x mesc_2c a375_ont}; do
   mkdir -p $w; [ -f $w/DONE ] && continue
+  rm -f $w/*.fastq   # a cancelled run leaves partial fasterq output
   case $w in
     a375_10x)
       fasterq-dump --split-files --include-technical -e 8 -t $TMP -O $w SRR21492169 || exit 1
