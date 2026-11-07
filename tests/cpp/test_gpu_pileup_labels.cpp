@@ -2,7 +2,8 @@
 // tests/cpp/test_gpu_pileup_labels.cpp
 //
 // The GPU pileup (SINGLET_GPU_PILEUP=on, src/engine_gpu/gpu_pileup) against the CPU pileup on a synthetic BAM, under the default intron
-// rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer), under 389 (without kFlank) and under 397 | 512 (kGeneFullSet). Compared: the exon / intron /
+// rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer), under 389 (without kFlank), under 909 = 397 | 512 (kGeneFullSet) and
+// under 908 (kGeneFullSet without kUnique: a multimapper inside one gene body gives intronic evidence, as STARsolo GeneFull). Compared: the exon / intron /
 // ambiguous accumulators (to_csc: indptr, indices, data), the molecule stats (spliced, unspliced, ambiguous, legacy_double, dropped) and the
 // per-barcode legacy_exon_extra. The fixture is test_molecule_labels.cpp's (G1 exon1 / intron / exon2, nested G2, G3; M1-M9) plus reads
 // for the alevin-fry USA labels (the CIGAR-N bit), kFlank (5 and 6 intronic bases), the kUnique / kNoSplicedIntron order and the legacy
@@ -180,7 +181,7 @@ int main(int argc, char** argv) {
     self[n] = 0;
 
     std::map<uint32_t, std::map<std::string, std::string>> cpu_by_rules;
-    for (uint32_t rules : {397u, 389u, 397u | 512u}) {
+    for (uint32_t rules : {397u, 389u, 397u | 512u, 908u}) {
         const std::string tag = "rules " + std::to_string(rules);
         std::cout << "\n=== " << tag << " ===\n";
         const std::string cpu = run_dump(dir, rules);
@@ -203,7 +204,8 @@ int main(int argc, char** argv) {
             CHECK(same, tag + ": " + k + " GPU == CPU");
             if (!same) std::cout << "    CPU: " << (C.count(k) ? C.at(k) : "<none>") << "\n    GPU: " << (G.count(k) ? G.at(k) : "<none>") << "\n";
         }
-        // the fixture exercises what it should (CPU side; the GPU equals it above)
+        // the fixture exercises what it should (CPU side; the GPU equals it above); 908 relabels m8 and counts muf (checked below)
+        if (!(rules & 1u)) continue;
         const std::string& m = C.at("molecules");
         CHECK(field(m, "spliced") == 3, tag + ": 3 spliced molecules (m5, the junction + exon molecule, the spliced multimapper)");
         CHECK(sum_list(C.at("legacy_exon_extra")) == 3, tag + ": legacy_exon_extra = 3 (m3, merged m7, junction + intron)");
@@ -213,6 +215,12 @@ int main(int argc, char** argv) {
     {   // kGeneFullSet drops exactly the three gene-ambiguous molecules (m6, gfb, gfd)
         auto total = [&](const std::string& m) { return field(m, "spliced") + field(m, "unspliced") + field(m, "ambiguous"); };
         CHECK(total(cpu_by_rules[397].at("molecules")) == total(cpu_by_rules[397u | 512u].at("molecules")) + 3, "kGeneFullSet: 3 molecules fewer than 397");
+    }
+    {   // without kUnique (908 vs 909): m8's intronic multimapper read makes it unspliced; muf (flank primary, intergenic secondary) counts
+        const auto& a = cpu_by_rules[397u | 512u].at("molecules"); const auto& b = cpu_by_rules[908].at("molecules");
+        CHECK(field(b, "unspliced") == field(a, "unspliced") + 1, "908: one more unspliced molecule than 909 (m8)");
+        CHECK(field(b, "spliced") + field(b, "unspliced") + field(b, "ambiguous") == field(a, "spliced") + field(a, "unspliced") + field(a, "ambiguous") + 1,
+              "908: one more molecule than 909 (muf)");
     }
     {   // kFlank moves exactly one molecule (f5) from the intron to the exon matrix; the 6-base read and the dropped multimapper do not move
         const auto& a = cpu_by_rules[397]; const auto& b = cpu_by_rules[389];

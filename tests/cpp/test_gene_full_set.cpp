@@ -107,7 +107,7 @@ int main() {
         std::cout << "SKIP: samtools not available\n";
     } else {
         const uint32_t gfs = singlet::intron_rule::kGeneFullSet;
-        for (uint32_t r : {0u, (uint32_t) singlet::intron_rule::kNoExonPriority, gfs, 397u, 397u | gfs}) {
+        for (uint32_t r : {0u, (uint32_t) singlet::intron_rule::kNoExonPriority, gfs, 397u, 397u | gfs, 908u}) {
             run_case(dir, false, r);
             for (int w : {1, 2, 3}) run_case(dir, true, r, w);
         }

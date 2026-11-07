@@ -5899,7 +5899,7 @@ static int singlet_main(int argc, char* argv[]) {
     }
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
-    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer; rules 397)
+    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet; rules 909)
     // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the mixed molecules behind the pre-USA split (mixed_exon / mixed_intron)
     // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
     // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
@@ -8098,9 +8098,15 @@ static int singlet_main(int argc, char* argv[]) {
             // Score filter: absolute min=10 covers short-read protocols (e.g. DNBelab 30bp).
             // STAR's default outFilterScoreMinOverLread=0.66 handles long reads.
             // Combined: max(10, 0.66*readLen) → 20 for 30bp, 66 for 100bp.
+            // The Beta aligner profile raises it to Cell Ranger's 30 (STARsolo's benchmark value): CR4 clipping leaves short cDNA
+            // reads whose 10-30 point alignments carry wrong-species reads (hgmm1k_v3 barnyard, bench/count_parity: STARsolo itself goes
+            // from 0.325% to 0.344% wrong-species UMIs at 10; Singlet at 30 is below STARsolo on every counting axis). The probe's
+            // plain arm and a profile the probe turns off keep 10 (score_val_idx is the value's token).
             // --star-extra '--outFilterScoreMin N' replaces it (STAR refuses a parameter given twice).
+            size_t score_val_idx = 0;
             if (std::none_of(star_extra.begin(), star_extra.end(), [](const std::string& a) { return a == "--outFilterScoreMin"; })) {
-                args.push_back("--outFilterScoreMin");   args.push_back("10");
+                args.push_back("--outFilterScoreMin");   args.push_back(cr4_status == "on" ? "30" : "10");
+                score_val_idx = args.size() - 1;
             }
             args.push_back("--soloCBmatchWLtype");
             if (solo_type_is_sam_tag_out || use_complex || use_complex_concat) {
@@ -8244,6 +8250,7 @@ static int singlet_main(int argc, char* argv[]) {
                         for (size_t i = 1; i + 1 < args.size(); ++i) {   // args[0] = "STAR", args.back() = nullptr
                             if (!r.with_cr4 && i >= cr4_beg && i < cr4_end) continue;
                             std::string t = args[i];
+                            if (!r.with_cr4 && score_val_idx != 0 && i == score_val_idx) t = "10";   // the plain arm keeps the base score
                             if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
                             if (!skipping) pa.push_back(t);
                             if (t == "--readFilesIn" && probe_src) {   // the probe reads the .1fq itself, not the fifos
@@ -8322,7 +8329,10 @@ static int singlet_main(int argc, char* argv[]) {
                     }
                     std::cerr << "[singlet] CR4 probe (" << cr4_probe_reads << " reads): unique " << u_on << "% with the Beta aligner profile, "
                               << u_off << "% without -> " << (keep ? "profile ON" : "profile OFF (" + cr4_status + ")") << "\n";
-                    if (!keep) args.erase(args.begin() + cr4_beg, args.begin() + cr4_end);
+                    if (!keep) {
+                        args.erase(args.begin() + cr4_beg, args.begin() + cr4_end);
+                        if (score_val_idx != 0) { score_val_idx -= cr4_end - cr4_beg; args[score_val_idx] = "10"; }
+                    }
                     std::error_code ec;   // keep the two Log.final.out; drop the solo outputs of the probes
                     for (const char* t : {"plain", "cr4"}) {
                         std::filesystem::remove_all(pdir + "/" + t + "_Solo.out", ec);
