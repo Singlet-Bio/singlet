@@ -2902,6 +2902,8 @@ static void usage(const char* prog) {
         << "  --snps FILE            VCF of SNP positions\n"
         << "  --hla-t1k DIR          T1K install with its IPD-IMGT/HLA index (bin/, hlaidx/, manifest.json); --pipeline on a human\n"
         << "                         genome uses <ref-base>/hla/t1k (--no-hla: none). Output: private/hla/ (owner-only)\n"
+        << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
+        << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
         << "Output:\n"
         << "  --out-prefix DIR       Output directory [./singlet_out]\n"
@@ -3298,6 +3300,8 @@ static int singlet_main(int argc, char* argv[]) {
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
     bool no_hla = false;                 // --no-hla
+    bool no_default_editing = false;     // --no-editing: do not use the default RNA editing panel in --pipeline mode (D-101)
+    std::string edit_panel_source = "none";
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
@@ -3324,6 +3328,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--no-snps") no_default_snps = true;
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
         else if (arg == "--no-hla") no_hla = true;
+        else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
+        else if (arg == "--no-editing") no_default_editing = true;
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -4124,6 +4130,29 @@ static int singlet_main(int argc, char* argv[]) {
                 std::cerr << "[singlet] Default SNP panel (--pipeline): " << cand << "\n";
             } else {
                 std::cerr << "[singlet] WARNING: default SNP panel not found: " << cand << " (no donor demux)\n";
+            }
+        }
+    }
+    // D-101: default RNA editing panel in --pipeline mode, REDIportal A-to-I sites on the genome strand
+    // (scripts/editing/build_rediportal_panel.py writes the panel and its manifest <panel>.json: version, sha256, license).
+    // Human GRCh38 and mouse GRCm39 only; the barnyard and other species get none.
+    if (pipeline_mode && config.edit_path.empty() && !no_default_editing && !genome_dir.empty()) {
+        std::string rb = ref_base;
+        if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+        const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+        const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
+        std::string panel;
+        if (human && !mouse) panel = "rna_editing_GRCh38.tsv.gz";
+        else if (mouse && !human) panel = "rna_editing_GRCm39.tsv.gz";
+        if (!rb.empty() && !panel.empty()) {
+            std::string cand = rb + "/pileup_indices/" + panel;
+            struct stat est{};
+            if (stat(cand.c_str(), &est) == 0) {
+                config.edit_path = cand;
+                edit_panel_source = "default";
+                std::cerr << "[singlet] Default RNA editing panel (--pipeline): " << cand << "\n";
+            } else {
+                std::cerr << "[singlet] default RNA editing panel not found: " << cand << " (no editing output)\n";
             }
         }
     }
@@ -10029,6 +10058,19 @@ static int singlet_main(int argc, char* argv[]) {
         }
         rp.extra.emplace_back("snp_panel", "{\"source\": \"" + snp_panel_source + "\", \"path\": " +
                                                singlet::json_str(config.snp_path) + "}");
+        {   // D-101: the editing panel and its manifest (<panel>.json: source, version, sha256, license), when one was used
+            std::string pj = "null";
+            if (!config.edit_path.empty()) {
+                std::string mp = config.edit_path;
+                if (mp.size() > 7 && mp.compare(mp.size() - 7, 7, ".tsv.gz") == 0) mp = mp.substr(0, mp.size() - 7);
+                std::ifstream mf(mp + ".json");
+                std::string mj((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
+                while (!mj.empty() && (mj.back() == '\n' || mj.back() == ' ')) mj.pop_back();
+                if (!mj.empty()) pj = mj;
+            }
+            rp.extra.emplace_back("editing_panel", "{\"source\": \"" + edit_panel_source + "\", \"path\": " +
+                                                       singlet::json_str(config.edit_path) + ", \"manifest\": " + pj + "}");
+        }
         rp.extra.emplace_back("bam_sort_mode", singlet::json_str(bam_sort_mode));
         rp.extra.emplace_back("outputs", singlet::outputs_inventory_json(out_prefix));
         extra_json += "  \"cell_caller\": \"" + export_stats.cell_caller + "\",\n";
