@@ -150,6 +150,7 @@ fetchbam)   # benchmark store: a submitter's 10x-style BAM (CR/CQ/UR/UQ tags kep
   mkdir -p $P/fq $P/bamdl; ACC=${ACC:?ACC}; B=$P/bamdl/$ACC.bam; SZ=$(curl -sI "${BAMURL:?BAMURL}" | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2}' | tail -1)
   for try in $(seq 1 200); do [ "$(stat -c %s $B 2> /dev/null || echo 0)" = "$SZ" ] && break; curl -s -C - --speed-time 120 --speed-limit 20000 --retry 5 --retry-delay 30 -o $B "$BAMURL" || sleep 20; done
   [ "$(stat -c %s $B)" = "$SZ" ] || { echo "download incomplete ($(stat -c %s $B) of $SZ)"; exit 5; }; echo "downloaded $SZ bytes"
+  if [ -n "${MD5:-}" ]; then got=$(md5sum $B | cut -d" " -f1); [ "$got" = "$MD5" ] || { echo "md5 mismatch ($got, expected $MD5)"; mv $B $B.bad; exit 5; }; echo "md5 ok $MD5"; fi
   set -o pipefail; $W/envs/pbench/bin/samtools fastq -@ 4 -F 2304 -T CR,CQ,UR,UQ $B 2> $P/fetchbam.err | python3 $D/bam2fq_cr.py $P/fq/${ACC}_1.fastq.gz $P/fq/${ACC}_2.fastq.gz 2> $P/fetchbam.count || { tail -3 $P/fetchbam.err; exit 5; }
   N=$(tail -1 $P/fetchbam.count); echo "{\"pairs\": $N, \"runs\": [[\"$ACC\", $N]]}" > $P/runs.json; rm -rf $P/bamdl; ls -l $P/fq; echo "reads kept: $N" ;;
 storeclean) rm -rf $P/sra $P/fq $P/tar $P/tar.dl $P/bamdl $P/stage $P/cap1fq; find $P \( -name '*.bam' -o -name '*.bai' \) -delete; du -sh $P ;;

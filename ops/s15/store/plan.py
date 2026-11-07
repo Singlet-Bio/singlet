@@ -25,10 +25,11 @@ def info(i):
     if human: app += ["mgatk"]
     if human and i in K: app += ["vireo", "souporcell"]
     if human and five and "vdj" in mods: app += ["trust4"]
+    if i in ("hgmm1k_v3", "hgmm1k_v2", "hgmm10k_v3"): app += ["kb_barnyard"]   # species-mixture verdict: kb on the human+mouse index
     h = have.get(i, set())
     missing = [t for t in app if t not in h]
     need_star = "STARsolo" not in h or any(t in missing for t in ("mgatk", "vireo", "souporcell"))
-    need_reads = need_star or any(t in missing for t in ("kb", "alevin", "trust4", "kraken_pf"))
+    need_reads = need_star or any(t in missing for t in ("kb", "alevin", "trust4", "kraken_pf", "kb_barnyard"))
     kind = "pilot" if i.startswith("pilot_") else "store"
     return dict(DIR=i[6:] if kind == "pilot" else i, KIND=kind, ACC=d["accessions"], CHEM=chem, SP=sp, MODS=mods, FM=d["fetch"], PM=d["pairs_m"] or "100",
                 FIVE="1" if five else "0", K=str(K.get(i, "")), MISSING=" ".join(missing), NEED_READS="1" if (missing or "STARsolo" not in h) and need_reads else "0",

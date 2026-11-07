@@ -44,7 +44,7 @@ kraken)   # viral k2 DB (the one S-nonhost used): reads of the cDNA mate; classi
   gzip -f $O/classified_reads.tsv; tail -3 $O/run.log; head -12 $O/report.txt; exit $rc ;;
 kraken_pf)   # open standard database with bacteria, archaea, viruses, fungi, protozoa and human: Langmead k2_pluspf_20261022 (built 2026-10-22). First 50 M reads of the cDNA mate, confidence 0.1.
   export PATH=$W/envs/kraken2/bin:$PATH; KDB=$W/data/kraken_db/k2_pluspf_20261022; for w in $(seq 1 720); do [ -e $KDB/DOWNLOADED ] && break; sleep 60; done; [ -s $KDB/hash.k2d ] || { echo "no kraken database at $KDB"; exit 6; }
-  zcat ${R2//,/ } | head -n 200000000 | tm kraken2 --db $KDB --threads 16 --confidence 0.1 --memory-mapping --report $O/report.txt --output $O/classified_reads.tsv /dev/stdin > $O/run.log 2>&1; rc=$?
+  zcat ${R2//,/ } | head -n 200000000 | tm kraken2 --db $KDB --threads 16 --confidence 0.1 --memory-mapping --report $O/report.txt --output $O/classified_reads.tsv /dev/stdin > $O/run.log 2>&1; rc=${PIPESTATUS[2]}   # zcat and head die of SIGPIPE when head stops at 50 M reads: only kraken2 counts
   gzip -f $O/classified_reads.tsv; echo "database k2_pluspf_20261022 (Langmead PlusPF, 2026-10-22)" > $O/database.txt; tail -3 $O/run.log; head -12 $O/report.txt; exit $rc ;;
 mgatk)
   export PATH=$W/envs/mtl/bin:$PATH PYTHONPATH=$W/envs/mgatk_extra; ulimit -n $(ulimit -Hn) 2> /dev/null
@@ -84,6 +84,15 @@ kbidx)   # one shared nac index (kb-python in the mgatk_extra env)
   export PATH=$W/envs/adt/bin:$PATH; mkdir -p $W/pilot/kb_index; cd $W/pilot/kb_index
   [ -f index.idx ] && { echo "index exists"; exit 0; }
   kb ref --workflow nac -i index.idx -g t2g.txt -f1 cdna.fa -f2 nascent.fa -c1 cdna_t2c.txt -c2 nascent_t2c.txt -t 16 $REFB/fasta/genome.fa $REFB/genes/genes.gtf; exit $? ;;
+kbidx_barnyard)   # nac index on the human+mouse (barnyard) reference for the species-mixture verdict
+  export PATH=$W/envs/adt/bin:$PATH; BR=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-GRCm39-barnyard; mkdir -p $W/pilot/kb_index_barnyard; cd $W/pilot/kb_index_barnyard
+  [ -f DONE ] && { echo "index exists"; exit 0; }
+  kb ref --workflow nac -i index.idx -g t2g.txt -f1 cdna.fa -f2 nascent.fa -c1 cdna_t2c.txt -c2 nascent_t2c.txt -t 16 $BR/fasta/genome.fa $BR/genes/genes.gtf && touch DONE; exit $? ;;
+kb_barnyard)   # kb-python nac on the barnyard index (hgmm species-mixture sets)
+  export PATH=$W/envs/adt/bin:$PATH; KI=$W/pilot/kb_index_barnyard; for w in $(seq 1 1440); do [ -e $KI/DONE ] && break; sleep 60; done; [ -e $KI/DONE ] || { echo "no barnyard kb index"; exit 6; }
+  X=10XV3; [ "$CH_umi" = 10 ] && X=10XV2; ST=forward; [ "$FIVE" = 1 ] && ST=unstranded
+  PAIRS=$(python3 -c "r1='$R1'.split(','); r2='$R2'.split(','); print(' '.join(x for p in zip(r1, r2) for x in p))")
+  tm kb count --workflow nac -i $KI/index.idx -g $KI/t2g.txt -c1 $KI/cdna_t2c.txt -c2 $KI/nascent_t2c.txt -x $X -w $WLD/$CH_whitelist --strand $ST -t 16 -m 200G -o $O/kb --h5ad $PAIRS > $O/run.log 2>&1; rc=$?; tail -3 $O/run.log; exit $rc ;;
 kb)
   export PATH=$W/envs/adt/bin:$PATH; X=10XV3; [ "$CH_umi" = 10 ] && X=10XV2; ST=forward; [ "$FIVE" = 1 ] && ST=unstranded
   PAIRS=$(python3 -c "r1='$R1'.split(','); r2='$R2'.split(','); print(' '.join(x for p in zip(r1, r2) for x in p))")
