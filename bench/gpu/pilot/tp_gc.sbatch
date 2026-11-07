@@ -142,45 +142,60 @@ stop_mps() {
   echo quit | nvidia-cuda-mps-control; MPS_ON=""; unset CUDA_MPS_PIPE_DIRECTORY CUDA_MPS_LOG_DIRECTORY; sleep 3; echo "MPS daemon stopped ($(date -Is))" | tee -a $S
 }
 cfg_set() {
-  # the shared-index holder, MPS and admission arms act on the whole node: in the pilot they need both GPUs (a g2 item)
-  case $1 in *shidx*|*mps*|adm*) [ "${PILOT_SHARED:-0}" = 1 ] && { echo "!! config $1 needs the whole node (queue it as a g2 item)" >&2; return 1; } ;; esac
+  # A config is one atom or several joined by '+' (bench/gpu/fastloop: stacked designs), for example wshrink+shidx+maponly. An atom is a
+  # name below, a name from the idea registry FL_IDEAS (TSV: name, env switches or -, extra arguments or -, stage), or x:NAME=VALUE.
+  # The shared-index holder, MPS and admission arms act on the whole node: in the pilot they need both GPUs (a g2 item). FL_SOLE=1 admits
+  # them in a g1 item that is the only item on its node (the one-GPU pilot, a smoke node): every holder on the node counts in the budget.
+  case $1 in *shidx*|*mps*|adm*) [ "${PILOT_SHARED:-0}" = 1 ] && [ "${FL_SOLE:-0}" != 1 ] && { echo "!! config $1 needs the whole node (queue it as a g2 item)" >&2; return 1; } ;; esac
   pkill -u $USER -f "gpu-holder" 2>/dev/null && { sleep 3; echo "shared-index holder stopped before point cfg $1" | tee -a $S; }
   rm -f /tmp/singlet_gpu_holder.* 2>/dev/null
   case $1 in *mps*) ;; *) stop_mps ;; esac
   CFG_ARGS=""; CFG_ENV=""; ARM_BIN=$BIN
+  local a; for a in ${1//+/ }; do cfg_atom $a || return 1; done
+  CFG_ENV=$(echo $CFG_ENV); CFG_ARGS=$(echo $CFG_ARGS)
+}
+cfg_atom() {
+  if [ -n "${FL_IDEAS:-}" ] && [ -f "$FL_IDEAS" ]; then
+    local l; l=$(awk -F'\t' -v n="$1" '$1 == n' "$FL_IDEAS" | head -1)
+    if [ -n "$l" ]; then
+      local e g; e=$(cut -f2 <<<"$l"); g=$(cut -f3 <<<"$l")
+      [ "$e" = - ] || CFG_ENV+=" $e"; [ "$g" = - ] || CFG_ARGS+=" $g"; return 0
+    fi
+  fi
   case $1 in
+    x:*=*) CFG_ENV+=" ${1#x:}" ;;                                                         # one env switch, named in the tag
     base) ;;
-    shidx) CFG_ENV="SINGLET_GPU_SHARED_INDEX=1" ;;                                     # VMM shared genome index (holder per device)
-    mpsshidx) CFG_ENV="SINGLET_GPU_SHARED_INDEX=1"; start_mps ;;
-    stepsauto) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=auto" ;;                            # heavy-read split controller
-    steps[0-9]*) CFG_ENV="SINGLET_ENGINE_GPU_STEPS_B=${1#steps}" ;;
-    trace) CFG_ENV="SINGLET_ENGINE_GPU_TRACE=1" ;;                                      # transfer ledger
-    screen) CFG_ENV="SINGLET_DEMUX_SCREEN=1" ;;                                         # demux single-donor screen
-    nhtries1) CFG_ENV="SINGLET_NONHOST_GPU_TRIES=1" ;;                                  # control: the non-host screen's retry off
+    shidx) CFG_ENV+=" SINGLET_GPU_SHARED_INDEX=1" ;;                                     # VMM shared genome index (holder per device)
+    mpsshidx) CFG_ENV+=" SINGLET_GPU_SHARED_INDEX=1"; start_mps ;;
+    stepsauto) CFG_ENV+=" SINGLET_ENGINE_GPU_STEPS_B=auto" ;;                            # heavy-read split controller
+    steps[0-9]*) CFG_ENV+=" SINGLET_ENGINE_GPU_STEPS_B=${1#steps}" ;;
+    trace) CFG_ENV+=" SINGLET_ENGINE_GPU_TRACE=1" ;;                                      # transfer ledger
+    screen) CFG_ENV+=" SINGLET_DEMUX_SCREEN=1" ;;                                         # demux single-donor screen
+    nhtries1) CFG_ENV+=" SINGLET_NONHOST_GPU_TRIES=1" ;;                                  # control: the non-host screen's retry off
     b0) ARM_BIN=$REFBIN ;;                                                               # the reference binary, no switches
-    wshrink) CFG_ENV="SINGLET_BOLD_WSHRINK=1" ;;
-    ulreset) CFG_ENV="SINGLET_BOLD_WSHRINK=1 SINGLET_GPU_PILEUP_UNLOCK=reset" ;;      # PR-2 diagnostic: the pileup resets its context before it unlocks (E20 default: unlock first)
+    wshrink) CFG_ENV+=" SINGLET_BOLD_WSHRINK=1" ;;
+    ulreset) CFG_ENV+=" SINGLET_BOLD_WSHRINK=1 SINGLET_GPU_PILEUP_UNLOCK=reset" ;;      # PR-2 diagnostic: the pileup resets its context before it unlocks (E20 default: unlock first)
     mpsbase) start_mps ;;
-    mpswshrink) CFG_ENV="SINGLET_BOLD_WSHRINK=1"; start_mps ;;
-    nodemux) CFG_ARGS="--n-donors 1" ;;                                                  # auto-K and VB skipped (K=1 synthesized)
-    nonh) CFG_ARGS="--no-viral-screen --no-microbial-screen" ;;                          # non-host screen and EM skipped
-    nodn) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen" ;;
-    alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
-    maponly) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
-    adm) CFG_ENV="SINGLET_GPU_ADMIT=1" ;;                                                 # gpu/bold-admit build b2: memory-aware admission instead of slot locks
-    admmps) CFG_ENV="SINGLET_GPU_ADMIT=1"; start_mps ;;                                  # the same with CUDA MPS (concurrent kernels of several processes)
-    admtuned) CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_ADMIT_CAP_GB=92.5 SINGLET_ADMIT_IDLE_GB=0 SINGLET_ENGINE_GPU_MEM_GB=36 SINGLET_ADMIT_EST_PREFILL_GB=36 SINGLET_GPU_PILEUP_ARENA_GB=28 SINGLET_ADMIT_EST_PILEUP_GB=28 SINGLET_ADMIT_EST_NONHOST_GB=29 SINGLET_ADMIT_EST_HANDOFF_GB=6 SINGLET_ADMIT_EST_SOLO_GB=2.5" ;;   # estimates from measured peaks (solo run 800349 and E17 line): prefill 34.8 GB normal plan, pileup peak 26.3 GB, non-host index 24.9 GB, kept 1.6 GB
-    admmap) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_GPU_ADMIT=1 SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;
-    mpsbsort) CFG_ENV="SINGLET_BOLD_BSORT=1"; start_mps ;;                                  # MPS plus the lane B cost sort (build b5)
+    mpswshrink) CFG_ENV+=" SINGLET_BOLD_WSHRINK=1"; start_mps ;;
+    nodemux) CFG_ARGS+=" --n-donors 1" ;;                                                  # auto-K and VB skipped (K=1 synthesized)
+    nonh) CFG_ARGS+=" --no-viral-screen --no-microbial-screen" ;;                          # non-host screen and EM skipped
+    nodn) CFG_ARGS+=" --n-donors 1 --no-viral-screen --no-microbial-screen" ;;
+    alloff) CFG_ARGS+=" --n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
+    maponly) CFG_ARGS+=" --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
+    adm) CFG_ENV+=" SINGLET_GPU_ADMIT=1" ;;                                                 # gpu/bold-admit build b2: memory-aware admission instead of slot locks
+    admmps) CFG_ENV+=" SINGLET_GPU_ADMIT=1"; start_mps ;;                                  # the same with CUDA MPS (concurrent kernels of several processes)
+    admtuned) CFG_ENV+=" SINGLET_GPU_ADMIT=1 SINGLET_ADMIT_CAP_GB=92.5 SINGLET_ADMIT_IDLE_GB=0 SINGLET_ENGINE_GPU_MEM_GB=36 SINGLET_ADMIT_EST_PREFILL_GB=36 SINGLET_GPU_PILEUP_ARENA_GB=28 SINGLET_ADMIT_EST_PILEUP_GB=28 SINGLET_ADMIT_EST_NONHOST_GB=29 SINGLET_ADMIT_EST_HANDOFF_GB=6 SINGLET_ADMIT_EST_SOLO_GB=2.5" ;;   # estimates from measured peaks (solo run 800349 and E17 line): prefill 34.8 GB normal plan, pileup peak 26.3 GB, non-host index 24.9 GB, kept 1.6 GB
+    admmap) CFG_ARGS+=" --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_GPU_ADMIT=1 SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;
+    mpsbsort) CFG_ENV+=" SINGLET_BOLD_BSORT=1"; start_mps ;;                                  # MPS plus the lane B cost sort (build b5)
     mps) start_mps ;;                                                                     # CUDA MPS, slot lock unchanged
-    m45) CFG_ENV="SINGLET_ENGINE_GPU_MEM_GB=45" ;;                                        # device budget of a 2-slot node
-    m91) CFG_ENV="SINGLET_ENGINE_GPU_MEM_GB=91" ;;
-    bsort) CFG_ENV="SINGLET_BOLD_BSORT=1" ;;                                              # gpu/bold-kern (build b5)
-    b64) CFG_ENV="SINGLET_BOLD_B64=1" ;;
-    bsortb64) CFG_ENV="SINGLET_BOLD_BSORT=1 SINGLET_BOLD_B64=1" ;;
-    nohc) CFG_ENV="SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
-    nohc_alloff) CFG_ARGS="--n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
-    nohc_map) CFG_ARGS="--no-viral-screen --no-microbial-screen"; CFG_ENV="SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
+    m45) CFG_ENV+=" SINGLET_ENGINE_GPU_MEM_GB=45" ;;                                        # device budget of a 2-slot node
+    m91) CFG_ENV+=" SINGLET_ENGINE_GPU_MEM_GB=91" ;;
+    bsort) CFG_ENV+=" SINGLET_BOLD_BSORT=1" ;;                                              # gpu/bold-kern (build b5)
+    b64) CFG_ENV+=" SINGLET_BOLD_B64=1" ;;
+    bsortb64) CFG_ENV+=" SINGLET_BOLD_BSORT=1 SINGLET_BOLD_B64=1" ;;
+    nohc) CFG_ENV+=" SINGLET_BENCH_NOHOSTCOPY=1" ;;                                        # prototype: no host copy of lane results and records (needs build b1)
+    nohc_alloff) CFG_ARGS+=" --n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
+    nohc_map) CFG_ARGS+=" --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip SINGLET_BENCH_NOHOSTCOPY=1" ;;
     *) echo "!! unknown config $1" >&2; return 1 ;;
   esac
 }
@@ -334,7 +349,7 @@ ensure_alone() {   # sample T slots
 
 pi=0
 while [ $pi -lt ${#POINTS[@]} ]; do pp=${POINTS[$pi]}; pi=$((pi + 1))
-  PT=${pp%%@*}; CFG=base; [[ $pp == *@* ]] && CFG=${pp#*@}; CFG=${CFG%%#*}; p=${pp//[@#]/_}
+  PT=${pp%%@*}; CFG=base; [[ $pp == *@* ]] && CFG=${pp#*@}; CFG=${CFG%%#*}; p=${pp//[@#+:=]/_}; p=${p//\//_}
   cfg_set $CFG || continue
   EXTRA_ARGS="$CFG_ARGS"
   if ! [[ $PT =~ ^(mix)?k([0-9]+)t([0-9]+)s([0-9]+)(m([0-9]+))?(r([0-9]+))?(p)?(f)?$ ]]; then echo "!! bad point tag $PT" | tee -a $S; continue; fi
