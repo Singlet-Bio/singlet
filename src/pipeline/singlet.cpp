@@ -8413,8 +8413,7 @@ static int singlet_main(int argc, char* argv[]) {
 
             if (chimeric) {   // the second (chimeric) pass maps the unmapped reads with the same index and barcode settings
                 std::ofstream af(out_prefix + "/star_args.txt");
-                for (size_t ai = 1; ai + 1 < args.size(); ++ai) af << args[ai] << "
-";
+                for (size_t ai = 1; ai + 1 < args.size(); ++ai) af << args[ai] << "\n";
             }
             // Call bundled STAR directly — no exec, no external binary needed.
             singlet::set_thread_name("star-main");   // STAR's child: its threads inherit it or rename (star-map, star-prefill)
@@ -9447,8 +9446,7 @@ static int singlet_main(int argc, char* argv[]) {
         for (size_t k = 0; k + 1 < base_args.size(); ++k)
             if (base_args[k] == "--soloType" && (base_args[k + 1] == "CB_UMI_Simple" || base_args[k + 1] == "CB_UMI_Complex")) solo_fastq = true;
         if (base_args.empty() || !solo_fastq || !std::filesystem::exists(unm1) || !std::filesystem::exists(unm2)) {
-            std::cerr << "[singlet] chimeric: skipped (needs a FASTQ barcode run with unmapped reads written)
-";
+            std::cerr << "[singlet] chimeric: skipped (needs a FASTQ barcode run with unmapped reads written)\n";
         } else {
             StopWatch chim_sw;
             static const std::set<std::string> drop = {
@@ -9487,8 +9485,7 @@ static int singlet_main(int argc, char* argv[]) {
             std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
             std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
             if (!ran) {
-                std::cerr << "[singlet] chimeric: the second STAR pass failed
-";
+                std::cerr << "[singlet] chimeric: the second STAR pass failed\n";
             } else {
                 singlet::chimeric::Config cc;
                 cc.junction_path = prefix + "Chimeric.out.junction";
@@ -9498,10 +9495,18 @@ static int singlet_main(int argc, char* argv[]) {
                 const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
                 std::cerr << "[singlet] chimeric: second pass " << chim_sw.elapsed_s() << " s; " << cs.lines << " junction lines, " << cs.kept_lines << " kept, "
                           << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous; " << cs.rows
-                          << " rows in " << cs.cells << " cells, " << cs.annotated << " in the catalogue" << (cs.ok ? "" : " (WRITE FAILED)") << "
-";
+                          << " rows in " << cs.cells << " cells, " << cs.annotated << " in the catalogue" << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
             }
+            // the second pass's own files: logs carry timings and paths (they differ between runs), the junction file is the table's input
+            const char* keep = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");
+            for (const char* f : {"Log.out", "Log.final.out", "Log.progress.out", "Log.std.out", "SJ.out.tab", "Chimeric.out.junction"}) {
+                if (keep && *keep == '1' && std::string(f) == "Chimeric.out.junction") continue;
+                std::filesystem::remove(prefix + f, ec);
+            }
+            std::filesystem::remove_all(prefix + "_STARtmp", ec);
         }
+        std::error_code ec2;
+        std::filesystem::remove(out_prefix + "/star_args.txt", ec2);
     }
 
     // ── T4: CITE-seq ADT/HTO processing ──────────────────────────────────────
