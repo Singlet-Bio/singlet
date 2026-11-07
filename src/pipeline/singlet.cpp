@@ -4092,6 +4092,12 @@ static int singlet_main(int argc, char* argv[]) {
         config.whitelist_path = whitelist_file;
     config.threads = pileup_threads;
     config.finalize_threads = std::max(1, star_threads);   // --threads: the finalize steps after the stream
+    // the R11 stream's records are decoded and their CBs resolved on a reader thread beside the serial loop (same records, same order,
+    // same CBs); SINGLET_PILEUP_LOOKAHEAD=0 keeps the loop reading the stream itself
+    {
+        const char* la = std::getenv("SINGLET_PILEUP_LOOKAHEAD");
+        config.stream_lookahead = star_threads >= 2 && !(la && la[0] == '0');
+    }
     config.umi_len = umi_len;
     if (pipeline_mode) config.count_mt = true;
     if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
