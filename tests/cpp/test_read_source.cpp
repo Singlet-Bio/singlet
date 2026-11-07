@@ -5,6 +5,7 @@
 //   - StarChunkSourceT = the bytes STAR's FASTQ branch builds from those FASTQ records, with STAR's chunk boundaries
 //   - OrderedBlocks delivers blocks in order whatever the worker timing
 //   - binned qualities survive the round trip
+//   - DecodedBlock::keep_packed_qual: the quality column as stored, equal to the unpacked one
 
 #include <chrono>
 #include <cstdio>
@@ -199,6 +200,48 @@ int main() {
             uint64_t sz[2] = {0, 0}, iReadAll = 0;
             src.fill(chunk, sz, 1 << 20, iReadAll, 100, 0);
             CHECK(iReadAll == 100, "readMapNumber");
+        }
+    }
+
+    // keep_packed_qual: the quality column copied as stored unpacks to the Phred values of the usual decode, the other columns unchanged
+    // (ILLUMINA4 and BINNED4, variable lengths with empty reads); a run without quality leaves it empty
+    {
+        const std::string b4 = dir + "/b4.1fq";
+        write_file(b4, 700, 3, QualMode::BINNED4);
+        for (int f = 0; f < 3; ++f) {
+            RunSet rs;
+            if (f == 0) rs.open({files[0]});
+            else if (f == 1) rs.open({b4});
+            else rs.open({files[1]});
+            bool ok = true, copied = false;
+            DecodedBlock plain, packed;
+            packed.keep_packed_qual = true;
+            for (uint32_t g = 0; ok && g < rs.block_count(); ++g) {
+                rs.decode(g, plain);
+                rs.decode(g, packed);
+                ok = packed.keep_packed_qual && packed.n_reads == plain.n_reads && packed.r2_lengths == plain.r2_lengths &&
+                     packed.r2_data == plain.r2_data && packed.r1_data == plain.r1_data && packed.trim_lengths == plain.trim_lengths &&
+                     packed.dup_counts == plain.dup_counts;
+                if (!ok) break;
+                if (packed.r2_qual_packed.empty()) { ok = f == 2 ? plain.r2_qual.empty() : packed.r2_qual == plain.r2_qual; continue; }
+                copied = true;
+                ok = packed.r2_qual.empty() && packed.r2_qual_packed_phred != nullptr;
+                size_t o = 0;
+                std::vector<uint8_t> back;
+                for (uint32_t i = 0; ok && i < packed.n_reads; ++i) {
+                    const uint16_t len = packed.r2_len(i);
+                    back.assign(len, 0);
+                    ok = o + pack::packed_bytes(len) <= packed.r2_qual_packed.size();
+                    if (!ok) break;
+                    pack::unpack_qual_4level(packed.r2_qual_packed.data() + o, len, back.data(), packed.r2_qual_packed_phred);
+                    o += pack::packed_bytes(len);
+                    const uint8_t* q = plain.r2_quality(i);
+                    ok = len == 0 || (q && std::memcmp(q, back.data(), len) == 0);
+                }
+                ok = ok && o == packed.r2_qual_packed.size();
+            }
+            CHECK(ok, f == 0 ? "packed_qual_ilmn4" : f == 1 ? "packed_qual_binned4" : "packed_qual_none");
+            CHECK(f == 2 ? !copied : copied, "packed_qual_copied_when_stored");
         }
     }
 

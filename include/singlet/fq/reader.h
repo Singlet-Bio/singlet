@@ -50,6 +50,15 @@ struct DecodedBlock {
     // R2 quality (decoded to phred)
     std::vector<uint8_t> r2_qual;  // Same layout as r2_data
 
+    // Packed R2 quality on request (decode_payload, BINNED4 and ILLUMINA4 only): set keep_packed_qual before decoding and the quality
+    // column is copied as stored instead of unpacked to r2_qual: per read packed_bytes(len) bytes, 2-bit codes with the read's first base in
+    // the top bits of its first byte, reads in order (empty reads take no bytes); r2_qual_packed_phred maps a code to Phred. A block whose
+    // column is not copied (another mode, a staged source, a truncated block) leaves r2_qual_packed empty and fills r2_qual as before.
+    // keep_packed_qual survives clear().
+    bool keep_packed_qual = false;
+    std::vector<uint8_t> r2_qual_packed;
+    const uint8_t* r2_qual_packed_phred = nullptr;
+
     // BC dict indices (if BC_DICT mode; uint32_t sentinel = dict_size for unknown)
     std::vector<uint32_t> bc_indices;
 
@@ -92,6 +101,8 @@ struct DecodedBlock {
         r2_offsets.clear();
         r2_lengths.clear();
         r2_qual.clear();
+        r2_qual_packed.clear();
+        r2_qual_packed_phred = nullptr;
         bc_indices.clear();
         trim_lengths.clear();
         dup_counts.clear();
@@ -526,7 +537,10 @@ class Reader {
         // Guard: if decode_seq_column returned end, the block is corrupt.
         // Skip remaining column decoders to avoid UB reads past the buffer.
         if (ptr < end) {
-            if (qual_mode_ == QualMode::BINNED4) {
+            const uint8_t* qcopy = blk.keep_packed_qual ? copy_qual_column_packed(ptr, end, blk) : nullptr;
+            if (qcopy) {
+                ptr = qcopy;
+            } else if (qual_mode_ == QualMode::BINNED4) {
                 ptr = decode_qual_column_binned4(ptr, end, blk.r2_lengths, blk.r2_qual);
             } else if (qual_mode_ == QualMode::ILLUMINA4) {
                 ptr = decode_qual_column_ilmn4(ptr, end, blk.r2_lengths, blk.r2_qual);
@@ -813,6 +827,20 @@ class Reader {
             }
         }
         return ptr;
+    }
+
+    // The quality column as stored (DecodedBlock::keep_packed_qual): BINNED4 and ILLUMINA4 only, and only when the whole column lies inside
+    // the block. Returns the pointer past the column, or nullptr when the caller decodes it as before.
+    const uint8_t* copy_qual_column_packed(const uint8_t* ptr, const uint8_t* end, DecodedBlock& blk) const {
+        static constexpr uint8_t kBinned4Phred[4] = {6, 15, 25, 37};   // pack::unpack_qual_binned4's centers
+        const uint8_t* phred = qual_mode_ == QualMode::BINNED4 ? kBinned4Phred : qual_mode_ == QualMode::ILLUMINA4 ? qual::kIlmn4Phred : nullptr;
+        if (!phred) return nullptr;
+        size_t total = 0;
+        for (uint16_t len : blk.r2_lengths) total += pack::packed_bytes(len);
+        if (total > static_cast<size_t>(end - ptr)) return nullptr;
+        blk.r2_qual_packed.assign(ptr, ptr + total);
+        blk.r2_qual_packed_phred = phred;
+        return ptr + total;
     }
 
     // Decode binned-4 quality column
