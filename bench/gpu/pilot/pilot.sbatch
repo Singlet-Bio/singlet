@@ -3,13 +3,13 @@
 #SBATCH --account=debruinz
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:nvidia_h100_nvl:2
-#SBATCH --cpus-per-task=56
-#SBATCH --mem=740G
+#SBATCH --cpus-per-task=54
+#SBATCH --mem=700G
 #SBATCH --exclusive
 #SBATCH --time=24:00:00
 #SBATCH --exclude=g050
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# GPU pilot: holds one whole H100 node (2 GPUs, all cores) and runs job scripts from a queue directory, one per GPU or one on the whole
+# GPU pilot: holds one whole H100 node (2 GPUs, the 54 usable cores, 700 GB; Slurm refuses more) and runs job scripts from a queue directory, one per GPU or one on the whole
 # node, so timing runs share a fixed node and nothing waits in the Slurm queue between them. README.md beside this file explains the queue.
 #
 #   QUEUE  queue root (default $WORK/jobs/gpu-campaign/queue): new/ holds the items, running/ and done/ are written here.
@@ -28,8 +28,8 @@ Q=${QUEUE:-$W/jobs/gpu-campaign/queue}; IDLE_S=${IDLE_S:-1800}
 mkdir -p $Q/new $Q/running $Q/done
 NODE=$(hostname -s); T0=$(date +%s)
 END=$(( T0 + $(squeue -h -j $SLURM_JOB_ID -o %L | awk -F'[-:]' '{ if (NF==4) print ($1*86400+$2*3600+$3*60+$4); else if (NF==3) print ($1*3600+$2*60+$3); else print ($1*60+$2) }') ))
-NCPU=${SLURM_CPUS_PER_TASK:-56}; HALF=$(( NCPU / 2 ))
-MEMG=740; HALFMEM=$(( MEMG / 2 - 10 ))
+NCPU=${SLURM_CPUS_PER_TASK:-54}; HALF=$(( NCPU / 2 ))
+MEMG=700; HALFMEM=$(( MEMG / 2 - 10 ))
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 log() { echo "$(date -Is) $*" | tee -a $Q/pilot-$SLURM_JOB_ID.log; }
 log "pilot job=$SLURM_JOB_ID node=$NODE cpus=$NCPU end=$(date -d @$END -Is) queue=$Q"
