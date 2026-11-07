@@ -43,7 +43,7 @@ kraken)   # viral k2 DB (the one S-nonhost used): reads of the cDNA mate; classi
   zcat ${R2//,/ } | tm kraken2 --db $W/modality-bench/sj_nonhost/db/k2_viral --threads 16 --confidence 0.1 --report $O/report.txt --output $O/classified_reads.tsv /dev/stdin > $O/run.log 2>&1; rc=$?
   gzip -f $O/classified_reads.tsv; tail -3 $O/run.log; head -12 $O/report.txt; exit $rc ;;
 kraken_pf)   # open standard database with bacteria, archaea, viruses, fungi, protozoa and human: Langmead k2_pluspf_20261022 (built 2026-10-22). First 50 M reads of the cDNA mate, confidence 0.1.
-  export PATH=$W/envs/kraken2/bin:$PATH; KDB=$W/data/kraken_db/k2_pluspf_20261022; [ -s $KDB/hash.k2d ] || { echo "no kraken database at $KDB"; exit 6; }
+  export PATH=$W/envs/kraken2/bin:$PATH; KDB=$W/data/kraken_db/k2_pluspf_20261022; for w in $(seq 1 720); do [ -e $KDB/DOWNLOADED ] && break; sleep 60; done; [ -s $KDB/hash.k2d ] || { echo "no kraken database at $KDB"; exit 6; }
   zcat ${R2//,/ } | head -n 200000000 | tm kraken2 --db $KDB --threads 16 --confidence 0.1 --memory-mapping --report $O/report.txt --output $O/classified_reads.tsv /dev/stdin > $O/run.log 2>&1; rc=$?
   gzip -f $O/classified_reads.tsv; echo "database k2_pluspf_20261022 (Langmead PlusPF, 2026-10-22)" > $O/database.txt; tail -3 $O/run.log; head -12 $O/report.txt; exit $rc ;;
 mgatk)
