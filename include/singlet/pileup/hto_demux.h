@@ -49,12 +49,12 @@ struct HtoDemuxResult {
 
 /// Settings of the caller. The defaults are the ones chosen by leave-one-dataset-out (see bench/adt/hto_lodo.py).
 struct HtoDemuxParams {
-    double confident_min = 0.5;     ///< log2 fold between the top two tags for a confident singlet
+    double confident_min = 0.25;    ///< log2 fold between the top two tags for a confident singlet
     double doublet_min = 1.0;       ///< log2 fold of the second tag over ambient for a doublet
-    double doublet_nmads = 3.0;
+    double doublet_nmads = 4.0;
     double confident_nmads = 3.0;
     double pseudo = 5.0;
-    double mixture_positive = 0.5;  ///< posterior for a tag to count as positive in the doublet veto
+    double mixture_positive = 0.95; ///< posterior for a tag to count as positive in the doublet veto
     size_t min_cells = 20;
     int em_iters = 200;
     double em_tol = 1e-9;
