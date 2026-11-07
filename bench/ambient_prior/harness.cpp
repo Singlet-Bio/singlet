@@ -44,7 +44,7 @@ static void set_param(singlet::AmbientDecontConfig& c, const std::string& k, dou
     else if (k == "kappa") c.prior_strength = v;
     else if (k == "offprior") c.off_prior_reads = v;
     else if (k == "outlier") c.outlier_round = v != 0;
-    // parameters of the shallow-cell prior are added here together with the change itself
+    else if (k == "cellcap") c.cell_rho_cap_mult = v;
     else { std::cerr << "unknown parameter " << k << "\n"; std::exit(2); }
 }
 
