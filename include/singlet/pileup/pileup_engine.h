@@ -160,7 +160,10 @@ struct PileupConfig {
     // kUnique stays on: without it (908) intronic multimappers add wrong-species UMIs that STARsolo does not count.
     // 2957 = 909 + kUmiGeneSpliced (2048): a UMI in two genes of a cell keeps its winner only when the winner is spliced. hgmm5k_v3 had
     // fewer wrong-species molecules than STARsolo but a 0.8% smaller denominator, so its X fraction sat just above; this closes it.
-    uint32_t intron_rules = 2957;
+    // 7053 = 2957 + kExonPrecedence (4096): a multimapper with an exonic alignment is judged on its exonic alignments only, as STARsolo
+    // Gene, Space Ranger and Cell Ranger count it. Highly expressed genes with unannotated retrocopies in other genes' introns (Eef1a1,
+    // Gapdh, Rps10, Rpl24, Bc1) lost most of their reads to gene ambiguity (docs/research-beta/spatial-exon-multimapper.md).
+    uint32_t intron_rules = 7053;
 };
 
 namespace intron_rule {
@@ -176,6 +179,14 @@ constexpr uint32_t kNoExonPriority  = 16;   ///< an exonic read of gene A inside
 // such gene is not counted. It implies kNoExonPriority on the primary, makes an intron-only secondary in another gene, or a primary in the
 // introns of two genes, mark a multimapper gene-ambiguous, and otherwise leaves the assignment (gene, exon / intron, labels) unchanged.
 constexpr uint32_t kGeneFullSet     = 512;
+// Exonic alignments take precedence over intronic-only ones (STARsolo Gene, Space Ranger, Cell Ranger with introns). A multimapper (NH > 1)
+// with at least one alignment that overlaps an exon is judged on those alignments alone: alignments without an exon overlap (intron or
+// gene-body hits only) neither make it gene-ambiguous nor give it their gene. It is ambiguous only when its exonic alignments name more than
+// one gene, or one exonic alignment is itself multi-gene (exons of two genes; under kGeneFullSet also an exon of one gene in another gene's
+// intron). The counted features follow R7 over the exonic alignments (the primary's when it is exonic and kept, else the smallest secondary
+// exon), the EM pair is the two smallest exonic genes, and kMtPrefer's tie is decided on the exonic genes and an exonic chrM alignment.
+// A multimapper without any exonic alignment is judged as before.
+constexpr uint32_t kExonPrecedence  = 4096;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
@@ -672,6 +683,12 @@ public:
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
+            bool mt_ex = false;                  // that alignment overlaps an exon (intron_rule::kExonPrecedence)
+            // intron_rule::kExonPrecedence: the same state over the exonic alignments only (note_ex_gene, note_*_exonic)
+            bool ex_seen = false, ex_ambiguous = false, ex_has_nuc = false, xa_primary = false;
+            uint32_t ex_first = UINT32_MAX, ex_second = UINT32_MAX;
+            uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
+            uint8_t xa_flags = 0, xa_diag = 0;
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
         mm_buffer.reserve(500000);
@@ -679,31 +696,24 @@ public:
         // Lambda to resolve a completed multi-hit entry
         auto resolve_mm = [&](MultiHitEntry& e, PileupStats& st) {
             if (e.bc_idx < 0) return;
-            if (mt_numt_tie(e)) {   // chrM gene vs. its nuclear copy: count the chrM gene (see mt_numt_tie)
+            const MmVerdict v = mm_verdict(e);   // shared with resolve_mm_parallel and the cross-worker merge
+            if (v.kind == MmVerdict::kMt) {      // chrM gene vs. its nuclear copy: count the chrM gene
                 count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
-                           mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                           v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
                 st.mt_numt_rescued++;
-                return;
-            }
-            if (e.gene_ambiguous) {
+            } else if (v.kind == MmVerdict::kAmbig) {
                 // G-EM: collect for post-pileup EM rescue
-                if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
-                    em_rescue::AmbigRead ar;
-                    ar.bc_idx  = e.bc_idx;
-                    ar.umi_len = e.umi_len;
-                    std::memcpy(ar.umi, e.umi, e.umi_len);
-                    ar.gene_a  = e.first_gene;
-                    ar.gene_b  = e.second_gene;
-                    ambig_reads_.push_back(ar);
-                }
-                return;
+                em_rescue::AmbigRead ar;
+                ar.bc_idx  = e.bc_idx;
+                ar.umi_len = e.umi_len;
+                std::memcpy(ar.umi, e.umi, e.umi_len);
+                ar.gene_a  = v.gene_a;
+                ar.gene_b  = v.gene_b;
+                ambig_reads_.push_back(ar);
+            } else if (v.kind == MmVerdict::kCount) {
+                count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
+                           v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
             }
-            // Gene-unique: first_gene is the only gene (or all intergenic)
-            if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-            ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
-                            static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
-            count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
-                       rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
         };
 
         // ── Strand probe ──
@@ -843,8 +853,9 @@ public:
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
                                         }
-                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(it->second, hit);
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm(it->second, stats);
                                         mm_buffer.erase(it);
@@ -864,8 +875,9 @@ public:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(entry, hit);
                                 }
                             }
                         }
@@ -1145,7 +1157,7 @@ public:
                         entry.intron_idx = rf.intron_idx;
                         entry.read_flags = rf.flags;
                         entry.read_diag = rf.diag;
-                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
+                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag, exon_gene != UINT32_MAX);
                     }
                     if (umi_str && umi_len > 0) {
                         int clen = std::min(umi_len, 15);
@@ -1153,6 +1165,8 @@ public:
                         entry.umi[clen] = '\0';
                         entry.umi_len = static_cast<uint8_t>(umi_len);
                     }
+                    const bool gf_multi = gene_full_multi(exon_gene, primary_multigene, intron_overlaps);
+                    note_primary_exonic(entry, exon_overlaps, exon_gene, primary_multigene, gf_multi, rf);
 
                     // If primary position overlaps multiple genes, mark as ambiguous
                     if (primary_multigene) {
@@ -1172,7 +1186,7 @@ public:
                         }
                     }
 
-                    if (gene_full_multi(exon_gene, primary_multigene, intron_overlaps)) entry.gene_ambiguous = true;
+                    if (gf_multi) entry.gene_ambiguous = true;
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                     note_gene(entry, aln_gene);
@@ -1430,6 +1444,12 @@ public:
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
+            bool mt_ex = false;                  // that alignment overlaps an exon (intron_rule::kExonPrecedence)
+            // intron_rule::kExonPrecedence: the same state over the exonic alignments only (note_ex_gene, note_*_exonic)
+            bool ex_seen = false, ex_ambiguous = false, ex_has_nuc = false, xa_primary = false;
+            uint32_t ex_first = UINT32_MAX, ex_second = UINT32_MAX;
+            uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
+            uint8_t xa_flags = 0, xa_diag = 0;
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
 
@@ -1661,8 +1681,9 @@ public:
                     if (m.bc_idx < 0 && wentry.bc_idx >= 0) m.bc_idx = wentry.bc_idx;
                     if (wentry.mt_gene != UINT32_MAX) {
                         m.mt_gene = wentry.mt_gene; m.mt_exon = wentry.mt_exon; m.mt_intron = wentry.mt_intron;
-                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag;
+                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag; m.mt_ex = wentry.mt_ex;
                     }
+                    merge_exonic(m, wentry);   // intron_rule::kExonPrecedence: the exonic genes and R7 over the exonic alignments
                     if (m.umi_len == 0 && wentry.umi_len > 0) {
                         m.umi_len = wentry.umi_len;
                         std::memcpy(m.umi, wentry.umi, wentry.umi_len);
@@ -1701,46 +1722,30 @@ public:
 
             PileupStats xw_stats;
             for (auto& [qh, m] : global_mm) {
-                // intron_rule::kMtPrefer (see resolve_mm_parallel): chrM gene vs. its nuclear copy
-                if (m.bc_idx >= 0 && mt_numt_tie(m)) {
-                    const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
-                    int target = 0;
-                    for (int w = 0; w < n_workers; ++w)
-                        if (workers[w].mol_store.has_group(bc, m.mt_gene)) { target = w; break; }
-                    auto& tw = workers[target];
-                    ReadFeatures rf{m.mt_gene, m.mt_exon, m.mt_intron, m.mt_flags,
-                                    static_cast<uint8_t>(m.mt_diag | DirectionalUmiStore::kDiagMulti)};
-                    count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
-                               m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
-                    xw_mt++;
-                    continue;
-                }
-                if (m.gene_ambiguous || m.bc_idx < 0) {
+                if (m.bc_idx < 0) continue;
+                // the same verdict as resolve_mm_parallel: intron_rule::kMtPrefer's chrM tie, gene ambiguity (G-EM pair) or the counted features
+                const MmVerdict v = mm_verdict(m);
+                if (v.kind == MmVerdict::kAmbig) {
                     // G-EM: collect cross-worker ambiguous reads for rescue
-                    if (m.gene_ambiguous && m.bc_idx >= 0 &&
-                        m.first_gene != UINT32_MAX && m.second_gene != UINT32_MAX) {
-                        em_rescue::AmbigRead ar;
-                        ar.bc_idx  = m.bc_idx;
-                        ar.umi_len = m.umi_len;
-                        std::memcpy(ar.umi, m.umi, m.umi_len);
-                        ar.gene_a  = m.first_gene;
-                        ar.gene_b  = m.second_gene;
-                        ambig_reads_.push_back(ar);
-                    }
+                    em_rescue::AmbigRead ar;
+                    ar.bc_idx  = m.bc_idx;
+                    ar.umi_len = m.umi_len;
+                    std::memcpy(ar.umi, m.umi, m.umi_len);
+                    ar.gene_a  = v.gene_a;
+                    ar.gene_b  = v.gene_b;
+                    ambig_reads_.push_back(ar);
                     continue;
                 }
-                if (m.first_gene == UINT32_MAX || m.gene_idx == UINT32_MAX) continue;
+                if (v.kind == MmVerdict::kNone) continue;
 
                 const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
                 int target = 0;  // no store has this (bc, gene) yet: any store is the only one
                 for (int w = 0; w < n_workers; ++w)
-                    if (workers[w].mol_store.has_group(bc, m.gene_idx)) { target = w; break; }
+                    if (workers[w].mol_store.has_group(bc, v.rf.gene)) { target = w; break; }
                 auto& tw = workers[target];
-                ReadFeatures rf{m.gene_idx, m.exon_idx, m.intron_idx, m.read_flags,
-                                static_cast<uint8_t>(m.read_diag | DirectionalUmiStore::kDiagMulti)};
-                count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
+                count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, v.rf,
                            m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
-                xw_exon++;
+                (v.kind == MmVerdict::kMt ? xw_mt : xw_exon)++;
             }
             workers[0].stats.exon_hits += xw_stats.exon_hits;
             workers[0].stats.mt_numt_rescued += xw_mt;
@@ -3353,6 +3358,7 @@ private:
         uint32_t exon_idx = UINT32_MAX;
         bool multi_gene = false;  // true if overlaps 2+ genes (vs intergenic)
         uint32_t body_gene = UINT32_MAX;  // intron_rule::kGeneFullSet: the one gene whose introns an exon-free alignment lies in
+        bool exonic = false;              // some same-strand exon overlap (intron_rule::kExonPrecedence: an exonic alignment)
     };
 
     // ── Hash functions for zero-allocation lookups ──
@@ -3572,6 +3578,7 @@ private:
             if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
             return result;
         }
+        result.exonic = true;
 
         // Check single-gene (any-overlap-based)
         uint32_t gene = gene_model_.exon_to_gene(mm_overlaps_[0]);
@@ -3610,7 +3617,7 @@ private:
                     }
                 }
                 if (g0 == UINT32_MAX) g0 = g;
-                else if (g != g0) { r = GeneHit{}; r.multi_gene = true; return; }
+                else if (g != g0) { const bool ex = r.exonic; r = GeneHit{}; r.multi_gene = true; r.exonic = ex; return; }
             }
         }
         if (r.gene_idx == UINT32_MAX) r.body_gene = g0;
@@ -4264,6 +4271,7 @@ private:
             if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
             return result;
         }
+        result.exonic = true;
 
         uint32_t gene = gene_model_.exon_to_gene(wc.mm_overlaps[0]);
         for (size_t i = 1; i < wc.mm_overlaps.size(); ++i) {
@@ -4287,33 +4295,24 @@ private:
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
-        // A read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a
-        // pseudogene) comes from the mitochondrial genome (hundreds of copies per cell vs. one nuclear
-        // copy): count it for the chrM gene instead of dropping it as gene-ambiguous.
-        if (mt_numt_tie(e)) {
+        const MmVerdict v = mm_verdict(e);
+        if (v.kind == MmVerdict::kMt) {   // chrM gene vs. its nuclear copy (NUMT): count the chrM gene (mm_verdict)
             count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                       mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                       v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
             wc.stats.mt_numt_rescued++;
-            return;
-        }
-        if (e.gene_ambiguous) {
+        } else if (v.kind == MmVerdict::kAmbig) {
             // G-EM: collect for post-pileup EM rescue
-            if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
-                em_rescue::AmbigRead ar;
-                ar.bc_idx  = e.bc_idx;
-                ar.umi_len = e.umi_len;
-                std::memcpy(ar.umi, e.umi, e.umi_len);
-                ar.gene_a  = e.first_gene;
-                ar.gene_b  = e.second_gene;
-                wc.ambig_reads.push_back(ar);
-            }
-            return;
+            em_rescue::AmbigRead ar;
+            ar.bc_idx  = e.bc_idx;
+            ar.umi_len = e.umi_len;
+            std::memcpy(ar.umi, e.umi, e.umi_len);
+            ar.gene_a  = v.gene_a;
+            ar.gene_b  = v.gene_b;
+            wc.ambig_reads.push_back(ar);
+        } else if (v.kind == MmVerdict::kCount) {
+            count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
+                       v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
         }
-        if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-        ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
-                        static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
-        count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                   rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
     }
 
     // ── Read → (gene, spliced/unspliced evidence) ──────────────────────────
@@ -4334,10 +4333,11 @@ private:
 
     // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
     // remember the alignment that lies in a chrM gene ...
+    // `exonic`: the alignment overlaps an exon of the gene (intron_rule::kExonPrecedence decides the tie on exonic alignments only).
     template <class E>
-    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
+    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag, bool exonic) const {
         if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
-        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
+        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag; e.mt_ex = exonic;
     }
     // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
     // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
@@ -4346,24 +4346,121 @@ private:
     // order of the sorted BAM, worker order of the cross-worker merge): first_gene and second_gene are the two smallest distinct genes, has_nuc says that
     // some alignment touched a non-chrM gene, and more than one distinct gene makes the read gene-ambiguous. The tie and the EM candidates then do not
     // depend on how the work was split. (Before: the first two genes met; for three or more alignments the chrM tie and the EM pair depended on the order.)
-    template <class E>
-    void note_gene(E& e, uint32_t g) const {
+    void note_gene_set(uint32_t& first, uint32_t& second, bool& ambiguous, bool& has_nuc, uint32_t g) const {
         if (g == UINT32_MAX) return;
-        if (!is_mt_gene(g)) e.has_nuc = true;
-        if (g == e.first_gene || g == e.second_gene) return;
-        if (e.first_gene == UINT32_MAX) { e.first_gene = g; return; }
-        e.gene_ambiguous = true;
-        if (g < e.first_gene) { e.second_gene = e.first_gene; e.first_gene = g; }
-        else if (e.second_gene == UINT32_MAX || g < e.second_gene) e.second_gene = g;
+        if (!is_mt_gene(g)) has_nuc = true;
+        if (g == first || g == second) return;
+        if (first == UINT32_MAX) { first = g; return; }
+        ambiguous = true;
+        if (g < first) { second = first; first = g; }
+        else if (second == UINT32_MAX || g < second) second = g;
     }
     template <class E>
-    bool mt_numt_tie(const E& e) const {
-        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.has_nuc;
-    }
+    void note_gene(E& e, uint32_t g) const { note_gene_set(e.first_gene, e.second_gene, e.gene_ambiguous, e.has_nuc, g); }
     template <class E>
     static ReadFeatures mt_rescue_features(const E& e) {
         return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
                             static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+    }
+
+    // intron_rule::kExonPrecedence. Every multimapper entry also keeps, over its exonic alignments only (an alignment whose same-strand
+    // exon overlaps are not empty), what note_gene keeps over all of them (ex_first / ex_second / ex_ambiguous / ex_has_nuc, order-free
+    // in the same way) and the R7 assignment restricted to them (xa_*: the primary's features when the primary is exonic and kept by the
+    // read-level rules, else the smallest secondary exon). The state is kept whatever the rules; only mm_verdict reads it, under the rule.
+    template <class E>
+    void note_ex_gene(E& e, uint32_t g) const { note_gene_set(e.ex_first, e.ex_second, e.ex_ambiguous, e.ex_has_nuc, g); }
+    // the primary alignment: exon_gene / exon_multigene as the primary path computed them, gf_multi = gene_full_multi (kGeneFullSet's
+    // single-alignment rule: an exon of one gene inside another gene's intron stays ambiguous), rf after classify_read and refine_read
+    template <class E>
+    void note_primary_exonic(E& e, const std::vector<uint32_t>& exon_overlaps, uint32_t exon_gene, bool exon_multigene, bool gf_multi,
+                             const ReadFeatures& rf) const {
+        if (exon_overlaps.empty()) return;   // intron-only or intergenic: not an exonic alignment
+        e.ex_seen = true;
+        if (exon_multigene) {
+            e.ex_ambiguous = true;
+            // its first two exon genes, as the all-alignment set takes them (G-EM candidates)
+            const uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+            if (ga != UINT32_MAX) {
+                note_ex_gene(e, ga);
+                for (size_t i = 1; i < exon_overlaps.size(); ++i) {
+                    const uint32_t gb = gene_model_.exon_to_gene(exon_overlaps[i]);
+                    if (gb != UINT32_MAX && gb != ga) { note_ex_gene(e, gb); break; }
+                }
+            }
+            return;
+        }
+        if (gf_multi) e.ex_ambiguous = true;
+        note_ex_gene(e, exon_gene);
+        if (rf.gene != UINT32_MAX) {
+            e.xa_primary = true;
+            e.xa_gene = rf.gene; e.xa_exon = rf.exon_idx; e.xa_intron = rf.intron_idx; e.xa_flags = rf.flags; e.xa_diag = rf.diag;
+        }
+    }
+    // a secondary alignment (determine_exon_gene*'s hit; multi_gene of an exonic hit = exons of two genes, or under kGeneFullSet an exon
+    // and another gene's intron)
+    template <class E>
+    void note_secondary_exonic(E& e, const GeneHit& hit) const {
+        if (!hit.exonic) return;
+        e.ex_seen = true;
+        if (hit.multi_gene) { e.ex_ambiguous = true; return; }
+        note_ex_gene(e, hit.gene_idx);
+        if (hit.gene_idx != UINT32_MAX && !e.xa_primary && (e.xa_gene == UINT32_MAX || hit.exon_idx < e.xa_exon)) {
+            e.xa_gene = hit.gene_idx; e.xa_exon = hit.exon_idx; e.xa_intron = UINT32_MAX; e.xa_flags = kExonicReadFlags; e.xa_diag = 0;
+        }
+    }
+    // the cross-worker merge of two partial entries of one read (order-free: the union of the gene sets, the primary's or the smallest exon)
+    template <class E>
+    void merge_exonic(E& m, const E& w) const {
+        if (!w.ex_seen) return;
+        m.ex_seen = true;
+        if (w.ex_ambiguous) m.ex_ambiguous = true;
+        if (w.ex_has_nuc) m.ex_has_nuc = true;
+        note_ex_gene(m, w.ex_first);
+        note_ex_gene(m, w.ex_second);
+        if (w.xa_gene != UINT32_MAX && !m.xa_primary && (w.xa_primary || m.xa_gene == UINT32_MAX || w.xa_exon < m.xa_exon)) {
+            m.xa_primary = w.xa_primary;
+            m.xa_gene = w.xa_gene; m.xa_exon = w.xa_exon; m.xa_intron = w.xa_intron; m.xa_flags = w.xa_flags; m.xa_diag = w.xa_diag;
+        }
+    }
+
+    // What a completed multimapper entry yields (the serial resolve_mm, resolve_mm_parallel and the cross-worker merge share it):
+    // kMt  intron_rule::kMtPrefer: gene-ambiguous between a chrM gene and a nuclear gene (NUMT); counted for the chrM gene (rf)
+    // kAmbig  gene-ambiguous with two candidate genes for G-EM (gene_a < gene_b); kCount  counted with rf; kNone  nothing.
+    // The gene set it is judged on: all alignments (note_gene), or under intron_rule::kExonPrecedence the exonic alignments when there are any.
+    struct MmVerdict {
+        enum Kind { kNone, kMt, kAmbig, kCount } kind = kNone;
+        ReadFeatures rf;
+        uint32_t gene_a = UINT32_MAX, gene_b = UINT32_MAX;
+    };
+    template <class E>
+    MmVerdict mm_verdict(const E& e) const {
+        MmVerdict v;
+        const bool ex = (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen;
+        const bool ambiguous = ex ? e.ex_ambiguous : e.gene_ambiguous;
+        // a read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a pseudogene) comes from the mitochondrial
+        // genome (hundreds of copies per cell vs. one nuclear copy): count it for the chrM gene instead of dropping it as gene-ambiguous
+        if (ambiguous && e.mt_gene != UINT32_MAX && (ex ? (e.ex_has_nuc && e.mt_ex) : e.has_nuc)) {
+            v.kind = MmVerdict::kMt;
+            v.rf = mt_rescue_features(e);
+            return v;
+        }
+        if (ambiguous) {
+            v.gene_a = ex ? e.ex_first : e.first_gene;
+            v.gene_b = ex ? e.ex_second : e.second_gene;
+            if (v.gene_a != UINT32_MAX && v.gene_b != UINT32_MAX) v.kind = MmVerdict::kAmbig;
+            return v;
+        }
+        if (ex) {
+            if (e.ex_first == UINT32_MAX || e.xa_gene == UINT32_MAX) return v;
+            v.rf = ReadFeatures{e.xa_gene, e.xa_exon, e.xa_intron, e.xa_flags, e.xa_diag};
+        } else {
+            // gene-unique: first_gene is the only gene (or all intergenic)
+            if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return v;
+            v.rf = ReadFeatures{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags, e.read_diag};
+        }
+        v.rf.diag = static_cast<uint8_t>(v.rf.diag | DirectionalUmiStore::kDiagMulti);
+        v.kind = MmVerdict::kCount;
+        return v;
     }
 
     // intron_rule::kGeneFullSet on a primary alignment: more than one gene in its same-strand body set (exons of two genes, an exon of one
@@ -4840,7 +4937,7 @@ private:
                                         note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(it->second, hit.gene_idx);
-                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
                                         if (!it->second.primary_assigned &&
@@ -4851,6 +4948,7 @@ private:
                                             it->second.read_flags = kExonicReadFlags;
                                         }
                                     }
+                                    note_secondary_exonic(it->second, hit);
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm_parallel(wc, it->second);
                                         wc.mm_buffer.erase(it);
@@ -4869,8 +4967,9 @@ private:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(entry, hit);
                                 }
                             }
                         }
@@ -5109,7 +5208,7 @@ private:
                     entry.intron_idx = rf.intron_idx;
                     entry.read_flags = rf.flags;
                     entry.read_diag = rf.diag;
-                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
+                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag, exon_gene != UINT32_MAX);
                 }
                 if (umi_str && umi_len > 0) {
                     int clen = std::min(umi_len, 15);
@@ -5117,6 +5216,8 @@ private:
                     entry.umi[clen] = '\0';
                     entry.umi_len = static_cast<uint8_t>(umi_len);
                 }
+                const bool gf_multi = gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps);
+                note_primary_exonic(entry, wc.exon_overlaps, exon_gene, primary_multigene, gf_multi, rf);
                 if (primary_multigene) {
                     entry.gene_ambiguous = true;
                     // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from wc.exon_overlaps
@@ -5134,7 +5235,7 @@ private:
                     }
                 }
 
-                if (gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps)) entry.gene_ambiguous = true;
+                if (gf_multi) entry.gene_ambiguous = true;
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                 note_gene(entry, aln_gene);
 

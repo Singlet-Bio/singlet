@@ -38,6 +38,27 @@
 namespace singlet {
 namespace nonhost {
 
+// ── Species keys ─────────────────────────────────────────────────────────────
+// The viral and microbial indices number their species independently, so one id can name a virus in one index and a
+// microbe in the other (about 1% of candidate rows in pbmc1k_v3). Inside the engine a species is keyed by index plus id:
+// a viral key is the viral id, a microbial key is the microbial id with bit 31 set. tag_microbial_keys() applies this to
+// the screen's output once, so the EM, the per-cell matrix and the confirmed reads count a virus and a microbe that share
+// an id as two species. Outputs write raw_species_id(key), the id in its own index, which is unchanged (D-100).
+constexpr uint32_t kMicrobialKeyBit = 0x80000000u;
+inline constexpr bool     is_microbial_key(uint32_t key) noexcept { return (key & kMicrobialKeyBit) != 0; }
+inline constexpr uint32_t raw_species_id(uint32_t key)   noexcept { return key & ~kMicrobialKeyBit; }
+inline constexpr uint32_t microbial_key(uint32_t sid)    noexcept { return sid | kMicrobialKeyBit; }
+
+// Sets bit 31 on every microbial hit id. Returns false (and changes nothing) if an id already uses bit 31.
+inline bool tag_microbial_keys(std::vector<NonHostScreener::MultiHit>& multi_hits) {
+    for (const auto& mh : multi_hits)
+        for (const auto& [sid, rate] : mh.microbial_hits)
+            if (is_microbial_key(sid)) return false;
+    for (auto& mh : multi_hits)
+        for (auto& h : mh.microbial_hits) h.first = microbial_key(h.first);
+    return true;
+}
+
 // ── Output type ──────────────────────────────────────────────────────────────
 
 // Confidence level based on per-species mean_hit_rate after EM:
@@ -141,7 +162,8 @@ inline EmFit em_fit(
     for (const auto& mh : multi_hits) {
         if (mh.viral_hits.empty() && mh.microbial_hits.empty()) continue;
 
-        // If a species appears in both viral and microbial lists (edge case), take the maximum.
+        // A key in both lists takes the maximum rate. After tag_microbial_keys() the lists share no key, so this only
+        // matters for untagged input (the unit tests), where an id shared by both indices is one species.
         std::map<uint32_t, float> merged;
         for (const auto& [sid, rate] : mh.viral_hits)
             merged[sid] = std::max(merged[sid], rate);   // default-initialises to 0.0
@@ -395,15 +417,13 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
 
 // ── Kingdom map builder ───────────────────────────────────────────────────────
 
-// Build a species_id → NonHostCategory map from a batch of MultiHit results.
-// All species_ids found in viral_hits → VIRAL.
-// species_ids in microbial_hits only → FUNGAL if their id is in fungal_species, else BACTERIAL.
+// Build a species key → NonHostCategory map from a batch of MultiHit results.
+// Keys in viral_hits → VIRAL. Keys in microbial_hits only → FUNGAL if their raw id is in fungal_species, else BACTERIAL.
 // Call this before em_deconvolve() when no external map is available.
 //
-// The viral and microbial indices number their species independently, so one id can name a virus in one and a microbe in the
-// other. The map is a function of the set of reads, not of their order: an id seen in any read's viral hits is VIRAL, as
-// species_name_lookup also resolves the viral name first. (Keeping the first kingdom seen made the label depend on read order,
-// which differs between the CPU and GPU paths.)
+// With tagged input (tag_microbial_keys) viral and microbial keys are disjoint, so each key has one kingdom. With untagged
+// input an id shared by both indices is VIRAL whatever the read order (as species_name_lookup resolved the viral name first),
+// which keeps the map a function of the set of reads and not of their order.
 inline std::unordered_map<uint32_t, NonHostCategory> build_kingdom_map(
         const std::vector<NonHostScreener::MultiHit>& multi_hits,
         const std::unordered_set<uint32_t>& fungal_species = {}) {
@@ -413,8 +433,8 @@ inline std::unordered_map<uint32_t, NonHostCategory> build_kingdom_map(
             kmap[sid] = NonHostCategory::VIRAL;
     for (const auto& mh : multi_hits)
         for (const auto& [sid, rate] : mh.microbial_hits)
-            kmap.emplace(sid, fungal_species.count(sid) ? NonHostCategory::FUNGAL
-                                                        : NonHostCategory::BACTERIAL);   // never replaces VIRAL
+            kmap.emplace(sid, fungal_species.count(raw_species_id(sid)) ? NonHostCategory::FUNGAL
+                                                                        : NonHostCategory::BACTERIAL);   // never replaces VIRAL
     return kmap;
 }
 

@@ -1766,12 +1766,13 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         NonHostScreener screener(viral_idx, microbial_idx, 0.05f,
                                  std::move(fungal_species_ids));
 
-        // Helper to look up species names across both indices
-        auto species_name_lookup = [&](uint32_t sid) -> std::string {
-            std::string n = viral_idx.species_name(sid);
-            if (!n.empty()) return n;
-            return microbial_idx.species_name(sid);
+        // Species name of an engine species key (nonhost_em.h): a microbial key names a microbial species, any other key a
+        // viral one, so a virus and a microbe that share an id keep their own names (D-100)
+        auto species_name_lookup = [&](uint32_t key) -> std::string {
+            return singlet::nonhost::is_microbial_key(key) ? microbial_idx.species_name(singlet::nonhost::raw_species_id(key))
+                                                           : viral_idx.species_name(key);
         };
+        using singlet::nonhost::raw_species_id;
 
         // ── NONHOST-HOST-SUBTRACT: try to load host Bloom filter ──────────────
         HostKmerFilter host_filter;
@@ -1893,6 +1894,9 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
 #ifdef SINGLET_HAVE_ENGINE_GPU
         }
 #endif
+        // Key microbial species apart from viral ones before anything counts species (D-100). Outputs write raw ids.
+        if (!singlet::nonhost::tag_microbial_keys(multi_hits))
+            throw std::runtime_error("nonhost: a microbial species id uses bit 31, which the engine reserves for its species key");
 
         // Build kingdom map (FUNGAL correctly labelled via screener.fungal_species())
         auto kingdom_map = build_kingdom_map(multi_hits, screener.fungal_species());
@@ -1925,14 +1929,14 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                         sa.kingdom == NonHostCategory::FUNGAL  ? "fungal_genomes"   :
                                                                   "bacterial_genomes";
                     std::string fna = eff_ref_dir + "/nonhost/" + kdir
-                                    + "/species_" + std::to_string(sa.species_id) + ".fna";
+                                    + "/species_" + std::to_string(raw_species_id(sa.species_id)) + ".fna";
                     struct stat fna_st{};
                     if (stat(fna.c_str(), &fna_st) == 0)
-                        std::cerr << "[nonhost] species_id=" << sa.species_id
+                        std::cerr << "[nonhost] species_id=" << raw_species_id(sa.species_id)
                                   << " confirmed (FASTA found)\n";
                     else {
                         nonhost_missing_fasta.push_back(fna);
-                        std::cerr << "[nonhost] WARNING: species_id=" << sa.species_id
+                        std::cerr << "[nonhost] WARNING: species_id=" << raw_species_id(sa.species_id)
                                   << " confirmed by EM but no reference FASTA available"
                                      " for secondary alignment (" << fna << " not found)\n";
                     }
@@ -2008,7 +2012,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             for (const auto& sa : cand) {
                 const char* kname = sa.kingdom == NonHostCategory::VIRAL ? "VIRAL" : sa.kingdom == NonHostCategory::BACTERIAL ? "BACTERIAL"
                                   : sa.kingdom == NonHostCategory::FUNGAL ? "FUNGAL" : "UNKNOWN";
-                ctsv << kname << "\t" << sa.species_id << "\t" << species_name_lookup(sa.species_id) << "\t" << sa.n_reads_assigned << "\t"
+                ctsv << kname << "\t" << raw_species_id(sa.species_id) << "\t" << species_name_lookup(sa.species_id) << "\t" << sa.n_reads_assigned << "\t"
                      << n_total << "\t" << std::fixed << std::setprecision(6) << sa.relative_abundance << "\t" << sa.mean_hit_rate << "\t"
                      << (confirmed_ids.count(sa.species_id) ? 1 : 0) << "\t" << std::setprecision(6)
                      << singlet::nonhost::infection_probability(sa.n_reads_assigned, static_cast<double>(n_total), sa.mean_hit_rate) << "\n";
@@ -2030,7 +2034,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                         case NonHostCategory::FUNGAL:    kname = "FUNGAL";    break;
                         default:                          kname = "UNKNOWN";   break;
                     }
-                    tsv << kname << "\t" << sa.species_id << "\t"
+                    tsv << kname << "\t" << raw_species_id(sa.species_id) << "\t"
                         << species_name_lookup(sa.species_id) << "\t"
                         << std::fixed << std::setprecision(6)
                         << sa.relative_abundance << "\t"
@@ -2104,7 +2108,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                         case NonHostCategory::FUNGAL:    kname = "FUNGAL";    break;
                         default:                          kname = "UNKNOWN";   break;
                     }
-                    jf << "    {\"species_id\": " << sa.species_id
+                    jf << "    {\"species_id\": " << raw_species_id(sa.species_id)
                        << ", \"species_name\": \"" << species_name_lookup(sa.species_id) << "\""
                        << ", \"kingdom\": \"" << kname << "\""
                        << ", \"relative_abundance\": " << sa.relative_abundance
@@ -4980,7 +4984,7 @@ static int singlet_main(int argc, char* argv[]) {
             if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
             else if (std::string pw; !e19probe::usable(pw)) why = "no usable GPU (" + pw + "): the GPU pileup will be declined";
             else if (onefq_r2_bound > (int) singlet_qmask::maxBases()) why = "cDNA reads over " + std::to_string(singlet_qmask::maxBases()) + " bases: the GPU pileup will be declined";
-            else if (ir & ~(1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397
+            else if (ir & ~(1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u | 4096u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397, kExonPrecedence (4096) to 7053
             else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
             else if (stream_unsorted == 0 || parallel_pileup == 1 || tagged_bam_enabled || !bam_file.empty() || getenv("SINGLET_KEEP_STAR_BAM"))
                 why = "the sorted-BAM path: no GPU pileup on STAR's stream";
@@ -5968,7 +5972,8 @@ static int singlet_main(int argc, char* argv[]) {
     }
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
-    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced; rules 2957)
+    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced,
+    // kExonPrecedence; rules 7053)
     // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the mixed molecules behind the pre-USA split (mixed_exon / mixed_intron)
     // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
     // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
@@ -5977,7 +5982,7 @@ static int singlet_main(int argc, char* argv[]) {
         unsetenv("SINGLET_GPU_PILEUP");
     }
     if (getenv("SINGLET_GPU_PILEUP")) {
-        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u;
+        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u | 4096u;
         uint32_t rules = config.intron_rules;
         if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (rules & ~kGpuRules) {

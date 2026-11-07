@@ -456,7 +456,7 @@ struct PileupInput {
     // (same order as `reads`): bit i = base i of the record sequence, in the record's (original read) orientation, has quality < minBaseq
     int useQual = 0;
     std::vector<uint8_t> lowq;
-    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer
+    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneVelo, kUmiGeneSpliced, kExonPrecedence
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
     // kFlank (only when intronRules has it): per gene its body [geneStart, geneEnd) and its merged exons geneExons[geneExonOff[g] .. geneExonOff[g + 1])
     // (GeneRecord::exon_indices, sorted by start), exon coordinates by exon index
