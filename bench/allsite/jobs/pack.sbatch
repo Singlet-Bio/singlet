@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=allsite-pack
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-bigmem
 #SBATCH --nodes=1
-#SBATCH --exclusive
-#SBATCH --mem=0
+#SBATCH --cpus-per-task=28
+#SBATCH --mem=700G
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# D-101 validation packed on one whole node: every line of $LIBS ("name truth input", truth "-" for none) runs validate.sbatch in
+# D-101 validation packed in one job (size it to the largest free slot; one node): every line of $LIBS ("name truth input", truth "-" for none) runs validate.sbatch in
 # parallel with an equal share of the node's cores. Needs BINDIR and LIBS (a file). Logs per library: $W/logs/allsite-pack-$JOB-<name>.out
 set -uo pipefail
 : "${BINDIR:?}" "${LIBS:?}"
