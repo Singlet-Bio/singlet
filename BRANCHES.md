@@ -250,3 +250,96 @@ The dependabot pull requests #183, #184 and #185 pass CI and stay open.
 ## Left to the GPU line
 
 These branches are handled with `gpu/frontier` and listed in `GPU_BRANCHES.md` there: `docs/gpu-handoff-2026-11-06`, `fix/gpu-strand-restart`, `gpu/bold`, `gpu/bold-admit`, `gpu/bold-hostcut`, `gpu/bold-integ`, `gpu/bold-kern`, `gpu/bold-kern2`, `gpu/bold-shidx`, `gpu/bold-shidx-fix`, `gpu/bold-split`, `gpu/cr4-clip`, `gpu/engine-gpu`, `gpu/engine-gpu-order-free`, `gpu/engine-gpu-stream`, `gpu/fable-engine`, `gpu/fable/beta-notes`, `gpu/fable/budget`, `gpu/fable/census`, `gpu/fable/compact`, `gpu/fable/e2e`, `gpu/fable/hostloop`, `gpu/fable/ingest`, `gpu/fable/lockclip`, `gpu/fable/mtpileup`, `gpu/fable/order`, `gpu/fable/pool`, `gpu/fable/posterior`, `gpu/fable/prefill`, `gpu/fable/probe`, `gpu/fable/profile`, `gpu/fable/records`, `gpu/fable/release`, `gpu/fable/seeds`, `gpu/fable/solo`, `gpu/fable/solowire`, `gpu/fable/tail`, `gpu/fable/throughput`, `gpu/fable/warp-window`, `gpu/fg2-engine`, `gpu/fg2-table-prefill`, `gpu/frontier`, `gpu/gpu-lock-release`, `gpu/gpu-pileup-preflight`, `gpu/gpu-pileup-quality`, `gpu/gpu-slots`, `gpu/gpu-slots2`, `gpu/host-offload`, `gpu/intron-rules`, `gpu/w11-prototypes`, `perf/gpu-candidate-pr2`, `perf/gpu-device`, `perf/gpu-instrumentation`, `perf/gpu-next`, `perf/gpu-next-e20`, `perf/gpu-next-e20e21`, `perf/gpu-next-e21`, `perf/gpu-pinned-dedup`, `perf/nvtx-host-ranges`, `perf/pileup-lock-release`.
+
+## Worktree pass
+
+A second pass removed the local worktrees under `.claude/worktrees` that were clean, fully pushed, owned by no running session, and whose tips were reachable or archive-tagged. Ten unreachable but clean tips were tagged `archive/2026-11-06/<branch>` first. 60 worktrees were removed and 41 remote branches deleted. Remote branches after this pass: 57.
+
+| Branch | Local tip | Remote tip deleted | Kept by |
+|---|---|---|---|
+| `bench/demux-truth` | 163e70a7475e | 163e70a7475ed74bd48f5ede344f9f7c4d6ade15 | tag `archive/gpu-2026-11-06/bench/demux-truth` |
+| `bench/demux-truth2` | fe78ec01e076 | fe78ec01e07632cbde2ecbdd065b104fd757b40a | tag `archive/gpu-2026-11-06/bench/demux-truth2` |
+| `bench/editing-check` | 9c5eb0687090 | local only | reachable from prod/campaign, main, gpu/frontier |
+| `bench/exact-vs-pseudo` | 8460ed6f66db | 8460ed6f66db1bd4242e79a276e67bb29a7c4fdb | tag `archive/gpu-2026-11-06/bench/exact-vs-pseudo` |
+| `bench/hto-independent` | 53fd81163fa1 | 53fd81163fa1825b0839caf7e3fd65e85c05c442 | tag `archive/2026-11-06/bench/hto-independent` |
+| `bench/nonhost-transcripts` | e53636dbb504 | e53636dbb504b8b2a838290637bcd61b1a4aa5fa | tag `archive/2026-11-06/bench/nonhost-transcripts` |
+| `bench/public-ambient-doublets` | 178cea486dcd | 178cea486dcde0f56719f13d368a09960752bb5b | tag `archive/2026-11-06/bench/public-ambient-doublets` |
+| `bench/public-counts` | 772eb0cd1fec | 772eb0cd1fecb9444e3a9402863544528ae1a006 | tag `archive/2026-11-06/bench/public-counts` |
+| `bench/public-genotype` | 4eb87a245b63 | 4eb87a245b63f2c96999ab18444ccfbb843dbcc4 | tag `archive/2026-11-06/bench/public-genotype` |
+| `bench/read-collapse` | 4e4963021dd1 | 4e4963021dd1faf200eb3c9a5642af6417ef48a0 | tag `archive/gpu-2026-11-06/bench/read-collapse` |
+| `bench/scbasecount` | b891bd71f406 | b891bd71f4064957d7938651935d686839720529 | reachable from prod/campaign, main, gpu/frontier |
+| `bench/tx-first` | 85a7c4f05e17 | 85a7c4f05e17a2937ceb98dc27506c5d744790b3 | tag `archive/gpu-2026-11-06/bench/tx-first` |
+| `bench/vdj-heldout` | 90b934897cbd | 90b934897cbd3189ae3b9cae485563dc0a76c1c7 | tag `archive/2026-11-06/bench/vdj-heldout` |
+| `claude/alpha-repack` | 7c7916b796c8 | 7c7916b796c887894a17db4b7c11a4015fdf4afd | tag `archive/2026-11-06/claude/alpha-repack` |
+| `claude/alpha-s1` | 6db779a95e98 | local only | reachable from prod/campaign, main, gpu/frontier |
+| `claude/atac-orderfree-a1-a2` | 595d4e6a5897 | 595d4e6a5897b0c61a6ea19245bcbdc27e86c5b5 | tag `archive/gpu-2026-11-06/claude/atac-orderfree-a1-a2` |
+| `claude/cell-type-capability` | 0bf6dfe99419 | 0bf6dfe9941995ca2172842c9f4c79741b3440b8 | reachable from prod/campaign, main, gpu/frontier |
+| `claude/celltype-nn` | ef1684f5c7bc | 999e1954d5e4cc11d4d990e3bd23847deacaae00 | reachable from prod/campaign, main, gpu/frontier |
+| `claude/docs-ancestry-call-legacy` | 60c0e202d127 | 60c0e202d127398a5beeb2a8ae3bff0e091221a6 | reachable from prod/campaign, main, gpu/frontier |
+| `claude/gpu-atac-reducers-270cf8` | cabdbfd5cf24 | cabdbfd5cf2496bd5228f2f84846a3df739d6027 | tag `archive/gpu-2026-11-06/claude/gpu-atac-reducers-270cf8` |
+| `claude/gpu-barcode-layer-484c70` | 46484d80fe2c | 46484d80fe2c35cf71d8a248f24364c3ab417c97 | tag `archive/gpu-2026-11-06/claude/gpu-barcode-layer-484c70` |
+| `claude/gpu-paired-prep-f54059-run` | 1acfd71247ff | local only | tag `archive/2026-11-06/claude/gpu-paired-prep-f54059` |
+| `claude/r12-posterior-099` | de651cbb6a73 | de651cbb6a73a47dc8ee5bffff31512857ee6b16 | reachable from prod/campaign, main, gpu/frontier |
+| `claude/s1-client-labels` | 69ee7b42dfb7 | 69ee7b42dfb77e064cfcad425d8a536ace1a1179 | reachable from prod/campaign, main, gpu/frontier |
+| `claude/s1-rename` | 17b9befe694f | 17b9befe694f0f7fe8923a7e24373347fc0aa36f | reachable from prod/campaign, main, gpu/frontier |
+| `claude/store-rename-rebase` | 36ff33d236e3 | local only | reachable from prod/campaign, main, gpu/frontier |
+| `claude/v2-cell-features` | efca0a81d008 | efca0a81d008015e9a50911560e7b3f151d1098b | reachable from prod/campaign, main, gpu/frontier |
+| `docs/beta-rollout-plan` | 6aa280c7babd | 6aa280c7babdf61b66e1a155fc3f62d38b8bc532 | reachable from prod/campaign, main, gpu/frontier |
+| `feat/campaign-orchestrator` | ebd59e348cc8 | ebd59e348cc82f51ece4de9bc4e7ee3956399631 | reachable from prod/campaign, main, gpu/frontier |
+| `feat/doublet-score-v2` | b1f9b3bb145d | b1f9b3bb145d202c971b3d6b54c5ad2c5d03bc89 | reachable from prod/campaign, main, gpu/frontier |
+| `fix/ambient-calibration` | a57faa14a762 | a57faa14a762e14440ab8fe84b3fb8fdee036193 | tag `archive/2026-11-06/fix/ambient-calibration` |
+| `fix/atlas-rerun-exit8` | 74662cc18cb4 | 74662cc18cb4cd92aa1b1ff7a52c1cee28236618 | tag `archive/gpu-2026-11-06/fix/atlas-rerun-exit8` |
+| `fix/called-v2-golden-tolerance` | c8cf92aada51 | c8cf92aada51c4bf7ba3cae8363f56e3aa07fa6d | reachable from prod/campaign, main, gpu/frontier |
+| `fix/crispr-guide-orientation` | d3e4fcd533fa | 06bfd70f848b9e5d5603b8aa72a9ebb8d6d6148f | reachable from prod/campaign, main, gpu/frontier |
+| `fix/editing-comment` | ec71ed8fc2ae | ec71ed8fc2ae6ae68f66b2ed7d252fd972731b82 | reachable from prod/campaign, main, gpu/frontier |
+| `fix/gpu-strand-restart` | 65c8293558af | local only | tag `archive/gpu-2026-11-06/fix/gpu-strand-restart` |
+| `fix/intron-assignment` | 688aeb445a7b | 688aeb445a7b8396cb673ffe5684ae3a757bdb1e | tag `archive/gpu-2026-11-06/fix/intron-assignment` |
+| `fix/is-cell-called-v2` | c844c0442402 | c844c0442402d36b0d00ff571ded3e719890c75b | reachable from prod/campaign, main, gpu/frontier |
+| `fix/s1-strip-mt-doublet` | bf71d8e1b4f8 | bf71d8e1b4f8ee6f2d495db907e215ed7ca7673b | tag `archive/2026-11-06/fix/s1-strip-mt-doublet` |
+| `fix/usa-labels` | 3ade35c4d8d5 | 3ade35c4d8d5245e52148ce8979428908aa2e380 | reachable from prod/campaign, main, gpu/frontier |
+| `fix/usa-legacy-layers` | 80e2c23fbb1a | 80e2c23fbb1a8881abf6e069ee7176d0aa6a00ca | reachable from prod/campaign, main, gpu/frontier |
+| `gpu/bold-hostcut` | f04a64c7b066 | local only | tag `archive/gpu-2026-11-06/gpu/bold-hostcut` |
+| `gpu/bold-integ` | e80aeb6580b3 | local only | tag `archive/gpu-2026-11-06/gpu/bold-integ` |
+| `gpu/bold-kern2` | 2398b35f6791 | local only | tag `archive/gpu-2026-11-06/gpu/bold-kern2` |
+| `gpu/bold-shidx` | 398846ac2d2a | local only | tag `archive/gpu-2026-11-06/gpu/bold-shidx` |
+| `gpu/bold-split` | 3c0ac3c25cb2 | local only | tag `archive/gpu-2026-11-06/gpu/bold-split` |
+| `gpu/engine-gpu` | 9eda178beb19 | local only | reachable from prod/campaign, main, gpu/frontier |
+| `gpu/engine-gpu-stream` | 9ca1ea6027ac | local only | reachable from prod/campaign, main, gpu/frontier |
+| `gpu/w11-prototypes` | b49a3a6adb6a | local only | reachable from prod/campaign, main, gpu/frontier |
+| `perf/deep-samples` | 83ba3c5d54b1 | 83ba3c5d54b10870e4da640a2461bb984df894e3 | tag `archive/gpu-2026-11-06/perf/deep-samples` |
+| `perf/download-chem` | 62dab27e3920 | local only | reachable from prod/campaign, main, gpu/frontier |
+| `perf/gpu-next` | f15eebb63fa2 | local only | tag `archive/gpu-2026-11-06/perf/gpu-next` |
+| `perf/star-accel` | 7229f45b8657 | fffca54e549c7744a63efb0fe018adbe3c87bac2 | reachable from prod/campaign, main, gpu/frontier |
+| `perf/txome-first` | 5a6652e08b8e | e1cc282be0b5cfb5b510225206687f8f1ac07a35 | reachable from prod/campaign, main, gpu/frontier |
+| `s11/gate3-harness` | 4530fcdf1552 | 4530fcdf155204373dee8d2bb3751f1ae7043287 | reachable from prod/campaign, main, gpu/frontier |
+| `study/latent-qc-ambient-truth` | 67d4d52245f5 | 67d4d52245f534ba0bb37519da2576477ac9ac1b | tag `archive/2026-11-06/study/latent-qc-ambient-truth` |
+| `worktree-agent-a8e264078653ff4b4` | 5c279cde64ef | local only | reachable from prod/campaign, main, gpu/frontier |
+| `worktree-agent-aa985dbbc513161a7` | 62dab27e3920 | local only | reachable from prod/campaign, main, gpu/frontier |
+
+Kept in this pass (the worktree holds uncommitted changes, belongs to a running session, or its branch is kept by an earlier rule):
+
+| Worktree | Branch | Reason |
+|---|---|---|
+| `agent-a197db1e7dec890bc` | `prod/run-screen` | 1 uncommitted change(s) |
+| `agent-a3674b4f024acdedc` | `study/latent-qc-ambient-atlas` | 1 uncommitted change(s) |
+| `agent-a388e00fd615fcab4` | `bench/vdj-sota` | heads an open PR |
+| `agent-a61509684bd297466` | `prod/atlas-rerun` | prod/* branch |
+| `agent-a73ea396223ab5ed3` | `bench/cellcall-independent-truth` | 2 uncommitted change(s) |
+| `agent-aa1393e5c52ced712` | `gpu/bold-kern` | 1 uncommitted change(s) |
+| `agent-ac0e5d1124efa197a` | `bench/public-perf` | 1 uncommitted change(s) |
+| `agent-ad0d4258ead787203` | `prod/campaign` | 24 uncommitted change(s) |
+| `agent-ae1497859bd407d68` | `(detached)` | 1 uncommitted change(s) |
+| `beta-pilot-cde0b8` | `claude/beta-pilot-cde0b8` | running or protected session |
+| `cpu-perf-c66d3f` | `perf/gpu-candidate-pr2` | running or protected session |
+| `expression-sota-31cf6d` | `claude/expression-sota-31cf6d` | 5 uncommitted change(s) |
+| `gpu-barcode-layer-484c70` | `fix/intron-rule-default` | 1 uncommitted change(s) |
+| `gpu-batch1` | `bench/gpu-batch1` | pinned pending jobs |
+| `gpu-device` | `perf/gpu-device` | open PR #193 (GPU) |
+| `gpu-fast` | `gpu/bold-shidx-fix` | GPU fold-next branch |
+| `gpu-handoff` | `docs/gpu-handoff-2026-11-06` | open PR #195 (GPU) |
+| `gpu-paths` | `bench/gpu-paths` | GPU session's manifest edit |
+| `input-routes` | `feat/input-routes` | 1 uncommitted change(s) |
+| `pipeline-benchmark-fefef3` | `plan/atlas-rerun` | 1 uncommitted change(s) |
+| `upbeat-bose-c2ec4b` | `fix/protocol-geometry` | 1 uncommitted change(s) |
+| `vdj-crispr-benchmark-721d3a` | `(detached)` | 11 uncommitted change(s) |
+| `w3-speedups` | `perf/w3-speedups` | 1 uncommitted change(s) |
