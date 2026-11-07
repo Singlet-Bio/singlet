@@ -16,11 +16,11 @@ The source branches are deleted once their verdict is recorded; each tip stays p
 | 1 | Non-host GPU screen falls back to the CPU | bug, no branch | resolved: device wandering, gone on a pinned GPU; retry kept on | `SINGLET_NONHOST_GPU_TRIES` |
 | 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | adopted, off by default (diagnostic) | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
 | 3 | 512-base lift and lean-path memory (P3-MEM-03) | `perf/gpu-device`, a462be4d; `gpu/frontier-fold-device`, 7cc07dd4 | adopted: identical, cost-neutral, 1.2 G reads fit one H100 | default |
-| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | identical at 2 and 3 slots; adoption A/B pending | `SINGLET_GPU_SHARED_INDEX=1` |
-| 5 | E21 resident pool | `gpu/fable/pool`, 719fd650 (tag only) | pending | `singlet gpu-pool` |
-| 6 | Heavy-read split | `gpu/bold-split`, 3c0ac3c2 (tag only) | pending | `SINGLET_ENGINE_GPU_STEPS_B=<n>\|auto` |
-| 7 | Single-donor demux screen | `gpu/bold-hostcut`, f04a64c7 (tag only) | pending | `SINGLET_DEMUX_SCREEN=1` |
-| 8 | WSHRINK | in the tree | pending | `SINGLET_BOLD_WSHRINK=1` |
+| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | identical at 2 and 3 slots; adoption A/B on the whole node (item 25; item 24 could not run it on one GPU) | `SINGLET_GPU_SHARED_INDEX=1` |
+| 5 | E21 resident pool | `gpu/fable/pool`, 719fd650 (tag only) | rejected: the non-host server and genome preload cost 15 % of pairs/s and 17 % more core-s/M | `singlet gpu-pool` (server and preload off) |
+| 6 | Heavy-read split | `gpu/bold-split`, 3c0ac3c2 (tag only) | rejected: auto steps 4 % slower over three blocks | `SINGLET_ENGINE_GPU_STEPS_B=<n>\|auto` |
+| 7 | Single-donor demux screen | `gpu/bold-hostcut`, f04a64c7 (tag only) | dropped at the tuning stop (D-103): its truth tolerance check would not finish in time | `SINGLET_DEMUX_SCREEN=1` |
+| 8 | WSHRINK | in the tree | adopted, on by default: 9 % more pairs/s at flat core-s/M | default (`SINGLET_BOLD_WSHRINK=0` turns it off) |
 | 9 | k_resolve exon-multimapper fix | no source | pending | |
 | 10 | One device dedup | E12 and #145 | resolved: one remains | |
 | 11 | Prefill out of memory at 2 slots per GPU | bug, found by item 1 | resolved: the prefill retries every device failure; 0 fallbacks in 80 runs, all identical | `SINGLET_ENGINE_GPU_OOM_TRIES` (default 4) |
@@ -139,3 +139,25 @@ Unmapped.out.mate1 with the same record counts. The cause was the input: the T18
 and the file was rewritten before these gates. With CPU and GPU reading the same file on the RTX 8000 (803808), cite is IDENTICAL even
 though the non-host screen ran out of device memory there and screened on the CPU. Identity checks of samples whose index fits 30 GB can
 therefore run on the V100S and RTX 8000 nodes; barnyard samples stay on the H100s.
+
+## 5. E21 resident pool (rejected)
+
+Item 50-e21 ran 40 pbmc1k_v3 runs per arm through one `singlet gpu-pool` at 8 in flight, T=7, 2 slots, on one H100 of g051 (54 cores,
+binary 4ea9d1e9), in the order A B B A. With the non-host server and the genome preload on, the pool made 1.84 and 1.86 M pairs/s at
+10.9 and 11.7 core-s/M. With both off it made 2.10 and 2.26 M pairs/s at 9.6 core-s/M in both blocks. The server pins 41 GB of host
+memory per pool, and the runs then compete for it and for the cores that page it. Both stay off; the pool itself (one process, queue
+drained, 0 failed of 160) is kept for the campaign runner.
+
+## 6. Heavy-read split (rejected)
+
+Item 23-stp-seq2 compared `SINGLET_ENGINE_GPU_STEPS_B=auto` with base at 8 in flight, T=7, 2 slots on one H100 (binary 120c8e4f).
+Over three blocks auto steps averaged 1.54 M pairs/s against 1.61 for base (one short base arm left out), about 4 % slower, at
+3 % fewer core-s/M. seqstop stopped at its cap as inconclusive; no block favored the split on pairs/s.
+
+## 8. WSHRINK (adopted)
+
+Item 22-wsh-seq2 compared `SINGLET_BOLD_WSHRINK=1` with base under the same design. The WSHRINK arms made 1.65 and 1.74 M pairs/s
+against 1.43 and 1.68 for base, about 9 % more, at 9.4 to 9.5 core-s/M in both, and seqstop declared the win after one block. The
+fast loop's RTX 8000 screen pointed the same way (held time down 4 %). WSHRINK keeps lane B's window aligns in a per-batch pool, so
+the lane fits more reads per pass. It is the default from the next frontier commit, gated on all nine samples;
+`SINGLET_BOLD_WSHRINK=0` restores the old lane B.

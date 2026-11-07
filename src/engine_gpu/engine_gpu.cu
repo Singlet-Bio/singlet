@@ -72,7 +72,7 @@ typedef Caps<      160,     4,   32,    16,  16,     256,  8,   8,    8,     640
 typedef Caps<      160,     4,   32,    64,   8,    1024,  8,   8,   32,    2048> LaneM;
 typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096> LaneB;
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;
-// gpu/bold-kern2 (SINGLET_BOLD_WSHRINK=1): lane B with the windows' aligns in a per-batch pool (Work::waP) and smaller NWA / NKEEP.
+// gpu/bold-kern2 (on by default; SINGLET_BOLD_WSHRINK=0 turns it off): lane B with the windows' aligns in a per-batch pool (Work::waP) and smaller NWA / NKEEP.
 // A read that needs more than these capacities ends Overflow and goes to the host lane (STAR's limits), as lane B's own overflows do.
 typedef Caps<      160,     8,  128,   128,  32,    4096, 20,  32,   32,    4096, true> LaneBc;
 
@@ -1925,9 +1925,10 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 nRep = rep.size();
     constexpr u64 slotA = laneSlotB<LaneA>(), slotM = laneSlotB<LaneM>(), slotB = laneSlotB<LaneB>();
     constexpr u64 perA = lanePerB<LaneA, false>(), perMw = lanePerB<LaneM, true>(), perMt = lanePerB<LaneM, false>(), perB0 = lanePerB<LaneB, false>();
-    // gpu/bold-kern2: SINGLET_BOLD_WSHRINK=1: lane B on LaneBc (aligns in a pool, 25 bytes per read of its bookkeeping, g_waSlice aligns of pool per read)
-    auto envOn = [](const char* k) { const char* v = std::getenv(k); return v && v[0] == '1'; };
-    const bool wshrink = NEW && envOn("SINGLET_BOLD_WSHRINK");
+    // gpu/bold-kern2 (IDEAS item 8): lane B on LaneBc (aligns in a pool, 25 bytes per read of its bookkeeping, g_waSlice aligns of pool per read).
+    // On by default since item 22 (A/B on pbmc1k_v3, +9 % pairs/s at flat core-s/M); SINGLET_BOLD_WSHRINK=0 turns it off.
+    const char* wsV = std::getenv("SINGLET_BOLD_WSHRINK");
+    const bool wshrink = NEW && !(wsV && wsV[0] == '0');
     if (const char* wsE = std::getenv("SINGLET_BOLD_WASLICE")) g_waSlice = (int)std::max<u64>(8, std::strtoull(wsE, nullptr, 10));
     const u64 perB = wshrink ? lanePerB<LaneBc, false>() + 25 + (u64)g_waSlice * WA_SIZE * sizeof(m5::uint) : perB0;
     const u64 RES = 112;   // E8: per sequence its packed result and offsets kept on the device for the records' gather (~70 bytes of result on pbmc1k_v3)
