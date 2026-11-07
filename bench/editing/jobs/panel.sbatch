@@ -24,7 +24,8 @@ for f in TABLE1_hg38_v3.txt.gz TABLE1_mm10_v3.txt.gz; do
   ls -l $D/$f
 done
 [ -s $D/mm10ToMm39.over.chain.gz ] || curl -fsS --retry 5 -o $D/mm10ToMm39.over.chain.gz https://hgdownload.soe.ucsc.edu/goldenPath/mm10/liftOver/mm10ToMm39.over.chain.gz
-source $W/src/singlet-agents/main/hpc/clipper/in_runtime.sh
+IR=$W/src/singlet-agents/main/hpc/clipper/in_runtime.sh; [ -f $IR ] || IR=$(ls -d $W/src/singlet-agents/*/hpc/clipper/in_runtime.sh | head -1)
+source $IR
 in_runtime bash -c "pip install -q --target $SCR/py pyliftover"
 B=$SCR/src/scripts/editing/build_rediportal_panel.py
 in_runtime bash -c "PYTHONPATH=$SCR/py python3 -I $B --table $D/TABLE1_mm10_v3.txt.gz --fasta $REF/GRCm39-2024-A/fasta/genome.fa \
