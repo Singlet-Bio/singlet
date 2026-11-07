@@ -20,7 +20,7 @@ static int n_fail = 0;
 
 struct Sig { uint32_t aln_off; uint8_t n_aln; uint8_t nh; uint16_t rlen; uint64_t seq_off; };
 struct Aln { int32_t tid; int32_t pos; uint32_t ops_off; uint16_t n_ops; uint8_t flags; uint8_t mapq; };
-struct Rd { uint32_t sig; int32_t bc; uint64_t umi; };
+struct Rd { uint32_t sig; int32_t bc; uint64_t umi3; };
 
 struct Recs {
     std::vector<Sig> S; std::vector<Aln> Al; std::vector<Rd> R; std::vector<uint32_t> ops; std::vector<uint8_t> seq; std::vector<uint64_t> lq;

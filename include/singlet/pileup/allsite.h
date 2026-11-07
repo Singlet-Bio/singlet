@@ -186,7 +186,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                 walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
                     const int bi = base_idx(code); if (bi < 0) return;
                     const uint8_t ref = G.base(static_cast<int32_t>(t), pos); if (ref > 3 || bi == ref || !pass_q(r, ri, code)) return;
-                    obs.push_back({(static_cast<uint64_t>(static_cast<uint32_t>(pos)) << 2) | static_cast<uint64_t>(bi), x.bc, P.umi_dedup ? x.umi : r});
+                    obs.push_back({(static_cast<uint64_t>(static_cast<uint32_t>(pos)) << 2) | static_cast<uint64_t>(bi), x.bc, P.umi_dedup ? x.umi3 : r});
                 });
             }
             pt.obs = obs.size();
@@ -218,7 +218,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
             SnpConsensus cons; char ub[24];
             for (uint64_t k = b0; k < b1; ++k) {
                 const uint64_t r = by_tid[k]; const auto& x = R.read(r);
-                umi_chars(x.umi, ub);
+                umi_chars(x.umi3, ub);
                 // the read's sites: its aligned positions increase, so one cursor over the sorted site positions
                 const auto& sg = R.sig(x.sig);
                 size_t cur = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), R.aln(sg.aln_off + sig_p[x.sig]).pos) - spos.begin());

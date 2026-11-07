@@ -1836,6 +1836,27 @@ inline ExportStats export_results(const PileupEngine& engine,
             if (n < 0) { record_failed_write("private/genotype/donors.vcf.gz"); result.failed_writes = failed_writes; }
             else std::cerr << "[genotype] donors.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
         }
+        // D-101: the donor genotypes at the all-site member's sites, and each cell's alleles against its donor's genotype (panel and
+        // all-site sites), private. Both come from the stored counts and the donor assignments only.
+        if (demux_result.n_donors_k > 0) {
+            using CSC16 = SparseAccumulator<uint16_t>::CSCMatrix;
+            const std::vector<std::string> as_names = engine.allsite_ready() ? engine.allsite_names() : std::vector<std::string>();
+            if (engine.allsite_ready()) {
+                const long long n = genotype::write_donors_vcf(out_prefix + "/private/genotype/donors_allsite.vcf.gz", demux_result,
+                                                               engine.allsite().ad, engine.allsite().dp, cc_result.cell_indices, as_names);
+                if (n < 0) { record_failed_write("private/genotype/donors_allsite.vcf.gz"); result.failed_writes = failed_writes; }
+                else std::cerr << "[genotype] donors_allsite.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
+            }
+            std::vector<genotype::SiteSet<CSC16>> sets;
+            if (snp_dp_csc.ncols > 0) sets.push_back({&snp_ad_csc, &snp_dp_csc, &engine.snp_names(), "panel"});
+            if (engine.allsite_ready()) sets.push_back({&engine.allsite().ad, &engine.allsite().dp, &as_names, "allsite"});
+            if (!sets.empty()) {
+                const long long n = genotype::write_cells_vcf(out_prefix + "/private/genotype/cells.vcf.gz", demux_result, sets,
+                                                              cc_result.cell_indices, barcodes, engine.contig_names());
+                if (n < 0) { record_failed_write("private/genotype/cells.vcf.gz"); result.failed_writes = failed_writes; }
+                else std::cerr << "[genotype] cells.vcf.gz: " << n << " variant sites (some donor 0/1 or 1/1)\n";
+            }
+        }
 
         // ── G6: Donor-aware mitochondrial outputs ──
         // Runs when --snps was set (donor demux ran) and mt pileup data exists.
