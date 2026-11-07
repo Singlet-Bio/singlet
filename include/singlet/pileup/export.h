@@ -1663,6 +1663,19 @@ inline ExportStats export_results(const PileupEngine& engine,
                           << " time=" << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_pa0).count()
                           << "s\n";
             });
+        // TE molecules (te_counts.h): subfamilies x barcodes (unique and multi-mapped reads), loci x barcodes (unique reads, loci with a
+        // molecule), and the locus table. Built from the records in any order, so the CPU and GPU paths write the same bytes.
+        if (engine.has_te())
+            write_threads.emplace_back([&]() {
+                auto t0 = std::chrono::high_resolution_clock::now();
+                auto te = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()), engine.tid_to_chrom());
+                write_matrix("te_counts", te.fam, te.fam.names);
+                write_matrix("te_locus_counts", te.locus, te.locus.names);
+                write_gz_text(out_prefix + "/te_loci.tsv.gz", te.loci_tsv);
+                std::cerr << "[te] " << te.n_records << " TE reads (" << te.n_unique_records << " unique) -> " << te.fam_molecules
+                          << " subfamily molecules, " << te.locus_molecules << " locus molecules in " << te.locus.nrows << " loci, time="
+                          << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count() << "s\n";
+            });
         // sj_features.tsv.gz: STAR motif / annotation / read support and STARsolo-comparable flag per junction
         // (sj_features.h). All junctions stay in sj_counts; filtering is the reader's choice.
         if (pileup_cfg.count_sj && !engine.sj_names().empty() && !sj_csc.data.empty())
