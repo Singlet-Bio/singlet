@@ -242,7 +242,7 @@ run_item() {   # point item worker sample T
   ( while [ ! -e $CRS ]; do sleep 0.2; done; ln $CRS $D/CellReads.stats ) 2>/dev/null &
   local WATCH=$!
   local NS=""
-  case " ${NSYS_ITEMS:-} " in *" $i "*) NS="${NSYS_BIN:-/usr/local/cuda/bin/nsys} profile -o $O/prof --force-overwrite=true --trace=$(echo ${NSYS_TRACE:-cuda+nvtx} | tr + ,) ${NSYS_EXTRA:-} --sample=none --cpuctxsw=none --gpu-metrics-devices=all --gpu-metrics-frequency=${NSYS_GM_HZ:-10000}" ;; esac
+  case " ${NSYS_ITEMS:-} " in *" $i "*) NS="${NSYS_BIN:-/usr/local/cuda/bin/nsys} profile -o $O/prof --force-overwrite=true --trace=$(echo ${NSYS_TRACE:-cuda+nvtx} | tr + ,) ${NSYS_EXTRA:-} --sample=${NSYS_SAMPLE:-none} --cpuctxsw=${NSYS_CTXSW:-none} --gpu-metrics-devices=all --gpu-metrics-frequency=${NSYS_GM_HZ:-10000}" ;; esac
   local T0; T0=$(date +%s.%N)
   ( cd $D && env "${XE[@]}" /usr/bin/time -v -o $O/time.txt timeout -k 30 3000 $NS $ARM_BIN $SCR/data/$s.1fq --ref-base $REF --genome-dir $G/star_2.7.11b \
       --exons $G/genes/genes.gtf --out-prefix $D/out/ --threads $T --pipeline --output-format 1pz --engine gpu $EXTRA_ARGS 2>&1 \

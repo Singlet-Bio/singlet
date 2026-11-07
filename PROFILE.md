@@ -69,8 +69,9 @@ The prefill moves 32.3 GB host to device in 19.1 s of wall time. Almost all of i
 ## What this means for the Phase 3 cards
 
 - **More slots.** The static per-slot budget is what limits it. A third slot helps pbmc1k_v3 (1.46 to 1.87 M pairs/s) but pushes nuclei2k_v2 out of level 5. The card needs admission by each run's estimated need, together with the shared index (IDEAS item 4, identical at 2 and 3 slots), which takes the genome index out of every slot's budget.
-- **Cross-sample cache.** Two costs repeat in every run: the 26.5 GB non-host index upload (4.3 s of device hold) and the pileup reference load (105 core-s for pbmc1k_v3, about 190 for nuclei2k_v2). Both are the same for every sample on a genome.
-- **E3 bypass and E2 truth-gated pruning.** Both act on the prefill lanes, about 10 s of a 25 s hold for pbmc1k_v3 at one slot, with phase 3 the largest part. The replay harness is the first tier for either.
+- **Cross-sample cache.** The advisor's option is an exact read cache: alignments of read sequences seen in earlier samples, which shortens the prefill's lanes. The profile adds two costs that repeat in every run and are identical for every sample on a genome: the 26.5 GB non-host index upload (4.3 s of device hold) and the pileup reference load (105 core-s for pbmc1k_v3, about 190 for nuclei2k_v2). Keeping both resident is the cheaper half of the card.
+- **E3 hand-off bypass.** Levels 4 and 5 already keep every read with a device record out of STAR's per-read loop, which is what the advisor's bypass proposed. What remains is the host work inside STAR's window (the "stream" stage, about 165 core-s of a pbmc1k_v3 run), and that work has to be placed by thread before the card can name a change. nsys cannot sample CPUs on Clipper (`perf_event_paranoid` 4), so this takes a per-thread /proc sampler.
+- **E2 truth-gated pruning.** It acts on the prefill lanes, about 10 s of a 25 s hold for pbmc1k_v3 at one slot, where phase 3 is the largest part and lanes M and B carry the heavy reads. Replay is the first tier.
 - **Host work.** Demux with its writes (42 s), the non-host screen's host part (14 s for pbmc1k_v3, 71 s for nuclei2k_v2) and cell calling (16 s) set most of the wall time once the device phases overlap. They are CPU work outside this campaign's kernels, but they bound what any GPU change can buy.
 
 ## Reproducing
