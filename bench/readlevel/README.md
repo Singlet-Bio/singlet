@@ -1,6 +1,6 @@
 # Read-level outputs: validation
 
-Checks of the read-level members that the Beta freeze keeps (D-101 in singlet-agents `sprint/DECISIONS.md`) against open or
+Checks of the read-level members that the Beta freeze keeps against open or
 reference tools on real data.
 
 ## Reads per UMI against Cell Ranger molecule_info (pbmc1k_v3)
