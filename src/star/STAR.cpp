@@ -47,9 +47,10 @@ extern bool g_e11SoloDone; //singlet E11 (SeqCacheGpuPrefill.cpp): star_Solo.out
 
 #include "htslib/htslib/sam.h"
 #include "parametersDefault.xxd"
+#include <fcntl.h>
+#include <unistd.h>
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/tail_trace.h"   // E16: marks of the level-5 tail (stderr; nothing at other levels)
-#include <fcntl.h>
 #include <thread>
 #include <vector>
 #define E16_MARK(...) singlet_tail::mark(__VA_ARGS__)
@@ -311,20 +312,27 @@ int star_main_impl(int argInN, char *argIn[])
     // close some BAM files
     if (P.inOut->outBAMfileUnsorted != NULL)
     {
-#ifdef SINGLET_HAVE_ENGINE_GPU
         struct stat e16st; const bool e16pipe = fstat(STDOUT_FILENO, &e16st) == 0 && S_ISFIFO(e16st.st_mode);
+#ifdef SINGLET_HAVE_ENGINE_GPU
         const bool e16fifo = singlet_tail::on() && e16pipe;
+        const bool eofCut = singlet_tail::cuts() ? singlet_tail::cut("eof") : true;
+#else
+        const bool eofCut = true;
 #endif
         bgzf_flush(P.inOut->outBAMfileUnsorted);
         bgzf_close(P.inOut->outBAMfileUnsorted);
         E16_MARK("STAR: BAM stream closed");
-#ifdef SINGLET_HAVE_ENGINE_GPU
-        // E16 "eof" (level 5): the linked htslib's bgzf_close leaves the stdout fd open, so the pipeline saw the stream's end only when this
-        // process exited; with the BAM on stdout nothing else may go there, and /dev/null takes the fd's place (the pipe's write end closes)
-        if (e16pipe && P.outStd == "BAM_Unsorted" && singlet_tail::cut("eof")) {
+        // The linked htslib's bgzf_close leaves the stdout fd open, so the pipeline saw the stream's end only when this process exited, after
+        // the sequence cache and genome were freed, SJ.out.tab written and Solo counted (105-180 s on GSM7656149 at T=16-18, with the
+        // pileup idle). With the BAM on stdout nothing else may go there, and /dev/null takes the fd's place: the pipe's write end closes and
+        // the pileup finalizes while STAR finishes. The pipeline reads none of STAR's files before it reaps STAR. E16 "eof" at level 5;
+        // on every other path unless SINGLET_STAR_EARLY_EOF=0. Outputs are unchanged.
+        static const bool earlyEof = [] { const char* e = getenv("SINGLET_STAR_EARLY_EOF"); return !(e != nullptr && e[0] == '0'); }();
+        if (e16pipe && P.outStd == "BAM_Unsorted" && eofCut && earlyEof) {
             const int dn = open("/dev/null", O_WRONLY);
             if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
         }
+#ifdef SINGLET_HAVE_ENGINE_GPU
         if (e16fifo) E16_MARK("STAR: BAM pipe's write end now held by:%s", singlet_tail::pipeWriters((unsigned long) e16st.st_ino).c_str());
 #endif
     };
