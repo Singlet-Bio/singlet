@@ -107,10 +107,10 @@ struct DoubletParams {
     uint32_t clf_mask       = 7;     ///< classifier features: bit 0 sim-neighbour logit, 1 log T, 2 log T minus observed neighbours,
                                      ///< 3 sim-neighbour logit within the nearest half of the k_adj neighbours, 4 within the nearest quarter,
                                      ///< 5 log ratio of the distances to the nearest observed and the nearest simulated point
-    uint32_t het_clusters   = 16;    ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
+    uint32_t het_clusters   = 0;     ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
                                      ///< different clusters (scDblFinder's heterotypic doublets), the rest are random pairs
     double   het_mix        = 1.0;   ///< share of the simulated doublets forced heterotypic (het_clusters > 0)
-    bool     het_auto       = true;  ///< het_mix from the separation of the clusters instead: clamp((sep - sep_lo) / (sep_hi - sep_lo), 0, 1), where
+    bool     het_auto       = false; ///< het_mix from the separation of the clusters instead: clamp((sep - sep_lo) / (sep_hi - sep_lo), 0, 1), where
                                      ///< sep = median over cells of (distance to the nearest other centroid / distance to the own centroid).  Discrete
                                      ///< cell-type islands (a species mixture) make heterotypic pairs the identifiable doublets; continuous
                                      ///< PBMC-like manifolds do not
