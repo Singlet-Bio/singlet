@@ -658,7 +658,7 @@ static uint32_t* sort_hilo(Arena& A, const uint64_t* hi, const uint32_t* lo, int
 
 // ------------------------------------------------------------------------------------------------------------------------
 struct Inputs {
-    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0; Par par; DPar dp;
+    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0, wantUmiKeys = 0; Par par; DPar dp;
     SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: low-quality mask per read, dp.qw words (dp.use_q)
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
@@ -667,6 +667,7 @@ struct Inputs {
 struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
     std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
+    std::vector<uint64_t> umi_keys;   // Inputs::wantUmiKeys: (cell << 32 | 2-bit UMI) of every gene store entry, sorted, distinct
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     std::vector<T3> exon_reads, intron_reads;   // g_want_reads: reads per molecule summed per (cell, feature), same rows as exon / intron
     std::vector<T3> mixed_exon, mixed_intron;   // g_want_mixed: unspliced molecules with an exon-only read, per (cell, exon) / (cell, intron)
@@ -1001,6 +1002,17 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 const uint64_t um = (1ull << gst.ub) - 1, gm = (1ull << gst.gb) - 1;
                 for (int i = 0; i < nm; i++) out->merges.push_back({(uint32_t)(ha[i] >> (gst.gb + gst.ub)), (uint32_t)((ha[i] >> gst.ub) & gm), ha[i] & um, hb2[i] & um});
             }
+        }
+        if (out && in.wantUmiKeys && gst.m > 0) {   // the multimap record's counted-UMI keys (multimap::build; PileupEngine::counted_umis)
+            std::vector<uint64_t> hk(gst.m); CK(cudaMemcpy(hk.data(), gst.uk, (size_t)gst.m * 8, cudaMemcpyDeviceToHost));
+            const int sh = gst.gb + gst.ub; const uint64_t um = ((1ull << gst.ub) - 1) & 0xffffffffull;
+            auto& K = out->umi_keys; const size_t base = K.size(); K.reserve(base + (size_t)gst.m);
+            for (int i = 0; i < gst.m;) {   // the store is in (cell, gene, UMI) order: per cell, its UMIs over every gene, sorted and distinct
+                const uint64_t cell = hk[i] >> sh; const size_t s = K.size(); int j = i;
+                for (; j < gst.m && (hk[j] >> sh) == cell; j++) K.push_back((cell << 32) | (hk[j] & um));
+                std::sort(K.begin() + s, K.end()); K.erase(std::unique(K.begin() + s, K.end()), K.end()); i = j;
+            }
+            if (base > 0) std::inplace_merge(K.begin(), K.begin() + base, K.end());   // the partitions hold disjoint cells
         }
         const size_t s5 = A.mark();
         uint64_t* sj_u = nullptr; uint32_t* sj_n = nullptr; int n_sju = red_junction(A, T, in, Rp, nRp, r_sj, o_sj, c_sj, l_jid, n_sjt, jb, cb, &sj_u, &sj_n, gr, gsp);

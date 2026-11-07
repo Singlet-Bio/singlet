@@ -20,6 +20,8 @@
 //   J chr6 exons 101-200 and 1601-1700 (a host gene, intron 201-1600), K chr7 exon 101-200 (a retrocopy's parent):
 //   m9      NH 2, K exon + J intron, UMI GAGA..            7053 (kExonPrecedence): counted for K, never in the record; 2957: (J, K)
 //   m10     NH 2, J intron + K exon (primary intronic)     the same, judged on the exonic secondary
+//   u5      NH 1 on C, UMI CTCT.. (m8's)                   counted for C: m8's UMI holds a counted read, so the record leaves it out
+//                                                          (STARsolo pools a UMI's reads: one unique read makes the UMI unique)
 // The record never holds a molecule the gene counts hold, so include_multimappers=True counts each molecule once.
 
 #include <unistd.h>
@@ -87,6 +89,7 @@ bool write_inputs(const std::string& dir) {
     f << sam_line("m8", 0, "chr5", 430, 3, 20, "CTCTCTCTCT", 2) << sam_line("m8", 256, "chr4", 1500, 3, 20, "CTCTCTCTCT", 2);
     f << sam_line("m9", 0, "chr7", 120, 3, 20, "GAGAGAGAGA", 2) << sam_line("m9", 256, "chr6", 800, 3, 20, "GAGAGAGAGA", 2);
     f << sam_line("m10", 0, "chr6", 900, 3, 20, "CGCGCGCGCG", 2) << sam_line("m10", 256, "chr7", 140, 3, 20, "CGCGCGCGCG", 2);
+    f << sam_line("u5", 0, "chr2", 175, 255, 20, "CTCTCTCTCT");
     f.close();
     std::string cmd = "samtools sort -o " + dir + "/t.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/t.bam";
     return std::system(cmd.c_str()) == 0;
@@ -104,7 +107,8 @@ std::vector<Key> reads_of(const singlet::PileupEngine& e) {
 }
 
 std::map<std::string, uint32_t> record_of(const singlet::PileupEngine& e) {
-    const auto r = singlet::multimap::build(e.ambig_reads(), static_cast<uint32_t>(e.barcodes().size()), e.gene_ids(), e.gene_names());
+    const auto r = singlet::multimap::build(e.ambig_reads(), static_cast<uint32_t>(e.barcodes().size()), e.gene_ids(), e.gene_names(),
+                                            &e.counted_umis());
     std::map<std::string, uint32_t> m;
     for (uint32_t c = 0; c < r.ncols; ++c)
         for (int32_t k = r.indptr[c]; k < r.indptr[c + 1]; ++k) m[r.names[static_cast<size_t>(r.indices[k])]] += r.data[k];
@@ -150,7 +154,11 @@ void run_case(const std::string& dir, bool parallel, int workers, uint32_t rules
         CHECK(rec.size() == (on ? 4u : 5u), tag + ": gene sets");
         CHECK(on ? rec.count("J_J|K_K") == 0 : (rec.count("J_J|K_K") && rec.at("J_J|K_K") == 2),
               tag + ": m9 and m10 are in the record only when the counts leave them out");
-        CHECK(rec.count("H_H|I_I") && rec.at("H_H|I_I") == 2, tag + ": u4 and m8 are two (H, I) molecules (gene-body sets)");
+        CHECK(rec.count("H_H|I_I") && rec.at("H_H|I_I") == 1, tag + ": u4 is one (H, I) molecule (gene-body sets); m8's UMI is counted (u5)");
+        const uint64_t u5 = singlet::umi_pack_2bit("CTCTCTCTCT", 10), m6 = singlet::umi_pack_2bit("CACACACACA", 10);
+        const auto& cu = e.counted_umis();
+        CHECK(std::binary_search(cu.begin(), cu.end(), u5) && !std::binary_search(cu.begin(), cu.end(), m6),
+              tag + ": the counted UMIs hold u5's and not m6's");
         CHECK(rec.count("A_A|B_B") && rec.at("A_A|B_B") == 1, tag + ": u1 and u2 are one (A, B) molecule");
         CHECK(rec.count("C_C|G_G") && rec.at("C_C|G_G") == 1, tag + ": m6 is one (C, G) molecule");
         CHECK(rec.count("C_C") && rec.at("C_C") == 1, tag + ": U2's reads share only C");
@@ -180,6 +188,11 @@ void unit_build() {
     std::vector<AmbigRead> rev(in.rbegin(), in.rend());
     const auto r2 = singlet::multimap::build(rev, 3, ids, nm);
     CHECK(r2.indptr == r.indptr && r2.indices == r.indices && r2.data == r.data && r2.names == r.names, "build: input order is irrelevant");
+    // a counted (cell 0, TTTT) leaves out that UMI's molecule; (cell 2, ACGT) is not cell 0's ACGT
+    const std::vector<uint64_t> counted = {singlet::umi_pack_2bit("TTTT", 4), (uint64_t{1} << 32) | singlet::umi_pack_2bit("ACGT", 4)};
+    const auto r3 = singlet::multimap::build(in, 3, ids, nm, &counted);
+    CHECK(r3.data == std::vector<uint32_t>({1, 1, 1}) && r3.molecules == 3 && r3.counted_umis == 1 && r3.dropped_umis == 1,
+          "build: a UMI with a counted read is left out");
 }
 
 }  // namespace

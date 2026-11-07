@@ -89,11 +89,14 @@ grouped by cell and exact UMI, and the molecule keeps the genes present in every
 a single-gene row (`<gene_id>_<gene_name>`), and a UMI whose reads share no gene is dropped. Reads with three or more candidate genes are
 left out, as are multimappers with a secondary alignment that itself spans two genes, which keeps the record small. A multimapper is
 judged on the gene set the counts use: under the default `kExonPrecedence` rule, its exonic alignments when it has any. A read that rule
-counts for one gene (a retrocopy in another gene's intron, for example) is in the gene counts and never in the record, so no molecule is
-counted twice; the run log reports reads, molecules, gene sets and dropped UMIs on its `[multimap]` line.
+counts for one gene (a retrocopy in another gene's intron, for example) is in the gene counts and never in the record. A UMI that also
+has a read in the gene counts is left out as well, because STARsolo pools all of a UMI's reads and one uniquely assigned read makes the
+whole UMI a unique molecule. No molecule is counted twice; the run log reports reads, molecules, gene sets, dropped UMIs and UMIs already
+in the gene counts on its `[multimap]` line.
 
 The CPU pileup collects the reads in its multimapper buffer and on unique two-gene primaries. The GPU pileup returns the same reads from
-`k_resolve`, and one host function (`multimap::build`) turns either list into the matrix, so the two engines write identical bytes.
+`k_resolve` and the exact (cell, UMI) keys of its gene store, and one host function (`multimap::build`) turns either into the matrix, so
+the two engines write identical bytes.
 
 Retrieval distributes the molecules over their genes in `singlet.multimap.distribute`, a port of STARsolo's `--soloMultiMappers`:
 

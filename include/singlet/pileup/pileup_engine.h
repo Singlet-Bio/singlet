@@ -2095,6 +2095,7 @@ public:
             for (uint32_t e = 0; e < ne; ++e) { in.exonStart[e] = gene_model_.exon_start(e); in.exonEnd[e] = gene_model_.exon_end(e); }
         }
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
+        in.wantUmiKeys = (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) ? 1 : 0;   // the multimap record's counted UMIs
         in.wantReads = reads_matrix_on() ? 1 : 0;   // reads per molecule (exon_reads / intron_reads / histogram)
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
@@ -2952,6 +2953,7 @@ public:
             }
             gpu_merges_.swap(out.geneMerges);
             gpu_ambig_reads(out.ambig, in.umiLen, ambig_reads_);   // the multimap record's reads (the CPU steps that collect them were skipped)
+            counted_umis_.swap(out.umiKeys);                        // ... and the UMIs it leaves out (finalize_all's keys on the CPU)
             stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
             if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
                 const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
@@ -4798,11 +4800,13 @@ private:
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
         // The multimap record's counted-UMI keys (multimap::build): every exact (cell, UMI) with a read in the gene counts' store,
         // taken before the stores are consumed. STARsolo pools a UMI's reads, so one uniquely assigned read makes the UMI unique.
+        // (After the GPU pileup the stores are empty and its keys, PileupOutput::umiKeys, stay.)
         if (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) {
-            counted_umis_.clear();
-            for (const auto& t : targets) t.store->append_umi_keys(counted_umis_);
-            std::sort(counted_umis_.begin(), counted_umis_.end());
-            counted_umis_.erase(std::unique(counted_umis_.begin(), counted_umis_.end()), counted_umis_.end());
+            std::vector<uint64_t> keys;
+            for (const auto& t : targets) t.store->append_umi_keys(keys);
+            std::sort(keys.begin(), keys.end());
+            keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+            if (!keys.empty()) counted_umis_.swap(keys);
         }
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
