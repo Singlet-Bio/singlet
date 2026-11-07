@@ -39,3 +39,9 @@ extern StarReadSource* g_starReadSource;
 #include <string>
 bool star_genome_preload(const std::string& dir, int threads, std::string& log);
 void star_genome_preload_release();
+// E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool` keeps genomes for the processes it forks. star_genome_preload_resident reads one
+// (as star_genome_preload) and keeps it aside: the pool's own process has no preload of its own. star_genome_preload_select, in a forked
+// process, makes the resident genome of `dir` (same directory device and inode) this process's preload; false (log: why) when none matches,
+// and the process then reads its own as before.
+bool star_genome_preload_resident(const std::string& dir, int threads, std::string& log);
+bool star_genome_preload_select(const std::string& dir, std::string& log);
