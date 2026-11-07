@@ -107,14 +107,14 @@ struct DoubletParams {
     uint32_t clf_mask       = 7;     ///< classifier features: bit 0 sim-neighbour logit, 1 log T, 2 log T minus observed neighbours,
                                      ///< 3 sim-neighbour logit within the nearest half of the k_adj neighbours, 4 within the nearest quarter,
                                      ///< 5 log ratio of the distances to the nearest observed and the nearest simulated point
-    uint32_t het_clusters   = 0;     ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
+    uint32_t het_clusters   = 16;    ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
                                      ///< different clusters (scDblFinder's heterotypic doublets), the rest are random pairs
     double   het_mix        = 1.0;   ///< share of the simulated doublets forced heterotypic (het_clusters > 0)
-    bool     het_auto       = false; ///< het_mix from the separation of the clusters instead: clamp((sep - sep_lo) / (sep_hi - sep_lo), 0, 1), where
+    bool     het_auto       = true;  ///< het_mix from the separation of the clusters instead: clamp((sep - sep_lo) / (sep_hi - sep_lo), 0, 1), where
                                      ///< sep = median over cells of (distance to the nearest other centroid / distance to the own centroid).  Discrete
                                      ///< cell-type islands (a species mixture) make heterotypic pairs the identifiable doublets; continuous
                                      ///< PBMC-like manifolds do not
-    double   sep_lo         = 1.5, sep_hi = 2.5;
+    double   sep_lo         = 3.0, sep_hi = 5.0;   ///< Kang pools sit at 2.0 to 2.5, human + mouse mixtures at 7.3 and 11.0 (development libraries)
     double   knn_scale      = 1.0;    ///< k = knn_scale * 0.5 * sqrt(n_cells)
     int      hvg_mode       = 0;      ///< 0: z-scored log dispersion in mean bins; 1: Scrublet v-score (percentile cut)
     double   vscore_pctl    = 85.0;   ///< hvg_mode 1: keep genes above this v-score percentile
@@ -732,7 +732,8 @@ inline std::vector<DoubletResult> detect_doublets(
             const uint32_t a = static_cast<uint32_t>(rng() % n);
             uint32_t b = static_cast<uint32_t>(rng() % (n - 1));
             if (b >= a) ++b;
-            if (!cl.empty() && (rng() >> 11) * (1.0 / 9007199254740992.0) < mix_used)
+            const bool force_het = !cl.empty() && (mix_used >= 1.0 || (mix_used > 0.0 && (rng() >> 11) * (1.0 / 9007199254740992.0) < mix_used));
+            if (force_het)
                 for (int tries = 0; tries < 50 && cl[b] == cl[a]; ++tries) {
                     b = static_cast<uint32_t>(rng() % (n - 1));
                     if (b >= a) ++b;

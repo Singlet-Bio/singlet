@@ -1125,6 +1125,7 @@ inline ExportStats export_results(const PileupEngine& engine,
                          100.0 * n_doublets / dbl_results.size()) << "%"
                       << " expected_rate=" << 100.0 * dbl_sum.expected_rate << "%"
                       << " detectable_fraction=" << dbl_sum.detectable_fraction
+                      << " cluster_separation=" << dbl_sum.cluster_separation << " het_mix=" << dbl_sum.het_mix_used
                       << " hvg=" << dbl_sum.n_hvg << " pcs=" << dbl_sum.n_pcs
                       << " time=" << dbl_s << "s\n";
         }  // if (!dbl_cell_indices.empty())
