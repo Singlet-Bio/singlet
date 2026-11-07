@@ -156,3 +156,42 @@ Cell Ranger V agreement on pbmc2_b / pbmc10k_b.
 - The anchor follows the convention of each library's Cell Ranger version (`vdj_human_imgtcys.tsv.gz` for CR >= 5).
 - The held-out run uses these defaults, with no `PARAMS`, at the frozen SHA recorded in `RESULTS.md`.
 - Held-out pass rule: unchanged, with the Addendum 1 ARI tolerance applied in the same way.
+
+## Addendum 5 (2026-11-07, registered before any run of the new assembler): mismatch- and repeat-tolerant assembly graph
+
+**Why.** With the first-Cys reference (PR 213) and the frozen IG rules (PR 214) pooled correct pairing on pbmc3_b, ngpbmc3_b and
+melanoma_b is 0.9062 against TRUST4 0.9198 (gap -0.0136). Threshold changes on the development libraries move pairing by at most
+0.0001 (job 804122), so the remaining loss is in the assembly: 1 to 4% of Cell Ranger's contigs never assemble, and heavy-chain
+CDR3s that contain a tandem repeat (for example `TACTACTACTAC`) come out one or more codons short or long.
+
+**Mechanism (all default off until the rule below is met).** Two changes to the assembly graph (`K_ASM = 19`), each a Params field:
+1. `asm_bubble_mm` (0 = off): two paths of one (barcode, chain) group that differ by at most this many substitutions over equal
+   length are merged into the path with more molecules (a sequencing or UMI-consensus error, or a somatic mutation that splits the
+   k-mer chain). The error-variant filter of `filter_contigs` (at most 2 substitutions) is unchanged.
+2. `asm_repeat_len` (0 = off): at a tandem repeat of period 1 to 3 nt and at least `asm_repeat_len` nt long, the path whose repeat
+   length has the most supporting molecules is chosen, instead of the length of the first path found.
+No change to V, J or C calling, to the reference, or to any filter.
+
+**Libraries.**
+- Development, the only data used to choose settings: melv11_b, nsclc22_b, chx10k_b, pbmc2_b, pbmc10k_b (BCR) and pbmc2_t, pbmc10k_t (TCR).
+- Confirmation, touched by earlier V(D)J runs and by this study's diagnosis, so not held out: pbmc3_b, ngpbmc3_b, melanoma_b.
+- Held-out: one NextGem BCR library from outside the corpus and outside every V(D)J run, named in a note before the freeze, not
+  opened until the settings are frozen, run once for Singlet and TRUST4.
+
+**Baseline.** `gpu/frontier` with PR 213 and PR 214 merged, default parameters (pooled development pairing 0.9164, TRUST4 0.9159;
+confirmation pairing 0.9062).
+
+**Metrics.** Primary: correct pairing (`bench/expression_sota/vdj/primary.py`). Guards: contig F1, wrong-lineage rate, clonotype ARI,
+V and J agreement with Cell Ranger, TCR pairing and contig F1, wall time.
+
+**Dev rule.** Keep a setting when all hold: pooled development BCR pairing rises by at least 0.003; no library loses more than 0.005 in
+pairing or contig F1; pooled wrong-lineage rate rises by at most 0.001; clonotype ARI of no library falls by more than 0.02; TCR
+pairing and contig F1 of pbmc2_t and pbmc10k_t fall by at most 0.002; wall time rises by at most 50%. If several settings keep, the
+one with the highest pooled pairing is taken. If none keeps, nothing is merged and the result is reported as negative.
+
+**Confirmation.** Reported next to the development result, with the same guards: pairing on pbmc3_b, ngpbmc3_b and melanoma_b before
+and after, and the gap to TRUST4. A confirmation library that loses more than 0.005 in pairing is reported as a failure of the setting.
+
+**Held-out pass rule.** Correct pairing of Singlet minus TRUST4 on the fresh library, with its paired bootstrap 95% interval, passes
+when the difference is at least the negative half-width of that interval (the gate contract); wrong-lineage rate at most Cell Ranger's
+plus 0.005; contig F1 above TRUST4's. One run, no tuning afterwards, and the result is reported whichever way it falls.
