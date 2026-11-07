@@ -1,0 +1,21 @@
+node=c007.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/aa47008f/singlet-gpu commit=aa47008f006403ec76327d9ef27e8dd0497d644c route=auto 2026-11-06T17:54:07-05:00
+auto: exit 0 wall 0:48.46 size 106414684
+  auto | [1fq-encode] Protocol: 10x-3p-v2 (confidence: 3)
+  auto | [singlet-download] 600000 / 4000000 reads (15%)[singlet-download] 1100000 / 4000000 reads (27%)[singlet-download] 1600000 / 4000000 reads (40%)[singlet-download] 2100000 / 4000000 reads (52%)[singlet-download] 2600000 / 4000000 reads (65%)[singlet-download] 3100000 / 4000000 reads (77%)[singl
+  auto | [singlet-download] Done: 4000000 reads, 8 blocks
+  auto | [singlet-download] Protocol: 10x-3p-v2 (confidence: 3)
+  auto | [1fq-profile]   Protocol:     0.393s ( 0.9%)
+  auto header | [1fq-decode] File: /tmp/debruinz-ir-rt-803296/auto.1fq
+  auto header | [1fq-decode] Version: 4, Protocol: 10xv2 (id=2, confidence=3)
+  auto header | [1fq-decode] Reads: 4000000, Blocks: 8, Streams: 2
+  auto header | [1fq-decode] R1 length: 26, R2 length: variable
+auto pipeline: exit 0 wall 1:20.59
+  auto | protocol_id 2
+  auto | protocol_name 10xv2
+  auto | n_cells_called 1475
+  auto | median_umi_per_cell 76
+  auto | median_genes_per_cell 48
+  auto | mapping_rate 0.216798
+  auto | median_umis_per_cell 76
+  auto | fraction_reads_in_cells 0.529543
+done 2026-11-06T17:56:17-05:00

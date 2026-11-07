@@ -12,6 +12,7 @@
 # on the staged .1fq and keeps summary.json and the cell count. Output: $W/jobs/input-routes/routes/<ROUTE>-<job>/.
 #   bam_pbmc1k     Cell Ranger 3 BAM of 10x pbmc_1k_v3 (a gate library) against the FASTQ folder route of the same library: read multisets
 #   bam_kang_stim  Cell Ranger 1.x BAM of Kang 2018 batch 2 stimulated lane (GSE96583, not a corpus row), 10x 3' v1
+#   bam_kang_head  the first HEADGB GB (default 3) of the same BAM by HTTP range (ENA serves it slowly), staged with --bam on the local prefix
 #   gemcode_pbmc3k 10x GemCode FASTQ tar of pbmc3k (Cell Ranger 1.1, 10x 3' v1; not a corpus row), from the URL
 #   dropseq_r1_76  Mereu 2020 Drop-seq library N703 (SRR9621743; the corpus row is N705), R1 76 nt, first MAXR spots
 #   seqwell_r1_32  Gierahn 2017 Seq-Well HEK single cells (SRR5250843; the corpus row is SRR5250839), R1 32 nt, first MAXR spots
@@ -70,6 +71,11 @@ case $ROUTE in
     pipe bam; pipe fqdir ;;
   bam_kang_stim)
     stage kang --bam https://ftp.sra.ebi.ac.uk/vol1/run/SRR539/SRR5398239/bam/2.2.bam ${EXTRA_ARGS:-}
+    pipe kang ;;
+  bam_kang_head)
+    mkdir -p $SCR/kh; curl -fsS --retry 5 --retry-all-errors -r 0-$(( ${HEADGB:-3} * 1000000000 )) -o $SCR/kh/2.2.head.bam https://ftp.sra.ebi.ac.uk/vol1/run/SRR539/SRR5398239/bam/2.2.bam
+    echo "prefix bytes $(stat -c %s $SCR/kh/2.2.head.bam)" | tee -a $O/summary.txt
+    stage kang --bam $SCR/kh/2.2.head.bam ${EXTRA_ARGS:-}
     pipe kang ;;
   gemcode_pbmc3k)
     stage pbmc3k https://cf.10xgenomics.com/samples/cell-exp/1.1.0/pbmc3k/pbmc3k_fastqs.tar ${EXTRA_ARGS:-}

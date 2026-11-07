@@ -1,0 +1,23 @@
+node=g008.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/df7d680e/singlet-gpu commit=df7d680e11b617f89949ca87fd5fd77f2e7c18dd route=gemcode_pbmc3k 2026-11-06T17:40:04-05:00
+pbmc3k: exit 0 wall 11:04.29 size 4456013679
+  pbmc3k | [singlet-download] FASTQ layout: gemcode, library pbmc3k_fastqs; 8 RA files; barcode read read-I1
+  pbmc3k | [singlet-download] input spec: fastq:/tmp/debruinz-ir-rt-803282/stage-pbmc3k/unpacked/pbmc3k_fastqs/read-I1_si-ACGCGGAA_lane-001-chunk-001.fastq.gz,/tmp/debruinz-ir-rt-803282/stage-pbmc3k/unpacked/pbmc3k_fastqs/read-I1_si-CGCTATCC_lane-001-chunk-001.fastq.gz,/tmp/debruinz-ir-rt-803282/stage-pbmc3k/u
+  pbmc3k | [1fq-encode] Protocol: 10x-3p-v1 (confidence: 3)
+  pbmc3k | [singlet-download] 500000 / 185980783 reads (0%)[singlet-download] 1000000 / 185980783 reads (0%)[singlet-download] 1500000 / 185980783 reads (0%)[singlet-download] 2000000 / 185980783 reads (1%)[singlet-download] 2500000 / 185980783 reads (1%)[singlet-download] 3000000 / 185980783 reads (1%)
+  pbmc3k | [singlet-download] Done: 185980783 reads, 372 blocks
+  pbmc3k | [singlet-download] Protocol: 10x-3p-v1 (confidence: 3)
+  pbmc3k | [1fq-profile]   Protocol:     0.282s ( 0.1%)
+  pbmc3k header | [1fq-decode] File: /tmp/debruinz-ir-rt-803282/pbmc3k.1fq
+  pbmc3k header | [1fq-decode] Version: 4, Protocol: 10xv1 (id=3, confidence=3)
+  pbmc3k header | [1fq-decode] Reads: 185980783, Blocks: 372, Streams: 2
+  pbmc3k header | [1fq-decode] R1 length: 24, R2 length: variable
+pbmc3k pipeline: exit 0 wall 18:36.24
+  pbmc3k | protocol_id 3
+  pbmc3k | protocol_name 10xv1
+  pbmc3k | n_cells_called 2709
+  pbmc3k | median_umi_per_cell 2239
+  pbmc3k | median_genes_per_cell 806
+  pbmc3k | mapping_rate 0.897417
+  pbmc3k | median_umis_per_cell 2239
+  pbmc3k | fraction_reads_in_cells 0.934811
+done 2026-11-06T18:09:45-05:00
