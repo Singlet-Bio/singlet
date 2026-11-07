@@ -24,14 +24,17 @@ EXTRA=""; SUF=""; SCORE=30; UMIOPT="--soloUMIfiltering MultiGeneUMI_CR --soloUMI
 BETA="--alignSJoverhangMin 8 --outFilterIntronMotifs RemoveNoncanonicalUnannotated --outFilterMismatchNoverLmax 0.05"
 case "${PROFILE:-}" in beta) SUF=_beta; EXTRA=$BETA ;; beta10) SUF=_beta10; EXTRA=$BETA; SCORE=10 ;; "") ;; *) echo "PROFILE?"; exit 2 ;; esac
 if [ "${UMI:-}" = dir ]; then SUF=${SUF}_dir; UMIOPT="--soloUMIfiltering - --soloUMIdedup 1MM_Directional_UMItools"; fi
+# BAM=1: an unsorted BAM whose GX/GN tags are GeneFull's (the first solo feature), for read-level comparisons. Output starsolo..._bam
+FEAT="Gene GeneFull Velocyto"; SAM="--outSAMtype None"
+if [ "${BAM:-0}" = 1 ]; then SUF=${SUF}_bam; FEAT="GeneFull Gene Velocyto"; SAM="--outSAMtype BAM Unsorted --outSAMattributes NH HI AS nM CR UR CB UB GX GN sF"; fi
 S=$W/count-parity/runs/$DS/starsolo$SUF; rm -rf $S; mkdir -p $S; cd $S
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 STAR --version > $S/version.txt
 /usr/bin/time -v -o $S/time.txt STAR --runThreadN $SLURM_CPUS_PER_TASK --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat \
     --soloType CB_UMI_Simple --soloCBwhitelist $WL --soloCBlen 16 --soloUMIstart 17 \
     --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand Forward \
-    --soloFeatures Gene GeneFull Velocyto --soloCellFilter EmptyDrops_CR \
+    --soloFeatures $FEAT --soloCellFilter EmptyDrops_CR \
     --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts $UMIOPT \
     --clipAdapterType CellRanger4 --outFilterScoreMin $SCORE \
-    --outSAMtype None --outTmpDir $SCR/startmp $EXTRA > $S/run.log 2>&1
+    $SAM --outTmpDir $SCR/startmp $EXTRA > $S/run.log 2>&1
 grep -E "Elapsed \(wall|Maximum resident" $S/time.txt; tail -3 $S/Log.final.out

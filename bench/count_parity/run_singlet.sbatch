@@ -8,6 +8,7 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Count-parity run: one Singlet binary on one dataset (CPU engine unless ENGINE=gpu), same command as bench/exact_vs_pseudo.
 #   sbatch --export=ALL,BIN=<singlet>,DS=hgmm1k_v3,TAG=<name>[,RULES=<intron_rules>][,DUMP=1][,TEE=1][,ENGINE=gpu][,GPUPILEUP=1][,ARGS="--no-cr4"] run_singlet.sbatch
+#   STAR_EXTRA="--outFilterScoreMin 30" is passed as --star-extra (export it before sbatch --export=ALL,...)
 #   GPUPILEUP=1 runs the CPU aligner with the GPU pileup (SINGLET_GPU_PILEUP=on): submit with -p short-gpu --gres=gpu:nvidia_h100_nvl:1
 # Output: $W/count-parity/runs/<DS>/<TAG>/ (raw matrices, pileup_stats.json, molecules.tsv.gz with DUMP=1, stream.bam with TEE=1)
 set -euo pipefail
@@ -33,8 +34,9 @@ export SINGLET_STALL_TIMEOUT=7200
 [ "${TEE:-0}" = 1 ] && export SINGLET_TEE_STREAM_BAM=$O/stream.bam
 [ "${GPUPILEUP:-0}" = 1 ] && export SINGLET_GPU_PILEUP=on
 EXTRA="${ARGS:-}"; [ "${ENGINE:-cpu}" = gpu ] && EXTRA="$EXTRA --engine gpu"
+XARGS=(); [ -n "${STAR_EXTRA:-}" ] && XARGS=(--star-extra "$STAR_EXTRA")
 cd $SCR
 /usr/bin/time -v -o $O/time.txt $BIN $ONEFQ --ref-base $REF --genome-dir $GENOME --exons $GTF \
-    --out-prefix $O/ --threads $SLURM_CPUS_PER_TASK --pipeline --output-format mtx --raw-matrix $EXTRA > $O/run.log 2>&1
+    --out-prefix $O/ --threads $SLURM_CPUS_PER_TASK --pipeline --output-format mtx --raw-matrix $EXTRA ${XARGS[@]+"${XARGS[@]}"} > $O/run.log 2>&1
 grep -E "Elapsed \(wall|Maximum resident" $O/time.txt
 tail -5 $O/run.log
