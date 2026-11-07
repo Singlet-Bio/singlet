@@ -1950,8 +1950,12 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             const std::string mate2_path = out_prefix + "/star_Unmapped.out.mate2";
             struct stat mate2_st{};
             if (stat(mate2_path.c_str(), &mate2_st) == 0 && mate2_st.st_size > 0) {
-                auto tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                    mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                // Only EM-confirmed species are counted and only they use the reads below, so with none confirmed (most samples)
+                // the table is empty whatever the reads are: the two unmapped files (tens of GB on a deep sample) are not read.
+                std::vector<singlet::nonhost::TaggedRead> tagged;
+                if (!em_result.empty())
+                    tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
+                        mate1_path, mate2_path, cb_len, umi_len, nh_selected);
 
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
