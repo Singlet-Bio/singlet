@@ -3288,6 +3288,10 @@ private:
 
     // Per-chromosome sorted SNP data (binary search, cache-friendly)
     std::vector<std::vector<ChrSNP>> chrom_snps_;      // indexed by tid
+    // Per tid, bucket k holds the index of the first SNP at or after position k << kSnpBucketShift, plus one bucket past the last SNP
+    // (= the SNP count). snp_lower_bound() searches one bucket instead of the whole chromosome and returns std::lower_bound's answer.
+    static constexpr int kSnpBucketShift = 10;
+    std::vector<std::vector<uint32_t>> chrom_snp_bucket_;
     std::vector<std::string> snp_names_;
     uint32_t n_snps_loaded_ = 0;
     uint32_t aim_snp_start_ = UINT32_MAX;   // N13: first AIM index in snp matrices
@@ -3912,10 +3916,37 @@ private:
             std::sort(snps.begin(), snps.end(),
                 [](const ChrSNP& a, const ChrSNP& b) { return a.pos < b.pos; });
         }
+        chrom_snp_bucket_.assign(chrom_snps_.size(), {});
+        for (size_t t = 0; t < chrom_snps_.size(); ++t) {
+            const auto& snps = chrom_snps_[t];
+            if (snps.empty()) continue;
+            const size_t nb = (static_cast<size_t>(std::max(snps.back().pos, 0)) >> kSnpBucketShift) + 2;
+            auto& bk = chrom_snp_bucket_[t];
+            bk.resize(nb);
+            size_t i = 0;
+            for (size_t k = 0; k < nb; ++k) {
+                const int64_t start = static_cast<int64_t>(k) << kSnpBucketShift;
+                while (i < snps.size() && snps[i].pos < start) ++i;
+                bk[k] = static_cast<uint32_t>(i);
+            }
+        }
         snp_pending_.clear();
         snp_pending_.shrink_to_fit();
         std::cerr << "[singlet-pileup] Resolved " << n_resolved
                   << " SNPs to BAM chromosome IDs\n";
+    }
+
+    // std::lower_bound over chrom_snps_[tid] by position (the first SNP at or after pos), searched within pos's bucket: every SNP
+    // before bucket k lies before k's start, and the SNP at the next bucket's index lies past pos, so the answer is in [bk[k], bk[k+1]].
+    // chrom_snps_[tid] must be non-empty.
+    std::vector<ChrSNP>::const_iterator snp_lower_bound(int32_t tid, int32_t pos) const {
+        const auto& snps = chrom_snps_[tid];
+        const auto& bk = chrom_snp_bucket_[tid];
+        auto cmp = [](const ChrSNP& s, int32_t p) { return s.pos < p; };
+        if (pos < 0) return std::lower_bound(snps.begin(), snps.end(), pos, cmp);
+        const size_t k = static_cast<size_t>(pos) >> kSnpBucketShift;
+        if (k + 1 >= bk.size()) return snps.end();
+        return std::lower_bound(snps.begin() + bk[k], snps.begin() + bk[k + 1], pos, cmp);
     }
 
     // ── Fast variant overlap check ──
@@ -3924,8 +3955,7 @@ private:
     bool has_variant_overlap(int32_t tid, int32_t start, int32_t end) const {
         if (static_cast<size_t>(tid) < chrom_snps_.size() && !chrom_snps_[tid].empty()) {
             const auto& snps = chrom_snps_[tid];
-            auto lb = std::lower_bound(snps.begin(), snps.end(), start,
-                [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+            auto lb = snp_lower_bound(tid, start);
             if (lb != snps.end() && lb->pos < end) return true;
         }
         return false;
@@ -4041,8 +4071,7 @@ private:
 
                     // Binary search for SNPs in [ref_pos, block_end)
                     if (snps) {
-                        auto it = std::lower_bound(snps->begin(), snps->end(), ref_pos,
-                            [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+                        auto it = snp_lower_bound(tid, ref_pos);
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
                             if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
@@ -4734,8 +4763,7 @@ private:
                 case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF: {
                     int32_t block_end = ref_pos + len;
                     if (snps) {
-                        auto it = std::lower_bound(snps->begin(), snps->end(), ref_pos,
-                            [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+                        auto it = snp_lower_bound(tid, ref_pos);
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
                             if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
