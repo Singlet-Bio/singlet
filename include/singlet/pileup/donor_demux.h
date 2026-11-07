@@ -1857,7 +1857,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
-        if (K >= 2 && cfg.threads >= 2) {
+        if (cfg.threads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
             do_fold(0);
             t1.join();
