@@ -1,0 +1,46 @@
+node=g005.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/df7d680e/singlet-gpu commit=df7d680e11b617f89949ca87fd5fd77f2e7c18dd route=bam_pbmc1k 2026-11-06T17:40:04-05:00
+bam: exit 0 wall 8:54.47 size 1327012508
+  bam | [singlet-download] input spec: bam:/tmp/debruinz-ir-rt-803281/stage-bam/pbmc_1k_v3_possorted_genome_bam.bam
+  bam | [1fq-encode] Protocol: 10x-3p-v3 (confidence: 3)
+  bam | [singlet-download] 500000 / 66601887 reads (0%)[singlet-download] 1000000 / 66601887 reads (1%)[singlet-download] 1500000 / 66601887 reads (2%)[singlet-download] 2000000 / 66601887 reads (3%)[singlet-download] 2500000 / 66601887 reads (3%)[singlet-download] 3000000 / 66601887 reads (4%)[singl
+  bam | [singlet-download] Done: 66601887 reads, 134 blocks
+  bam | [singlet-download] Protocol: 10x-3p-v3 (confidence: 3)
+  bam | [1fq-profile]   Protocol:     1.769s ( 0.5%)
+  bam header | [1fq-decode] File: /tmp/debruinz-ir-rt-803281/bam.1fq
+  bam header | [1fq-decode] Version: 4, Protocol: 10xv3 (id=1, confidence=3)
+  bam header | [1fq-decode] Reads: 66601887, Blocks: 134, Streams: 2
+  bam header | [1fq-decode] R1 length: 28, R2 length: variable
+fqdir: exit 0 wall 2:31.81 size 1838317554
+  fqdir | [singlet-download] FASTQ layout: illumina, library pbmc_1k_v3; 2 R1/R2 file pairs
+  fqdir | [singlet-download] input spec: fastq:/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc_1k_v3_fastqs/pbmc_1k_v3_S1_L001_R1_001.fastq.gz,/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc_1k_v3_fastqs/pbmc_1k_v3_S1_L002_R1_001.fa
+  fqdir | [1fq-encode] Protocol: 10x-3p-v3 (confidence: 3)
+  fqdir | [singlet-download] 500000 / 66601887 reads (0%)[singlet-download] 1000000 / 66601887 reads (1%)[singlet-download] 1500000 / 66601887 reads (2%)[singlet-download] 2000000 / 66601887 reads (3%)[singlet-download] 2500000 / 66601887 reads (3%)[singlet-download] 3000000 / 66601887 reads (4%)[singl
+  fqdir | [singlet-download] Done: 66601887 reads, 134 blocks
+  fqdir | [singlet-download] Protocol: 10x-3p-v3 (confidence: 3)
+  fqdir | [1fq-profile]   Protocol:     1.825s ( 1.6%)
+  fqdir header | [1fq-decode] File: /tmp/debruinz-ir-rt-803281/fqdir.1fq
+  fqdir header | [1fq-decode] Version: 4, Protocol: 10xv3 (id=1, confidence=3)
+  fqdir header | [1fq-decode] Reads: 66601887, Blocks: 134, Streams: 2
+  fqdir header | [1fq-decode] R1 length: 28, R2 length: variable
+bam read pairs 66601887 sha 339b53678b4df9da
+fqdir read pairs 66601887 sha 339b53678b4df9da
+pairs only in bam 0, only in fastq 0
+bam pipeline: exit 0 wall 6:00.09
+  bam | protocol_id 1
+  bam | protocol_name 10xv3
+  bam | n_cells_called 1225
+  bam | median_umi_per_cell 6960
+  bam | median_genes_per_cell 2072
+  bam | mapping_rate 0.874788
+  bam | median_umis_per_cell 6960
+  bam | fraction_reads_in_cells 0.911518
+fqdir pipeline: exit 0 wall 7:27.28
+  fqdir | protocol_id 1
+  fqdir | protocol_name 10xv3
+  fqdir | n_cells_called 1225
+  fqdir | median_umi_per_cell 6960
+  fqdir | median_genes_per_cell 2072
+  fqdir | mapping_rate 0.874788
+  fqdir | median_umis_per_cell 6960
+  fqdir | fraction_reads_in_cells 0.911518
+done 2026-11-06T18:11:46-05:00
