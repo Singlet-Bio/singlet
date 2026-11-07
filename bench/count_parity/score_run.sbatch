@@ -24,7 +24,7 @@ SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 grep -P '\tgene\t' $GTF0 > $SCR/genes.gtf
 PY=$W/envs/pbench/bin/python
 echo "code $SHA run $R starsolo $STARSOLO"
-$PY -I $CODE/bench/count_parity/parity_score.py --singlet $R --starsolo $STARSOLO --cr $H5 --gtf $SCR/genes.gtf --kind $KIND --out $R/parity.json || true
+$PY -I $CODE/bench/count_parity/parity_score.py --singlet $R --starsolo $STARSOLO --cr $H5 --gtf $SCR/genes.gtf --kind $KIND --out $R/parity_$(basename $STARSOLO).json || true; cp $R/parity_$(basename $STARSOLO).json $R/parity.json
 if [ -s $R/molecules.tsv.gz ] && [ $KIND = barnyard ]; then
   $PY -I $CODE/bench/count_parity/diagnose.py --dump $R/molecules.tsv.gz --cr $H5 --gtf $SCR/genes.gtf --out $R/diagnose.json
 fi
