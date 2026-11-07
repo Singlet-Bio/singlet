@@ -188,6 +188,9 @@ struct Input {
     // buildRecords, E10's products, E11's keep) after the host lane and the host assembly; reacquire takes the same device again. Unset (or
     // SINGLET_ENGINE_GPU_SPLIT=0): one hold, as before
     std::function<void()> reacquire;
+    // IDEAS.md item 11: E10 turning itself off for lack of device memory fails mapDistinct instead (the caller retries the whole call); unset
+    // on the caller's last attempt, where the run goes on without E10 as before
+    bool oomFatal = false;
     std::vector<uint8_t> cr4info;       // not read by the engine (E20: but compared with the device's when clip.dev): per read STAR's CellRanger4 5' clip (what clipChunk would leave in the FASTQ)
     // E8: with e2e set, mapDistinct also builds the pileup's records on the device and copies them into e2e (E2EHeader); the host lane
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:

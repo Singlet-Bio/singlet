@@ -1293,7 +1293,9 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // records), and the reads' CR/UR are kept for E11 at the records (keepLate)
     bool entHost = false; u64 entOff = 0, qmOff = 0, keepTally = 0;
     const bool keepLate = lean;
+    std::string e10Oom;   // IDEAS.md item 11: why E10 turned off for lack of device memory (with in.oomFatal, mapDistinct fails at its end)
     auto e10Off = [&](const std::string& why) {
+        if (e10 && e10Oom.empty() && (why.find("out of memory") != std::string::npos || why.find("out of device memory") != std::string::npos)) e10Oom = why;
         if (e10) out.e10.log += "engine_gpu: E10 not used (" + why + "); STAR's loop does the per-read work\n";
         if (!why.empty()) { e9::soloKeepRelease(); out.e10.soloKept = false; g_bud.used -= std::min(g_bud.used, keepTally); keepTally = 0; }   // E11: nothing to count on the device without E10
         e10 = false; cudaGetLastError();
@@ -2830,6 +2832,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         snprintf(line, sizeof line, "engine_gpu: E6 dump of %llu records -> %s (%.1f s)\n", (unsigned long long)(out.seqOff.size() - 1), dp, now() - td);
         out.log += line;
     }
+    if (in.oomFatal && !e10Oom.empty()) return fail("E10 ran out of device memory (" + e10Oom + "); the caller runs mapDistinct again");
     return true;
 }
 

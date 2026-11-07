@@ -1511,8 +1511,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (e2hSaved) e2h0 = *e2r.hdr();
     int oomTries = 3;
     if (const char *t = getenv("SINGLET_ENGINE_GPU_OOM_TRIES")) oomTries = std::max(1, atoi(t));
+    // E10's own out-of-memory turn-off fails the call too, except on the last attempt (in.oomFatal); dmal's failures say "out of device memory"
+    auto oomLog = [](const std::string &l) { return l.find("out of memory") != std::string::npos || l.find("out of device memory") != std::string::npos; };
+    in.oomFatal = oomTries > 1;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
-    for (int a = 2; !ok && !out.budgetFail && a <= oomTries && out.log.find("out of memory") != std::string::npos; a++) {
+    for (int a = 2; !ok && !out.budgetFail && a <= oomTries && oomLog(out.log); a++) {
+        in.oomFatal = a < oomTries;
         in.release();
         const int waitS = 5 * (a - 1);
         P.inOut->logMain << "ENGINE_GPU: attempt " << a - 1 << " ran out of device memory; attempt " << a << " in " << waitS << " s. Its log:\n" << out.log << flush;
