@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Resolve a samprof run (samples.bin + maps.txt) into per-thread, per-function CPU tables.
-usage: resolve.py RUNDIR BINARY ADDR2LINE [--ms 5] [--top 40]   -> writes RUNDIR/profile.md and prints it.
+usage: resolve.py RUNDIR BINARY ADDR2LINE [--ms 5] [--top 40] [--under REGEX --out NAME]   -> writes RUNDIR/profile.md (or NAME) and prints it.
+--under keeps only the samples whose stack holds a real function matching REGEX (e.g. 'PileupEngine::run' for the stream loop's thread).
 self = innermost inlined function at the sampled pc; own = the real (outermost) function holding it; inclusive = real functions on the
 stack, each counted once per sample. cpu_s = samples * ms / 1000."""
 import collections, re, struct, subprocess, sys
@@ -71,6 +72,9 @@ def fn(pc, which):
     return '[' + (m.rsplit('/', 1)[-1] if m else '?') + ']'
 
 
+if '--under' in sys.argv:
+    rx_u = re.compile(sys.argv[sys.argv.index('--under') + 1])
+    recs = [r for r in recs if any(rx_u.search(fn(pc, 'own')) or rx_u.search(fn(pc, 'self')) for pc in r[1])]
 tot = len(recs)
 if '--cpu' in sys.argv:   # the process timer under-counts multithreaded CPU (about 1 sample per wall tick); scale to the measured total
     ms = float(sys.argv[sys.argv.index('--cpu') + 1]) * 1000.0 / tot
@@ -144,5 +148,5 @@ for pid in pids:
     for f, k in lc.most_common(14):
         L.append('| `%s` | %.0f |' % (f[:110], sec(k)))
     L.append('')
-open(rd + '/profile.md', 'w').write('\n'.join(L) + '\n')
+open(rd + '/' + (sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else 'profile.md'), 'w').write('\n'.join(L) + '\n')
 print('\n'.join(L))
