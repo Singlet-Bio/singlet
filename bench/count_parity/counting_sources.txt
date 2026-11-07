@@ -1,0 +1,14 @@
+# Files whose content decides the gene count matrices. A change to any of them needs a new STARsolo gate record
+# (bench/count_parity/gate.sbatch on Clipper, then commit gate_results/<hash16>.json). One path per line; '#' starts a comment.
+# The alignment (src/star, the STAR flags in src/pipeline/singlet.cpp) is gated by the long-read truth track (M1-M7), not here.
+include/singlet/pileup/pileup_engine.h
+include/singlet/pileup/umi_dedup.h
+include/singlet/pileup/gene_model.h
+include/singlet/pileup/interval_tree.h
+include/singlet/pileup/export.h
+include/singlet/pileup/mtx_writer.h
+include/singlet/pileup/cb_correct.h
+include/singlet/pileup/gpu_pileup_bridge.h
+src/engine_gpu/gpu_pileup/pileup/pileup.cu
+src/engine_gpu/gpu_pileup/pileup/pileup_rec.h
+src/engine_gpu/gpu_pileup/m6/m6.cu
