@@ -1154,8 +1154,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     {   // diagnostic: whether the schedule flag took (a context made earlier in this process keeps its own flags)
         unsigned fl = 0; cudaGetDeviceFlags(&fl);
-        char b[160]; snprintf(b, sizeof b, "engine_gpu: device flags 0x%x (schedule %s), cudaInitDevice: %s
-", fl,
+        char b[160]; snprintf(b, sizeof b, "engine_gpu: device flags 0x%x (schedule %s), cudaInitDevice: %s\n", fl,
                               (fl & cudaDeviceScheduleMask) == cudaDeviceScheduleBlockingSync ? "blocking sync" : (fl & cudaDeviceScheduleMask) == cudaDeviceScheduleSpin ? "spin" :
                               (fl & cudaDeviceScheduleMask) == cudaDeviceScheduleYield ? "yield" : "auto", cudaGetErrorString(initRc));
         out.log += b;
