@@ -159,14 +159,17 @@ holder_stop() {   # the shared-index holders this item started (their environmen
 }
 nhsrv_start() {   # the non-host server of this point (XC card, `singlet gpu-nhsrv`): it keeps the screen's index on the device across runs
   NHSRV_SOCK=/tmp/singlet-nhsrv-$RUNID.sock; rm -f $NHSRV_SOCK
-  RUNID=$RUNID $BIN gpu-nhsrv $NHSRV_SOCK 0 8 >> $RES0/nhsrv.log 2>&1 & NHSRV_PID=$!
+  # started from a subshell, so it is no job of this shell: the bare `wait` after each point waits only for the identity checks
+  NHSRV_PID=$( (RUNID=$RUNID $BIN gpu-nhsrv $NHSRV_SOCK 0 8 >> $RES0/nhsrv.log 2>&1 & echo $!) )
   local i; for i in $(seq 1 60); do [ -S $NHSRV_SOCK ] && break; sleep 0.5; done
   [ -S $NHSRV_SOCK ] || { echo "!! non-host server did not start (see $RES0/nhsrv.log)" | tee -a $S; return 1; }
   echo "non-host server pid $NHSRV_PID on $NHSRV_SOCK ($(date -Is))" | tee -a $S
 }
 nhsrv_stop() {
   [ -n "${NHSRV_PID:-}" ] || return 1
-  kill $NHSRV_PID 2>/dev/null; wait $NHSRV_PID 2>/dev/null; rm -f $NHSRV_SOCK; NHSRV_PID=""; return 0
+  local i; kill $NHSRV_PID 2>/dev/null
+  for i in $(seq 1 20); do kill -0 $NHSRV_PID 2>/dev/null || break; sleep 0.5; done
+  kill -9 $NHSRV_PID 2>/dev/null; rm -f $NHSRV_SOCK; NHSRV_PID=""; return 0
 }
 cfg_set() {
   # A config is one atom or several joined by '+' (bench/gpu/fastloop: stacked designs), for example wshrink+shidx+maponly. An atom is a
