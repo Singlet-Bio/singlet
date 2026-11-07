@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -318,6 +319,38 @@ static void test7_kingdom_order_independent() {
     PASS(name);
 }
 
+// ── Test 8: one fit, any thread count, any number of reports ──
+// em_fit on 8 threads is bit-identical to 1 thread on an input large enough to run threaded (>= 20000 patterns), and
+// em_deconvolve equals em_report of the shared fit.
+static void test8_fit_threads_and_reports() {
+    const char* name = "test8_fit_threads_and_reports";
+    std::mt19937 rnd(12345);
+    std::vector<MH> reads;
+    for (int i = 0; i < 60000; ++i) {
+        MH mh;
+        const int nv = 1 + static_cast<int>(rnd() % 4), nm = static_cast<int>(rnd() % 3);
+        for (int j = 0; j < nv; ++j) mh.viral_hits.push_back({static_cast<uint32_t>(rnd() % 400), 0.05f + (rnd() % 950) / 1000.0f});
+        for (int j = 0; j < nm; ++j) mh.microbial_hits.push_back({1000u + static_cast<uint32_t>(rnd() % 300), 0.05f + (rnd() % 950) / 1000.0f});
+        reads.push_back(std::move(mh));
+    }
+    const auto kmap = build_kingdom_map(reads);
+    const EmFit f1 = em_fit(reads, 500, 1e-6f, 0.05f, 1), f8 = em_fit(reads, 500, 1e-6f, 0.05f, 8);
+    bool same = f1.iterations == f8.iterations && f1.theta == f8.theta && f1.hit_rate_sum == f8.hit_rate_sum &&
+                f1.weight_sum == f8.weight_sum && f1.idx_to_species == f8.idx_to_species && f1.N == f8.N;
+    if (!same) { FAIL(name, "8 threads differ from 1 thread"); return; }
+    int it = 0;
+    const auto a = em_deconvolve(reads, kmap, 500, 1e-6f, 1e-4f, 0.05f, 0.30f, &it, 0);
+    const auto b = em_report(f8, kmap, 1e-4f, 0.30f, 0);
+    same = it == f8.iterations && a.size() == b.size();
+    for (size_t i = 0; same && i < a.size(); ++i)
+        same = a[i].species_id == b[i].species_id && a[i].relative_abundance == b[i].relative_abundance &&
+               a[i].n_reads_assigned == b[i].n_reads_assigned && a[i].mean_hit_rate == b[i].mean_hit_rate &&
+               a[i].kingdom == b[i].kingdom;
+    if (!same) { FAIL(name, "em_deconvolve differs from em_report of the shared fit"); return; }
+    if (em_report(f8, kmap, 0.0f, 0.0f, 10u).size() < b.size()) { FAIL(name, "looser report lists fewer species"); return; }
+    PASS(name);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -328,6 +361,7 @@ int main() {
     test5_min_abundance_filter();
     test6_order_independent();
     test7_kingdom_order_independent();
+    test8_fit_threads_and_reports();
 
     std::cerr << "\n--- " << g_passed << "/" << (g_passed + g_failed) << " tests passed ---\n";
     return (g_failed == 0) ? 0 : 1;

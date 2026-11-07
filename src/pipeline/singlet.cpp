@@ -1899,12 +1899,12 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         int  n_em_iter   = 0;
         const uint32_t min_abs_reads = std::max(500u,
             static_cast<uint32_t>(0.005f * static_cast<float>(n_total)));
-        auto em_result = em_deconvolve(multi_hits, kingdom_map,
-                                       /*max_iter=*/500, /*tol=*/1e-6f,
-                                       /*min_abundance=*/1e-4f,
-                                       /*min_prefilter_hr=*/0.05f,
-                                       /*min_report_hr=*/0.30f, &n_em_iter,
-                                       /*min_abs_reads=*/min_abs_reads);
+        // One EM fit serves both reports: the abundance table here and nonhost_candidates.tsv below (the iterations do not depend
+        // on the report thresholds), on the run's threads (bit-identical at any count)
+        const EmFit em_fit_all = em_fit(multi_hits, /*max_iter=*/500, /*tol=*/1e-6f, /*min_prefilter_hr=*/0.05f, std::max(1, n_threads));
+        n_em_iter = em_fit_all.iterations;
+        auto em_result = em_report(em_fit_all, kingdom_map, /*min_abundance=*/1e-4f, /*min_report_hr=*/0.30f,
+                                   /*min_abs_reads=*/min_abs_reads);
 
         std::cerr << "[nonhost] EM converged in " << n_em_iter
                   << " iterations, " << em_result.size() << " species above threshold\n";
@@ -1996,9 +1996,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // and any taxon-specific check of a negative library need the evidence below those thresholds as well)
         {
             std::filesystem::create_directories(out_prefix + "/nonhost");
-            int cand_iter = 0;
-            auto cand = em_deconvolve(multi_hits, kingdom_map, /*max_iter=*/500, /*tol=*/1e-6f, /*min_abundance=*/0.0f,
-                                      /*min_prefilter_hr=*/0.05f, /*min_report_hr=*/0.0f, &cand_iter, /*min_abs_reads=*/10u);
+            auto cand = em_report(em_fit_all, kingdom_map, /*min_abundance=*/0.0f, /*min_report_hr=*/0.0f, /*min_abs_reads=*/10u);
             std::unordered_set<uint32_t> confirmed_ids;
             for (const auto& sa : em_result) confirmed_ids.insert(sa.species_id);
             std::ofstream ctsv(out_prefix + "/nonhost/nonhost_candidates.tsv");
