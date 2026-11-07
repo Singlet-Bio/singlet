@@ -15,13 +15,14 @@ engine; alignment is held to the M1-M7 gate separately.
 | #86 grouped nonhost EM | Host code after the pileup, shared; `nonhost_gpu.cu` only does the screen (phases A-C). Nonhost outputs are identical in the gate. |
 | #82 binary read source | Note only (P3): `--engine gpu` still decodes the `.1fq` to FASTQ temp files (file mode); the GPU prefill could take `StarChunkSourceT` blocks instead, which would save the decode and the temp files. Not attempted. The R11 histogram is counted in the file-mode `process_block` on top of #82's `RunSet` decode. |
 
-## Not mirrored: the intron rules of #80 (incl. D2, chrM/NUMT tie)
+## The intron rules of #80 (history; superseded)
 
-`prod/campaign` now defaults to `intron_rules = 389` (read-level kUnique, kNoSplicedIntron, kMtPrefer; molecule-level kUmiGeneCR). They are not
-on the GPU (`k_annotate` / `k_resolve` / the gene reducer). With any rule on, `singlet` ignores `SINGLET_GPU_PILEUP`, says so, and runs the CPU
-pileup on the GPU-mapped reads (counts correct, only the pileup saving is lost). `SINGLET_INTRON_RULES=0` restores the pre-#80 classification,
-and gate (a) below runs with it. The GPU multimapper resolve (`k_resolve`) has the same gap D2 had on the serial path (kMtPrefer); on neuron1k_v3
-(mouse) mt-Atp6 is 16 with rules 0 on both engines and 326 619 with the default rules on both engines (the GPU run is the CPU-pileup fallback). **The Beta cost saving needs #80 on the GPU first** (follow-up).
+This section first recorded that the GPU pileup lacked the rules of #80, so any rule on sent the run to the CPU pileup. The later sections
+of this document record the port ("Intron rules of #80 ... on the GPU", then the 397 default with kFlank). Today the engine default is
+`intron_rules = 2957` (0xb8d: 389 + kFlank 8 + kGeneFullSet 512 + kUmiGeneSpliced 2048, `include/singlet/pileup/pileup_engine.h`), and
+`singlet.cpp` declines the GPU pileup only for bits outside `kGpuRules` (1, 4, 8, 16, 128, 256, 512, 1024, 2048). The frontier identity
+gates run these defaults with the GPU pileup on: on neuron1k_v3 the records are built on the device, no pileup fallback occurs, and cpu:gpu
+is identical, mt-Atp6 included. `SINGLET_INTRON_RULES=0` restores the pre-#80 classification, as gate (a) below used.
 
 ## Gate (a): CPU engine vs `--engine gpu` + `SINGLET_GPU_PILEUP=on`, `SINGLET_INTRON_RULES=0`
 
