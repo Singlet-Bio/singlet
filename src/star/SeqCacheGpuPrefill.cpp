@@ -1502,7 +1502,28 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         lockReleased = false;
         singlet_tail::mark("prefill: device taken again (waited %.3f s)", wait2);
     };
+    // IDEAS.md item 11: with several samples per GPU the device can hold less free memory than this sample's E17 budget (other processes'
+    // contexts, E11 keeps between their E20 holds), and an allocation fails with out of memory. That is transient: release the slot, wait, take
+    // the same device again and run mapDistinct again from the start. Its fail() has reset the device; the shared region's header is restored, so
+    // nothing of the failed attempt is used. SINGLET_ENGINE_GPU_OOM_TRIES attempts (default 3; 1: STAR maps every read after the first, as before)
+    singlet_engine_gpu::E2EHeader e2h0{};
+    const bool e2hSaved = e2r.base != nullptr;
+    if (e2hSaved) e2h0 = *e2r.hdr();
+    int oomTries = 3;
+    if (const char *t = getenv("SINGLET_ENGINE_GPU_OOM_TRIES")) oomTries = std::max(1, atoi(t));
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
+    for (int a = 2; !ok && !out.budgetFail && a <= oomTries && out.log.find("out of memory") != std::string::npos; a++) {
+        in.release();
+        const int waitS = 5 * (a - 1);
+        P.inOut->logMain << "ENGINE_GPU: attempt " << a - 1 << " ran out of device memory; attempt " << a << " in " << waitS << " s. Its log:\n" << out.log << flush;
+        singlet_tail::mark("prefill: device out of memory, attempt %d in %d s", a, waitS);
+        std::this_thread::sleep_for(std::chrono::seconds(waitS));
+        in.reacquire();
+        if (e2hSaved) *e2r.hdr() = e2h0;
+        out = singlet_engine_gpu::Output{};
+        out.log = "engine_gpu: OOM retry: attempt " + std::to_string(a) + " of " + std::to_string(oomTries) + "\n";
+        ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
+    }
     in.release();
     singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
     time_t tGpu = time(nullptr);
