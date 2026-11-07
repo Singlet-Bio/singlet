@@ -3,8 +3,8 @@
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
 #SBATCH --nodes=1
-#SBATCH --exclusive
-#SBATCH --mem=0
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=96G
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # One whole node for the read-level benchmarks' staging: Penter fetch, TE data fetch and TE comparator setup run side by side
