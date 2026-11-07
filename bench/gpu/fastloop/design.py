@@ -152,7 +152,8 @@ def main():
         f.write('export FL_IDEAS=$FL/ideas.tsv FL_SOLE=%d SAMPLE=%s\n' % (1 if o.sole else 0, T['sample']))
         if o.sole and any('shidx' in pt or 'mps' in pt for pt in points):
             # the one-GPU pilot is not exclusive: another job on the node would count the holder's memory in its budget, and ours its jobs
-            f.write('if [ "${PILOT:-0}" = 1 ] && [ -n "${PILOT_NODE:-}" ] && [ -n "${PILOT_JOB:-}" ]; then\n')
+            # FL_NODE_OK=1 skips the check off the pilots (run_on.sbatch on a screening node): tp_gc stops only its own holders
+            f.write('if [ "${PILOT:-0}" = 1 ] && [ -n "${PILOT_NODE:-}" ] && [ -n "${PILOT_JOB:-}" ] && [ "${FL_NODE_OK:-0}" != 1 ]; then\n')
             f.write('  other=$(squeue -w $PILOT_NODE -h -o "%i %u %j" | grep -v "^$PILOT_JOB ")\n')
             f.write('  [ -n "$other" ] && { echo "FL_SOLE REFUSED: other jobs on $PILOT_NODE; the shared-index cells need the node to themselves:"; '
                     'echo "$other"; exit 3; }\n')

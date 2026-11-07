@@ -29,7 +29,7 @@ import re
 STEPS = ['index', 'reads', 'e10', 'clip', 'dedup', 'laneA', 'laneM', 'laneB', 'lanes', 'hostlane', 'records', 'readRecord', 'e2e']
 LOCKS = ['prefill', 'solo', 'pileup', 'nonhost', 'handoff']
 STAGES = ['scan', 'refs', 'STAR', 'stream', 'handoff', 'nonhost', 'export', 'demux']
-MAIN = ['held', 'core', 'wall']
+MAIN = ['held', 'gheld', 'gsteps', 'core', 'wall']
 
 
 def metric(r, m):
@@ -38,6 +38,12 @@ def metric(r, m):
         if v is None:
             v = sum((x or {}).get('held') or 0 for x in (r.get('locks') or {}).values())
         return v
+    if m == 'gheld':   # device locks without the non-host screen's (its index load is file I/O, noisy on small inputs)
+        L = r.get('locks') or {}
+        return sum((L.get(k) or {}).get('held') or 0 for k in ('prefill', 'solo', 'pileup', 'handoff')) if L else None
+    if m == 'gsteps':   # the engine's own step timers, summed (device work of the prefill, no locks or waits)
+        s = r.get('steps') or {}
+        return sum(s.values()) if s else None
     if m == 'core':
         return r['core_s'] / r['pairs'] * 1e6 if r.get('core_s') and r.get('pairs') else None
     if m == 'wall':
@@ -153,6 +159,7 @@ def main():
     ap.add_argument('--reps', type=int, default=1000)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--tsv', default=None)
+    ap.add_argument('--trim', type=float, default=1.4, help='leave out runs above TRIM x their cell median of the primary metric (0: off)')
     o = ap.parse_args()
     ideas = [x for x in o.ideas.split(',') if x]
     k = len(ideas)
@@ -163,6 +170,32 @@ def main():
             if len(f) >= 4 and not l.startswith('#'):
                 stage_of[f[0]] = f[3]
     rows, excl = load(o.res, ideas, o.drop_first)
+    if o.trim > 0:
+        med = {}
+        for r in rows:
+            v = metric(r['run'], o.metric)
+            if v is not None:
+                med.setdefault(r['cell'], []).append(v)
+        med = {c: sorted(v)[(len(v) - 1) // 2] for c, v in med.items()}   # lower median: robust with two runs
+        keep = []
+        for r in rows:
+            v = metric(r['run'], o.metric)
+            if v is not None and med.get(r['cell']) and v > o.trim * med[r['cell']]:
+                excl['outlier'] = excl.get('outlier', 0) + 1
+                print('outlier left out: %s %s %s = %.2f (cell median %.2f)' % (r['point'], r['run'].get('copy'), o.metric, v, med[r['cell']]))
+                continue
+            keep.append(r)
+        rows = keep
+    gone = [i for j, i in enumerate(ideas) if len({r['x'][j] for r in rows}) < 2]
+    if gone:
+        print('no runs left at one level of: %s (left out of the fit)' % ', '.join(gone))
+        idx = [j for j, i in enumerate(ideas) if i not in gone]
+        ideas = [ideas[j] for j in idx]
+        k = len(ideas)
+        for r in rows:
+            r['x'] = [r['x'][j] for j in idx]
+            r['cell'] = tuple(r['x'])
+        load.tally = [([x[j] for j in idx], b) for x, b in load.tally]
     print('# fastloop effects: %s' % o.res)
     print('runs used %d; left out: %s' % (len(rows), ', '.join('%s %d' % kv for kv in excl.items() if kv[1])))
     if not rows:
@@ -240,10 +273,11 @@ def main():
     print('Effect of switching each idea on, relative to the fitted all-off level (95 %% bootstrap CI); decision on %s at theta %.0f%% '
           '(WIN: CI below -theta; RULED-OUT: CI above -theta; OPEN: neither, add a block).' % (o.metric, 100 * o.theta))
     print()
-    print('| idea | stage | held | core-s/M | wall | decision |')
-    print('|---|---|---|---|---|---|')
+    print('| idea | stage | held | gheld | gsteps | core-s/M | wall | decision |')
+    print('|---|---|---|---|---|---|---|---|')
     for j, i in enumerate(ideas):
-        print('| %s | %s | %s | %s | %s | %s |' % (i, stage_of.get(i, ''), cell('held', j), cell('core', j), cell('wall', j), decide(o.metric, j)))
+        print('| %s | %s | %s | %s | %s | %s | %s | %s |' % (i, stage_of.get(i, ''), cell('held', j), cell('gheld', j), cell('gsteps', j), cell('core', j),
+                                                       cell('wall', j), decide(o.metric, j)))
     print()
     print('Where each idea acts: stage metrics whose 95 % CI excludes zero, largest first (seconds per run, then relative).')
     print()
