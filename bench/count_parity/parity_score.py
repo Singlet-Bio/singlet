@@ -87,7 +87,23 @@ def wrong_species(m, bcs, pure_h, pure_m):
     h = np.asarray(X[:, ish].sum(1)).ravel(); mo = np.asarray(X[:, ~ish].sum(1)).ravel()
     sel = pure_h | pure_m
     wrong = np.where(pure_h, mo, np.where(pure_m, h, 0.0))
-    return wrong[sel], (h + mo)[sel]
+    pg = np.zeros(len(m.genes))
+    if pure_m.any():
+        pg[ish] += X[pure_m][:, ish].sum(0).A1
+    if pure_h.any():
+        pg[~ish] += X[pure_h][:, ~ish].sum(0).A1
+    return wrong[sel], (h + mo)[sel], dict(zip(m.genes, pg))
+
+
+def excess(ga, gb, chrom, n=25):
+    """Genes ranked by wrong-species UMIs of Singlet minus STARsolo."""
+    genes = set(ga) | set(gb)
+    d = {g: ga.get(g, 0.0) - gb.get(g, 0.0) for g in genes}
+    top = sorted(d.items(), key=lambda kv: -kv[1])[:n]; bot = sorted(d.items(), key=lambda kv: kv[1])[:10]
+    nm = lambda g: chrom.get(g, ("", g, ""))[1] or g  # noqa: E731
+    return {"sum_positive": float(sum(v for v in d.values() if v > 0)), "sum_negative": float(sum(v for v in d.values() if v < 0)),
+            "top_positive": [(nm(g), g, float(v), float(ga.get(g, 0)), float(gb.get(g, 0))) for g, v in top],
+            "top_negative": [(nm(g), g, float(v), float(ga.get(g, 0)), float(gb.get(g, 0))) for g, v in bot]}
 
 
 def chry(m, bcs, pure_h, ycols):
@@ -155,12 +171,14 @@ def main():
         layers = [("barnyard.X", lambda: L.load_singlet(a.singlet), lambda: L.load_starsolo(a.starsolo, "GeneFull")),
                   ("barnyard.exon", lambda: collapse_by_gene(a.singlet, "exon_counts"), lambda: L.load_starsolo(a.starsolo, "Gene")),
                   ("barnyard.intron", lambda: collapse_by_gene(a.singlet, "intron_counts"), lambda: L.load_starsolo_velocyto(a.starsolo, "unspliced"))]
+        chrom = L.gene_chrom(a.gtf)
+        res["excess"] = {}
         for name, ls, lo in layers:
             ms, mo = ls(), lo()
-            wa, ta = wrong_species(ms, cr.barcodes, ph, pm); wb, tb = wrong_species(mo, cr.barcodes, ph, pm)
+            wa, ta, ga = wrong_species(ms, cr.barcodes, ph, pm); wb, tb, gb = wrong_species(mo, cr.barcodes, ph, pm)
             res["axes"][name] = ratio_axis(wa, ta, wb, tb, rng)
+            res["excess"][name] = excess(ga, gb, chrom)
             if name == "barnyard.X":
-                chrom = L.gene_chrom(a.gtf)
                 ycols = {g for g, (c, n, t) in chrom.items() if c.endswith("chrY") and g.startswith("ENSG") and "_PAR_Y" not in g}
                 ya, ha, ga = chry(ms, cr.barcodes, ph, ycols); yb, hb, gb = chry(mo, cr.barcodes, ph, ycols)
                 res["axes"]["chrY"] = ratio_axis(ya, ha, yb, hb, rng, 1e6)
