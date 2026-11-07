@@ -30,9 +30,14 @@ def runs_of(res, cfg):
             continue
         if m.get('cfg') != cfg:
             continue
-        vals = {'core': [], 'held': []}
+        vals = {'core': [], 'held': [], 'fallback': 0}
         for r in pj.get('runs', []):
             if r.get('rc', 0) != 0 or not r.get('pairs'):
+                continue
+            # a run that fell back to the CPU costs about three times the core-seconds of a GPU run; it would set the point's mean, so it
+            # is counted (FALLBACK line) and left out of the timing (bench/gpu/fastloop/README.md: fallbacks are a failure, not a time)
+            if r.get('engine_failed') or not r.get('level5', True) or not r.get('gpu_pileup_ok', True):
+                vals['fallback'] += 1
                 continue
             vals['core'].append(r['core_s'] / r['pairs'] * 1e6)
             if r.get('log_held_s') is not None:
@@ -69,7 +74,11 @@ def main():
     pa, pb = runs_of(o.res, o.a), runs_of(o.res, o.b)
     na = sum(len(p['core']) for _, p in pa)
     nb = sum(len(p['core']) for _, p in pb)
-    final = min(na, nb) >= o.cap
+    fa = sum(p['fallback'] for _, p in pa)
+    fb = sum(p['fallback'] for _, p in pb)
+    if fa or fb:
+        print('seqstop FALLBACK runs left out of the timing: %s %d, %s %d' % (o.a, fa, o.b, fb))
+    final = min(na + fa, nb + fb) >= o.cap
     lvl = 0.95 if final else 0.99
     decision = 'CONTINUE'
     for metric in ('core', 'held'):
