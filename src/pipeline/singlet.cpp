@@ -5995,16 +5995,39 @@ static int singlet_main(int argc, char* argv[]) {
         for (size_t w = 0; w < cnt.size(); ++w) cnt[w] = cb_corrector.exact_count(static_cast<int64_t>(w));
         static constexpr char kNtU[5] = {'A', 'C', 'G', 'T', 'N'};
         const int L = cb_corrector.length();
-        uint64_t n_corrected = 0, n_lost = 0;
-        for (const auto& [key, n] : cbx_nonexact) {
-            char raw[32], fixed_bc[40];
-            uint64_t k = key;
-            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
-            raw[L] = '\0';
-            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
-            if (st < 0) { n_lost += n; continue; }
-            const int64_t w = cb_corrector.find(std::string(fixed_bc, L).c_str());
-            if (w >= 0) { cnt[w] += n; n_corrected += n; }
+        // Every distinct non-exact barcode is resolved on its own and only integer counts are summed, so the work is split over the
+        // hash table's buckets on star_threads threads with the same result (a 1.2 G-read sample spent ~86 s here on one thread,
+        // before STAR starts). cnt[] is added to atomically; resolve() is const and thread-safe once settled (exact_count above).
+        std::atomic<uint64_t> n_corrected{0}, n_lost{0};
+        {
+            const size_t nbk = cbx_nonexact.bucket_count();
+            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk, 1024))));
+            std::atomic<size_t> next_bk{0};
+            auto work = [&]() {
+                uint64_t corr = 0, lost = 0;
+                char raw[32], fixed_bc[40];
+                constexpr size_t kChunk = 4096;
+                for (size_t b0; (b0 = next_bk.fetch_add(kChunk)) < nbk;) {
+                    const size_t b1 = std::min(nbk, b0 + kChunk);
+                    for (size_t bk = b0; bk < b1; ++bk)
+                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) {
+                            const uint64_t n = it->second;
+                            uint64_t k = it->first;
+                            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+                            raw[L] = '\0';
+                            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+                            if (st < 0) { lost += n; continue; }
+                            fixed_bc[L] = '\0';
+                            const int64_t w = cb_corrector.find(fixed_bc);
+                            if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
+                        }
+                }
+                n_corrected += corr; n_lost += lost;
+            };
+            std::vector<std::thread> pool;
+            for (int t = 1; t < nt_u; ++t) pool.emplace_back(work);
+            work();
+            for (auto& t : pool) t.join();
         }
         std::vector<char> bc(L + 1);
         for (size_t w = 0; w < cnt.size(); ++w) {
@@ -6014,7 +6037,7 @@ static int singlet_main(int argc, char* argv[]) {
         }
         std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
         std::cerr << "[singlet] barcode universe: " << out.size() << " whitelist barcodes with >= " << bc_min_reads << " reads after R11 correction ("
-                  << n_corrected << " reads corrected onto a barcode, " << n_lost << " uncorrectable)" << std::endl;
+                  << n_corrected.load() << " reads corrected onto a barcode, " << n_lost.load() << " uncorrectable)" << std::endl;
     };
     if (engine_ptr && config.cb_from_cr) {
         std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
