@@ -182,12 +182,6 @@ struct AmbientDecontConfig {
                                         ///< pass for "not expressed", which raises its c_k, which hides more native genes (hgmm1k_v3: 42 shallow mouse
                                         ///< cells at c_k 0.18 against 0.007-0.012 elsewhere). 0 = off
     double   capped_cell_mult = 3.0;    ///< cells of a capped cluster are limited to this multiple of its capped c_k
-    double   alpha_shrink_cells = 0.0;  ///< depth-trend level of every cluster (alpha_k) is shrunk toward the pooled level as a Gamma-Poisson posterior with this many
-                                        ///< pseudo-cells of exposure (0 = off): a small shallow cluster whose own off-gene reads set a high alpha_k no longer sets the prior
-                                        ///< mean of its cells alone
-    double   cell_rho_cap_mult = 0.0;   ///< every cell's rho is limited to this multiple of the depth-trend prior mean of its depth (the expected ambient reads
-                                        ///< of a droplet of that size over its UMIs); 0 = off. Shallow cells of a small cluster whose c_k is inflated reach 2 to 3 times the
-                                        ///< truth on mixtures (hgmm1k_v3: 42 shallow mouse cells), and the cluster cap only binds on c_k
     double   phi_pseudocount  = 1e-4;   ///< per-gene pseudocount of the native profile
     bool     equal_cell_weight = false; ///< cluster profiles average cells with equal weight instead of by UMIs
     bool     outlier_round = true;      ///< refit the clusters without cells whose rho is far above their cluster's
@@ -737,15 +731,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                 auto fit_alpha = [&](double g, double* score) {
                     std::vector<double> s1(K, 0.0), s2(K, 0.0);
                     for (uint32_t j : el) { s1[cl[j]] += xoff[j]; s2[cl[j]] += offA[cl[j]] * std::exp(g * lN[j]); }
-                    double S1 = 0.0, S2 = 0.0;
-                    for (uint32_t k = 0; k < K; ++k) if (s1[k] > 0 && s2[k] > 0) { S1 += s1[k]; S2 += s2[k]; }
-                    const double kap = cfg.alpha_shrink_cells > 0.0 && S2 > 0.0 ? cfg.alpha_shrink_cells * S2 / static_cast<double>(el.size()) : 0.0;
-                    const double rate_g = S2 > 0.0 ? S1 / S2 : 0.0;
-                    for (uint32_t k = 0; k < K; ++k) {
-                        if (!(s1[k] > 0 && s2[k] > 0)) alpha[k] = -1e9;
-                        else if (kap > 0.0) alpha[k] = std::log((s1[k] + kap * rate_g) / (s2[k] + kap));
-                        else alpha[k] = std::log(s1[k] / s2[k]);
-                    }
+                    for (uint32_t k = 0; k < K; ++k) alpha[k] = (s1[k] > 0 && s2[k] > 0) ? std::log(s1[k] / s2[k]) : -1e9;
                     if (score) {
                         double sc = 0.0;
                         for (uint32_t j : el) {
@@ -828,7 +814,6 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
             }
             // a capped cluster's own off-gene reads are what inflated its c_k: no cell of it goes beyond the outlier multiple of the capped value
             if (std::isfinite(ck_cap[k])) r = std::min(r, std::max(cfg.capped_cell_mult * ck[k], cfg.rho_min));
-            if (trend && cfg.cell_rho_cap_mult > 0.0 && mu_cell[j] > 0.0) r = std::min(r, std::max(cfg.cell_rho_cap_mult * mu_cell[j], cfg.rho_min));
             rho[j] = r;
         });
     };

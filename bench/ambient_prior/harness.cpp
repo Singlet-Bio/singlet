@@ -44,8 +44,7 @@ static void set_param(singlet::AmbientDecontConfig& c, const std::string& k, dou
     else if (k == "kappa") c.prior_strength = v;
     else if (k == "offprior") c.off_prior_reads = v;
     else if (k == "outlier") c.outlier_round = v != 0;
-    else if (k == "cellcap") c.cell_rho_cap_mult = v;
-    else if (k == "ashrink") c.alpha_shrink_cells = v;
+    // a parameter of a new estimator variant is added here together with the change itself
     else { std::cerr << "unknown parameter " << k << "\n"; std::exit(2); }
 }
 
