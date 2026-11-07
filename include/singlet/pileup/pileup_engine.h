@@ -4444,7 +4444,8 @@ private:
         std::vector<std::vector<D::Molecule>> mols(targets.size());
         for (size_t i = 0; i < targets.size(); ++i)
         {
-            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i],
+                                                                        config_.finalize_threads);
             else targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
         }
         fin_mark("molecules collapsed");
