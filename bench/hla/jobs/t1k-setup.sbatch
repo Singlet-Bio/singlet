@@ -25,8 +25,7 @@ cp -r $SCR/T1K/LICENSE $SCR/out/LICENSE.T1K
 cd $SCR/out
 curl -fsS --retry 5 -o hlaidx/hla.dat.zip https://ftp.ebi.ac.uk/pub/databases/ipd/imgt/hla/hla.dat.zip
 ( cd hlaidx && unzip -q -o hla.dat.zip )
-REL=$(grep -m1 -oE "IPD-IMGT/HLA Release [0-9.]+|Release: [0-9.]+|version: [0-9.]+" hlaidx/hla.dat || true)
-[ -n "$REL" ] || REL=$(grep -m3 -iE "release|version" hlaidx/hla.dat | head -1)
+REL=$(grep -oE "Rel. [0-9]+.[0-9]+.[0-9]+" hlaidx/hla.dat | sed "s/Rel. //" | sort -V | tail -1)
 perl bin/t1k-build.pl -o hlaidx -d hlaidx/hla.dat
 ls -l hlaidx
 SHA_DAT=$(sha256sum hlaidx/hla.dat.zip | cut -c1-64); SHA_RNA=$(sha256sum hlaidx/hlaidx_rna_seq.fa | cut -c1-64)

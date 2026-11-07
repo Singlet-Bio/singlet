@@ -254,6 +254,7 @@ add_pileup_test(test_te_kmer_integration)
 add_pileup_test(test_txome_gene_index)
 add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
+add_pileup_test(test_hla_typing)       # D-101: the HLA prefilter keeps every read T1K counts; donor rule; genotype JSON
 add_pileup_test(test_read_source)   # read_source.h: shared .1fq decoder, STAR chunk source
 add_pileup_test(test_fastq_encoder_r1_101)
 add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
