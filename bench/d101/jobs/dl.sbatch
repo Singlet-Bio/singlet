@@ -25,8 +25,11 @@ if [ $KIND = sc ]; then
   echo "donor $DONOR $SC ($SCG)"
   URL=$(curl -fsS "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=$SC&result=read_run&fields=submitted_ftp" | tail -1 | cut -f2 | tr ';' '\n' | grep '\.bam$')
   [ -n "$URL" ] || { echo "no submitted BAM for $SC"; exit 4; }
-  ( cd $SCR && $BIN download --bam https://$URL --staging-dir $SCR/stage -o $SCR/$SC.1fq ) 2>&1 | tail -25
-  mv $SCR/$SC.1fq $O.part && mv $O.part $O
+  # Stage the BAM (30+ GB at ~3.5 MB/s from EBI) in project space, so a job killed at the time limit resumes it (curl -C -).
+  ST=$W/data/d101/stage/$SC; mkdir -p $ST
+  ( cd $SCR && $BIN download --bam https://$URL --staging-dir $ST -o $SCR/$SC.1fq ) 2>&1 | tail -25
+  [ -s $SCR/$SC.1fq ] || { echo "conversion failed for $SC"; exit 5; }
+  mv $SCR/$SC.1fq $O.part && mv $O.part $O && rm -rf $ST
   ls -l $O
 else
   [ "$BULK" = "-" ] && { echo "donor $DONOR has no bulk run"; exit 0; }
