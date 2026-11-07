@@ -3151,10 +3151,57 @@ inline bool usable(std::string& why) {
 
 // E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool` (gpu_pool.cpp) is one resident process per GPU; it forks one process per
 // sample of its queue, which runs singlet_main (the `singlet` command, below) with that sample's arguments.
-int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**));
+int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
+                     std::string (*preload_refs)(const std::vector<std::vector<std::string>>&));
 static int singlet_main(int argc, char* argv[]);
+
+// The default SNP panel of --pipeline for a genome directory (a file under <ref_base>/pileup_indices/), empty for none
+static std::string default_snp_panel(const std::string& genome_dir) {
+    const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+    const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
+    if (human && !mouse) return "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz";
+    if (mouse && !human) return "mus_musculus.vcf.gz";
+    // Barnyard (GRCh38-GRCm39-barnyard, contigs GRCh38___chrN / GRCm39___N): both panels with the contigs renamed
+    // (scripts/build_barnyard_snp_panel.sh), so mixtures of human and mouse lines are demultiplexed in one model.
+    if (human && mouse) return "barnyard_GRCh38_GRCm39.vcf.gz";
+    return "";
+}
+
+// Pool-resident pileup references (PileupEngine::preload_pool_references): the GTF and SNP panel that singlet_main resolves for each
+// queued sample's arguments in the pool's form (--exons or the GTF next to --genome-dir; --snps or --pipeline's default panel), parsed
+// once in the pool before it forks the samples. A sample takes a structure only when its own file is the same file, so a guess here
+// that a sample does not use costs pool memory and nothing else.
+static std::string pool_preload_refs(const std::vector<std::vector<std::string>>& item_args) {
+    auto val = [](const std::vector<std::string>& v, const char* k) {
+        std::string r;
+        for (size_t i = 0; i + 1 < v.size(); ++i) if (v[i] == k) r = v[i + 1];
+        return r;
+    };
+    auto has = [](const std::vector<std::string>& v, const char* k) { return std::find(v.begin(), v.end(), std::string(k)) != v.end(); };
+    std::vector<std::string> snps, gtfs;
+    for (const auto& a : item_args) {
+        const std::string gd = val(a, "--genome-dir");
+        std::string gtf = val(a, "--exons"), snp = val(a, "--snps");
+        if (gtf.empty() && snp.empty() && !gd.empty()) {
+            std::string d = gd;
+            while (d.size() > 1 && d.back() == '/') d.pop_back();
+            const auto sep = d.rfind('/');
+            if (sep != std::string::npos && sep > 0) gtf = d.substr(0, sep) + "/genes/genes.gtf";
+        }
+        if (snp.empty() && has(a, "--pipeline") && !has(a, "--no-snps") && !gd.empty()) {
+            std::string rb = val(a, "--ref-base");
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            const std::string panel = default_snp_panel(gd);
+            if (!rb.empty() && !panel.empty()) snp = rb + "/pileup_indices/" + panel;
+        }
+        if (!gtf.empty() && gtf != "None" && gtf != "none") gtfs.push_back(gtf);
+        if (!snp.empty()) snps.push_back(snp);
+    }
+    return singlet::PileupEngine::preload_pool_references(snps, gtfs);
+}
+
 int main(int argc, char* argv[]) {
-    if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main);
+    if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main, &pool_preload_refs);
     return singlet_main(argc, argv);
 }
 
@@ -4112,14 +4159,7 @@ static int singlet_main(int argc, char* argv[]) {
     if (pipeline_mode && config.snp_path.empty() && !no_default_snps && !genome_dir.empty()) {
         std::string rb = ref_base;
         if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
-        const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
-        const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
-        std::string panel;
-        if (human && !mouse) panel = "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz";
-        else if (mouse && !human) panel = "mus_musculus.vcf.gz";
-        // Barnyard (GRCh38-GRCm39-barnyard, contigs GRCh38___chrN / GRCm39___N): both panels with the contigs renamed
-        // (scripts/build_barnyard_snp_panel.sh), so mixtures of human and mouse lines are demultiplexed in one model.
-        else if (human && mouse) panel = "barnyard_GRCh38_GRCm39.vcf.gz";
+        const std::string panel = default_snp_panel(genome_dir);
         if (!rb.empty() && !panel.empty()) {
             std::string cand = rb + "/pileup_indices/" + panel;
             struct stat sst{};

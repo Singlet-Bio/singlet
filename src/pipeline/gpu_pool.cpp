@@ -46,6 +46,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -259,7 +260,9 @@ void close_fds_from(int lo, int keep = -1) {
 }   // namespace
 
 // The pool. argv: the arguments after `gpu-pool`. pipeline: the `singlet` command's main (singlet.cpp), run in each sample's process.
-int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
+// preload_refs (singlet.cpp, may be null): parses the pileup references of the samples' arguments once, in the pool, before any fork.
+int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
+                     std::string (*preload_refs)(const std::vector<std::vector<std::string>>&)) {
     int device = -1, slots = 2, workers = 8, threads = 7, preloadThreads = 8;
     double timeout = 0;
     std::string queue, args, report;
@@ -388,6 +391,24 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
     if (server) plog("non-host server: not built (no CUDA engine)");
 #endif
 
+    // ---- the pileup references (each genome's GTF and SNP panel), once, on a thread beside the genome preload
+    std::thread refsTh;
+    std::string refsLog;
+    double refsSec = 0;
+    if (preload_refs) {
+        std::vector<std::vector<std::string>> itemArgs;
+        for (const Item& it : items) {
+            std::vector<std::string> all = base;
+            all.insert(all.end(), it.extra.begin(), it.extra.end());
+            itemArgs.push_back(std::move(all));
+        }
+        refsTh = std::thread([&refsLog, &refsSec, preload_refs, itemArgs = std::move(itemArgs)]() {
+            const double t0 = wall_now();
+            refsLog = preload_refs(itemArgs);
+            refsSec = wall_now() - t0;
+        });
+    }
+
     // ---- the genomes, once
     const char* gpe = std::getenv("SINGLET_GENOME_PRELOAD");
     const std::string gload = arg_value(base, "--genome-load");
@@ -403,6 +424,10 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
             plog("genome %s: %s%s", it.genome.c_str(), ok ? "resident, " : "not preloaded: ", lg.c_str());
         }
     } else plog("genome preload off: every sample reads its own");
+    if (refsTh.joinable()) {
+        refsTh.join();
+        plog("pileup references (%.1f s): %s", refsSec, refsLog.c_str());
+    }
     const double tReady = wall_now();
     plog("ready in %.2f s", tReady - tStart);
 
