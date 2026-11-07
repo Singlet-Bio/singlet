@@ -110,4 +110,9 @@ feature). At run time it declined every device below compute capability 8.0, so 
 70 admits Clipper's V100S and RTX 8000). With it, pbmc2m runs the whole GPU path (level 5, ingest, GPU pileup and non-host screen, no
 fallback) and is IDENTICAL to the CPU engine on both: RTX 8000 39.1 s and 126 core-s (803615), V100S 39.5 s and 157 core-s, device peak
 28.6 GB of 32 GB (803616), against 34.2 s and 121 core-s on an H100 NVL for the same engine (803549). The same outputs on three GPU
-architectures are evidence for T10. The 9-sample gate on each (803632, 803633) decides whether identity gates move off the H100s.
+architectures are evidence for T10. The 9-sample gates (803632 on the RTX 8000, 803633 on the V100S) gave IDENTICAL for seven samples. hgmm1k_v3 does not fit: its barnyard
+index is 52.7 GB, and E17 stops the run as designed (budgets 42.3 and 29.7 GB). pbmc1k_cite_v3 differed in nonhost_reads.fq and
+Unmapped.out.mate1 with the same record counts. The cause was the input: the T18 reference had read an older encoding of the sample's .1fq,
+and the file was rewritten before these gates. With CPU and GPU reading the same file on the RTX 8000 (803808), cite is IDENTICAL even
+though the non-host screen ran out of device memory there and screened on the CPU. Identity checks of samples whose index fits 30 GB can
+therefore run on the V100S and RTX 8000 nodes; barnyard samples stay on the H100s.
