@@ -304,6 +304,20 @@ static void test6_order_independent() {
     PASS(name);
 }
 
+// ── Test 7: the kingdom of an id that both indices use does not depend on read order ──
+static void test7_kingdom_order_independent() {
+    const char* name = "test7_kingdom_order_independent";
+    const std::unordered_set<uint32_t> fungal = {7};
+    std::vector<MH> a = {make_microbial(7, 0.9f), make_viral(7, 0.8f), make_microbial(9, 0.9f)};
+    std::vector<MH> b = {make_viral(7, 0.8f), make_microbial(9, 0.9f), make_microbial(7, 0.9f)};
+    auto ka = build_kingdom_map(a, fungal), kb = build_kingdom_map(b, fungal);
+    if (ka.at(7) != NonHostCategory::VIRAL || kb.at(7) != NonHostCategory::VIRAL) { FAIL(name, "shared id not VIRAL in both orders"); return; }
+    if (ka.at(9) != NonHostCategory::BACTERIAL || kb.at(9) != NonHostCategory::BACTERIAL) { FAIL(name, "microbial-only id not BACTERIAL"); return; }
+    std::vector<MH> c = {make_microbial(7, 0.9f)};
+    if (build_kingdom_map(c, fungal).at(7) != NonHostCategory::FUNGAL) { FAIL(name, "fungal-only id not FUNGAL"); return; }
+    PASS(name);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -313,6 +327,7 @@ int main() {
     test4_convergence();
     test5_min_abundance_filter();
     test6_order_independent();
+    test7_kingdom_order_independent();
 
     std::cerr << "\n--- " << g_passed << "/" << (g_passed + g_failed) << " tests passed ---\n";
     return (g_failed == 0) ? 0 : 1;

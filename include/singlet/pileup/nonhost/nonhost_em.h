@@ -310,22 +310,24 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
 
 // Build a species_id → NonHostCategory map from a batch of MultiHit results.
 // All species_ids found in viral_hits → VIRAL.
-// species_ids in microbial_hits → FUNGAL if their id is in fungal_species, else BACTERIAL.
+// species_ids in microbial_hits only → FUNGAL if their id is in fungal_species, else BACTERIAL.
 // Call this before em_deconvolve() when no external map is available.
+//
+// The viral and microbial indices number their species independently, so one id can name a virus in one and a microbe in the
+// other. The map is a function of the set of reads, not of their order: an id seen in any read's viral hits is VIRAL, as
+// species_name_lookup also resolves the viral name first. (Keeping the first kingdom seen made the label depend on read order,
+// which differs between the CPU and GPU paths.)
 inline std::unordered_map<uint32_t, NonHostCategory> build_kingdom_map(
         const std::vector<NonHostScreener::MultiHit>& multi_hits,
         const std::unordered_set<uint32_t>& fungal_species = {}) {
     std::unordered_map<uint32_t, NonHostCategory> kmap;
-    for (const auto& mh : multi_hits) {
+    for (const auto& mh : multi_hits)
         for (const auto& [sid, rate] : mh.viral_hits)
-            kmap.emplace(sid, NonHostCategory::VIRAL);     // emplace: first insertion wins
-        for (const auto& [sid, rate] : mh.microbial_hits) {
-            NonHostCategory cat = fungal_species.count(sid)
-                                  ? NonHostCategory::FUNGAL
-                                  : NonHostCategory::BACTERIAL;
-            kmap.emplace(sid, cat);
-        }
-    }
+            kmap[sid] = NonHostCategory::VIRAL;
+    for (const auto& mh : multi_hits)
+        for (const auto& [sid, rate] : mh.microbial_hits)
+            kmap.emplace(sid, fungal_species.count(sid) ? NonHostCategory::FUNGAL
+                                                        : NonHostCategory::BACTERIAL);   // never replaces VIRAL
     return kmap;
 }
 
