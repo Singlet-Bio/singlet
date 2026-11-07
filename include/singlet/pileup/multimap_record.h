@@ -16,6 +16,8 @@
 // Per (cell, UMI) the record keeps the genes present in every read of that UMI (STARsolo's umiGenes in collapseUMIperCB: exact UMIs,
 // no 1-mismatch collapse, the intersection of the reads' gene sets). A UMI left with two genes is a two-gene molecule, one left with a
 // single gene is a molecule of that gene, and an empty intersection is dropped. Molecules are counted per class (the gene set) and cell.
+// A (cell, UMI) that also has a read in the gene counts (`counted`, sorted cell << 32 | packed UMI) is left out: STARsolo pools all of a
+// UMI's reads, so one uniquely assigned read makes the whole UMI a unique molecule, which the gene counts already hold.
 //
 // Output: a classes x barcodes integer matrix (rows sorted by gene index pair; the columns are the sample's barcode columns, as every
 // other count matrix). Row names are the class's genes as "<gene_id>_<gene_name>", two genes joined by "|". Reads whose gene set has
@@ -42,10 +44,11 @@ struct Record {
     uint64_t reads = 0;             // input reads used
     uint64_t molecules = 0;         // (cell, UMI) with a non-empty gene set
     uint64_t dropped_umis = 0;      // (cell, UMI) whose reads share no gene
+    uint64_t counted_umis = 0;      // (cell, UMI) left out because the gene counts hold a read of it
 };
 
 inline Record build(const std::vector<em_rescue::AmbigRead>& in, uint32_t n_barcodes, const std::vector<std::string>& gene_ids,
-                    const std::vector<std::string>& gene_names) {
+                    const std::vector<std::string>& gene_names, const std::vector<uint64_t>* counted = nullptr) {
     constexpr uint32_t NONE = UINT32_MAX;
     const uint32_t ng = static_cast<uint32_t>(gene_ids.size());
     struct R { uint32_t bc; uint64_t umi; uint32_t ga, gb; };
@@ -76,7 +79,9 @@ inline Record build(const std::vector<em_rescue::AmbigRead>& in, uint32_t n_barc
             ++j;
         }
         if (g1 == NONE) { g1 = g2; g2 = NONE; }
-        if (g1 == NONE) ++out.dropped_umis;
+        const uint64_t key = (static_cast<uint64_t>(rs[i].bc) << 32) | (rs[i].umi & 0xffffffffULL);
+        if (counted && std::binary_search(counted->begin(), counted->end(), key)) ++out.counted_umis;
+        else if (g1 == NONE) ++out.dropped_umis;
         else ms.push_back(M{g1, g2, rs[i].bc});
         i = j;
     }

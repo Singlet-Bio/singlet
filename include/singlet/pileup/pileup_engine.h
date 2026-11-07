@@ -3081,6 +3081,8 @@ public:
     bool reverse_strand() const { return config_.reverse_strand; }
     /// Per-molecule dump path (diagnostics; "" = none). Defaults to SINGLET_MOLECULE_DUMP.
     void set_molecule_dump(const std::string& path) { molecule_dump_ = path; }
+    /// Sorted (cell << 32 | 2-bit packed UMI) of every exact UMI with a read in the gene counts (multimap::build drops these UMIs).
+    const std::vector<uint64_t>& counted_umis() const { return counted_umis_; }
     /// Carry the probe record of an earlier pass over to this (retry) engine.
     void keep_strand_probe(const PileupEngine& prev) {
         strand_probed_ = prev.strand_probed_;
@@ -3124,6 +3126,7 @@ private:
         h[std::min<uint32_t>(reads, kReadsHistBins) - 1]++;
     }
     std::string molecule_dump_;     // SINGLET_MOLECULE_DUMP: per-molecule TSV (gz) for diagnostics
+    mutable std::vector<uint64_t> counted_umis_;   // sorted (cell << 32 | packed UMI) of the gene counts' reads (finalize_all)
     bool strand_probed_ = false;    // Auto-strand probe reached a decision
     bool strand_flipped_ = false;   // ... and changed reverse_strand
     StrandEvidence strand_probe_;
@@ -4793,6 +4796,14 @@ private:
             mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]());
         }
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
+        // The multimap record's counted-UMI keys (multimap::build): every exact (cell, UMI) with a read in the gene counts' store,
+        // taken before the stores are consumed. STARsolo pools a UMI's reads, so one uniquely assigned read makes the UMI unique.
+        if (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) {
+            counted_umis_.clear();
+            for (const auto& t : targets) t.store->append_umi_keys(counted_umis_);
+            std::sort(counted_umis_.begin(), counted_umis_.end());
+            counted_umis_.erase(std::unique(counted_umis_.begin(), counted_umis_.end()), counted_umis_.end());
+        }
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
             for (const auto& t : targets) st += finalize_store(*t.store, *t.exon, *t.intron, *t.amb, t.mixed_exon, t.mixed_intron);

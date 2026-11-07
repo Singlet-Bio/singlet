@@ -1648,10 +1648,11 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (engine.gene_model().n_genes() > 0)
             write_threads.emplace_back([&]() {
                 const auto mm = multimap::build(engine.ambig_reads(), static_cast<uint32_t>(barcodes.size()), engine.gene_ids(),
-                                                engine.gene_names());
+                                                engine.gene_names(), &engine.counted_umis());
                 write_matrix("multimap_counts", mm, mm.names);
                 std::cerr << "[multimap] " << mm.reads << " two-gene reads, " << mm.molecules << " molecules in " << mm.nrows
-                          << " gene sets (" << mm.dropped_umis << " UMIs whose reads share no gene)\n";
+                          << " gene sets (" << mm.dropped_umis << " UMIs whose reads share no gene, " << mm.counted_umis
+                          << " UMIs already in the gene counts)\n";
             });
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             SINGLET_TIMED(write_threads, [&]() { write_matrix("sj_counts", sj_csc, engine.sj_names()); });
