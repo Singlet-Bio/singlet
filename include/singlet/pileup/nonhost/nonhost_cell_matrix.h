@@ -41,6 +41,7 @@
 
 #pragma once
 
+#include "nonhost_em.h"         // raw_species_id (species keys, D-100)
 #include "nonhost_screener.h"   // NonHostScreener::MultiHit, NonHostCategory
 #include "../pz_writer.h"       // write_1pz<ValT> — B-G7-4
 
@@ -180,7 +181,7 @@ public:
 
             CellSpeciesRecord rec;
             rec.cb               = cb;
-            rec.species_taxon_id = sid;
+            rec.species_taxon_id = raw_species_id(sid);   // counted by engine key, written as the id in its own index (D-100)
             rec.n_reads          = acc.n_reads;
             rec.n_umis           = static_cast<uint32_t>(acc.umis_seen.size());
             rec.n_genes          = 0;

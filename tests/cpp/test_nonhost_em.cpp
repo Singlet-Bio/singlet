@@ -348,6 +348,36 @@ static void test8_fit_threads_and_reports() {
                a[i].kingdom == b[i].kingdom;
     if (!same) { FAIL(name, "em_deconvolve differs from em_report of the shared fit"); return; }
     if (em_report(f8, kmap, 0.0f, 0.0f, 10u).size() < b.size()) { FAIL(name, "looser report lists fewer species"); return; }
+
+// ── Test 9: a virus and a microbe that share an id are two EM species once keyed (D-100) ──
+static void test9_shared_id_two_species() {
+    const char* name = "test9_shared_id_two_species";
+    const std::unordered_set<uint32_t> fungal = {5};
+    std::vector<MH> hits;
+    for (int i = 0; i < 300; ++i) hits.push_back(make_viral(5, 0.9f));       // virus 5
+    for (int i = 0; i < 100; ++i) hits.push_back(make_microbial(5, 0.9f));   // fungus 5 in the microbial index
+    for (int i = 0; i < 100; ++i) hits.push_back(make_microbial(8, 0.9f));   // bacterium 8
+    if (!tag_microbial_keys(hits)) { FAIL(name, "tagging refused valid ids"); return; }
+    auto kmap   = build_kingdom_map(hits, fungal);
+    auto result = em_deconvolve(hits, kmap, 500, 1e-6f, 1e-4f, 0.0f, 0.0f);
+    if (result.size() != 3) { FAIL(name, "expected three species"); return; }
+    int seen = 0;
+    for (const auto& sa : result) {
+        const uint32_t raw = raw_species_id(sa.species_id);
+        if (!is_microbial_key(sa.species_id) && raw == 5) {
+            if (sa.kingdom != NonHostCategory::VIRAL || std::abs(sa.relative_abundance - 0.6f) > 0.02f) { FAIL(name, "virus 5 wrong"); return; }
+            ++seen;
+        } else if (is_microbial_key(sa.species_id) && raw == 5) {
+            if (sa.kingdom != NonHostCategory::FUNGAL || std::abs(sa.relative_abundance - 0.2f) > 0.02f) { FAIL(name, "fungus 5 wrong"); return; }
+            ++seen;
+        } else if (is_microbial_key(sa.species_id) && raw == 8) {
+            if (sa.kingdom != NonHostCategory::BACTERIAL) { FAIL(name, "bacterium 8 wrong"); return; }
+            ++seen;
+        }
+    }
+    if (seen != 3) { FAIL(name, "species keys not recovered"); return; }
+    std::vector<MH> bad = {make_microbial(kMicrobialKeyBit | 3u, 0.9f)};
+    if (tag_microbial_keys(bad) || bad[0].microbial_hits[0].first != (kMicrobialKeyBit | 3u)) { FAIL(name, "bit-31 id not refused"); return; }
     PASS(name);
 }
 
@@ -362,6 +392,7 @@ int main() {
     test6_order_independent();
     test7_kingdom_order_independent();
     test8_fit_threads_and_reports();
+    test9_shared_id_two_species();
 
     std::cerr << "\n--- " << g_passed << "/" << (g_passed + g_failed) << " tests passed ---\n";
     return (g_failed == 0) ? 0 : 1;
