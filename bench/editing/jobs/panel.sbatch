@@ -28,10 +28,10 @@ IR=$W/src/singlet-agents/main/hpc/clipper/in_runtime.sh; [ -f $IR ] || IR=$(ls -
 source $IR
 in_runtime bash -c "pip install -q --target $SCR/py pyliftover"
 B=$SCR/src/scripts/editing/build_rediportal_panel.py
-in_runtime bash -c "PYTHONPATH=$SCR/py python3 -I $B --table $D/TABLE1_mm10_v3.txt.gz --fasta $REF/GRCm39-2024-A/fasta/genome.fa \
+in_runtime bash -c "cd $SCR && PYTHONPATH=$SCR/py python3 $B --table $D/TABLE1_mm10_v3.txt.gz --fasta $REF/GRCm39-2024-A/fasta/genome.fa \
   --snp-panel $REF/pileup_indices/mus_musculus.vcf.gz --chain $D/mm10ToMm39.over.chain.gz --version 'REDIportal v3 (mouse, mm10)' \
   --source-url $SRCURL/TABLE1_mm10_v3.txt.gz --assembly-source mm10 --assembly-target GRCm39 --out $SCR/rna_editing_GRCm39"
-in_runtime bash -c "PYTHONPATH=$SCR/py python3 -I $B --table $D/TABLE1_hg38_v3.txt.gz --fasta $REF/GRCh38-2024-A/fasta/genome.fa \
+in_runtime bash -c "cd $SCR && PYTHONPATH=$SCR/py python3 $B --table $D/TABLE1_hg38_v3.txt.gz --fasta $REF/GRCh38-2024-A/fasta/genome.fa \
   --snp-panel $REF/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz --version 'REDIportal v3 (human, hg38)' \
   --source-url $SRCURL/TABLE1_hg38_v3.txt.gz --assembly-source hg38 --assembly-target GRCh38 --out $SCR/rna_editing_GRCh38"
 for g in GRCm39 GRCh38; do cp $SCR/rna_editing_$g.json $SCR/rna_editing_$g.tsv.gz $OUT/; done
