@@ -51,7 +51,7 @@ for arm in "${ORDER[@]}"; do
   printf "%s\t%s\t%s\t%s\t%.1f\t%s\t%s\t%s\t%s\t%s\t%.1f\n" $i $arm $BD "${ES:-?}" $WALL $CORES $RSS "$(mark 'STAR pid=')" "$(mark '[singlet] Pileup: ')" \
       "$(mark 'Exporting feature matrices')" $WALL >> $RES/runs.tsv
   ( cd $SCR/r$i/out && find . -type f ! -name '*.fq' ! -name '*Unmapped*' ! -name '*.bam' ! -name '*.1fq' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum ) > $O/hashes.txt
-  cp $SCR/r$i/out/star_Log.final.out $O/ 2>/dev/null
+  cp $SCR/r$i/out/star_Log.final.out $O/ 2>/dev/null; grep -a "SEQCACHE" $SCR/r$i/out/star_Log.out > $O/seqcache.txt 2>/dev/null
   if [ "${KEEP:-}" = $arm ] && [ ! -d $RES/keep-$arm ]; then rsync -a --exclude='*.fq' --exclude='*Unmapped*' --exclude='*.bam' $SCR/r$i/out/ $RES/keep-$arm/; fi
   echo "run $i $arm ($BD): exit ${ES:-?}, wall $WALL s, core-s $CORES, maxRSS $RSS GB" | tee -a $RES/summary.txt
   rm -rf $SCR/r$i
