@@ -1,0 +1,56 @@
+# Ideas from the unmerged GPU branches: verdicts
+
+Each idea below was developed on a branch that never merged. It was redeveloped on `gpu/frontier`, tested, and adopted, kept off by default,
+or rejected. Rates name the sample, binary, node, GPU count and baseline. Every timing ran inside one Slurm job on one pinned H100 NVL
+(`CUDA_VISIBLE_DEVICES=0`) in an A/B/B/A design, with the fixed reference binary b0 = gpu/frontier at 9560b8db where a b0 arm is named.
+Identity means the 9-sample gate (`pr2-gate.sbatch`: out_equiv over every output, the ten Solo files, the mapping statistics, SJ.out.tab,
+the read files by sorted records, CellReads.stats by sorted rows) of the GPU engine against the CPU engine. Job logs are on Clipper under
+`$WORK/logs/`, harness results under `$WORK/jobs/gpu-integ/results/tp-<job>/` and `$WORK/jobs/gpu-campaign/results/`.
+
+The source branches are deleted once their verdict is recorded; each tip stays pinned by its archive tag.
+
+| # | Idea | Source branch, tip | Verdict | Switch |
+|---|---|---|---|---|
+| 1 | Non-host GPU screen falls back to the CPU | bug, no branch | pending | `SINGLET_NONHOST_GPU_TRIES` |
+| 2 | Transfer ledger and NVTX ranges | `perf/nvtx-host-ranges`, cacf6435 | pending | `SINGLET_ENGINE_GPU_TRACE=1`, `SINGLET_NVTX=1` |
+| 3 | 512-base lift and lean-path memory (P3-MEM-03) | `perf/gpu-device`, a462be4d; `gpu/frontier-fold-device`, 7cc07dd4 | adopted: identical, cost-neutral, 1.2 G reads fit one H100 | default |
+| 4 | VMM shared index | `gpu/bold-shidx-fix`, 84be99f8 | pending | `SINGLET_GPU_SHARED_INDEX=1` |
+| 5 | E21 resident pool | `gpu/fable/pool`, 719fd650 (tag only) | pending | `singlet gpu-pool` |
+| 6 | Heavy-read split | `gpu/bold-split`, 3c0ac3c2 (tag only) | pending | `SINGLET_ENGINE_GPU_STEPS_B=<n>\|auto` |
+| 7 | Single-donor demux screen | `gpu/bold-hostcut`, f04a64c7 (tag only) | pending | `SINGLET_DEMUX_SCREEN=1` |
+| 8 | WSHRINK | in the tree | pending | `SINGLET_BOLD_WSHRINK=1` |
+| 9 | k_resolve exon-multimapper fix | no source | pending | |
+| 10 | One device dedup | E12 and #145 | resolved: one remains | |
+
+## 3. 512-base lift and lean-path memory (P3-MEM-03)
+
+All nine commits of `perf/gpu-device` are on `gpu/frontier` (`git cherry` finds an equivalent patch for each): the eight of the fold
+branch, fast-forwarded as 7cc07dd4, and the chunked hand-off pass, cherry-picked as b7f9244d. The lift (5b8afcbd) replaces the fixed
+128-base low-quality mask with variable-width masks, so cDNA reads up to 512 bases stay on the GPU path. P3-MEM-03 runs the reads phase by
+read chunks with the dedup by hash partition (step A), the records phase by record chunks (step B), frees the lean path's host copies once
+used, and streams the reads of the E16 hand-off pass in chunks sized from free device memory while the records stay resident.
+
+Identity: the 9-sample gate is IDENTICAL on the fold (803425, g051) and on gpu/frontier 6b4a6a25 (803456). Gate 803427 (a462be4d) is
+IDENTICAL on pbmc1k_v3, neuron1k_v3 and a slice of GSM7064234 with every chunk forced small (`RCHUNK=8000000 RPARTS=3 RECCHUNK=4000000
+SINGLET_E2E_PASS_CHUNK=3000000`), which exercises every chunk boundary on small inputs.
+
+Capability: the full GSM7064234 (1.198 G reads, 90.7% unique) runs end to end on one H100 (803428, a462be4d, 728 GB allocation): exit 0
+in 2647 s, device peak 93.1 GB, host peak 629 GB. Before the chunked hand-off this sample uploaded about 86 GB in that pass and died of a
+thrust bad_alloc. STAR plus the GPU engine end at about 1130 s and the pileup at 1435 s; demux auto-K (about 430 s), ambient (280 s) and
+mt plus export (220 s) are the rest. The host peak comes from the STAR caller keeping the read planes (about 240 GB at 1.2 G reads) for the
+whole run, because the rRNA hook, ingRecord and E13 read them after mapDistinct; samples over about 800 M pairs need host-streaming
+prefill (P3-MEM-15) to fit in 600 GB.
+
+Cost on small samples: none. The baseline gate on 9560b8db (803435, g052, all nine IDENTICAL) and the fold gate (803425) agree on the
+device peak to within 0.4 GB on every sample and on wall and core-seconds to within noise (pbmc1k_v3: 126.3 s, 567 core-s against
+126.2 s, 566 core-s). The peak near 90 GB in both is the E17 arena filling the card (the gate's `dev_peak_gb` samples the whole GPU),
+not the fold.
+
+## 10. One device dedup
+
+Only one device dedup is in the tree. #145's per-read dedup pass (`k_dd_flags`, `k_dd_repofgroup`, `k_dd_readrep`, switch
+`SINGLET_ENGINE_GPU_HOSTDEDUP`, commit e51d081e on `perf/gpu-pinned-dedup`) and its pinned staging uploads (edbfbd97,
+`SINGLET_ENGINE_GPU_FASTUP`) were dropped by the staging merge of the Fable line (82a38f53, 2026-11-04), which kept E12's dedup
+(`k_heads`, `k_readrep`, the dedup's products on the device) and E12's staged uploads. E12's host loops stay behind
+`SINGLET_ENGINE_GPU_DEDUP=host` and `SINGLET_ENGINE_GPU_CFG=old` as the opt-out. P3-MEM-03 adds the lean path's dedup by hash
+partition, which is a memory plan of the same dedup, not a second one. Nothing to delete.
