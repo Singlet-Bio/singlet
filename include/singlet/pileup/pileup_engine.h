@@ -143,7 +143,7 @@ struct PileupConfig {
     uint32_t wl_ambient_ceil = 50;      // UMI ceiling: WL barcodes with ≤ this count define the ambient pool
     // Intron-assignment rules (intron_rule::k* bits). SINGLET_INTRON_RULES overrides it
     // (decimal or 0x hex) for experiments; see docs/pipeline-validation.md §4.4.
-    // Default 909 (below). 397 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer) + 8 (kFlank). 389 (without kFlank) was chosen on real
+    // Default 2957 (below). 397 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer) + 8 (kFlank). 389 (without kFlank) was chosen on real
     // truth (sweep2: matches or beats every other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA)
     // under the old molecule labels. With the alevin-fry USA labels (any intron-touching read = unspliced) a read that touches an intron by
     // <= 5 bp of an exon-touching read must not count as intron evidence: on PBMC-E long-read truth kFlank lifts the molecule precision of the
@@ -153,7 +153,9 @@ struct PileupConfig {
     // STARsolo GeneFull decides. On the hgmm1k_v3 barnyard it cut non-PAR chrY UMIs in female cells from 8.2 to 2.2 per million and wrong-
     // species exon UMIs from 0.387% to 0.361% (bench/count_parity; with the Beta aligner profile's score 30, below STARsolo on every axis).
     // kUnique stays on: without it (908) intronic multimappers add wrong-species UMIs that STARsolo does not count.
-    uint32_t intron_rules = 909;
+    // 2957 = 909 + kUmiGeneSpliced (2048): a UMI in two genes of a cell keeps its winner only when the winner is spliced. hgmm5k_v3 had
+    // fewer wrong-species molecules than STARsolo but a 0.8% smaller denominator, so its X fraction sat just above; this closes it.
+    uint32_t intron_rules = 2957;
 };
 
 namespace intron_rule {
@@ -176,6 +178,10 @@ constexpr uint32_t kUmiGeneCR       = 128;  ///< UMI in >1 gene of a cell: keep 
 /// With kUmiGeneCR: a UMI in >1 gene of a cell also loses its unspliced molecule, as STARsolo Velocyto drops a UMI whose reads
 /// share no transcript (SoloFeature_countVelocyto). The spliced / ambiguous winner stays (Gene and GeneFull keep it).
 constexpr uint32_t kUmiGeneVelo     = 1024;
+/// With kUmiGeneCR: a UMI in >1 gene of a cell keeps its winner only when the winner is spliced (has a junction read); unspliced and
+/// ambiguous winners go too (implies kUmiGeneVelo). A UMI seen in two genes is weak evidence for either, and without a junction
+/// nothing ties the winner to its gene's mRNA. On hgmm5k_v3 this removes the wrong-species excess over STARsolo GeneFull.
+constexpr uint32_t kUmiGeneSpliced  = 2048;
 constexpr uint32_t kMoleculeRules   = kUmiGene | kUmiGeneAll | kUmiGeneCR;
 }  // namespace intron_rule
 
@@ -4484,7 +4490,8 @@ private:
                             if (u.n_genes <= 1) d = false;
                             else if (mrules & intron_rule::kUmiGeneCR)
                                 d = u.tie || m.gene != u.best_gene ||
-                                    ((config_.intron_rules & intron_rule::kUmiGeneVelo) && m.label() == D::MoleculeLabel::Unspliced);
+                                    ((config_.intron_rules & intron_rule::kUmiGeneVelo) && m.label() == D::MoleculeLabel::Unspliced) ||
+                                    ((config_.intron_rules & intron_rule::kUmiGeneSpliced) && m.label() != D::MoleculeLabel::Spliced);
                             else if (mrules & intron_rule::kUmiGeneAll) d = true;
                             else d = m.label() != D::MoleculeLabel::Spliced;   // kUmiGene
                             drop[i][k] = d ? 1 : 0;
