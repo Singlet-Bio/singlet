@@ -37,11 +37,13 @@ for arm in "${ORDER[@]}"; do
   xv=XENV_$arm; ENVS=(${!xv:-})
   PRE=(); if [ "${PROF:-0}" = 1 ]; then mkdir -p $O/samprof; PRE=(env LD_PRELOAD=$W/jobs/cpu-speed/bin/$BD/libsamprof.so SAMPROF_OUT=$O/samprof SAMPROF_MS=5); fi
   ( while true; do echo "$(date +%s.%N) $(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)"; sleep 1; done ) > $O/cpu.txt & MON=$!
+  # per-thread CPU time of every singlet process (the pileup thread is the main thread of the parent), every 5 s
+  ( while true; do echo "@ $(date +%s)"; ps -eLo pid=,lwp=,comm=,time= | awk '$3 ~ /^singlet/'; sleep 5; done ) > $O/threads.txt 2>/dev/null & MON2=$!
   T0=$(date +%s.%N); C0=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat)
   ( cd $SCR/r$i && env "${ENVS[@]}" "${PRE[@]}" /usr/bin/time -v -o $O/time.txt timeout -k 30 ${RUN_TIMEOUT:-12000} $BIN $FQ --ref-base $REF \
       --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf --out-prefix $SCR/r$i/out/ --threads $T --pipeline --output-format 1pz --engine cpu 2>&1 \
       | while IFS= read -r l; do printf '%s %s\n' "$(date +%s.%N)" "$l"; done > $O/log.txt )
-  C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON 2>/dev/null
+  C1=$(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat); T1=$(date +%s.%N); kill $MON $MON2 2>/dev/null
   ES=$(awk -F': ' '/Exit status/{print $2}' $O/time.txt)
   WALL=$(echo "$T1 - $T0" | bc); CORES=$(echo "($C1 - $C0)/1000000" | bc -l | cut -c1-9)
   RSS=$(awk -F': ' '/Maximum resident/{printf "%.1f", $2/1048576}' $O/time.txt)

@@ -1074,11 +1074,11 @@ static VBResult init_vb_pca_seeded(
     return result;
 }
 
-// Run VB from scratch (random initialisation), single-threaded.
-// Called from run_batch() which runs restarts in parallel.
+// Run VB from scratch (random initialisation). Called from run_batch(), which runs restarts side by side; nthreads is the
+// restart's share of the threads (run_vb_inplace's result does not depend on it).
 static VBResult run_vb(
     const CoveredSNPData& data, int K,
-    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter)
+    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter, int nthreads = 1)
 {
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
@@ -1101,7 +1101,7 @@ static VBResult run_vb(
         for (int k = 0; k < K; ++k) result.id_prob[c][k] *= inv;
     }
 
-    run_vb_inplace(data, K, cfg, result, max_iter, /*nthreads=*/1);
+    run_vb_inplace(data, K, cfg, result, max_iter, nthreads);
     return result;
 }
 
@@ -1120,6 +1120,9 @@ static VBResult fit_vb_k(
     const int n_inits = std::max(1, static_cast<int>(kinds.size()));
     std::vector<VBResult> init_results(n_inits);
     const int nw = std::max(1, std::min(threads, n_inits));
+    // Threads left over when there are fewer restarts than threads go to each restart's VB (1 restart at K = 1, 3 in the K
+    // search): run_vb_inplace cuts every reduction into kDetChunks fixed chunks, so its result is the same for any nthreads.
+    const int per_init = std::max(1, threads / nw);
 
     auto run_batch = [&](int start, int end) {
         for (int i = start; i < end; ++i) {
@@ -1130,9 +1133,9 @@ static VBResult fit_vb_k(
             if (K > 1 && kind > 0) {
                 // PCA-seeded restart: prevents symmetric-init cluster collapse
                 init_results[i] = init_vb_pca_seeded(cov, K, cfg, init_seed, pca, quiet || i > 0, kind);
-                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, /*nthreads=*/1);
+                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, per_init);
             } else {
-                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre);
+                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre, per_init);
             }
         }
     };
@@ -1854,7 +1857,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
-        if (K >= 2 && cfg.threads >= 2) {
+        if (cfg.threads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
             do_fold(0);
             t1.join();
