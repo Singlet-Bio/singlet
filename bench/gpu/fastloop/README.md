@@ -18,7 +18,7 @@ Each idea is decided on its own metric (column 6 of `ideas.tsv`, held device sec
 |---|---|---|---|
 | S1 | pbmc2m, one run at a time, 3 runs per point | whole pipeline at small size | 33 min on an RTX 8000, 32 min on an H100 (item 60) |
 | S2 | pbmc2m, 4 in flight on 2 slots | concurrency | unusable on RTX and V100S (index exceeds a slot); 18 min on an H100 for one block (item 61) |
-| S3 | pbmc1k_v3, one at a time (`maponly` ends after STAR and the pileup on builds from 23f83010) | size-dependent lane ideas | 51 min on an H100 for one block of a 2^3 design, whole pipeline (item 62) |
+| S3 | pbmc1k_v3, one at a time (`maponly` ends after STAR and the pileup on builds from 23f83010, but its runs still lack device fields in point.json) | size-dependent lane ideas | 51 min on an H100 for one block of a 2^3 design, whole pipeline (item 62) |
 | FULL | pbmc1k_v3, 8 in flight on 2 slots | the campaign's tier 4 | 1.5 h per idea by seqstop, about 20 min per block |
 
 On the RTX 8000 the S1 tier runs at about 1% coefficient of variation within a cell on every metric, against 2.4 to 2.7% for core-s/M and 11 to 23% for the device metrics at tier 4. A 2^3 design with 2 blocks resolves effects of about ±1% on held device time, and a 2^4 screen of four ideas took 31 RTX-minutes and no H100 time. The H100 behaves the same way: item 60 decided three ideas in 32 minutes with intervals of ±0.4 to ±1.0% on held device time, about 11 H100-minutes per verdict against 90 minutes and ±2.8% for one full sequential A/B. S2 adds concurrency at the price of noise: one block of item 61 gave intervals of about ±5%, enough for the shared index (−29%) and too wide for small effects.
@@ -35,6 +35,21 @@ On the RTX 8000 the S1 tier runs at about 1% coefficient of variation within a c
 The short tiers agree with the full A/B on the shared index and the retry at every size and on both cards. They miss WSHRINK on the H100, and the stage timers say why. Run one at a time, WSHRINK moves part of lane B's work onto the host lane, so the device saves less than the host spends. Its full-A/B win comes from 8 runs sharing the device, where device time is the bottleneck and host work overlaps. An idea that trades device work for host work therefore needs a concurrent tier (S2 with more blocks, or the full A/B), and the report's stage lines flag such an idea: lane B falls while the host lane rises.
 
 The RTX S1 tier agrees with the H100 on direction and stage for every anchor and is within a factor of two on size, which makes it a good first screen: does the idea act, and where. It does not rank by size. Lane B's share of the hold differs between the cards: at full size WSHRINK shortens lane B by 41% on the H100 and leaves it unchanged on the RTX. Three classes of idea therefore need the H100: concurrency ideas (slots, MPS, admission), ideas that need the H100's memory (the shared index on a V100S, the resident non-host server anywhere else) and ideas whose effect depends on sample size (S3).
+
+## Verdicts of the first round (2026-11-07)
+
+| idea | tier and item | held device time | core-s/M | verdict |
+|---|---|---|---|---|
+| resident non-host server (`nhsrv`, XC card (a)) | H100 S1, item 63 | −26.6% [−27.1, −26.2] | −20.1% [−21.0, −19.2] | WIN; sent for a k8 confirmation A/B and the identity gate |
+| shared index (`shidx`) | H100 S1, S2, S3, items 60–63 | −20% (S1), −29% (S2), −6% (S3) | −1.6 to −2.0% | WIN; adoption A/B at k8 run by the campaign |
+| WSHRINK | H100 S1 and S3 | neutral at one run at a time | +1 to +3% | concurrency effect, confirmed at k8 by the campaign's full A/B |
+| retry off (`nhtries1`) | H100 S1, S2, S3 | within ±1% | within ±1% | RULED OUT |
+| stepsauto | RTX S1 | no effect (the split never triggers at pbmc2m) | none | RULED OUT at small size; full A/B inconclusive |
+| demux screen | RTX S1 | none | −1.9% [−2.2, −1.5] | below the 3% bar |
+
+The resident server wins on every metric. Its non-host lock hold halves and the non-host references stop being loaded per run. Each nhsrv point starts a fresh server and drops its first run, so the effect is the warm steady state that one server per node would give. Because a server-plus-preload arm ran slower at 8 in flight, the k8 A/B decides adoption.
+
+Time per verdict fell from about 90 H100-minutes for one sequential A/B to about 11 H100-minutes, with intervals of ±1% instead of ±2.8%. Six ideas were decided in about 2.5 H100-hours, including the calibration items. The RTX 8000 tier answered "does it act, and where" for four ideas in 31 minutes without H100 time.
 
 ## Use
 
