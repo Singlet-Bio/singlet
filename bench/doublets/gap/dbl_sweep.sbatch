@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=dbl-sweep
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=short-bigmem
 #SBATCH --nodes=1
 #SBATCH --exclusive
 #SBATCH --mem=0
@@ -31,7 +31,7 @@ jobs_list=$T/jobs.txt; : > $jobs_list
 while read -r label args; do
   [ -z "$label" ] && continue; case $label in \#*) continue;; esac
   mkdir -p $J/run/$label
-  for d in $DS; do echo "$label $d $args" >> $jobs_list; done
+  for d in $DS; do echo "$label $d $args" | sed "s/ *$//" >> $jobs_list; done
 done < $VARIANTS
 runone() { label=$1; d=$2; shift 2; $BINX $DATA/$d $J/run/$label/$d.tsv threads=4 nomap=1 "$@" 2> $J/run/$label/$d.err; }
 export -f runone; export BINX DATA J
