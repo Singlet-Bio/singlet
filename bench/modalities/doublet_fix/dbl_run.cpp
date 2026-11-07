@@ -66,6 +66,9 @@ int main(int argc, char** argv) {
         else if (k == "mask") prm.clf_mask = (uint32_t)v;
         else if (k == "het") prm.het_clusters = (uint32_t)v;
         else if (k == "hetmix") prm.het_mix = v;
+        else if (k == "hetauto") prm.het_auto = v != 0;
+        else if (k == "seplo") prm.sep_lo = v;
+        else if (k == "sephi") prm.sep_hi = v;
         else if (k == "simcap") prm.sim_query_cap = (uint32_t)v;
         else if (k == "tile") tile = (int)v;
         else if (k == "ridge") prm.clf_ridge = v;
@@ -111,5 +114,6 @@ int main(int argc, char** argv) {
                  "\"n_hvg\":%u,\"n_pcs\":%u,\"k_adj\":%u,\"n_sim\":%u,\"seconds\":%.2f,\"fallback\":%d}\n",
                  sm.n_cells, sm.n_called, sm.expected_rate, sm.null_score, sm.detectable_fraction, sm.n_hvg, sm.n_pcs, sm.k, sm.n_sim,
                  sm.seconds, sm.used_fallback ? 1 : 0);
+    std::fprintf(stderr, "{\"cluster_separation\":%.4f,\"het_mix_used\":%.3f}\n", sm.cluster_separation, sm.het_mix_used);
     return 0;
 }

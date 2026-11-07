@@ -110,6 +110,11 @@ struct DoubletParams {
     uint32_t het_clusters   = 0;     ///< > 0: k-means clusters of the observed cells; a share het_mix of the simulated doublets pairs cells of
                                      ///< different clusters (scDblFinder's heterotypic doublets), the rest are random pairs
     double   het_mix        = 1.0;   ///< share of the simulated doublets forced heterotypic (het_clusters > 0)
+    bool     het_auto       = false; ///< het_mix from the separation of the clusters instead: clamp((sep - sep_lo) / (sep_hi - sep_lo), 0, 1), where
+                                     ///< sep = median over cells of (distance to the nearest other centroid / distance to the own centroid).  Discrete
+                                     ///< cell-type islands (a species mixture) make heterotypic pairs the identifiable doublets; continuous
+                                     ///< PBMC-like manifolds do not
+    double   sep_lo         = 1.5, sep_hi = 2.5;
     double   knn_scale      = 1.0;    ///< k = knn_scale * 0.5 * sqrt(n_cells)
     int      hvg_mode       = 0;      ///< 0: z-scored log dispersion in mean bins; 1: Scrublet v-score (percentile cut)
     double   vscore_pctl    = 85.0;   ///< hvg_mode 1: keep genes above this v-score percentile
@@ -123,6 +128,8 @@ struct DoubletSummary {
     double   expected_rate = 0.0;
     double   null_score = -1.0;       ///< score of the 95th-percentile observed singlet (the detectable-fraction threshold)
     double   detectable_fraction = 0.0;
+    double   cluster_separation = -1.0;   ///< median ratio of the distance to the nearest other centroid over the own one (het_clusters > 0)
+    double   het_mix_used = 0.0;
     double   seconds = 0.0;
     bool     used_fallback = false;
     std::vector<uint32_t> sim_hist, obs_hist;  ///< 20-bin histograms of the simulated / observed scores on [0, 1]
@@ -644,6 +651,7 @@ inline std::vector<DoubletResult> detect_doublets(
     n_sim = std::max(n_sim, 10u);
     std::vector<std::pair<uint32_t, uint32_t>> parents(n_sim);
     double het_share = 1.0;                          // share of random pairs that are heterotypic (1 when clustering is off)
+    double sep = -1.0, mix_used = prm.het_mix;
     std::vector<char> sim_het(n_sim, 1);             // simulated doublet pairs cells of different clusters
     std::vector<uint32_t> het_cl;
     {
@@ -707,12 +715,24 @@ inline std::vector<DoubletResult> detect_doublets(
             double same = 0.0;
             for (uint32_t c = 0; c < Kc; ++c) { const double pc = double(cnt[c]) / n; same += pc * pc; }
             het_share = std::max(0.05, 1.0 - same);
+            std::vector<float> ratio(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                float own = 3.4e38f, oth = 3.4e38f;
+                for (uint32_t c = 0; c < Kc; ++c) {
+                    const float d = d2(&X[size_t(i) * n_pc], &C[size_t(c) * n_pc]);
+                    if (c == cl[i]) own = d; else oth = std::min(oth, d);
+                }
+                ratio[i] = std::sqrt(oth / std::max(own, 1e-12f));
+            }
+            std::nth_element(ratio.begin(), ratio.begin() + n / 2, ratio.end());
+            sep = ratio[n / 2];
         }
+        if (prm.het_auto && sep > 0.0) mix_used = std::min(1.0, std::max(0.0, (sep - prm.sep_lo) / (prm.sep_hi - prm.sep_lo)));
         for (uint32_t s = 0; s < n_sim; ++s) {
             const uint32_t a = static_cast<uint32_t>(rng() % n);
             uint32_t b = static_cast<uint32_t>(rng() % (n - 1));
             if (b >= a) ++b;
-            if (!cl.empty() && (rng() >> 11) * (1.0 / 9007199254740992.0) < prm.het_mix)
+            if (!cl.empty() && (rng() >> 11) * (1.0 / 9007199254740992.0) < mix_used)
                 for (int tries = 0; tries < 50 && cl[b] == cl[a]; ++tries) {
                     b = static_cast<uint32_t>(rng() % (n - 1));
                     if (b >= a) ++b;
@@ -966,7 +986,7 @@ inline std::vector<DoubletResult> detect_doublets(
     for (const auto& rr : results) sm.obs_hist[std::min(19, int(rr.score * 20))]++;
     call_cells(-1.0, h);
     sm.n_sim = n_sim; sm.n_hvg = H; sm.n_pcs = n_pc; sm.k = k_adj;
-    sm.null_score = null_score; sm.detectable_fraction = h;
+    sm.null_score = null_score; sm.detectable_fraction = h; sm.cluster_separation = sep; sm.het_mix_used = mix_used;
     finish();
     return results;
 }
