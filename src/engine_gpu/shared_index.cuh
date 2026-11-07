@@ -217,7 +217,9 @@ uint64_t sharedIndexReserve() {
     if (!en || std::string(en) != "1") return 0;
     uint64_t best = 0;
     glob_t g{};
-    if (glob("/tmp/singlet_gpu_holder.*.info", 0, nullptr, &g) == 0) {
+    // only the holders of the current device: a holder on the node's other GPU (another sample's item) is not on this device's memory
+    int cur = 0; if (cudaGetDevice(&cur) != cudaSuccess) cur = 0;
+    if (glob(shPath(deviceId(cur) + ".*", "info").c_str(), 0, nullptr, &g) == 0) {
         for (size_t i = 0; i < g.gl_pathc; i++) {
             FILE* f = fopen(g.gl_pathv[i], "r"); if (!f) continue;
             long pid = 0; unsigned long long b = 0;

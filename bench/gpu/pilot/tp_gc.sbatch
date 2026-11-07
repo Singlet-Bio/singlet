@@ -51,7 +51,7 @@
 set -uo pipefail
 # RUNID names this run's results, scratch and git ref (default: the Slurm job). The GPU pilot (bench/gpu/pilot) runs two harnesses in one
 # job, one per GPU, with RUNID=<pilot job>-g<gpu>-<item>, PILOT=1 and, while the other GPU is in use, PILOT_SHARED=1.
-RUNID=${RUNID:-$SLURM_JOB_ID}; export CUDA_DEVICE_ORDER=PCI_BUS_ID
+RUNID=${RUNID:-$SLURM_JOB_ID}; export RUNID CUDA_DEVICE_ORDER=PCI_BUS_ID   # RUNID reaches the runs and the holders they start (holder_stop)
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REF=/mnt/projects/debruinz_project/cellarium/reference
 BINDIR=${BINDIR:?BINDIR: the directory with singlet-gpu and commit-gpu}; BIN=$BINDIR/singlet-gpu
 EXPECT_COMMIT=${EXPECT_COMMIT:?EXPECT_COMMIT: the commit that BINDIR must hold}
@@ -141,14 +141,29 @@ stop_mps() {
   [ -z "${MPS_ON:-}" ] && return 0
   echo quit | nvidia-cuda-mps-control; MPS_ON=""; unset CUDA_MPS_PIPE_DIRECTORY CUDA_MPS_LOG_DIRECTORY; sleep 3; echo "MPS daemon stopped ($(date -Is))" | tee -a $S
 }
+holder_stop() {   # the shared-index holders this item started (their environment carries its RUNID), and their /tmp files; a holder of another
+                  # item on the node (the other GPU of the pilot, a second job on a smoke node) is left alone
+  local pid f hp n=0
+  for pid in $(pgrep -u $USER -f "gpu-holder" 2>/dev/null); do
+    tr ' ' '
+' < /proc/$pid/environ 2>/dev/null | grep -qx "RUNID=$RUNID" || continue
+    kill $pid 2>/dev/null && n=$((n + 1))
+  done
+  [ $n -gt 0 ] && sleep 1
+  for f in /tmp/singlet_gpu_holder.*.info; do   # files of holders that are gone (ours just stopped, or dead ones)
+    [ -f "$f" ] || continue; hp=$(awk '{print $1; exit}' "$f" 2>/dev/null)
+    [ -n "$hp" ] && kill -0 "$hp" 2>/dev/null && continue
+    rm -f "${f%.info}".* 2>/dev/null
+  done
+  [ $n -gt 0 ]
+}
 cfg_set() {
   # A config is one atom or several joined by '+' (bench/gpu/fastloop: stacked designs), for example wshrink+shidx+maponly. An atom is a
   # name below, a name from the idea registry FL_IDEAS (TSV: name, env switches or -, extra arguments or -, stage), or x:NAME=VALUE.
   # The shared-index holder, MPS and admission arms act on the whole node: in the pilot they need both GPUs (a g2 item). FL_SOLE=1 admits
   # them in a g1 item that is the only item on its node (the one-GPU pilot, a smoke node): every holder on the node counts in the budget.
   case $1 in *shidx*|*mps*|adm*) [ "${PILOT_SHARED:-0}" = 1 ] && [ "${FL_SOLE:-0}" != 1 ] && { echo "!! config $1 needs the whole node (queue it as a g2 item)" >&2; return 1; } ;; esac
-  pkill -u $USER -f "gpu-holder" 2>/dev/null && { sleep 3; echo "shared-index holder stopped before point cfg $1" | tee -a $S; }
-  rm -f /tmp/singlet_gpu_holder.* 2>/dev/null
+  holder_stop && { sleep 3; echo "shared-index holder stopped before point cfg $1" | tee -a $S; }
   case $1 in *mps*) ;; *) stop_mps ;; esac
   CFG_ARGS=""; CFG_ENV=""; ARM_BIN=$BIN
   local a; for a in ${1//+/ }; do cfg_atom $a || return 1; done
@@ -448,5 +463,6 @@ if [ -n "${NSYS_ITEMS:-}" ]; then
   done
 fi
 [ -n "${MPS_ON:-}" ] && { echo quit | nvidia-cuda-mps-control; echo "MPS daemon stopped" | tee -a $S; }
+holder_stop && echo "shared-index holder of this item stopped at the end" | tee -a $S
 echo "PROVENANCE job=$SLURM_JOB_ID node=$(hostname -s) bin=$BIN sha256=$BSHA commit=$COMMIT scripts=$SCRIPTS" | tee -a $S
 echo done $(date -Is) | tee -a $S
