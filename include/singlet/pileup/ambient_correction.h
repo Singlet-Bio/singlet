@@ -45,10 +45,12 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <sstream>
 #include <numeric>
 #include <string>
@@ -984,23 +986,50 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
         // order-free-rules R10c: consensus over clusterings. Each member is a full fit with its own data-derived seeds
         // (cluster_salt = member); rho and the expected native counts are averaged, then rounded once.
         const unsigned thr = cfg.threads ? cfg.threads : std::max(1u, std::thread::hardware_concurrency());
-        std::vector<double> nat_sum(X.gene.size(), 0.0), nat, rho_sum(X.n_cells, 0.0);
-        for (uint32_t m = 0; m < n_fit; ++m) {
-            AmbientDecontConfig cm = cfg;
-            cm.cluster_salt = m;
-            AmbientCorrectionResult Rm;
-            Rm.profile = R.profile;
-            std::vector<uint32_t> cv;
-            decontx_ambient_core(X, R.profile.gene_fractions, cm, Rm, cv, &nat);
-            for (size_t e = 0; e < nat.size(); ++e) nat_sum[e] += nat[e];
-            for (size_t j = 0; j < X.n_cells; ++j) rho_sum[j] += Rm.contam[j].rho;
-            if (m == 0) {   // member 0 keeps clusters and cluster statistics
-                auto corr = std::move(R.corrected);
-                auto prof = R.profile;
-                R = std::move(Rm);
-                R.corrected = std::move(corr);
-                R.profile = std::move(prof);
+        std::vector<double> nat_sum(X.gene.size(), 0.0), rho_sum(X.n_cells, 0.0);
+        // Members run side by side, each on thr / workers threads: a member's fit does not depend on its thread count
+        // (parallel_for writes one slot per index, the PCA sums over fixed blocks), and its expected native counts and rho
+        // are added to the sums in member order 0, 1, ..., so the sums are the ones the one-at-a-time loop made. Parts of
+        // a fit run on K clusters or serially, so one member at a time left most threads idle. At most `workers` members'
+        // native-count vectors are held at once.
+        const unsigned workers = std::max(1u, std::min<unsigned>(n_fit, thr / 4));
+        const unsigned thr_m = std::max(1u, thr / workers);
+        AmbientCorrectionResult R0;
+        std::mutex mu;
+        std::condition_variable turn;
+        uint32_t next_add = 0;
+        std::atomic<uint32_t> next_m{0};
+        auto member_worker = [&]() {
+            for (uint32_t m; (m = next_m.fetch_add(1)) < n_fit;) {
+                AmbientDecontConfig cm = cfg;
+                cm.cluster_salt = m;
+                cm.threads = thr_m;
+                AmbientCorrectionResult Rm;
+                Rm.profile = R.profile;
+                std::vector<uint32_t> cv;
+                std::vector<double> nat;
+                decontx_ambient_core(X, R.profile.gene_fractions, cm, Rm, cv, &nat);
+                std::unique_lock<std::mutex> lk(mu);
+                turn.wait(lk, [&] { return next_add == m; });
+                for (size_t e = 0; e < nat.size(); ++e) nat_sum[e] += nat[e];
+                for (size_t j = 0; j < X.n_cells; ++j) rho_sum[j] += Rm.contam[j].rho;
+                if (m == 0) R0 = std::move(Rm);   // member 0 keeps clusters and cluster statistics
+                ++next_add;
+                turn.notify_all();
             }
+        };
+        {
+            std::vector<std::thread> pool;
+            for (unsigned w = 1; w < workers; ++w) pool.emplace_back(member_worker);
+            member_worker();
+            for (auto& t : pool) t.join();
+        }
+        {
+            auto corr = std::move(R.corrected);
+            auto prof = R.profile;
+            R = std::move(R0);
+            R.corrected = std::move(corr);
+            R.profile = std::move(prof);
         }
         for (auto& v : nat_sum) v /= n_fit;
         ambient_detail::round_native(X, nat_sum, thr, cvals);
