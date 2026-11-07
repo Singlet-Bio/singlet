@@ -5009,6 +5009,16 @@ static int singlet_main(int argc, char* argv[]) {
             }
             singlet::fq::RunSet::HeadScanOptions so;
             std::vector<singlet::fq::RunSet::BlockHead> heads;
+            // R11 in the head scan: barcode discovery needs R11's exact counts before STAR is forked, when STAR's prefill has published
+            // none, and the pending corrector below then read every block of the .1fq a second time (27 s on 7 threads for pbmc1k_v3). The
+            // head scan already decompresses each block, so it takes the counts too. They are the same scan's counts over the same blocks
+            // with the same layout; only their time changes. SINGLET_INGEST_R11_EARLY=0: the second pass, as before.
+            const int r11_cb0 = detected_cb_start - 1, r11_cbl = detected_bc_len;
+            const int r11_umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, r11_umil = umi_len;
+            const char* r11_env = std::getenv("SINGLET_INGEST_R11_EARLY");
+            const bool r11_early = needs_barcode_discovery && !(r11_env && r11_env[0] == '0');
+            auto r11_dict = std::make_shared<std::vector<uint64_t>>();
+            auto r11_raws = std::make_shared<std::vector<std::vector<std::string>>>();
             std::vector<uint64_t> freq;
             std::vector<std::string> probe;
             uint64_t stored = 0;
@@ -5018,6 +5028,10 @@ static int singlet_main(int argc, char* argv[]) {
                 freq.assign(static_cast<size_t>(dict_n) + 1, 0);
                 so.probe_per_block = std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(nb, 1u) - 1u) / std::max<uint32_t>(nb, 1u));
                 so.bc_freq = freq.data();
+                if (r11_early) {
+                    r11_dict->assign(dict_n, 0);
+                    so.r11 = true; so.cb0 = r11_cb0; so.cbl = r11_cbl; so.umi0 = r11_umi0; so.umil = r11_umil; so.r11_dict = r11_dict->data();
+                }
                 heads.resize(nb);
                 std::atomic<uint32_t> nxt{0};
                 std::mutex emu;
@@ -5034,6 +5048,10 @@ static int singlet_main(int argc, char* argv[]) {
                 work();
                 for (auto& t : pool) t.join();
                 if (!err.empty()) why = "head scan: " + err;
+                if (r11_early && err.empty()) {
+                    r11_raws->resize(nb);
+                    for (uint32_t b = 0; b < nb; ++b) (*r11_raws)[b].swap(heads[b].r11_raw);
+                }
                 for (auto& h : heads) {
                     stored += h.n_stored;
                     for (auto& s : h.probe) { if (probe.size() >= 20000) break; probe.push_back(std::move(s)); }
@@ -5073,38 +5091,44 @@ static int singlet_main(int argc, char* argv[]) {
                 fifo_first25_r2 = std::move(probe);
                 // R11: the corrector is handed to the pileup now; its exact counts are read on first use (cb_correct.h set_pending): from the
                 // E8 region, where STAR's prefill wrote them right after its decode, or else (no region, no prefill decode) from the .1fq here
-                const int cb0 = detected_cb_start - 1, cbl = detected_bc_len;
-                const int umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, umil = umi_len;
+                const int cb0 = r11_cb0, cbl = r11_cbl, umi0 = r11_umi0, umil = r11_umil;
                 const int nt = std::max(1, star_threads);
-                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack](singlet::CbCorrector& c) {
+                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack, r11_dict, r11_raws](singlet::CbCorrector& c) {
                     StopWatch sw;
                     std::vector<std::pair<uint64_t, uint64_t>> pairs;
                     uint64_t nwl = 0, tot = 0;
                     const int fd = singlet_engine_gpu::ingest::plan().r11Fd;
                     if (singlet_engine_gpu::ingest::fetchR11(fd, pairs, nwl, tot) && nwl == c.size()) {
                         for (const auto& [w, n] : pairs) c.add_exact(static_cast<int64_t>(w), n);
+                        std::vector<uint64_t>().swap(*r11_dict); std::vector<std::vector<std::string>>().swap(*r11_raws);
                         std::cerr << "[1fq-ingest] R11 exact CB histogram from STAR's prefill (E8 region): " << tot << " reads, " << pairs.size()
                                   << " barcodes, read in " << sw.elapsed_s() << "s\n";
                         return;
                     }
-                    singlet::fq::RunSet::HeadScanOptions o;
-                    std::vector<uint64_t> dict(runs->bc_dict_size(), 0);
-                    o.r11 = true; o.cb0 = cb0; o.cbl = cbl; o.umi0 = umi0; o.umil = umil; o.r11_dict = dict.data();
                     const uint32_t nb = runs->block_count();
-                    std::vector<std::vector<std::string>> raws(nb);
-                    std::atomic<uint32_t> nxt{0};
-                    std::atomic<bool> bad{false};
-                    auto work = [&]() {
-                        singlet::fq::RunSet::BlockHead h;
-                        for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
-                            try { runs->scan_head(b, o, h); raws[b].swap(h.r11_raw); } catch (...) { bad = true; }
-                        }
-                    };
-                    std::vector<std::thread> pool;
-                    for (int t = 1; t < std::min<int>(nt, static_cast<int>(std::max<uint32_t>(nb, 1u))); ++t) pool.emplace_back(work);
-                    work();
-                    for (auto& t : pool) t.join();
-                    if (bad) { std::cerr << "[1fq-ingest] ERROR: R11's histogram could not be read from the .1fq\n"; _exit(1); }
+                    std::vector<uint64_t> dict;
+                    std::vector<std::vector<std::string>> raws;
+                    const bool early = r11_raws->size() == nb && r11_dict->size() == runs->bc_dict_size();
+                    if (early) { dict.swap(*r11_dict); raws.swap(*r11_raws); }
+                    else {
+                        singlet::fq::RunSet::HeadScanOptions o;
+                        dict.assign(runs->bc_dict_size(), 0);
+                        raws.resize(nb);
+                        o.r11 = true; o.cb0 = cb0; o.cbl = cbl; o.umi0 = umi0; o.umil = umil; o.r11_dict = dict.data();
+                        std::atomic<uint32_t> nxt{0};
+                        std::atomic<bool> bad{false};
+                        auto work = [&]() {
+                            singlet::fq::RunSet::BlockHead h;
+                            for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
+                                try { runs->scan_head(b, o, h); raws[b].swap(h.r11_raw); } catch (...) { bad = true; }
+                            }
+                        };
+                        std::vector<std::thread> pool;
+                        for (int t = 1; t < std::min<int>(nt, static_cast<int>(std::max<uint32_t>(nb, 1u))); ++t) pool.emplace_back(work);
+                        work();
+                        for (auto& t : pool) t.join();
+                        if (bad) { std::cerr << "[1fq-ingest] ERROR: R11's histogram could not be read from the .1fq\n"; _exit(1); }
+                    }
                     static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
                     uint64_t n_exact = 0;
                     const auto& dflat = runs->bc_dict_flat();
@@ -5130,7 +5154,7 @@ static int singlet_main(int argc, char* argv[]) {
                             }
                         }
                     std::cerr << "[1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): " << n_exact << " reads over a "
-                              << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s\n";
+                              << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s" << (early ? " (counted by the head scan)" : "") << "\n";
                 });
                 cb_hist_ready = true;
                 decode_time = ingest_sw.elapsed_s();
