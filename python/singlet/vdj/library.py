@@ -57,9 +57,7 @@ def process_library(
     qc = Q.library_qc(
         contigs, cells, res.stats, gex_called=list(called), gex_columns=list(gex_columns)
     )
-    ref_path = os.path.join(
-        os.path.dirname(os.path.abspath(A.R.__file__)), "data", f"vdj_{species}.tsv.gz"
-    )
+    ref_path = A.R.data_path(species)
     ref_info = {"name": f"vdj_{species}", "segments": len(ref.segs)}
     if os.path.exists(ref_path):
         ref_info["sha256"] = hashlib.sha256(open(ref_path, "rb").read()).hexdigest()

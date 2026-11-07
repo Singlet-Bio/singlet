@@ -137,8 +137,8 @@ class Reference:
                 self.seg_class[i] = first.setdefault(lab, i)
 
     @classmethod
-    def load(cls, species_or_path: str = "human"):
-        return cls(R.load(species_or_path))
+    def load(cls, species_or_path: str = "human", cdr3_start: str = "first"):
+        return cls(R.load(species_or_path, cdr3_start))
 
 
 # ----------------------------------------------------------------------------------------------------------- reads
