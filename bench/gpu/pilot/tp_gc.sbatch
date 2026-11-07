@@ -70,6 +70,12 @@ seq_block() {   # sets SEQNEXT to the next block's point tags (no subshell: SEQN
   if [ $(( SEQSCHED + 2 * k )) -gt ${SEQCAP:-40} ]; then SEQN=$((SEQN + 1)); SEQSCHED=$((SEQSCHED + k)); SEQNEXT="$t@$a#s$SEQN $t@$b#s$SEQN"
   else SEQN=$((SEQN + 1)); SEQSCHED=$((SEQSCHED + 2 * k)); SEQNEXT="$t@$a#s${SEQN}a $t@$b#s${SEQN}a $t@$b#s${SEQN}b $t@$a#s${SEQN}b"; fi
 }
+if [ "${SMOKE:-0}" = 1 ]; then   # smoke tier (smoke.sbatch, a V100S or RTX 8000): two runs of each config the item names, one at a time, on pbmc2m
+  SC=(); [ -n "${SEQAB:-}" ] && SC=(k1t8s1r2@${SEQAB%%:*} k1t8s1r2@${SEQAB##*:})
+  if [ ${#SC[@]} = 0 ]; then for p in "${POINTS[@]}"; do c=${p%%#*}; case $c in *@*) c=k1t8s1r2@${c#*@} ;; *) c=k1t8s1r2 ;; esac
+    case " ${SC[*]} " in *" $c "*) ;; *) SC+=($c) ;; esac; done; fi
+  POINTS=("${SC[@]}"); SEQAB=; SAMPLE=${SMOKE_SAMPLE:-pbmc2m}; echo "SMOKE: points ${POINTS[*]} on $SAMPLE"
+fi
 [ -n "${SEQAB:-}" ] && { seq_block; POINTS=($SEQNEXT); }
 SAMPLE=${SAMPLE:-pbmc1k_v3}; MIX=(${MIX:-pbmc1k_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2})
 DUMP=${DUMP:-0}; IDENT=${IDENT:-0}; NRUNS=${NRUNS:-}
