@@ -30,4 +30,4 @@
 
 **Falsifier.** Any gate difference ends a change. A change that saves under 2 s of wall per pbmc1k_v3 run is reverted as not worth its code.
 
-**Result.** Pending: gate 804095 with hgmm as pilot item 29, and timing run 804091.
+**Result.** The three changes are identical on all nine samples: gate 804121 (RTX 8000, a8b24ac5) covered the eight smaller samples, and pilot item 29 covered hgmm1k_v3 on an H100. In the gate's GPU run of pbmc1k_v3 at T=18, wall fell from 199 to 175 s against gate 803947 (ee7fa54d). Non-host went from 27 to 15 s, and the demux thread from 38 to 26 s. The demux now costs more CPU, 231 against 172 core-s, so the whole run uses 761 core-s where it used 702. The export timing lines put every writer of Phase 3 under 2 s, which leaves the demux as Phase 3's critical path. Cell calling, at 14 s wall and 35 core-s, is the largest phase outside it. Whether the wall saving outweighs the CPU under concurrency is pilot item 34: a sequential A/B of a8b24ac5 against ee7fa54d at k16 T5, 2 slots.

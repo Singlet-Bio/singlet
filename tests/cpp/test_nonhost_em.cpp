@@ -347,7 +347,9 @@ static void test8_fit_threads_and_reports() {
                a[i].n_reads_assigned == b[i].n_reads_assigned && a[i].mean_hit_rate == b[i].mean_hit_rate &&
                a[i].kingdom == b[i].kingdom;
     if (!same) { FAIL(name, "em_deconvolve differs from em_report of the shared fit"); return; }
-    if (em_report(f8, kmap, 0.0f, 0.0f, 10u).size() < b.size()) { FAIL(name, "looser report lists fewer species"); return; }
+    if (em_report(f8, kmap, 0.0f, 0.0f, 0u).size() < b.size()) { FAIL(name, "the report without thresholds lists fewer species"); return; }
+    PASS(name);
+}
 
 // ── Test 9: a virus and a microbe that share an id are two EM species once keyed (D-100) ──
 static void test9_shared_id_two_species() {

@@ -215,6 +215,7 @@ cfg_atom() {
     nodn) CFG_ARGS+=" --n-donors 1 --no-viral-screen --no-microbial-screen" ;;
     alloff) CFG_ARGS+=" --n-donors 1 --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_BENCH_SKIP=ambient,doublet SINGLET_CR4_PROBE=skip" ;;
     maponly) CFG_ARGS+=" --no-viral-screen --no-microbial-screen"; CFG_ENV+=" SINGLET_BENCH_EXIT_AFTER=star SINGLET_CR4_PROBE=skip" ;;  # ends after pileup + STAR
+    sladm) CFG_ENV+=" SINGLET_ENGINE_GPU_ADMIT=1" ;;                                     # SL step 2 (f7daed65+): a deep sample takes several slots at the E20 relock
     adm) CFG_ENV+=" SINGLET_GPU_ADMIT=1" ;;                                                 # gpu/bold-admit build b2: memory-aware admission instead of slot locks
     admmps) CFG_ENV+=" SINGLET_GPU_ADMIT=1"; start_mps ;;                                  # the same with CUDA MPS (concurrent kernels of several processes)
     admtuned) CFG_ENV+=" SINGLET_GPU_ADMIT=1 SINGLET_ADMIT_CAP_GB=92.5 SINGLET_ADMIT_IDLE_GB=0 SINGLET_ENGINE_GPU_MEM_GB=36 SINGLET_ADMIT_EST_PREFILL_GB=36 SINGLET_GPU_PILEUP_ARENA_GB=28 SINGLET_ADMIT_EST_PILEUP_GB=28 SINGLET_ADMIT_EST_NONHOST_GB=29 SINGLET_ADMIT_EST_HANDOFF_GB=6 SINGLET_ADMIT_EST_SOLO_GB=2.5" ;;   # estimates from measured peaks (solo run 800349 and E17 line): prefill 34.8 GB normal plan, pileup peak 26.3 GB, non-host index 24.9 GB, kept 1.6 GB
