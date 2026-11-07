@@ -2000,15 +2000,13 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             std::unordered_set<uint32_t> confirmed_ids;
             for (const auto& sa : em_result) confirmed_ids.insert(sa.species_id);
             std::ofstream ctsv(out_prefix + "/nonhost/nonhost_candidates.tsv");
-            ctsv << "kingdom	species_id	species_name	reads_assigned	screened_reads	relative_abundance	mean_hit_rate	em_confirmed
-";
+            ctsv << "kingdom\tspecies_id\tspecies_name\treads_assigned\tscreened_reads\trelative_abundance\tmean_hit_rate\tem_confirmed\n";
             for (const auto& sa : cand) {
                 const char* kname = sa.kingdom == NonHostCategory::VIRAL ? "VIRAL" : sa.kingdom == NonHostCategory::BACTERIAL ? "BACTERIAL"
                                   : sa.kingdom == NonHostCategory::FUNGAL ? "FUNGAL" : "UNKNOWN";
-                ctsv << kname << "	" << sa.species_id << "	" << species_name_lookup(sa.species_id) << "	" << sa.n_reads_assigned << "	"
-                     << n_total << "	" << std::fixed << std::setprecision(6) << sa.relative_abundance << "	" << sa.mean_hit_rate << "	"
-                     << (confirmed_ids.count(sa.species_id) ? 1 : 0) << "
-";
+                ctsv << kname << "\t" << sa.species_id << "\t" << species_name_lookup(sa.species_id) << "\t" << sa.n_reads_assigned << "\t"
+                     << n_total << "\t" << std::fixed << std::setprecision(6) << sa.relative_abundance << "\t" << sa.mean_hit_rate << "\t"
+                     << (confirmed_ids.count(sa.species_id) ? 1 : 0) << "\n";
             }
         }
 
