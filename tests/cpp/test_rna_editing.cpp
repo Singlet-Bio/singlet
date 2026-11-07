@@ -98,7 +98,8 @@ Run run_engine(const std::string& dir, const std::string& bam, bool with_edit) {
     if (!e.load_references()) { std::cout << "  load_references failed\n"; return r; }
     e.run(bam);
     r.ad = e.snp_ad().to_csc(); r.dp = e.snp_dp().to_csc();
-    r.edit_start = e.edit_snp_start(); r.snp_names = e.snp_names(); r.edit_names = e.edit_names();
+    r.edit_start = e.edit_snp_start(); r.snp_names = e.snp_names();
+    for (uint32_t i = 0; i < e.n_edit_sites(); ++i) r.edit_names.push_back(e.edit_name(i));
     return r;
 }
 
@@ -145,7 +146,7 @@ void test_engine() {
     auto er1 = singlet::editing::summarize(ea, ed, only1);
     CHECK(er1.site[0].dp == 1 && er1.site[0].dp_all == 4 && er1.alt_total == 3, "non-called barcodes count only in umis_all_barcodes");
     std::vector<std::string> bcs{"AAACCTGAGAAACGAG-1", "AAACCTGCAGGTTCAC-1"};
-    CHECK(singlet::editing::write_sites(dir + "/s.tsv.gz", er, b.edit_names), "write_sites");
+    CHECK(singlet::editing::write_sites(dir + "/s.tsv.gz", er, std::vector<std::string>(b.edit_names.begin(), b.edit_names.begin() + 2)), "write_sites");
     CHECK(singlet::editing::write_cells(dir + "/c.tsv", er, cells, bcs), "write_cells");
     CHECK(singlet::editing::write_summary(dir + "/e.json", dir + "/edit.tsv", 3, er, 2), "write_summary");
     std::system(("gzip -dc " + dir + "/s.tsv.gz > " + dir + "/s.tsv").c_str());

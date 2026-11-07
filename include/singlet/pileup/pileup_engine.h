@@ -504,8 +504,14 @@ public:
             });
         }
 
+        // D-101: the editing panel parses alongside (its indices are assigned after the AIM block below)
+        bool edit_ok = true;
+        std::thread edit_thread;
+        if (!config_.edit_path.empty()) edit_thread = std::thread([&]() { edit_ok = parse_edit_panel(); });
+
         if (snp_thread.joinable()) snp_thread.join();
         if (gtf_thread.joinable()) gtf_thread.join();
+        if (edit_thread.joinable()) edit_thread.join();
 
         if (!snp_ok || !gtf_ok) return false;
         if (need_exons) has_gene_model_ = true;
@@ -515,7 +521,11 @@ public:
             load_aim_panel();
         }
         // D-101: the editing panel goes last, so every SNP and AIM index is the same as without it
-        if (!config_.edit_path.empty() && !load_edit_panel()) return false;
+        if (!config_.edit_path.empty()) {
+            if (!edit_ok) return false;
+            edit_snp_start_ = n_snps_loaded_;
+            n_snps_loaded_ += static_cast<uint32_t>(edit_sites_.size());
+        }
 
         // N18: load CRISPR guide reference if provided
         if (!config_.guide_ref_path.empty()) {
@@ -3009,7 +3019,10 @@ public:
     /// D-101: first SNP index of the RNA editing panel (UINT32_MAX without one); rows from here to the end are editing sites
     uint32_t edit_snp_start() const { return edit_snp_start_; }
     /// D-101: names of the editing rows (chrom:pos:R>A), row i = SNP index edit_snp_start() + i; snp_names() stops before them
-    const std::vector<std::string>& edit_names() const { return edit_names_; }
+    std::string edit_name(uint32_t i) const {
+        const auto& e = edit_sites_[i];
+        return edit_chroms_[e.chrom] + ":" + std::to_string(e.pos0 + 1) + ":" + e.ref + ">" + e.alt;
+    }
     uint32_t n_edit_sites() const { return edit_snp_start_ == UINT32_MAX ? 0u : n_snps_loaded_ - edit_snp_start_; }
     const std::vector<std::string>& snp_names() const { return snp_names_; }
     const std::vector<std::string>& exon_names() const { return gene_model_.exon_names(); }
@@ -3283,7 +3296,9 @@ private:
     uint32_t n_snps_loaded_ = 0;
     uint32_t aim_snp_start_ = UINT32_MAX;   // N13: first AIM index in snp matrices
     uint32_t edit_snp_start_ = UINT32_MAX;  // D-101: first editing-site index in snp matrices
-    std::vector<std::string> edit_names_;   // D-101: editing-site names (kept apart so snp_names_ matches the SNP rows)
+    struct EditSite { int32_t pos0; uint16_t chrom; char ref, alt; };   // 8 bytes: 15.7 M human sites in 126 MB
+    std::vector<EditSite> edit_sites_;       // D-101: panel row i = SNP index edit_snp_start_ + i (names made on demand: edit_name)
+    std::vector<std::string> edit_chroms_;
 
     // Splice junction tracking
     std::unordered_map<uint64_t, uint32_t> sj_index_;  // (tid<<32|donor)^acceptor → sj idx
@@ -3626,16 +3641,17 @@ private:
                   << " AIM positions for ancestry (start_idx=" << aim_snp_start_ << ")\n";
     }
 
-    // D-101: append the RNA editing panel (CHROM POS REF ALT [...], 1-based, genome strand) to snp_pending_.
-    // Only single-base A>G and T>C rows are taken; anything else is skipped and counted.
-    bool load_edit_panel() {
+    // D-101: parse the RNA editing panel (CHROM POS REF ALT [...], 1-based, genome strand) into edit_sites_. Only single-base
+    // A>G and T>C rows are taken; anything else is skipped and counted. Runs on its own thread during load_references (it touches
+    // only edit_sites_ and edit_chroms_); load_references gives the block its SNP indices after the AIM block, and
+    // resolve_pending_snps puts the sites into chrom_snps_.
+    bool parse_edit_panel() {
         LineReader f(config_.edit_path);
         if (!f.good()) {
             std::cerr << "[singlet-pileup] ERROR: Cannot open editing panel: " << config_.edit_path << "\n";
             return false;
         }
-        edit_snp_start_ = n_snps_loaded_;
-        std::unordered_map<std::string, std::string> chrom_intern;
+        std::unordered_map<std::string, uint16_t> chrom_id;
         std::string line;
         uint64_t n_skip = 0;
         while (f.getline(line)) {
@@ -3653,19 +3669,12 @@ private:
             const char ref = p[1], alt = p[3];
             if ((p + 4 < end && p[4] != '\t' && p[4] != '\r') || pos < 1 ||
                 !((ref == 'A' && alt == 'G') || (ref == 'T' && alt == 'C'))) { ++n_skip; continue; }
-            std::string chrom(f0, chrom_len);
-            auto it = chrom_intern.try_emplace(chrom, chrom).first;
-            SNPSite site;
-            site.index = n_snps_loaded_++;
-            site.ref_allele = ref;
-            site.alt_allele = alt;
-            snp_pending_.push_back({it->second, pos - 1, site});
-            char buf[96];
-            const int n = std::snprintf(buf, sizeof(buf), "%s:%d:%c>%c", it->second.c_str(), pos, ref, alt);
-            edit_names_.emplace_back(buf, n);
+            auto it = chrom_id.try_emplace(std::string(f0, chrom_len), static_cast<uint16_t>(edit_chroms_.size()));
+            if (it.second) edit_chroms_.push_back(it.first->first);
+            edit_sites_.push_back({pos - 1, it.first->second, ref, alt});
         }
-        std::cerr << "[singlet-pileup] Loaded " << n_edit_sites() << " RNA editing sites (start_idx=" << edit_snp_start_
-                  << ", skipped " << n_skip << " rows) from " << config_.edit_path << "\n";
+        std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites (skipped " << n_skip
+                  << " rows) from " << config_.edit_path << "\n";
         return true;
     }
 
@@ -3856,6 +3865,23 @@ private:
                                             p.site.ref_allele, p.site.alt_allele});
                 n_resolved++;
             }
+        }
+        // D-101: editing sites, one chromosome lookup per contig
+        if (!edit_sites_.empty()) {
+            std::vector<int32_t> etid(edit_chroms_.size());
+            for (size_t c = 0; c < edit_chroms_.size(); ++c) {
+                etid[c] = resolve_chrom(edit_chroms_[c]);
+                if (etid[c] >= 0 && static_cast<size_t>(etid[c]) >= chrom_snps_.size()) chrom_snps_.resize(etid[c] + 1);
+            }
+            uint64_t n_edit_resolved = 0;
+            for (size_t i = 0; i < edit_sites_.size(); ++i) {
+                const auto& e = edit_sites_[i];
+                const int32_t tid = etid[e.chrom];
+                if (tid < 0) continue;
+                chrom_snps_[tid].push_back({e.pos0, edit_snp_start_ + static_cast<uint32_t>(i), e.ref, e.alt});
+                ++n_edit_resolved;
+            }
+            std::cerr << "[singlet-pileup] Resolved " << n_edit_resolved << " of " << edit_sites_.size() << " RNA editing sites\n";
         }
         // Sort per-chromosome for binary search
         for (auto& snps : chrom_snps_) {

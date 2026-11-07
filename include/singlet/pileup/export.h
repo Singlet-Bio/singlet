@@ -1394,12 +1394,12 @@ inline ExportStats export_results(const PileupEngine& engine,
             std::filesystem::create_directories(out_prefix + "/private/editing");
             const auto er = editing::summarize(edit_alt_csc, edit_dp_csc, cc_result.cell_indices);
             std::vector<std::string> cov_names; cov_names.reserve(er.covered.size());
-            for (uint32_t i : er.covered) cov_names.push_back(engine.edit_names()[i]);
+            for (uint32_t i : er.covered) cov_names.push_back(engine.edit_name(i));
             auto alt_cov = editing::select_rows(edit_alt_csc, er.covered);
             auto dp_cov = editing::select_rows(edit_dp_csc, er.covered);
             write_matrix("private/editing/editing_alt", alt_cov, cov_names);
             write_matrix("private/editing/editing_dp", dp_cov, cov_names);
-            if (!editing::write_sites(out_prefix + "/private/editing/editing_sites.tsv.gz", er, engine.edit_names()))
+            if (!editing::write_sites(out_prefix + "/private/editing/editing_sites.tsv.gz", er, cov_names))
                 record_failed_write("private/editing/editing_sites.tsv.gz");
             if (!editing::write_cells(out_prefix + "/editing_cells.tsv", er, cc_result.cell_indices, barcodes))
                 record_failed_write("editing_cells.tsv");

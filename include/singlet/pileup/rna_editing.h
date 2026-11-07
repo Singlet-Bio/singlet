@@ -131,15 +131,17 @@ inline EditingResult summarize(const Csc& alt, const Csc& dp, const std::vector<
     return r;
 }
 
-/// private/editing/editing_sites.tsv.gz: covered sites, called-cell totals. `names` are the panel names (chrom:pos:R>A).
-inline bool write_sites(const std::string& path, const EditingResult& r, const std::vector<std::string>& names) {
+/// private/editing/editing_sites.tsv.gz: covered sites, called-cell totals. `cov_names[j]` names panel row r.covered[j]
+/// (chrom:pos:R>A, the row names of the private matrices).
+inline bool write_sites(const std::string& path, const EditingResult& r, const std::vector<std::string>& cov_names) {
+    if (cov_names.size() != r.covered.size()) return false;
     gzFile g = gzopen(path.c_str(), "wb6");
     if (!g) return false;
     gzputs(g, "site\tstrand\tref_umis\tedited_umis\tediting_level\tcells_covered\tcells_edited\tumis_all_barcodes\n");
     char buf[256];
-    for (uint32_t i : r.covered) {
-        const auto& s = r.site[i];
-        const std::string& nm = names[i];
+    for (size_t j = 0; j < r.covered.size(); ++j) {
+        const auto& s = r.site[r.covered[j]];
+        const std::string& nm = cov_names[j];
         const char strand = nm.size() >= 3 && nm[nm.size() - 3] == 'T' ? '-' : '+';
         const uint64_t ref = s.dp - s.alt;
         int n;
