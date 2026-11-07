@@ -38,6 +38,8 @@
 #include <string>
 #include <thread>
 #include <sched.h>
+#include <sys/stat.h>
+#include <cstdlib>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -487,11 +489,15 @@ public:
         std::thread snp_thread;
         std::thread gtf_thread;
 
-        if (need_snps) {
+        // Pool-resident references (take_pool_snps / take_pool_gtf below): the structures `singlet gpu-pool` parsed from the same files
+        const bool snp_pooled = need_snps && take_pool_snps();
+        const bool gtf_pooled = need_exons && take_pool_gtf(gtf_ok);
+
+        if (need_snps && !snp_pooled) {
             snp_thread = std::thread([&]() { snp_ok = load_snps(); });
         }
 
-        if (need_exons) {
+        if (need_exons && !gtf_pooled) {
             gtf_thread = std::thread([&]() {
                 const auto& path = config_.exon_gtf_path;
                 bool is_bed = (path.find(".bed") != std::string::npos);
@@ -3889,6 +3895,130 @@ private:
         SNPSite site;
     };
     std::vector<PendingSNP> snp_pending_;
+
+public:
+    // ── Pool-resident references ──
+    // `singlet gpu-pool` parses each genome's GTF and SNP panel once, before it forks the samples (preload_pool_references), with the
+    // loaders below on the same bytes. A sample's load_references takes those structures when its file is the same file (device, inode,
+    // size and modification time): they are moved out of the sample's copy-on-write copy of the pool's memory, so nothing is parsed or
+    // copied, and the outputs are the loaders' own. Each is taken once per process; a second engine, a changed file or a failed parse in
+    // the pool parses as before. SINGLET_POOL_REFS=0 (in the pool or in a sample): every sample parses its own.
+    struct PoolFileId {
+        dev_t dev = 0; ino_t ino = 0; off_t size = 0; time_t mtime = 0; long mtime_ns = 0;
+        bool operator==(const PoolFileId& o) const {
+            return dev == o.dev && ino == o.ino && size == o.size && mtime == o.mtime && mtime_ns == o.mtime_ns;
+        }
+    };
+    static bool pool_file_id(const std::string& path, PoolFileId& id) {
+        struct stat st{};
+        if (path.empty() || ::stat(path.c_str(), &st) != 0) return false;
+        id.dev = st.st_dev; id.ino = st.st_ino; id.size = st.st_size; id.mtime = st.st_mtim.tv_sec; id.mtime_ns = st.st_mtim.tv_nsec;
+        return true;
+    }
+    static bool pool_refs_enabled() { const char* e = std::getenv("SINGLET_POOL_REFS"); return !(e && e[0] == '0'); }
+    struct PoolSnps {
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        std::vector<PendingSNP> pending; std::vector<std::string> names; uint32_t n = 0; double sec = 0;
+    };
+    struct PoolGtf {
+        PoolFileId id; std::string path; bool is_bed = false, ok = false, vdj_ok = false, taken = false;
+        GeneModel gm; VdjModel vdj; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolSnps>>& pool_snps() { static std::vector<std::unique_ptr<PoolSnps>> v; return v; }
+    static std::vector<std::unique_ptr<PoolGtf>>& pool_gtfs() { static std::vector<std::unique_ptr<PoolGtf>> v; return v; }
+
+    // In the pool, before any sample is forked: parse each distinct file of `snp_paths` and `gtf_paths` once (each file on a thread of its
+    // own, as load_references runs its two loaders). Returns a log line.
+    static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths) {
+        std::string log;
+        if (!pool_refs_enabled()) return "off (SINGLET_POOL_REFS=0)";
+        std::vector<std::thread> th;
+        for (const std::string& p : snp_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "SNP panel " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_snps()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_snps().push_back(std::make_unique<PoolSnps>());
+            PoolSnps* e = pool_snps().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                PileupConfig c; c.snp_path = e->path;
+                auto eng = std::make_unique<PileupEngine>(c);
+                e->ok = eng->load_snps();
+                e->pending = std::move(eng->snp_pending_); e->names = std::move(eng->snp_names_); e->n = eng->n_snps_loaded_;
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (const std::string& p : gtf_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "GTF " + p + ": not found; "; continue; }
+            const bool is_bed = p.find(".bed") != std::string::npos;
+            bool seen = false;
+            for (const auto& e : pool_gtfs()) seen = seen || (e->id == id && e->is_bed == is_bed);
+            if (seen) continue;
+            pool_gtfs().push_back(std::make_unique<PoolGtf>());
+            PoolGtf* e = pool_gtfs().back().get();
+            e->id = id; e->path = p; e->is_bed = is_bed;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                e->ok = e->is_bed ? e->gm.load_bed(e->path) : e->gm.load_gtf(e->path);
+                if (e->ok && !e->is_bed) e->vdj_ok = e->vdj.load_gtf(e->path);   // load_references reads it when config.count_vdj
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (auto& t : th) t.join();
+        char b[64];
+        for (const auto& e : pool_snps()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "SNP panel " + e->path + ": " + (e->ok ? std::to_string(e->n) + " sites" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_gtfs()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "GTF " + e->path + ": " +
+                   (e->ok ? std::to_string(e->gm.n_exons()) + " exons, " + std::to_string(e->gm.n_genes()) + " genes" : std::string("failed")) + b;
+        }
+        return log.empty() ? "no reference files" : log;
+    }
+
+private:
+    // load_snps' result from the pool, for config_.snp_path (false: load_snps runs)
+    bool take_pool_snps() {
+        if (pool_snps().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.snp_path, id)) return false;
+        for (auto& e : pool_snps()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            snp_pending_ = std::move(e->pending); snp_names_ = std::move(e->names); n_snps_loaded_ = e->n;
+            e->taken = true;
+            std::cerr << "[singlet-pileup] Loaded " << n_snps_loaded_ << " SNP sites (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // the GTF thread's result from the pool, for config_.exon_gtf_path (false: the thread runs); ok: the parse's result
+    bool take_pool_gtf(bool& ok) {
+        if (pool_gtfs().empty() || !pool_refs_enabled()) return false;
+        const auto& path = config_.exon_gtf_path;
+        const bool is_bed = (path.find(".bed") != std::string::npos);
+        PoolFileId id;
+        if (!pool_file_id(path, id)) return false;
+        for (auto& e : pool_gtfs()) {
+            if (!(e->id == id) || e->is_bed != is_bed || !e->ok || e->taken) continue;
+            gene_model_ = std::move(e->gm);
+            if (!is_bed && config_.count_vdj) {
+                vdj_model_ = std::move(e->vdj);
+                if (e->vdj_ok && !vdj_model_.empty()) has_vdj_ = true;
+            }
+            e->taken = true;
+            ok = true;
+            std::cerr << "[singlet-pileup] Gene model of " << path << " parsed once by the pool: " << gene_model_.n_exons() << " exons, "
+                      << gene_model_.n_genes() << " genes\n";
+            return true;
+        }
+        return false;
+    }
 
     void resolve_pending_snps() {
         // Determine max tid for vector sizing
