@@ -1151,7 +1151,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const double tF0 = now();
     double tS = tF0;   // E12: start of the current step
     auto step = [&](const char* k) { const double t = now(); stepAdd(k, t - tS); tS = t; };
-    const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
+    const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
     if (initRc != cudaSuccess) cudaGetLastError();
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     {   // diagnostic: whether the schedule flag took (a context made earlier in this process keeps its own flags)

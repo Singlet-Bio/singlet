@@ -172,6 +172,14 @@ struct Clip {
 // Large arrays (64 MB and up) also ask for transparent hugepages on their 2 MB-aligned interior: with THP in "madvise" mode (as on
 // Clipper) they otherwise fault in 4 KB at a time, and the parallel first touches of many threads contend on the process's page tables
 // (the mapper's record copies, the decode's arrays). Placement only: the bytes are the same. SINGLET_NOINIT_HUGEPAGE=0 turns it off.
+// cudaInitDevice's third argument: deviceFlags (cudaDeviceScheduleBlockingSync: a host thread waiting on the device sleeps) are applied
+// only with cudaInitDeviceFlagsAreValid (0x01) there. Every call passed 0 before, so the contexts ran with schedule "auto", which spins a
+// waiting thread while the process has fewer contexts than cores (the lane-driving thread burned about the lanes' kernel time in CPU).
+// SINGLET_GPU_SCHEDULE_AUTO=1 restores that (0).
+inline unsigned gpuInitFlags() {
+    static const unsigned f = [] { const char* e = std::getenv("SINGLET_GPU_SCHEDULE_AUTO"); return (e && e[0] == '1') ? 0u : 0x01u; }();
+    return f;
+}
 inline bool noinitHugepage() {
     static const bool on = [] { const char* e = std::getenv("SINGLET_NOINIT_HUGEPAGE"); return !(e && e[0] == '0'); }();
     return on;
