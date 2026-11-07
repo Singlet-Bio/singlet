@@ -24,7 +24,7 @@ J, OUT = sys.argv[1:3]
 POS = {"ravindra2021_dpi1": "sars2", "ravindra2021_dpi2": "sars2"}  # the two lymphoblastoid libraries (GSE230239) are 2 x 101 nt reads, not droplet libraries: no EBV positive could be run
 NEG_LIBS = ["ravindra2021_mock", "pbmc1k_v3", "pbmc1k_v2", "pbmc5p_v1", "hgmm1k_v3", "neuron1k_v3", "nuclei2k_v2", "kang2018_ctrl"]
 LIBS = list(POS) + NEG_LIBS
-TAXA = {"sars2": (re.compile(r"NC_045512|coronavirus 2", re.I), 694009), "ebv": (re.compile(r"gammaherpesvirus 4|Epstein", re.I), 10376),
+TAXA = {"sars2": (re.compile(r"NC_045512|coronavirus 2", re.I), 2697049), "ebv": (re.compile(r"gammaherpesvirus 4|Epstein", re.I), 10376),
         "flua": (re.compile(r"Influenza A virus", re.I), 11320), "salm": (re.compile(r"Salmonella", re.I), 28901)}
 NEGATIVE_TAXA = ["sars2", "flua", "salm"]
 
@@ -98,22 +98,33 @@ def balanced(p, y):
     return float(0.5 * (np.log(p[y == 1]).mean() + np.log(1 - p[y == 0]).mean()))
 
 
-res = {"pairs": int(len(df)), "positives": int(df.y.sum()), "negatives": int((1 - df.y).sum()), "tools": {}}
-for tool, cols in (("singlet", ["s_x1", "s_x2"]), ("kraken2_pluspf", ["k_x1"])):
-    X, y = df[cols].values, df.y.values
-    b = fit(X, y)
-    p = prob(b, X)
-    lolo = np.zeros(len(df))
+RIDGES = (0.03, 0.1, 0.3, 1.0, 3.0)
+
+
+def lolo_score(X, y, ridge):
+    lolo = np.full(len(df), np.nan)
     for lib in df.lib.unique():
         tr = (df.lib != lib).values
         if df.y[tr].sum() == 0 or (1 - df.y[tr]).sum() == 0:
-            lolo[~tr] = np.nan
             continue
-        lolo[~tr] = prob(fit(X[tr], y[tr]), X[~tr])
+        lolo[~tr] = prob(fit(X[tr], y[tr], ridge), X[~tr])
     ok = ~np.isnan(lolo)
-    res["tools"][tool] = {"features": cols, "coef": [float(v) for v in b], "log_score_in_sample": balanced(p, y),
-                          "log_score_leave_one_library_out": balanced(lolo[ok], y[ok]), "n_lolo": int(ok.sum()),
-                          "p_positives": [round(float(v), 4) for v in p[y == 1]], "max_p_negatives": float(p[y == 0].max())}
+    return lolo, ok, balanced(lolo[ok], y[ok])
+
+
+res = {"pairs": int(len(df)), "positives": int(df.y.sum()), "negatives": int((1 - df.y).sum()), "tools": {}}
+for tool, cols in (("singlet", ["s_x1", "s_x2"]), ("kraken2_pluspf", ["k_x1"])):
+    X, y = df[cols].values, df.y.values
+    # the ridge is chosen by the leave-one-library-out log score, the only out-of-fit number the development data give
+    sc = {r: lolo_score(X, y, r)[2] for r in RIDGES}
+    ridge = max(sc, key=sc.get)
+    b = fit(X, y, ridge)
+    p = prob(b, X)
+    lolo, ok, lsc = lolo_score(X, y, ridge)
+    res["tools"][tool] = {"features": cols, "ridge": ridge, "ridge_lolo_scores": {str(k): float(v) for k, v in sc.items()},
+                          "coef": [float(v) for v in b], "log_score_in_sample": balanced(p, y), "log_score_leave_one_library_out": lsc,
+                          "n_lolo": int(ok.sum()), "p_positives": [round(float(v), 4) for v in p[y == 1]], "max_p_negatives": float(p[y == 0].max()),
+                          "p_negatives_top": [(df.lib[i] + ":" + df.taxon[i], round(float(p[i]), 4)) for i in np.argsort(-p * (1 - y))[:5]]}
     df[tool + "_p"] = p
     print(tool, json.dumps(res["tools"][tool]))
 df.to_csv(OUT.replace(".json", "_pairs.csv"), index=False)

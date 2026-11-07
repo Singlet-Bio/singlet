@@ -24,9 +24,10 @@ struct InfectionCalibration {
     double b0, b1, b2;
 };
 
-// FITTED COEFFICIENTS: filled in by bench/nonhost_calib/fit_score.py (see the fit set below)
-inline constexpr InfectionCalibration kInfectionCalibration{0.0, 0.0, 0.0};
-inline constexpr const char* kInfectionCalibrationFitSet = "unfitted";
+// Coefficients from bench/nonhost_calib/fit_score.py (job output bench/nonhost_calib/fit_2026-11-07.json), frozen.
+inline constexpr InfectionCalibration kInfectionCalibration{6.4668, 3.9596, 0.6231};
+inline constexpr const char* kInfectionCalibrationFitSet =
+    "2026-11-07 development libraries: positives ravindra2021_dpi1 and dpi2 (SARS-CoV-2); negatives SARS-CoV-2, influenza A and Salmonella enterica in ravindra2021_mock, pbmc1k_v3, pbmc1k_v2, pbmc5p_v1, hgmm1k_v3, neuron1k_v3, nuclei2k_v2, kang2018_ctrl and the two infected libraries; 30 pairs, ridge 0.03";
 
 inline double infection_probability(double reads, double screened_reads, double mean_hit_rate,
                                     const InfectionCalibration& c = kInfectionCalibration) {
