@@ -22,9 +22,10 @@ cat > $SCR/t.sh <<EOS
 set -uo pipefail
 export PATH=$ENV/bin:\$PATH CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++ LD_LIBRARY_PATH=$ENV/lib CMAKE_POLICY_VERSION_MINIMUM=3.5
+export CPLUS_INCLUDE_PATH=$ENV/include C_INCLUDE_PATH=$ENV/include LIBRARY_PATH=$ENV/lib
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
 cmake -S $S -B $SCR/b -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_BUILD_TESTS=ON -DSINGLET_ENGINE_GPU=OFF > $SCR/c.log 2>&1 || { tail -30 $SCR/c.log; exit 1; }
-cmake --build $SCR/b -j $NC > $SCR/b.log 2>&1 || { grep -m20 -B2 -A6 "error" $SCR/b.log | head -60; }
+cmake --build $SCR/b -j $NC -- -k > $SCR/b.log 2>&1 || { grep -m20 -B2 -A6 "error" $SCR/b.log | head -60; }
 cd $SCR/b && ctest -j 16 --timeout 900 --output-on-failure 2>&1 | tail -40
 EOS
 apptainer exec -B $W -B $SCR $IMG bash $SCR/t.sh
