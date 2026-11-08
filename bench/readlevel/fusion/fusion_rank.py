@@ -23,6 +23,11 @@ Scores (higher first; ties broken by M, remaining ties ranked together):
   breakpoint C * f * (1 + s)            (feature 1 combined)
   known      M * (1 + 4K)               (feature 2 alone)
   combined   C * f * (1 + s) * (1 + 4K)
+
+With --cascade (ORACLES_B6_B8.md, "B6 ranking without the prior", 91ad1d85), the variant "arriba" ranks the calls of the engine's port of
+Arriba's cascade (arriba_cascade.h; high, medium and low confidence). Each unordered gene pair takes the key of its best call:
+confidence, then supporting molecules (split reads after UMI deduplication), then e-value (lower first); equal keys rank together.
+No catalogue enters it. --cascade-discarded names the filter that removed each truth pair's candidates.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import collections
+import csv
 import json
 import os
 import sys
@@ -135,11 +141,45 @@ def curve(keys, truth):
     return pts, [p for p, _ in order]
 
 
+CONF = {"high": 2, "medium": 1, "low": 0}
+
+
+def cascade_keys(path):
+    """Unordered gene pair -> (confidence * 1e7 + molecules, -evalue) of its best call, plus the call rows of each pair."""
+    keys, rows = {}, {}
+    with fe.opener(path) as f:
+        for row in csv.DictReader(f, delimiter="	"):
+            p = fe.pair(fe.first_gene(row["#gene1"]), fe.first_gene(row["gene2"]))
+            reads = int(row["split_reads1"]) + int(row["split_reads2"]) + int(row["discordant_mates"])
+            k = (CONF[row["confidence"]] * 1e7 + reads, -float(row["evalue"]))
+            if p not in keys or k > keys[p]:
+                keys[p] = k
+                rows[p] = {"confidence": row["confidence"], "molecules": reads, "evalue": float(row["evalue"]), "cells": int(row["cells"]),
+                           "breakpoint1": row["breakpoint1"], "breakpoint2": row["breakpoint2"], "site1": row["site1"], "site2": row["site2"]}
+    return keys, rows
+
+
+def cascade_discarded(path, truth):
+    """Truth pair -> {filter: candidate breakpoints it removed} and the largest read support among them."""
+    out = {p: {"filters": collections.Counter(), "max_reads": 0} for p in truth}
+    with fe.opener(path) as f:
+        for row in csv.DictReader(f, delimiter="	"):
+            p = fe.pair(fe.first_gene(row["#gene1"]), fe.first_gene(row["gene2"]))
+            if p not in out:
+                continue
+            out[p]["filters"][row["filters"].split(",")[0].split("(")[0]] += 1
+            n = row["read_identifiers"]
+            out[p]["max_reads"] = max(out[p]["max_reads"], 0 if n == "." else len(n.split(",")))
+    return {p: {"filters": dict(v["filters"]), "max_reads": v["max_reads"]} for p, v in out.items()}
+
+
 def main():
     ap = argparse.ArgumentParser()
     for a in ("engine", "starfusion", "arriba", "readmap", "labels", "truth", "gtf", "mitelman", "out"):
         ap.add_argument("--" + a, required=True)
     ap.add_argument("--leave-truth-out", action="store_true", help="drop the truth pairs from the Mitelman prior")
+    ap.add_argument("--cascade", help="fusions.tsv.gz of the engine's Arriba-cascade port: adds the variant 'arriba'")
+    ap.add_argument("--cascade-discarded", help="discarded.tsv.gz of the same run: the filters that removed the truth pairs")
     x = ap.parse_args()
     truth_by_line = {}
     for part in x.truth.split(";"):
@@ -160,8 +200,20 @@ def main():
     res = {"truth": sorted(truth), "leave_truth_out": x.leave_truth_out, "mitelman_pairs": len(known_pairs), "truth_in_mitelman": {p: p in known_pairs for p in sorted(truth)},
            "n_pairs": len(feats), "pairs_in_mitelman": sum(v["K"] for v in feats.values()),
            "truth_features": {p: feats.get(p) for p in sorted(truth)}, "comparators": comps, "variants": {}}
-    for v in VARIANTS:
-        keys = {p: (score(v, f), f["M"]) for p, f in feats.items()}
+    variants = list(VARIANTS)
+    if x.cascade:
+        ckeys, crows = cascade_keys(x.cascade)
+        variants.append("arriba")
+        res["cascade"] = {"n_pairs": len(ckeys), "call_set": fe.sample_point(ckeys, truth), "truth_calls": {p: crows.get(p) for p in sorted(truth)}}
+        if x.cascade_discarded:
+            res["cascade"]["truth_discarded"] = cascade_discarded(x.cascade_discarded, truth)
+    for v in variants:
+        if v == "arriba":
+            keys = ckeys
+            info = crows
+        else:
+            keys = {p: (score(v, f), f["M"]) for p, f in feats.items()}
+            info = feats
         pts, order = curve(keys, truth)
         rat = {c: {"fp": comps[c]["false_positives"], "recall_engine": fe.recall_at_fp(pts, comps[c]["false_positives"]),
                    "recall_comparator": comps[c]["recall"]} for c in comps}
@@ -169,7 +221,7 @@ def main():
             rat[c]["pass"] = rat[c]["recall_engine"] >= rat[c]["recall_comparator"]
         res["variants"][v] = {"recall_at_fp": rat, "part1_pass": all(r["pass"] for r in rat.values()),
                               "truth_rank": {p: (order.index(p) + 1 if p in order else None) for p in sorted(truth)},
-                              "top15": [[p, round(keys[p][0], 3), feats[p]] for p in order[:15]]}
+                              "top15": [[p, round(keys[p][0], 3), info[p]] for p in order[:15]]}
     # rule part 2: cell recall per truth fusion (>= 1 supporting molecule per cell); the ranking does not enter it
     rm = fe.load_readmap(x.readmap)
     eng_cells = fe.cell_metrics(fe.engine_calls(x.engine, cells)[1], labels, truth_by_line)
@@ -187,7 +239,8 @@ def main():
         json.dump(res, f, indent=1)
     print(json.dumps({"truth_in_mitelman": res["truth_in_mitelman"], "truth_features": res["truth_features"],
                       "part1": {v: (res["variants"][v]["part1_pass"], res["variants"][v]["truth_rank"],
-                                    {c: r["recall_engine"] for c, r in res["variants"][v]["recall_at_fp"].items()}) for v in VARIANTS},
+                                    {c: r["recall_engine"] for c, r in res["variants"][v]["recall_at_fp"].items()}) for v in variants},
+                      "cascade": res.get("cascade"),
                       "part2": part2}, indent=1))
 
 
