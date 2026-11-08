@@ -98,6 +98,12 @@ class FastqEncoder {
         }
 
         ProtocolCandidate detected{};
+        if (need_detection && !autodetect_whitelists_present(cfg.whitelist_dirs)) {
+            // without the 10x whitelists the scores rest on read lengths alone (GSE230239: 10x v3 with a 101-nt R1 became split-seq)
+            close_fastq(r1_fp, r1_path);
+            close_fastq(r2_fp, r2_path);
+            throw std::runtime_error(autodetect_no_whitelist_error(cfg.whitelist_dirs));
+        }
         if (need_detection) {
             // Full protocol auto-detection from probe reads
             struct ProbeSpot {

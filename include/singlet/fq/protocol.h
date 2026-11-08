@@ -11,7 +11,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <unistd.h>
 #include <iostream>
 #include <string>
 #include <sys/stat.h>
@@ -1121,6 +1123,69 @@ ProtocolCandidate detect_protocol(
 
 // Error text if an auto-detected protocol fails the whitelist floor, "" otherwise. Not applied to a forced/manual protocol, to protocols
 // without a whitelist, or to short barcodes (bc_len < 14: chance hits).
+// Whitelist directories of a command, in the order singlet download and singlet encode both use: the --whitelist-dir values when given,
+// else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists. Only existing directories are returned.
+inline std::vector<std::string> resolve_whitelist_dirs(const std::vector<std::string>& cli_dirs) {
+    if (!cli_dirs.empty()) return cli_dirs;
+    std::vector<std::string> out;
+    auto is_dir = [](const std::string& p) { struct stat st; return !p.empty() && stat(p.c_str(), &st) == 0 && S_ISDIR(st.st_mode); };
+    if (const char* e = std::getenv("SINGLET_WHITELIST_DIR"); e && is_dir(e)) { out.push_back(e); return out; }
+    char buf[4096];
+    const ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len > 0) {
+        const std::string exe(buf, static_cast<size_t>(len));
+        const auto pos = exe.rfind('/');
+        if (pos != std::string::npos && is_dir(exe.substr(0, pos) + "/../whitelists")) out.push_back(exe.substr(0, pos) + "/../whitelists");
+    }
+    return out;
+}
+
+// Auto-detection scores the 10x chemistries by whitelist hits. Without a 10x whitelist it can only weigh read lengths, and a long barcode
+// read then looks like split-seq (GSE230239: a 101-nt 10x v3 R1). True when some directory holds the 10x 3' v3 or v2 whitelist.
+inline bool autodetect_whitelists_present(const std::vector<std::string>& dirs) {
+    for (const char* tag : {"10x-3p-v3", "10x-3p-v2"}) {
+        const CandidateSpec* s = find_protocol_spec(tag);
+        if (!s || s->whitelist_file.empty()) continue;
+        for (const auto& d : dirs) { struct stat st; if (stat((d + "/" + s->whitelist_file).c_str(), &st) == 0 && S_ISREG(st.st_mode)) return true; }
+    }
+    return false;
+}
+
+// The error auto-detection stops with when no 10x whitelist is found; names the three places looked and the directories searched
+inline std::string autodetect_no_whitelist_error(const std::vector<std::string>& dirs) {
+    std::string searched;
+    for (const auto& d : dirs) searched += (searched.empty() ? "" : ", ") + d;
+    return "protocol auto-detection needs the 10x whitelists (3M-february-2018.txt, 737K-august-2016.txt) and found none. Looked in "
+           "--whitelist-dir, then $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists (searched: " +
+           (searched.empty() ? std::string("no existing directory") : searched) +
+           "). Point one of them at the whitelist directory, or name the chemistry with --protocol.";
+}
+
+// singlet run: the 10x 3' and 5' chemistries (every version) correct barcodes against their whitelist. Without it the run stops,
+// unless --barcode-discovery asks for discovery; whitelist-free protocols (Visium and the rest) keep discovery.
+inline bool whitelist_required(const std::string& tag) {
+    return tag.rfind("10x-3p-", 0) == 0 || tag.rfind("10x-5p-", 0) == 0;
+}
+
+// The first <dir>/<file> that exists, in the order of the dirs (resolve_whitelist_dirs), else "".
+inline std::string find_whitelist_file(const std::string& file, const std::vector<std::string>& dirs) {
+    if (file.empty()) return "";
+    for (const auto& d : dirs) {
+        const std::string p = d + "/" + file;
+        struct stat st;
+        if (stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode)) return p;
+    }
+    return "";
+}
+
+inline std::string run_no_whitelist_error(const std::string& tag, const std::string& file, const std::vector<std::string>& dirs) {
+    std::string searched;
+    for (const auto& d : dirs) searched += (searched.empty() ? "" : ", ") + d;
+    return tag + " corrects barcodes against " + file + ", which was not found. Looked in --whitelist-dir, then $SINGLET_WHITELIST_DIR, "
+           "then <binary dir>/../whitelists (searched: " + (searched.empty() ? std::string("no existing directory") : searched) +
+           "). Point one of them at the whitelist directory, pass --whitelist FILE, or ask for barcode discovery with --barcode-discovery.";
+}
+
 inline std::string protocol_wl_floor_error(const ProtocolCandidate& d) {
     if (d.confidence == Confidence::FORCE || d.confidence == Confidence::MANUAL) return "";
     const CandidateSpec* spec = find_protocol_spec(d.tag);

@@ -752,30 +752,9 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
     ecfg.source_label = source_label;   // FASTQ / BAM inputs: the run they hold (empty for SRA = the accession or path)
-    // $SINGLET_WHITELIST_DIR when the user didn't pass --whitelist-dir (the engine, the stager and the .1fg2 reader read it too). Without it the
-    // protocol gate had no 10x whitelist to score against and rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
-    if (whitelist_dirs.empty()) {
-        if (const char* e = std::getenv("SINGLET_WHITELIST_DIR")) {
-            struct stat st;
-            if (*e && stat(e, &st) == 0 && S_ISDIR(st.st_mode)) whitelist_dirs.push_back(e);
-        }
-    }
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // --whitelist-dir, else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs; singlet encode uses the same order).
+    // Without a 10x whitelist the protocol gate rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
+    whitelist_dirs = singlet::fq::resolve_whitelist_dirs(whitelist_dirs);
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim  = no_trim;
@@ -922,6 +901,13 @@ static int cmd_download(int argc, char* argv[]) {
         std::cerr << "[singlet-download] Declared read count (catalog): " << declared_read_count << "\n";
     if (!catalog_protocol.empty())
         std::cerr << "[singlet-download] Catalog protocol (metadata): " << catalog_protocol << "\n";
+
+    // Auto-detection without the 10x whitelists scores chemistries on read lengths alone (B20: a 101-nt 10x v3 R1 became split-seq), so
+    // it stops here, as singlet encode does; an explicit --protocol needs no whitelist.
+    if (ecfg.protocol_tag.empty() && !singlet::fq::autodetect_whitelists_present(ecfg.whitelist_dirs)) {
+        std::cerr << "[singlet-download] ERROR: " << singlet::fq::autodetect_no_whitelist_error(ecfg.whitelist_dirs) << "\n";
+        return 1;
+    }
 
     // Encode
     singlet::fq::SraEncoder encoder;
@@ -1188,22 +1174,9 @@ static int cmd_encode(int argc, char* argv[]) {
     ecfg.block_size = block_size;
     ecfg.r2_maxlen = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // --whitelist-dir, else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists, as singlet download (protocol.h resolve_whitelist_dirs).
+    // Auto-detection stops with an error when none holds a 10x whitelist (GSE230239: a 101-nt 10x v3 R1 was encoded as split-seq).
+    whitelist_dirs = singlet::fq::resolve_whitelist_dirs(whitelist_dirs);
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim = no_trim;
@@ -1231,7 +1204,9 @@ static int cmd_encode(int argc, char* argv[]) {
     } else {
         std::cerr << "[singlet-encode] " << reads_r1 << " + " << reads_r2
                   << " → " << output_path << "\n";
-        auto stats = encoder.encode(reads_r1, reads_r2, ecfg);
+        singlet::fq::FastqEncoder::Stats stats;
+        try { stats = encoder.encode(reads_r1, reads_r2, ecfg); }
+        catch (const std::exception& e) { std::cerr << "\n[singlet-encode] ERROR: " << e.what() << "\n"; return 2; }
         std::cerr << "\n[singlet-encode] Done: " << stats.total_reads << " reads"
                   << ", " << stats.blocks_written << " blocks\n";
         std::cerr << "[singlet-encode] Protocol: " << stats.protocol_tag
@@ -2903,6 +2878,8 @@ static void usage(const char* prog) {
         << "  --ref-base DIR         Reference root dir for auto-detection (overrides\n"
         << "                         SINGLET_REF_BASE env var)\n"
         << "  --whitelist FILE       Barcode whitelist (for barcode correction)\n"
+        << "  --whitelist-dir DIR    Where the protocol's whitelist is looked up first (then $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists)\n"
+        << "  --barcode-discovery    Discover barcodes when a 10x 3'/5' whitelist is not found (otherwise the run stops)\n"
         << "  --barcodes FILE        Filtered barcode list\n\n"
         << "Feature layers (at least one required):\n"
         << "  --exons FILE           GTF for gene model\n"
@@ -3286,6 +3263,8 @@ static int singlet_main(int argc, char* argv[]) {
     std::string genome_dir, reads_r2, reads_r1;
     std::string ref_base;
     std::string barcode_file, whitelist_file;
+    std::vector<std::string> run_whitelist_dirs;   // --whitelist-dir (repeatable), resolved with resolve_whitelist_dirs
+    bool barcode_discovery = false;                // --barcode-discovery: a 10x 3'/5' run without its whitelist discovers barcodes
     std::string out_prefix = "./singlet_out";
     std::string output_format = "1pz";
     std::string genome_load = "NoSharedMemory";
@@ -3380,6 +3359,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--reads" && i+2 < argc) { reads_r2 = argv[++i]; reads_r1 = argv[++i]; }
         else if (arg == "--barcodes" && i+1 < argc) { barcode_file = argv[++i]; user_provided_barcodes = true; }
         else if (arg == "--whitelist" && i+1 < argc) whitelist_file = argv[++i];
+        else if (arg == "--whitelist-dir" && i+1 < argc) run_whitelist_dirs.push_back(argv[++i]);
+        else if (arg == "--barcode-discovery") barcode_discovery = true;
         else if (arg == "--exons" && i+1 < argc) config.exon_gtf_path = argv[++i];
         else if (arg == "--snps" && i+1 < argc) { config.snp_path = argv[++i]; snp_panel_source = "user"; }
         else if (arg == "--no-snps") no_default_snps = true;
@@ -3806,30 +3787,26 @@ static int singlet_main(int argc, char* argv[]) {
                 }
             }
             if (!wl_name.empty()) {
-                // Resolve path: <binary-dir>/../whitelists/<file>
+                // $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs, the order of singlet
+                // download and encode). The run path read only the install directory, so a binary outside an install tree fell back
+                // to barcode auto-discovery even with the variable set (Kang 10x v1: 285,088 discovered barcodes on one run, 21,727 on another).
+                const auto wl_dirs = singlet::fq::resolve_whitelist_dirs(run_whitelist_dirs);
+                const std::string candidate = singlet::fq::find_whitelist_file(wl_name, wl_dirs);
                 bool resolved = false;
-                char exe_buf[PATH_MAX];
-                ssize_t exe_len = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf)-1);
-                if (exe_len > 0) {
-                    exe_buf[exe_len] = '\0';
-                    std::string bin_dir(exe_buf);
-                    auto slp = bin_dir.rfind('/');
-                    if (slp != std::string::npos) bin_dir.resize(slp);
-                    std::string candidate = bin_dir + "/../whitelists/" + wl_name;
-                    struct stat wl_stat;
-                    if (stat(candidate.c_str(), &wl_stat) == 0) {
-                        whitelist_file = candidate;
-                        whitelist_auto_resolved = true;
-                        resolved = true;
-                        std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag
-                                  << " → " << wl_name << "\n";
-                    }
+                if (!candidate.empty()) {
+                    whitelist_file = candidate;
+                    whitelist_auto_resolved = true;
+                    resolved = true;
+                    std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag << " → " << candidate << "\n";
+                } else if (singlet::fq::whitelist_required(proto_tag) && !barcode_discovery) {
+                    std::cerr << "ERROR: " << singlet::fq::run_no_whitelist_error(proto_tag, wl_name, wl_dirs) << "\n";
+                    return 1;
                 }
                 if (!resolved) {
-                    // Whitelist file not found at install path (or readlink failed)
+                    // not in $SINGLET_WHITELIST_DIR nor <binary dir>/../whitelists
                     std::cerr << "[singlet] Whitelist " << wl_name
                               << " not found for " << proto_tag
-                              << " — using barcode auto-discovery\n";
+                              << " — using barcode auto-discovery (looked in $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists)\n";
                     whitelist_file = "None";
                     whitelist_auto_resolved = true;
                 }
