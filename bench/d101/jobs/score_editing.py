@@ -4,6 +4,11 @@ Level at a + strand site = G / (A + G); at a - strand site = C / (T + C) (REDIpo
 its UMI counts (edited_umis / (ref_umis + edited_umis)); REDItools3 levels come from read BaseCount [A, C, G, T]. Sites are scored when
 bulk has >= --min-bulk reads and the single-cell method has >= --min-sc; the shared set is where both single-cell methods qualify.
 Reports Pearson r, Spearman rho and mean absolute error for each method on its own qualifying set and on the shared set.
+
+With --sites (chrom pos strand bulk_depth sc_depth from reditools_neutral.sbatch) the primary verdict is on a neutral set chosen
+independently of both tools: bulk REDItools3 >= --min-bulk reads and raw single-cell BAM depth >= --min-sc. Each tool's coverage of that
+set (its own depth >= --min-sc) and its levels on the covered part and on the part both tools cover are reported. The Singlet-selected
+lines above stay as a secondary result.
 """
 import argparse
 import gzip
@@ -85,10 +90,18 @@ def main():
     ap.add_argument("--label", default="")
     ap.add_argument("--min-bulk", type=int, default=10)
     ap.add_argument("--min-sc", type=int, default=5)
+    ap.add_argument("--sites", default=None, help="neutral site table (chrom pos strand bulk_depth sc_depth), gzip")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     sg = read_singlet(a.singlet)
     strand = {k: v[2] for k, v in sg.items()}
+    neutral_dp = {}
+    if a.sites:
+        with gzip.open(a.sites, "rt") as f:
+            for line in f:
+                c, pos, st, bd, sd = line.rstrip("\n").split("\t")
+                strand[(c, int(pos))] = st
+                neutral_dp[(c, int(pos))] = int(sd)
     rs = read_reditools(a.sc, strand)
     bk = read_reditools(a.bulk, strand)
     good_bulk = {k: v[0] for k, v in bk.items() if v[1] >= a.min_bulk}
@@ -102,6 +115,22 @@ def main():
         "shared": {"singlet": stats([s_pairs[k] for k in shared]), "reditools3_sc": stats([r_pairs[k] for k in shared])},
         "level_definition": "edited / (ref + edited); Singlet in UMIs, REDItools3 in reads; + sites A>G, - sites T>C",
     }
+    if a.sites:
+        neutral = sorted(k for k in good_bulk if neutral_dp.get(k, 0) >= a.min_sc)
+        s_cov = [k for k in neutral if k in sg and sg[k][1] >= a.min_sc]
+        r_cov = [k for k in neutral if k in rs and rs[k][1] >= a.min_sc]
+        both = sorted(set(s_cov) & set(r_cov))
+        n = len(neutral)
+        res["primary_neutral"] = {
+            "definition": f"REDIportal panel sites with bulk REDItools3 >= {a.min_bulk} reads and raw single-cell BAM depth "
+                          f"(called cells, samtools depth) >= {a.min_sc}; chosen independently of Singlet and REDItools3",
+            "sites": n,
+            "singlet": {"coverage": len(s_cov) / n if n else None, **stats([(sg[k][0], good_bulk[k]) for k in s_cov])},
+            "reditools3_sc": {"coverage": len(r_cov) / n if n else None, **stats([(rs[k][0], good_bulk[k]) for k in r_cov])},
+            "both_covered": {"singlet": stats([(sg[k][0], good_bulk[k]) for k in both]),
+                             "reditools3_sc": stats([(rs[k][0], good_bulk[k]) for k in both])},
+        }
+        res["secondary_note"] = "singlet / reditools3_sc / shared above are on sites Singlet selected (Singlet depth >= min_sc)"
     with open(a.out, "w") as f:
         json.dump(res, f, indent=1)
 

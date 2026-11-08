@@ -31,6 +31,8 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in 1 2 3 4 5 6 7 8; do printf 'run-%s\trun\t32\t180\tdlsc-%s\t%s\n' $r $r "$(run run_sc.sbatch $r)"; done
   for r in 1 2 3 4 5 6 7 8; do printf 'star-%s\tstar\t16\t72\tdlbulk-%s\t%s\n' $r $r "$(run bulk_star.sbatch $r)"; done
   for r in 1 2 3 4 5 6 7 8; do printf 'redi-%s\tredi\t16\t48\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools.sbatch $r)"; done
+  # B4 primary: the same comparison on a site set chosen independently of both tools (bulk STAR depth, raw sc depth)
+  for r in 1 2 3 4 5 6 7 8; do printf 'redin-%s\tredi\t16\t48\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools_neutral.sbatch $r)"; done
   for r in $(seq 9 20); do printf 'dlsc-%s\tdlsc\t4\t16\t-\t%s\n' $r "$(run dl.sbatch $r KIND=sc)"; done
   for r in $(seq 9 20); do printf 'hla-%s\thla\t8\t24\tdlsc-%s\t%s\n' $r $r "$(run hla_sc.sbatch $r)"; done
   printf 'arcas-env\tenv\t4\t16\t-\t%s\n' "$(run arcas_env.sbatch 0)"
@@ -52,4 +54,5 @@ while read -r D SC G B BG; do
 done < $LIBS
 [ -n "$ARGS" ] && $ENV/bin/python3 $J/score_hla.py nih --compiled $J/compiled_nih_3p_genotypes.csv --singlet $ARGS > $J/results/hla_nih.json 2>&1
 cat $J/editing/*/score.json > $J/results/editing_scores.jsonl 2>/dev/null
+cat $J/editing_neutral/*/score.json > $J/results/editing_neutral_scores.jsonl 2>/dev/null
 ls -l $J/results; echo "end $(date -Is)"
