@@ -113,8 +113,34 @@ def matched_depth(both, sg, rs, bulk, seed=1):
         ks = [k for k in both if sg[k][1] >= lo and (hi is None or sg[k][1] < hi)]
         bins[f"{lo}-{hi - 1}" if hi else f"{lo}+"] = {"singlet": stats([(sg[k][0], bulk[k]) for k in ks]),
                                                       "reditools3_sc": stats([(rs[k][0], bulk[k]) for k in ks])}
-    return {"reditools3_downsampled_to_singlet_umis": stats(ds), "singlet": stats([(sg[k][0], bulk[k]) for k in both]),
-            "by_singlet_umi_depth": bins, "seed": seed}
+    out = {"reditools3_downsampled_to_singlet_umis": stats(ds), "singlet": stats([(sg[k][0], bulk[k]) for k in both]),
+           "by_singlet_umi_depth": bins, "seed": seed}
+    out["pearson_difference_singlet_minus_reditools3"] = paired_bootstrap([(sg[k][0], d[0], bulk[k]) for k, d in zip(both, ds)], seed)
+    return out
+
+
+def paired_bootstrap(rows, seed, n_boot=500):
+    """Singlet minus REDItools3 Pearson r with bulk, resampling sites (paired). rows = (singlet level, reditools level, bulk level)."""
+    try:
+        import numpy as np
+    except ImportError:
+        return None
+    if len(rows) < 100:
+        return None
+    a = np.array(rows, dtype=float)
+    r = np.random.default_rng(seed)
+
+    def corr(x, y):
+        x = x - x.mean(); y = y - y.mean()
+        d = math.sqrt((x * x).sum() * (y * y).sum())
+        return float((x * y).sum() / d) if d > 0 else 0.0
+    diff = corr(a[:, 0], a[:, 2]) - corr(a[:, 1], a[:, 2])
+    bs = []
+    for _ in range(n_boot):
+        ix = r.integers(0, len(a), len(a)); b = a[ix]
+        bs.append(corr(b[:, 0], b[:, 2]) - corr(b[:, 1], b[:, 2]))
+    lo, hi = np.percentile(bs, [2.5, 97.5])
+    return {"difference": diff, "ci95": [float(lo), float(hi)], "bootstrap": n_boot, "sites": len(a)}
 
 
 def main():
