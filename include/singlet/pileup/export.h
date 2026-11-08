@@ -1879,7 +1879,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         { auto _unused2 = std::move(snp_dp_csc); }
     }
 
-    // D-101: the all-site member under the storage rule (allsite_store.h): called cells; one donor, the donor's variant sites; private.
+    // D-101: the all-site member under the storage rule (allsite_store.h): called cells; one donor, its ALT-evidence sites; private.
+    std::string allsite_rule; int allsite_donors = 0;   // mirrored in provenance.json (no genotype information)
     if (engine.allsite_ready()) {
         std::filesystem::create_directories(out_prefix + "/private/allsite");
         const auto plan = allsite::plan_store(engine.allsite().ad, engine.allsite().dp, cc_result.cell_indices,
@@ -1893,6 +1894,7 @@ inline ExportStats export_results(const PileupEngine& engine,
             record_failed_write("private/allsite/sites.tsv.gz");
         if (!allsite::write_store_json(out_prefix + "/private/allsite/store.json", plan, ad.data.size(), dp.data.size()))
             record_failed_write("private/allsite/store.json");
+        allsite_rule = plan.rule; allsite_donors = plan.n_donors;
         std::cerr << "[allsite] stored " << plan.rule << ": " << plan.cells << " called cells, " << plan.sites_per_cell << " of " << plan.sites
                   << " sites with per-cell entries; AD " << ad.data.size() << " of " << engine.allsite().ad.data.size() << ", DP " << dp.data.size()
                   << " of " << engine.allsite().dp.data.size() << " entries\n";
@@ -1926,6 +1928,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         for (auto v : exon_csc.data) total_umis += static_cast<uint64_t>(v);
         // Inject the cell_caller field determined during Phase 1.7 (not in const ExportConfig)
         ProvenanceConfig prov_with_caller = export_cfg.provenance;
+        prov_with_caller.allsite_store_rule = allsite_rule;
+        prov_with_caller.allsite_n_donors = allsite_donors;
         if (!cell_caller_method.empty())
             prov_with_caller.cell_caller = cell_caller_method;
         else if (!export_cfg.provenance.cell_caller.empty())

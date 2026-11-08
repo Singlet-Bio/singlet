@@ -46,6 +46,9 @@ struct ProvenanceConfig {
     bool        cascade_enabled     = false;
     std::string cascade_mode        = "off";       ///< off, on, auto
     std::string te_classify_mode    = "off";       ///< off, on
+    // D-101: the storage rule of the private all-site member and demux's donor count (allsite_store.h); no genotype information
+    std::string allsite_store_rule;                ///< empty: no all-site member
+    int         allsite_n_donors    = 0;
 };
 
 /// Write {out_prefix}/provenance.json.
@@ -193,6 +196,8 @@ inline void write_provenance_json(
       << "  },\n";
 
     f << "  \"cell_caller\": \""       << esc(prov.cell_caller) << "\",\n";
+    if (!prov.allsite_store_rule.empty())
+        f << "  \"allsite_store\": {\"rule\": \"" << esc(prov.allsite_store_rule) << "\", \"n_donors\": " << prov.allsite_n_donors << "},\n";
 
     // output block
     f << "  \"output\": {\n"
