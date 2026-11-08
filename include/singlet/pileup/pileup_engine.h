@@ -779,6 +779,7 @@ public:
             look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
             return false;
         };
+        mol_store_.set_staging(true);   // the loop's molecules go to the store's staging table (DirectionalUmiStore::seal())
         while (next_record()) {
             if (e16_first) { e16_first = false; singlet_tail::mark("parent: first BAM record"); }
 #ifdef SINGLET_PROFILE
@@ -1347,6 +1348,7 @@ public:
             std::cerr << "[singlet-pileup] Flushed " << mm_flushed
                       << " incomplete multi-mapped entries\n";
         }
+        mol_store_.set_staging(false);   // seals: the groups as record_read() would have built them, before anything reads them
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpu_covers_ && !gpu_handoff_pass(stats)) {

@@ -94,6 +94,7 @@ add_pileup_test(test_csc_add_signed)   # the uint16 cap of the pre-USA exon / in
 add_pileup_test(test_umi_store_scale)
 add_pileup_test(test_umi_deep_roots)
 add_pileup_test(test_umi_consume)
+add_pileup_test(test_umi_staging)
 add_pileup_test(test_umi_seeds)         # SINGLET_UMI_COLLAPSE=seed: order-free seed-based directional collapse
 add_pileup_test(test_mt_numt_tie)
 add_pileup_test(test_gene_full_set)
