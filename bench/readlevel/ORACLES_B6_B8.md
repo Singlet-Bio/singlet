@@ -41,7 +41,7 @@ in `results/`.
 
 | Oracle | Engine | Best comparator | Verdict |
 |---|---|---|---|
-| B6 chimeric junctions | Original build: 0 of 3 truth fusions at matched false positives on both mixes. With fixes 1–2 (#220): 1 of 3 on 1:15, tying both comparators, 0 of 3 on 1:1.5; 6 RUNX1–RUNX1T1 cells on 1:15 | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **fail** |
+| B6 chimeric junctions | PR #220: clause 1 fails on 1:1.5 (best 2 of 3 with the combined score), clause 2 fails on both mixes (RUNX1–RUNX1T1 6 of 8 cells on 1:15). Soft-clip prototype with the combined score: clause 1 passes on both mixes, clause 2 one cell short on each | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **fail** |
 | B7 TE counts | pending (804377) | pending | pending |
 | B8 reads per UMI | 96.9% of Cell Ranger molecules matched; matched TVD 0.0153; saturation 0.7288 vs 0.7248 | Cell Ranger 3.0 is the reference | **pass** |
 
@@ -165,3 +165,46 @@ Addendum, written before the run it describes. The 20-base prototype still misse
 supporting read never reaches the chimeric pass. The second pass runs with `--chimSegmentMin 15`, so a read whose unaligned tail
 is 15 to 19 bases can form a chimera but is never sent there. One more prototype run sets the soft-clip threshold to that same
 15 bases (`chimproto-a8d58f06-sc15`). It is scored with the formula above, unchanged, and reported beside the others.
+
+### B6 ranking evidence: results
+
+Scored with `fusion_rank.py` as pre-registered (3f35b10a, plus the 15-base run declared at e7f77465), in job 804425. Each cell
+of the table gives the engine's recall read at STAR-Fusion's false-positive count and at Arriba's (9 and 44 on 1:1.5, 6 and 39 on
+1:15). The comparators' own recall at those points is 0 and 1 on 1:1.5, and 1/3 and 1/3 on 1:15. Results are in
+`results/b6_*_rank_{fix,sc20,sc15}.json`.
+
+| Build | Variant | 1:1.5 recall (SF / Arriba) | 1:15 recall (SF / Arriba) | Clause 1 |
+|---|---|---|---|---|
+| PR #220 (a704996d) | baseline, cells, agreement, splice, breakpoint | 0 / 0 | 1/3 / 1/3 | fail |
+| PR #220 | known | 2/3 / 2/3 | 1/3 / 2/3 | fail |
+| PR #220 | combined | 2/3 / 2/3 | 2/3 / 2/3 | fail |
+| soft-clip 20 | baseline, cells, agreement | 0 / 0 | 1/3 / 1/3 | fail |
+| soft-clip 20 | splice, breakpoint | 0 / 2/3 | 1/3 / 1/3 | fail |
+| soft-clip 20 | known | 2/3 / 1 | 1/3 / 2/3 | pass |
+| soft-clip 20 | combined | 1 / 1 | 1/3 / 2/3 | pass |
+| soft-clip 15 | baseline, cells, agreement | 0 / 0 | 0 / 1/3 | fail |
+| soft-clip 15 | splice, breakpoint | 0 / 2/3 | 1/3 / 1/3 | fail |
+| soft-clip 15 | known | 2/3 / 1 | 1/3 / 2/3 | pass |
+| soft-clip 15 | combined | 1 / 1 | 1/3 / 2/3 | pass |
+
+Clause 2 does not depend on the ranking, and it fails for every build. With the PR build the engine reaches 0, 1 and 1 cells for
+BCR–ABL1, NUP214–XKR3 and RUNX1–RUNX1T1 on 1:1.5 (Arriba 1, 2 and 3) and 6 RUNX1–RUNX1T1 cells on 1:15 (comparators 8). With
+either soft-clip build it ties on BCR–ABL1 and NUP214–XKR3 but stays one RUNX1–RUNX1T1 cell short on each mix, at 2 against 3 and
+7 against 8. No caller marks a cell of the other line.
+
+**Verdict: B6 fails.** The PR build fails both clauses on 1:1.5 and clause 2 on 1:15. The best prototype, the soft-clip route with
+the combined score, passes clause 1 on both mixes and misses clause 2 by one cell per mix.
+
+Breakpoint consistency alone barely reorders the list. The truth fusions have one or two cells each, while the strongest
+artifacts are themselves consistent multi-cell events at a single breakpoint, such as CCDC144NL-AS1–UBBP4 in 18 cells and
+ENSG00000227240–TNR in 11. Of the breakpoint features, the exon-boundary term carries the signal, lifting the truth pairs from
+about rank 90 to rank 25 on the soft-clip 1:1.5 run. The Mitelman prior does most of the work. Its 33,965 pairs include all three
+truth fusions by construction, and between 4 and 11 of each run's other pairs as well (AFF1–KMT2A on 1:15, for one), so it
+admits known-fusion artifacts too.
+
+The missing cell has the same cause on both mixes. The supporting read (barcode CCTTACGAGCCCGAAA on 1:15, ACTGCTCCATTGTGCA on
+1:1.5) never reaches the engine's chimeric pass, with a soft-clip threshold of 20 or 15 bases. The soft-clip route recovers
+the other missed cells (GTACTTTCATACTACG, GGTGTTAGTCCCTACT). The 15-base route costs 5.8% more second-pass reads than the PR build
+(6.78 M against 6.41 M on 1:1.5) and adds nothing over 20 bases. Two explanations remain open. The main pass may align the read
+with a shorter clip, or the engine may route it elsewhere before alignment. The comparators' copy of the 1:15 read carries
+barcode CCTTACGATCCCGAAA, one mismatch from the whitelist entry, which points at barcode handling.
