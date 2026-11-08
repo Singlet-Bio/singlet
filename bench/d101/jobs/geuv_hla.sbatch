@@ -24,8 +24,30 @@ export PATH=$ENV/bin:$PATH LD_LIBRARY_PATH=$ENV/lib
 get() { local u=${1/ftp:\/\//https://} f=$SCR/$(basename $1) i
   for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -C - -o $f $u && gzip -t $f 2>/dev/null && return 0; sleep 20; done
   return 1; }
-for u in $U1 $U2; do get $u || { echo "download failed: $u"; exit 5; }; done
-F1=$SCR/$(basename $U1); F2=$SCR/$(basename $U2); ls -l $F1 $F2
+# NCBI's S3 copy first (about 10x EBI from Clipper nodes, memory fastest-read-source): the run's .sra object in sra-pub-run-odp,
+# fetched as 8 resumable byte ranges, checked against its Content-Length, then fasterq-dump --split-files. The submitted FASTQs are
+# not in sra-pub-src. EBI's FASTQs are the fallback when the size does not match or the conversion fails.
+size() { { curl -fsSIL "$1" 2>/dev/null || true; } | awk '{gsub(/[^[:print:]]/,"")} tolower($1)=="content-length:"{n=$2} END{print n+0}'; }
+s3get() { local u=https://sra-pub-run-odp.s3.amazonaws.com/sra/$RUN/$RUN f=$SCR/$RUN.sra NE N=8 L i pids="" ok=1
+  NE=$(size $u); [ "$NE" -gt 0 ] || return 1; L=$(( (NE + N - 1) / N ))
+  part() { local lo=$(( $1 * L )) hi=$(( ($1 + 1) * L - 1 )) p=$SCR/sra.$1 t have try
+    [ $hi -ge $NE ] && hi=$(( NE - 1 )); t=$(( hi - lo + 1 ))
+    for try in $(seq 1 20); do have=$(stat -c %s $p 2>/dev/null || echo 0); [ $have -ge $t ] && return 0
+      curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 -r $(( lo + have ))-$hi $u >> $p || sleep 5; done; return 1; }
+  for i in $(seq 0 $(( N - 1 ))); do part $i & pids="$pids $!"; done
+  for p in $pids; do wait $p || ok=0; done; [ $ok = 1 ] || return 1
+  cat $(for i in $(seq 0 $(( N - 1 ))); do echo $SCR/sra.$i; done) > $f; rm -f $SCR/sra.*
+  [ "$(stat -c %s $f)" = "$NE" ] || { echo "S3 size mismatch for $RUN"; return 1; }
+  fasterq-dump --split-files -e $T -t $SCR -O $SCR $f > $SCR/fqd.log 2>&1 || { tail -3 $SCR/fqd.log; return 1; }
+  rm -f $f; [ -s $SCR/${RUN}_1.fastq ] && [ -s $SCR/${RUN}_2.fastq ]; }
+td=$(date +%s)
+if s3get; then F1=$SCR/${RUN}_1.fastq; F2=$SCR/${RUN}_2.fastq; SRCN=ncbi-s3-odp
+else
+  echo "S3 route failed for $RUN; EBI"; rm -f $SCR/${RUN}* $SCR/sra.*
+  for u in $U1 $U2; do get $u || { echo "download failed: $u"; exit 5; }; done
+  F1=$SCR/$(basename $U1); F2=$SCR/$(basename $U2); SRCN=ebi
+fi
+ls -l $F1 $F2; echo "reads from $SRCN in $(( $(date +%s) - td )) s"; echo "download $SRCN $(( $(date +%s) - td ))" >> $O/times.txt
 t0=$(date +%s.%N)
 perl $T1K/bin/run-t1k -1 $F1 -2 $F2 --preset hla -f $T1K/hlaidx/hlaidx_rna_seq.fa -t $T -o t1k --od $SCR/t1k > $O/t1k.log 2>&1
 t1=$(date +%s.%N)
