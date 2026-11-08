@@ -26,7 +26,10 @@ CB1=$( { samtools view $BAM 2>/dev/null || true; } | grep -m1 -o 'CB:Z:[^[:space
 awk -F'\t' 'NR>1{print $1}' $R/editing_cells.tsv | sed 's/-1$//' > $SCR/cells.txt
 case "$CB1" in *-1) sed -i 's/$/-1/' $SCR/cells.txt;; esac
 echo "donor $DONOR sc $SC bulk $BULK sites $(wc -l < $SCR/sites.bed) cells $(wc -l < $SCR/cells.txt) CB example $CB1"
-samtools view -@ $T -b -L $SCR/sites.bed -D CB:$SCR/cells.txt -o $SCR/sc.bam $BAM; samtools index $SCR/sc.bam
+# REDItools3 reads mismatches from the MD tag, which the engine's BAM does not carry; calmd adds it from the same genome
+FA=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/fasta/genome.fa
+samtools view -@ $T -b -L $SCR/sites.bed -D CB:$SCR/cells.txt -o $SCR/sc0.bam $BAM
+samtools calmd -@ $T -b $SCR/sc0.bam $FA > $SCR/sc.bam 2> $SCR/calmd.log; rm -f $SCR/sc0.bam; samtools index $SCR/sc.bam
 RT="env PYTHONPATH=$W/envs/reditools3 python3 -m reditools analyze"
 t0=$(date +%s)
 in_runtime $RT $SCR/sc.bam -B $SCR/sites.bed -me 0 -s 0 -t $T -o $O/reditools_sc.tsv
