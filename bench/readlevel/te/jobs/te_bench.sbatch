@@ -74,7 +74,7 @@ comparators() {
     /usr/bin/time -v -o $O/scte_time.txt scTE -i $BAM -o $O/scte -x $O/scte_idx.exclusive.idx --hdf5 True -CB CB -UMI UB -p $((C/2)) \
       --min_genes 100 --expect-cells 20000 > $O/scte.log 2>&1 ) &
   local P1=$!
-  ( ls $O/solote/*/matrix.mtx* >/dev/null 2>&1 && exit 0   # finished earlier
+  ( ls $O/solote/*/*_MATRIX/matrix.mtx* >/dev/null 2>&1 && exit 0   # finished earlier
     /usr/bin/time -v -o $O/solote_time.txt python $T/SoloTE/SoloTE_pipeline.py --threads $((C/2)) --bam $BAM --teannotation $O/solote_te.bed \
       --outputprefix $NAME --outputdir $O/solote > $O/solote.log 2>&1 ) &
   local P2=$!
