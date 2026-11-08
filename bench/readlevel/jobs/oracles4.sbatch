@@ -61,8 +61,9 @@ te() {   # NAME threads
     ln -sfn $M1 $D/10x/${S}_S1_L00${lane}_R1_001.fastq.gz; ln -sfn $M2 $D/10x/${S}_S1_L00${lane}_R2_001.fastq.gz; done
   H1=; H2=; for r in SRR38330749 SRR38330750; do fq $r $D/hto || { echo "fetch $r failed"; exit 1; }; mates $D/hto $r || exit 1; H1=${H1:+$H1,}$M1; H2=${H2:+$H2,}$M2; done
   [ -s $D/pacbio.csv.gz ] || curl -sSfL -o $D/pacbio.csv.gz https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9707nnn/GSM9707175/suppl/GSM9707175_Leukemic_cell_lines_long_read_count_table.csv.gz
+  TRL=/mnt/projects/debruinz_project/kodumags/cellranger-9.0.1/lib/python/cellranger/barcodes/translation/3M-february-2018_NXT.txt.gz
   $PY -I $B/fusion/hto_labels.py --r1 $H1 --r2 $H2 \
-    --whitelist $W/pipeline-benchmark/whitelists/3M-february-2018.txt --pacbio $D/pacbio.csv.gz --out $F/labels.tsv --summary $J/results/b6_holdout_labels.json
+    --whitelist $W/pipeline-benchmark/whitelists/3M-february-2018.txt --translate $TRL --pacbio $D/pacbio.csv.gz --out $F/labels.tsv --summary $J/results/b6_holdout_labels.json
   rc=$?; [ $rc = 0 ] || { echo "labels exit $rc: stop before any caller"; exit 1; }
   # the frozen engine configuration, once
   PBIN=$J/bin/chimproto-68d44117; BL=$W/envs/fusion/var/lib/arriba/blacklist_hg38_GRCh38_v2.5.1.tsv.gz; RC=$J/fusion/chimeric_recurrent_GRCh38.tsv

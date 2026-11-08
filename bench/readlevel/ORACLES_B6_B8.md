@@ -321,3 +321,14 @@ breakpoint features alone (`breakpoint`, `cells`, `agreement`, `splice`); the Mi
 `known` and `combined` scores. STAR-Fusion 1.15.1 and Arriba 2.5.1 run on the same reads (R2) with the commands used for
 Penter. As a secondary check outside the verdict, each caller's BCR–ABL1 cells are compared with the cells that have PacBio
 BCR::ABL1 reads. There is one engine run and one scoring, with no reruns after seeing results.
+
+### Label correction (before any scoring)
+
+The first label pass (job 804554) counted hashtag UMIs under the feature library's raw cell barcodes. On 3' v3.1 beads the
+capture oligo that primes TotalSeq-B carries a different barcode from the poly-dT oligo, so these barcodes are not the cells'
+gene-expression barcodes. Only 10 of the 4,400 PacBio barcodes, which are in gene-expression space, matched a labelled cell, and
+the hashtag split (10,416 against 309 cells) was not a cell-line mix. The registered rule asks for corrected cell barcodes, so
+`hto_labels.py --translate` now maps each feature barcode to its gene-expression barcode through Cell Ranger 9.0.1's
+translation table (`barcodes/translation/3M-february-2018_NXT.txt.gz`, column 2 to column 1) before the whitelist check. Every
+other label rule is unchanged. The labels are rebuilt while the engine and comparators are still running, and no caller output
+has been read. The uncorrected summary is kept as `results/b6_holdout_labels_untranslated.json`.

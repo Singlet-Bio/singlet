@@ -56,8 +56,20 @@ def main():
     ap = argparse.ArgumentParser()
     for a in ("r1", "r2", "whitelist", "pacbio", "out", "summary"):
         ap.add_argument("--" + a, required=True)
+    # 3' v3/v3.1 feature barcoding: the feature library's cell barcode comes from the bead's capture oligo, which carries a different barcode
+    # from its poly-dT oligo. Cell Ranger's translation table (column 1 gene expression, column 2 feature) maps it back to the cell's
+    # gene-expression barcode, the space of the cDNA reads and the PacBio table.
+    ap.add_argument("--translate", help="Cell Ranger barcodes/translation/3M-february-2018*.txt.gz")
     x = ap.parse_args()
     wl = {l.strip() for l in open(x.whitelist) if l.strip()}
+    tr = None
+    if x.translate:
+        tr = {}
+        with gzip.open(x.translate, "rt") as f:
+            for l in f:
+                a = l.split()
+                if len(a) >= 2:
+                    tr[a[1]] = a[0]
     umis = collections.defaultdict(lambda: {k: set() for k in HTO})
     n = hit = 0
     for s1, s2 in fq_pairs(x.r1.split(","), x.r2.split(",")):
@@ -67,6 +79,8 @@ def main():
             if seq in w:
                 hit += 1
                 cb = s1[:16]
+                if tr is not None:
+                    cb = tr.get(cb, "")
                 if cb in wl:
                     umis[cb][k].add(s1[16:28])
                 break
@@ -91,7 +105,7 @@ def main():
     with open(x.out.replace(".tsv", "_pacbio_bcr_abl.txt"), "w") as f:
         f.write("".join(c + "\n" for c in sorted(pos)))
     summ.update({"cells_labelled": len(lab), "per_hashtag": {k: {"line": name[k], "cells": rate[k][1], "cells_with_bcr_abl_long_read": rate[k][0]} for k in HTO},
-                 "pacbio_bcr_abl_barcodes": len(pos), "pacbio_layout": layout})
+                 "pacbio_bcr_abl_barcodes": len(pos), "pacbio_layout": layout, "translated": bool(x.translate)})
     json.dump(summ, open(x.summary, "w"), indent=1)
     print(json.dumps(summ, indent=1))
 
