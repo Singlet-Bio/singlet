@@ -4,7 +4,7 @@
 // The port of Arriba's cascade (include/singlet/pileup/arriba_cascade.h) on a synthetic GTF and STAR junction file: the annotation index lookup,
 // splice-site tests, contig patterns, k-mers, the single-end split-read record, then the whole cascade: a spliced inter-chromosomal fusion with
 // three molecules passes (its UMI duplicate is removed by 'duplicates'), a read-through to a gene 2 kb downstream is removed by 'read_through',
-// a single-molecule fusion is removed by 'min_support', a read from an unlisted barcode never enters, and a poly-A read trips 'low_entropy'.
+// a single-molecule spliced fusion is discarded (min_support, then in_vitro), a read from an unlisted barcode never enters, and a poly-A read trips 'low_entropy'.
 
 #include <unistd.h>
 
@@ -123,7 +123,8 @@ int main() {
     CHECK(ab && ab->filter == FILTER_none && ab->supporting_reads() == 3, "GA-GB passes with three molecules");
     CHECK(ab && ab->spliced1 && ab->spliced2 && ab->breakpoint1 == 1099 && ab->breakpoint2 == 60000, "both breakpoints at splice sites");
     CHECK(ab && ab->evalue < 0.3 && ab->confidence >= CONFIDENCE_MEDIUM, "GA-GB has a passing e-value and confidence");
-    CHECK(ad && ad->filter == FILTER_min_support, "a single-molecule fusion fails min_support");
+    // min_support discards it first; because it is spliced, in_vitro then re-examines it and, with one read between the most-read genes, claims it
+    CHECK(ad && ad->filter == FILTER_in_vitro, "a single-molecule spliced fusion is discarded (min_support, then in_vitro)");
     const std::string out = dir + "/calls.tsv.gz";
     CHECK(write_fusions(r, out, false), "calls written");
     std::vector<std::string> rows;
