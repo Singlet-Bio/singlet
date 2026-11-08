@@ -5072,7 +5072,7 @@ static int singlet_main(int argc, char* argv[]) {
                 const uint32_t nb = runs->block_count();
                 const uint32_t dict_n = runs->bc_dict_size();
                 freq.assign(static_cast<size_t>(dict_n) + 1, 0);
-                so.probe_per_block = std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(nb, 1u) - 1u) / std::max<uint32_t>(nb, 1u));
+                so.sampler = &probe_sampler;   // the 5' probe: the same ContentProbeSampler and the same records as the decode routes
                 so.bc_freq = freq.data();
                 if (r11_early) {
                     r11_dict->assign(dict_n, 0);
@@ -5123,11 +5123,8 @@ static int singlet_main(int argc, char* argv[]) {
                     r11_raws->resize(nb);
                     for (uint32_t b = 0; b < nb; ++b) (*r11_raws)[b].swap(heads[b].r11_raw);
                 }
-                for (auto& h : heads) {
-                    stored += h.n_stored;
-                    for (auto& s : h.probe) { if (probe.size() >= 20000) break; probe.push_back(std::move(s)); }
-                    std::vector<std::string>().swap(h.probe);
-                }
+                for (auto& h : heads) stored += h.n_stored;
+                probe = probe_sampler.sequences();   // a fused pass that stopped offered a subset of these records: offers are idempotent
                 // the 5' clip as the sanity check below decides it from the same sample: the prefill gives STAR the reads unclipped
                 int clip = r2_clip5p;
                 if (no_clip5p) clip = 0;
