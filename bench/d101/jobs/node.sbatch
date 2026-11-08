@@ -30,9 +30,6 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in 1 2 3 4 5 6 7 8; do printf 'dlbulk-%s\tdlbulk\t6\t24\t-\t%s\n' $r "$(run dl.sbatch $r KIND=bulk)"; done
   for r in 1 2 3 4 5 6 7 8; do printf 'run-%s\trun\t32\t180\tdlsc-%s\t%s\n' $r $r "$(run run_sc.sbatch $r)"; done
   for r in 1 2 3 4 5 6 7 8; do printf 'star-%s\tstar\t16\t72\tdlbulk-%s\t%s\n' $r $r "$(run bulk_star.sbatch $r)"; done
-  for r in 1 2 3 4 5 6 7 8; do printf 'redi-%s\tredi\t16\t48\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools.sbatch $r)"; done
-  # B4 primary: the same comparison on a site set chosen independently of both tools (bulk STAR depth, raw sc depth)
-  for r in 1 2 3 4 5 6 7 8; do printf 'redin-%s\tredi\t16\t48\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools_neutral.sbatch $r)"; done
   for r in $(seq 9 20); do printf 'dlsc-%s\tdlsc\t4\t16\t-\t%s\n' $r "$(run dl.sbatch $r KIND=sc)"; done
   for r in $(seq 9 20); do printf 'hla-%s\thla\t8\t24\tdlsc-%s\t%s\n' $r $r "$(run hla_sc.sbatch $r)"; done
   printf 'arcas-env\tenv\t4\t16\t-\t%s\n' "$(run arcas_env.sbatch 0)"
@@ -40,9 +37,11 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in $(seq 1 60); do printf 'geuv2-%s\tgeuv\t8\t24\tarcas-env\t%s\n' $r "$(run geuv_hla.sbatch $r)"; done
   # stock T1K on every read of each library (B5 comparator); confirmation libraries first
   for r in 13 14 15 16 18 20 8 1 4 5 2 3 6 7 9 10 11 12; do printf 't1ksc-%s\tt1ksc\t16\t48\tdlsc-%s\t%s\n' $r $r "$(run stock_t1k_sc.sbatch $r)"; done
+  # B4 primary: the same comparison on a site set chosen independently of both tools (bulk STAR depth, raw sc depth)
+  for r in 1 2 3 4 5 6 7 8; do printf 'redin-%s\tredi\t8\t32\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools_neutral.sbatch $r)"; done
 } > $TF
 $ENV/bin/python3 $J/node_run.py $TF --state $J/state --logs $J/tasklogs --cpus $(( NC * 2 )) --mem $MEMG \
-  --limit dlsc=4 --limit dlbulk=2 --limit geuv=6 --limit run=2 --limit t1ksc=2 --stop-after 12000
+  --limit dlsc=4 --limit dlbulk=2 --limit geuv=3 --limit run=2 --limit t1ksc=1 --limit redi=2 --stop-after 12000
 # Scoring (cheap; reruns on whatever has finished). HLA results are owner-only.
 chmod 700 $J/results
 $ENV/bin/python3 $J/score_hla.py geuvadis --truth $J/geuv/truth.txt --res $J/geuv/res > $J/results/hla_geuvadis.json 2>&1

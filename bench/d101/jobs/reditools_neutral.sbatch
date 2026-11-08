@@ -44,12 +44,20 @@ samtools depth -a -@ $T -b $SCR/bq3.bed $SCR/sc.bam | awk '{print $1":"$2"\t"$3}
 awk 'NR==FNR{d[$1]=$2; next}{k=$1":"$3; print $1"\t"$3"\t"$4"\t"$5"\t"(k in d?d[k]:0)}' $SCR/scdp.txt $SCR/bq.bed \
   | gzip -1 > $O/sites.tsv.gz   # chrom pos strand bulk_depth sc_depth
 echo "sites with sc depth>=$MINSC $(zcat $O/sites.tsv.gz | awk -v m=$MINSC '$5>=m' | wc -l) $(date -Is)"
-RT="env PYTHONPATH=$W/envs/reditools3 python3 -m reditools analyze"
-zcat $O/sites.tsv.gz | awk '$5>0{print $1"\t"$2-1"\t"$2}' > $SCR/scsites.bed
+# REDItools3 cannot cover millions of BED sites in 4 h (3.56M sites ran 3.7 h without output, 2026-11-08), so it runs on a seeded
+# uniform sample of NMAX sites from the union of the neutral set (sc depth >= MINSC) and the Singlet-selected set (Singlet >= MINSC
+# UMIs), both within bulk >= MINBULK. A uniform sample of each set keeps the primary set neutral and the secondary set as defined.
+NMAX=${NMAX:-200000}
+zcat $R/private/editing/editing_sites.tsv.gz | awk -F'\t' -v m=$MINSC 'NR>1 && $3+$4>=m{split($1,a,":"); print a[1]":"a[2]}' > $SCR/sg5.txt
+zcat $O/sites.tsv.gz | awk -v m=$MINSC 'NR==FNR{s[$1]=1; next} $5>=m || (($1":"$2) in s){print $1"\t"$2-1"\t"$2}' $SCR/sg5.txt - > $SCR/union.bed
+NU=$(wc -l < $SCR/union.bed)
+shuf -n $NMAX --random-source=<(yes 1) $SCR/union.bed | sort -k1,1 -k2,2n > $SCR/sample.bed
+echo "{\"union_sites\": $NU, \"sampled\": $(wc -l < $SCR/sample.bed), \"nmax\": $NMAX, \"seed\": \"yes 1\"}" | tee $O/sample_info.json
+RT="env PYTHONPATH=$W/envs/reditools3 timeout 6000 python3 -m reditools analyze"
 echo "reditools sc $(date -Is)"; t0=$(date +%s)
-in_runtime $RT $SCR/sc.bam -B $SCR/scsites.bed -me 0 -s 0 -t $T -o $O/reditools_sc.tsv
+in_runtime $RT $SCR/sc.bam -B $SCR/sample.bed -me 0 -s 0 -t $T -o $O/reditools_sc.tsv
 echo "reditools bulk $(date -Is)"; t1=$(date +%s)
-in_runtime $RT $BB -B $SCR/bq3.bed -me 0 -s 0 -t $T -o $O/reditools_bulk.tsv
+in_runtime $RT $BB -B $SCR/sample.bed -me 0 -s 0 -t $T -o $O/reditools_bulk.tsv
 t2=$(date +%s)
 echo "{\"reditools_sc_s\": $((t1-t0)), \"reditools_bulk_s\": $((t2-t1))}" > $O/times.json
 SRC=$(dirname $(readlink -f $0)); [ -f $SRC/score_editing.py ] || SRC=$W/jobs/d101
