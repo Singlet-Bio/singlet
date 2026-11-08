@@ -167,6 +167,11 @@ def main():
                              "reditools3_sc": stats([(rs[k][0], good_bulk[k]) for k in both])},
             "both_covered_matched_depth": matched_depth(both, sg, rs, good_bulk),
         }
+        sel = {k for k in good_bulk if k in sg and sg[k][1] >= a.min_sc}
+        res["sample_membership"] = {
+            "sampled_sites_with_bulk_output": len(bk), "bulk_qualifying": len(good_bulk),
+            "neutral": n, "singlet_selected": len(sel), "in_both_sets": len(sel & set(neutral)),
+            "note": "the verdict uses the neutral set only; the Singlet-selected set is the secondary line; the union is never scored"}
         res["secondary_note"] = "singlet / reditools3_sc / shared above are on sites Singlet selected (Singlet depth >= min_sc)"
     with open(a.out, "w") as f:
         json.dump(res, f, indent=1)
