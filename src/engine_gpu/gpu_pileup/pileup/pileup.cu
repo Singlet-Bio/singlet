@@ -81,7 +81,7 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096 are implemented; qw: mask words per read (P3-ENG-14)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
@@ -265,9 +265,10 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
             auto notex = [&](uint32_t g) { note_set(g, xfg, xsec, xamb, xnuc); };
             uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
             uint32_t spm = 0;                                                                                        // genomes of the alignments (joint reference)
+            bool mta = false;                                                                                        // some alignment on chrM (kChrMPrecedence)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
-                { const int32_t t = A[sg.aln_off + k].tid; if (t >= 0 && (uint32_t)t < ntsp) spm |= tsp[t]; }
+                { const int32_t t = A[sg.aln_off + k].tid; if (t >= 0 && (uint32_t)t < ntsp) spm |= tsp[t]; if (P.chrm_tid >= 0 && t == P.chrm_tid) mta = true; }
                 const bool multi = (x.multi & 1u) != 0, exo = (x.multi & 2u) != 0;
                 if (A[sg.aln_off + k].flags & 2) {
                     if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here
@@ -313,6 +314,11 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
             if (am && mg != MAXU && (X ? (xnuc && mexo) : nuc)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
             else if (X) { if (!xamb && xfg != MAXU && xg != MAXU) { r.gene = xg; r.exon = xex; r.intron = xin; r.flags = xfl ? xfl : 5; } }
             else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
+            // kChrMPrecedence (mm_verdict): with an alignment on chrM, keep a chrM gene, else count the chrM gene it touches, else nothing
+            if ((P.rules & 8192) && mta && !(r.flags & 256u) && !(r.gene != MAXU && is_mt(r.gene))) {
+                if (mg != MAXU) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }
+                else r = GRes{MAXU, MAXU, MAXU, 0};
+            }
         }
     }
     out[s] = r;

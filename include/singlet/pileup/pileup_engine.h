@@ -191,6 +191,14 @@ constexpr uint32_t kGeneFullSet     = 512;
 // when all alignments lie in one genome; across genomes the read is judged on all of them (hgmm1k_v3: a human rRNA read whose only exonic
 // alignment is the mouse 18S pseudogene Rn18s-rs5 stays ambiguous). A single-genome reference is unaffected.
 constexpr uint32_t kExonPrecedence  = 4096;
+// A multimapper with any alignment on the mitochondrial contig (chrM or MT) is never counted for a nuclear gene. Mitochondrial
+// transcripts outnumber any nuclear copy of their sequence (NUMT) by orders of magnitude, so such a read comes from chrM. It is counted
+// for the chrM gene it touches (under kMtPrefer, which records that alignment) and otherwise dropped, even when its chrM alignment lies
+// outside every annotated chrM gene. Cell Ranger's 2024-A references leave out the mitochondrial rRNA and tRNA genes, so 12S and 16S
+// rRNA reads would otherwise land on any annotated NUMT: under kExonPrecedence PBMC-E gave the 115 bp lncRNA ENSG00000289474 (chr2,
+// 115 of 116 bases identical to chrM:627-742) 146,507 molecules with no long-read support. Joint references (<genome>___chrM) have no
+// plain chrM contig, and the rule leaves them unchanged.
+constexpr uint32_t kChrMPrecedence  = 8192;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
@@ -698,6 +706,7 @@ public:
             uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
             uint8_t xa_flags = 0, xa_diag = 0;
             uint8_t sp_mask = 0;                 // species of the alignments' contigs (species_bit; joint references only)
+            bool mt_aln = false;                 // some alignment lies on the chrM contig (intron_rule::kChrMPrecedence)
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
         mm_buffer.reserve(500000);
@@ -1460,6 +1469,7 @@ public:
             uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
             uint8_t xa_flags = 0, xa_diag = 0;
             uint8_t sp_mask = 0;                 // species of the alignments' contigs (species_bit; joint references only)
+            bool mt_aln = false;                 // some alignment lies on the chrM contig (intron_rule::kChrMPrecedence)
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
 
@@ -4524,6 +4534,7 @@ private:
     void note_primary_exonic(E& e, const std::vector<uint32_t>& exon_overlaps, uint32_t exon_gene, bool exon_multigene, bool gf_multi,
                              const ReadFeatures& rf, int32_t tid) const {
         e.sp_mask |= species_bit(tid);       // every alignment, exonic or not
+        if (is_chrm(tid)) e.mt_aln = true;
         if (exon_overlaps.empty()) return;   // intron-only or intergenic: not an exonic alignment
         e.ex_seen = true;
         if (exon_multigene) {
@@ -4551,6 +4562,7 @@ private:
     template <class E>
     void note_secondary_exonic(E& e, const GeneHit& hit, int32_t tid) const {
         e.sp_mask |= species_bit(tid);
+        if (is_chrm(tid)) e.mt_aln = true;
         if (!hit.exonic) return;
         e.ex_seen = true;
         if (hit.multi_gene) { e.ex_ambiguous = true; return; }
@@ -4563,6 +4575,7 @@ private:
     template <class E>
     void merge_exonic(E& m, const E& w) const {
         m.sp_mask |= w.sp_mask;
+        if (w.mt_aln) m.mt_aln = true;
         if (!w.ex_seen) return;
         m.ex_seen = true;
         if (w.ex_ambiguous) m.ex_ambiguous = true;
@@ -4584,8 +4597,23 @@ private:
         ReadFeatures rf;
         uint32_t gene_a = UINT32_MAX, gene_b = UINT32_MAX;
     };
+    // intron_rule::kChrMPrecedence over the verdict of the other rules: a multimapper with an alignment on chrM keeps a chrM gene's count,
+    // goes to the chrM gene it touches (kMtPrefer's alignment), or is dropped; it is never counted for, or rescued (G-EM) into, a nuclear gene
     template <class E>
     MmVerdict mm_verdict(const E& e) const {
+        MmVerdict v = mm_verdict_rules(e);
+        if (!(config_.intron_rules & intron_rule::kChrMPrecedence) || !e.mt_aln || v.kind == MmVerdict::kMt) return v;
+        if (v.kind == MmVerdict::kCount && is_mt_gene(v.rf.gene)) return v;
+        if (e.mt_gene != UINT32_MAX) {
+            v.kind = MmVerdict::kMt;
+            v.rf = mt_rescue_features(e);
+            v.gene_a = v.gene_b = UINT32_MAX;
+            return v;
+        }
+        return MmVerdict{};
+    }
+    template <class E>
+    MmVerdict mm_verdict_rules(const E& e) const {
         MmVerdict v;
         // kExonPrecedence decides only within one species: on a joint reference (barnyard) a read whose alignments span species stays
         // judged on all of them, as at 2957 (a human rRNA read whose one exonic alignment is a mouse 18S pseudogene is not mouse)
