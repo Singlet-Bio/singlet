@@ -180,6 +180,17 @@ void ReadAlign::outputAlignments() {
         PROF_ADD(PROF_outSAM, tOutSAM);
     };    
 
+    if (unmapType<0 && outFilterBySJoutPass && trBest!=nullptr) {//singlet prototype: --chimeric soft-clip route (SINGLET_CHIM_SOFTCLIP_MIN=N, off by default)
+        //a mapped read whose best alignment leaves >= N cDNA bases unaligned is also written to Unmapped.out, so the chimeric pass sees it.
+        //CPU path only (GPU hand-off reads return above) and the copy also reaches the non-host screen: a prototype, not for production.
+        static const int clipMin = getenv("SINGLET_CHIM_SOFTCLIP_MIN") ? atoi(getenv("SINGLET_CHIM_SOFTCLIP_MIN")) : 0;
+        if (clipMin>0) {
+            uint64 al=0;
+            for (uint64 ie=0; ie<trBest->nExons; ie++) al+=trBest->exons[ie][EX_L];
+            if (Lread>al && Lread-al>=(uint64)clipMin) ReadAlign::outReadsUnmapped();
+        };
+    };
+
     if (unmapType>=0) {//unmapped reads
         statsRA.unmappedAll++; //include unmapType==4, i.e. one-mate alignments of PE reads - which may have been set in writeSAM above
         PROF_T0(tOutUnmapped);
