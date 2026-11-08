@@ -2961,6 +2961,7 @@ static void usage(const char* prog) {
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
         << "  --te-gtf FILE          TE annotation (TEtranscripts rmsk GTF): te_counts, te_locus_counts, te_loci.tsv.gz\n"
         << "  --no-te                In --pipeline mode, skip the default TE annotation (<ref-base>/pileup_indices/te)\n"
+        << "  --te-rule RULE         TE counting rule: singlet (default), scte (scTE exclusive-mode port), solote (SoloTE method)\n"
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
@@ -3377,6 +3378,10 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--no-snps") no_default_snps = true;
         else if (arg == "--no-te") no_default_te = true;
         else if (arg == "--te-gtf" && i+1 < argc) { config.te_gtf_path = argv[++i]; te_source = "user"; }
+        else if (arg == "--te-rule" && i+1 < argc) {
+            const std::string r = argv[++i];
+            if (!singlet::te_rule_parse(r, config.te_rule)) { std::cerr << "ERROR: --te-rule must be singlet, scte or solote (got '" << r << "')\n"; return 1; }
+        }
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -4201,6 +4206,7 @@ static int singlet_main(int argc, char* argv[]) {
             }
         }
     }
+    if (const char* e = std::getenv("SINGLET_TE_ALL_RULES"); e && *e == '1') config.te_all_rules = true;   // benchmarks: every TE rule
     if (pipeline_mode && !config.umi_dedup_directional && !no_dir_dedup_explicit) config.umi_dedup_directional = true;
 
     // ── Track B cascade validation (T-L2-7) ─────────────────────────────────
@@ -10143,7 +10149,8 @@ static int singlet_main(int argc, char* argv[]) {
         }
         rp.extra.emplace_back("snp_panel", "{\"source\": \"" + snp_panel_source + "\", \"path\": " +
                                                singlet::json_str(config.snp_path) + "}");
-        rp.extra.emplace_back("te_annotation", "{\"source\": \"" + te_source + "\", \"path\": " + singlet::json_str(config.te_gtf_path) + "}");
+        rp.extra.emplace_back("te_annotation", "{\"source\": \"" + te_source + "\", \"path\": " + singlet::json_str(config.te_gtf_path) +
+                                                   ", \"rule\": \"" + singlet::te_rule_name(config.te_rule) + "\"}");
         rp.extra.emplace_back("bam_sort_mode", singlet::json_str(bam_sort_mode));
         rp.extra.emplace_back("outputs", singlet::outputs_inventory_json(out_prefix));
         extra_json += "  \"cell_caller\": \"" + export_stats.cell_caller + "\",\n";

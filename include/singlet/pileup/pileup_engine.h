@@ -144,6 +144,8 @@ struct PileupConfig {
     bool count_mt = false;          // Inline chrM allele pileup for heteroplasmy
     bool count_polya = false;       // Record poly(A)-tailed read 3' ends (polya_sites.h); 3' protocols only
     std::string te_gtf_path;        // TE annotation (TEtranscripts-style rmsk GTF); empty = no TE counts (te_counts.h)
+    TeRule te_rule = TeRule::kSinglet;  // TE counting rule of te_counts (--te-rule; te_counts.h)
+    bool te_all_rules = false;      // SINGLET_TE_ALL_RULES=1: also write te_counts.<rule>.1pz for the other rules (benchmarks)
     bool aim_ancestry = true;          // N13: inject built-in AIM panel for ancestry classification
     std::string guide_ref_path;         // N18: CRISPR guide CSV (name,sequence); empty = disabled
     bool count_vdj = true;              // N17: V(D)J gene usage counting; requires exon_gtf_path
@@ -539,7 +541,12 @@ public:
         // TE loci (te_counts.h): loaded beside the gene model; exonic reads stay with the genes, so a gene model is required
         std::thread te_thread;
         if (need_exons && !config_.te_gtf_path.empty())
-            te_thread = std::thread([&]() { has_te_ = te_model_.load_gtf(config_.te_gtf_path) && !te_model_.empty(); });
+            te_thread = std::thread([&]() {
+                has_te_ = te_model_.load_gtf(config_.te_gtf_path) && !te_model_.empty();
+                // scte rule: scTE's exclusive index (TE loci on protein-coding / lincRNA exons removed), from the same gene GTF
+                if (has_te_ && (config_.te_rule == TeRule::kScte || config_.te_all_rules))
+                    te_scte_masked_ = te_model_.mask_scte_exclusive(config_.exon_gtf_path);
+            });
 
         if (snp_thread.joinable()) snp_thread.join();
         if (gtf_thread.joinable()) gtf_thread.join();
@@ -547,7 +554,9 @@ public:
         if (!config_.te_gtf_path.empty())
             std::cerr << "[te] " << (has_te_ ? "loaded " + std::to_string(te_model_.n_loci()) + " loci in " +
                                                    std::to_string(te_model_.n_families()) + " subfamilies from "
-                                             : std::string("NOT loaded (no gene model or unreadable): ")) << config_.te_gtf_path << "\n";
+                                             : std::string("NOT loaded (no gene model or unreadable): ")) << config_.te_gtf_path
+                      << " rule=" << te_rule_name(config_.te_rule) << (config_.te_all_rules ? " (all rules)" : "")
+                      << (te_scte_masked_ >= 0 ? " scte_masked_loci=" + std::to_string(te_scte_masked_) : std::string()) << "\n";
 
         if (!snp_ok || !gtf_ok) return false;
         if (need_exons) has_gene_model_ = true;
@@ -1289,11 +1298,9 @@ public:
                     }
                 }
                 // TE molecules (te_counts.h)
-                if (has_te_ && !aligned_blocks_.empty()) {
-                    TeRecord tr;
-                    if (te_record(tid, aligned_blocks_, nh, static_cast<uint32_t>(bc_idx), umi_str, umi_len, te_scratch_, te_exon_scratch_, tr))
-                        te_recs_.push_back(tr);
-                }
+                if (has_te_ && !aligned_blocks_.empty())
+                    te_records(tid, aligned_blocks_, nh, static_cast<uint32_t>(bc_idx), umi_str, umi_len, (b->core.flag & BAM_FREVERSE) != 0,
+                               te_scratch_, te_scratch2_, te_exon_scratch_, te_recs_);
 
                 }   // !gpu_covers_
                 PROF_END(prof, exon_intron);
@@ -1577,7 +1584,7 @@ public:
         std::vector<CellAlignQC> cell_qc;  // per-cell alignment QC (multimappers, nM mismatches)
         std::vector<PolyARecord> polya;    // poly(A)-tailed read ends (count_polya)
         std::vector<TeRecord> te;          // TE records (te_counts.h)
-        std::vector<uint32_t> te_scratch, te_exon_scratch;
+        std::vector<uint32_t> te_scratch, te_scratch2, te_exon_scratch;
         // G-RRNA: per-worker rRNA detector
         singlet::RrnaDetector rrna_detector;
         // N22: per-worker WL ambient gene profile (populated when whitelist_path is set)
@@ -2325,7 +2332,7 @@ public:
             PileupStats st; std::vector<PolyARecord> polya; std::vector<uint32_t> ov;
             struct VdjEv { uint32_t bc, vg, gene; int ulen; char umi[24]; };
             std::vector<VdjEv> vdj;
-            std::vector<TeRecord> te; std::vector<std::pair<int32_t, int32_t>> blocks; std::vector<uint32_t> te_scratch, te_exon_scratch;
+            std::vector<TeRecord> te; std::vector<std::pair<int32_t, int32_t>> blocks; std::vector<uint32_t> te_scratch, te_scratch2, te_exon_scratch;
         };
         // the chunks run on the job's cores (the streaming pileup is one thread; STAR has exited) and are merged in read order, so every
         // counter and the order of the poly(A) and V(D)J records are those of the serial loop (SINGLET_HANDOFF_PASS_SERIAL=1: one chunk)
@@ -2458,9 +2465,9 @@ public:
                     if (op == 0 || op == 7 || op == 8) { L.blocks.push_back({rpos, rpos + len}); rpos += len; }
                     else if (op == 2 || op == 3) rpos += len;
                 }
-                TeRecord tr;
-                if (!L.blocks.empty() && te_record(a.tid, L.blocks, nh, static_cast<uint32_t>(rr.bc), umi_str, umi_len, L.te_scratch, L.te_exon_scratch, tr))
-                    L.te.push_back(tr);
+                if (!L.blocks.empty())
+                    te_records(a.tid, L.blocks, nh, static_cast<uint32_t>(rr.bc), umi_str, umi_len, (a.flags & 1) != 0, L.te_scratch, L.te_scratch2,
+                               L.te_exon_scratch, L.te);
             }
             }
         };
@@ -3198,17 +3205,42 @@ public:
     const std::vector<TeRecord>& te_records() const { return te_recs_; }
     const TeModel& te_model() const { return te_model_; }
     bool has_te() const { return has_te_; }
-    /// One alignment's TE record, if it has one: the shared rule of the serial, worker and GPU host paths.
-    bool te_record(int32_t tid, const std::vector<std::pair<int32_t, int32_t>>& blocks, int nh, uint32_t bc, const char* umi_str,
-                   int umi_len, std::vector<uint32_t>& scratch, std::vector<uint32_t>& exon_scratch, TeRecord& out) const {
-        uint32_t fam = 0, locus = UINT32_MAX;
+    TeRule te_rule() const { return config_.te_rule; }
+    bool te_all_rules() const { return config_.te_all_rules; }
+    /// One alignment's TE records, appended to `out`: the shared rule of the serial, worker and GPU host paths. The configured rule,
+    /// and with te_all_rules the other two as well (records carry their rule; export builds one matrix per rule).
+    void te_records(int32_t tid, const std::vector<std::pair<int32_t, int32_t>>& blocks, int nh, uint32_t bc, const char* umi_str,
+                    int umi_len, bool read_reverse, std::vector<uint32_t>& scratch, std::vector<uint32_t>& scratch2,
+                    std::vector<uint32_t>& exon_scratch, std::vector<TeRecord>& out) const {
         auto exonic = [&](int32_t s, int32_t e) {
             gene_model_.query_exons(tid, s, e, exon_scratch);
             return !exon_scratch.empty();
         };
-        if (!te_model_.assign(tid, blocks, nh == 1, exonic, fam, locus, scratch)) return false;
-        out = TeRecord{fam, bc, polya_umi_hash(umi_str, umi_len), locus};
-        return true;
+        // solote rule: genes with an exon containing [s, e) on the read's sense strand (STARsolo Gene's test, as the GN tag reflects)
+        auto genes = [&](int32_t s, int32_t e, std::vector<uint32_t>& v) {
+            v.clear();
+            gene_model_.query_exons(tid, s, e, exon_scratch);
+            for (uint32_t x : exon_scratch) {
+                if (gene_model_.exon_start(x) > s || gene_model_.exon_end(x) < e) continue;
+                const uint32_t g = gene_model_.exon_to_gene(x);
+                if (g == UINT32_MAX) continue;
+                if (config_.stranded) {
+                    const char gs = gene_model_.gene_strand(g);
+                    if (gs != '.') {
+                        bool expect_reverse = (gs == '-');
+                        if (config_.reverse_strand) expect_reverse = !expect_reverse;
+                        if (read_reverse != expect_reverse) continue;
+                    }
+                }
+                v.push_back(g);
+            }
+        };
+        const uint64_t umi = polya_umi_hash(umi_str, umi_len);
+        for (int r = 0; r < kTeRules; ++r) {
+            const TeRule rule = static_cast<TeRule>(r);
+            if (rule != config_.te_rule && !config_.te_all_rules) continue;
+            te_model_.records(rule, tid, blocks, nh == 1, bc, umi, exonic, genes, scratch, scratch2, out);
+        }
     }
     const std::vector<std::string>& tid_to_chrom() const { return tid_to_chrom_; }
     /// N13: first SNP index belonging to the built-in AIM panel (UINT32_MAX if not injected)
@@ -3537,7 +3569,8 @@ private:
     TeModel te_model_;
     bool has_te_ = false;
     mutable std::vector<TeRecord> te_recs_;
-    std::vector<uint32_t> te_scratch_, te_exon_scratch_;   // serial path scratch
+    long te_scte_masked_ = -1;                              // loci removed by scTE's exclusive index (scte rule), -1 = not built
+    std::vector<uint32_t> te_scratch_, te_scratch2_, te_exon_scratch_;   // serial path scratch
 
     // G-RRNA: rRNA contamination detector (stateless, shared across serial path)
     singlet::RrnaDetector rrna_detector_;
@@ -5834,11 +5867,9 @@ private:
                 }
             }
             // TE molecules (te_counts.h)
-            if (has_te_ && !wc.aligned_blocks.empty()) {
-                TeRecord tr;
-                if (te_record(tid, wc.aligned_blocks, nh, static_cast<uint32_t>(bc_idx), umi_str, umi_len, wc.te_scratch, wc.te_exon_scratch, tr))
-                    wc.te.push_back(tr);
-            }
+            if (has_te_ && !wc.aligned_blocks.empty())
+                te_records(tid, wc.aligned_blocks, nh, static_cast<uint32_t>(bc_idx), umi_str, umi_len, (b->core.flag & BAM_FREVERSE) != 0,
+                           wc.te_scratch, wc.te_scratch2, wc.te_exon_scratch, wc.te);
         }
 
         // ── Variant pileup ──

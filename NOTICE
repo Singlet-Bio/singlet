@@ -7,3 +7,39 @@ python/singlet/data/whitelists/visium-v1.txt, visium-v1_coordinates.tsv, 737K-ar
 737K-cratac-v1.txt.gz were rebuilt from 10x Genomics public datasets, licensed under Creative Commons Attribution 4.0
 International (CC BY 4.0). Source datasets, URLs, checksums and the rebuilding method:
 python/singlet/data/whitelists/ATTRIBUTION.md. 10x Genomics does not endorse this software.
+
+Third-party code
+----------------
+include/singlet/pileup/te_counts.h ports parts of scTE (https://github.com/JiekaiLab/scTE, commit 566f6ab3): the exclusive TE index
+(bin/scTE_build genomeIndex, readGtf, cleanexon; scTE/annotation.py annoGtf), the assignment of a read to every overlapping
+feature (scTE/base.py align) and the first-read-per-barcode-and-UMI molecule rule (scTE/base.py Bam2bed). scTE is described in
+He J, Babarinde IA, Sun L, et al. Identifying transposable element expression dynamics and heterogeneity during development at
+the single-cell level with a processing pipeline scTE. Nature Communications 12, 1456 (2021). scTE is licensed as follows:
+
+MIT License
+
+Copyright (c) 2019 Jiangping He, Andrew P. Hutchins & Jiekai Chen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Method citations
+----------------
+The solote TE counting rule in include/singlet/pileup/te_counts.h is reimplemented from the published method of SoloTE, with no
+SoloTE code: Rodriguez-Quiroz R, Valdebenito-Maturana B. SoloTE for improved analysis of transposable elements in single-cell
+RNA-Seq data using locus-specific expression. Communications Biology 5, 1063 (2022).

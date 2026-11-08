@@ -1681,13 +1681,26 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (engine.has_te())
             write_threads.emplace_back([&]() {
                 auto t0 = std::chrono::high_resolution_clock::now();
-                auto te = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()), engine.tid_to_chrom());
+                auto te = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()), engine.tid_to_chrom(),
+                                          engine.te_rule());
                 write_matrix("te_counts", te.fam, te.fam.names);
                 write_matrix("te_locus_counts", te.locus, te.locus.names);
                 write_gz_text(out_prefix + "/te_loci.tsv.gz", te.loci_tsv);
-                std::cerr << "[te] " << te.n_records << " TE reads (" << te.n_unique_records << " unique) -> " << te.fam_molecules
-                          << " subfamily molecules, " << te.locus_molecules << " locus molecules in " << te.locus.nrows << " loci, time="
+                std::cerr << "[te] rule=" << te_rule_name(engine.te_rule()) << ": " << te.n_records << " TE records (" << te.n_unique_records
+                          << " unique) -> " << te.fam_molecules << " subfamily molecules, " << te.locus_molecules << " locus molecules in "
+                          << te.locus.nrows << " loci, time="
                           << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count() << "s\n";
+                // SINGLET_TE_ALL_RULES=1 (benchmarks): the other rules' subfamily matrices beside it, te_counts.<rule>
+                if (engine.te_all_rules())
+                    for (int r = 0; r < kTeRules; ++r) {
+                        const TeRule rule = static_cast<TeRule>(r);
+                        if (rule == engine.te_rule()) continue;
+                        auto tr = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()),
+                                                  engine.tid_to_chrom(), rule);
+                        write_matrix(std::string("te_counts.") + te_rule_name(rule), tr.fam, tr.fam.names);
+                        std::cerr << "[te] rule=" << te_rule_name(rule) << ": " << tr.n_records << " TE records -> " << tr.fam_molecules
+                                  << " subfamily molecules (te_counts." << te_rule_name(rule) << ")\n";
+                    }
             });
         // sj_features.tsv.gz: STAR motif / annotation / read support and STARsolo-comparable flag per junction
         // (sj_features.h). All junctions stay in sj_counts; filtering is the reader's choice.
