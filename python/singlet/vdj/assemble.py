@@ -119,6 +119,13 @@ class Params:
     # True: the strongest heavy and light contigs of a barcode with no kept IG chain, both removed by the cross filter, come
     # back together (a B cell of an expanded clone whose plasma cells hold its junctions at > 10x the UMIs)
     ig_pair_rescue: bool = False
+    # > 0: a barcode is a B cell only with >= this many UMIs over its IG contigs, productive or not (the documented V(D)J
+    # cell rule of Cell Ranger: a T cell or other droplet holds a few ambient IG molecules, a B cell tens to thousands)
+    ig_cell_min_umis: int = 0
+    # True: a read with a Phe/Trp118 anchor and no V call takes Cys104 from its Y-Y-C motif in frame (TRUST4's V motif)
+    asm_cys_motif: bool = False
+    # > 0: a barcode whose only kept productive IG contig has fewer junction UMIs than this is not a B cell
+    ig_lone_min_junction_umis: int = 0
     threads: int = 8
 
 
@@ -328,6 +335,13 @@ def run_library(
             f2 = K.fw_from_c(codes, off, o[:, 8].astype(np.int64), todo)
             ok2 = (f2 >= 0) & (f2 + 3 - K_ASM >= 0)
             fw[todo[ok2]] = f2[ok2]
+        if params.asm_cys_motif:
+            # a V the reference index misses (somatic hypermutation): Cys104 from the read's Y-Y-C motif (TRUST4)
+            todo = np.flatnonzero((cys < 0) & (fw >= 0))
+            if len(todo):
+                c2 = K.cys_from_motif(codes, off, fw.astype(np.int64), todo, 15, 120, 30)
+                ok2 = (c2 >= 0) & (c2 + K_ASM <= L[todo])
+                cys[todo[ok2]] = c2[ok2]
         # informative: reaches the junction (V 3' end in the read, or a J hit)
         v_end = np.where(
             o[:, 0] >= 0,
@@ -894,6 +908,17 @@ def filter_contigs(df, params: Params):
         lone = ig & ((df["chain"] == "IGH") & ~light | df["chain"].isin(("IGK", "IGL")) & ~heavy)
         drop = df["kept"] & lone & (n_bc >= params.ig_lone_spread)
         df["ig_lone"] = drop
+        df.loc[drop, "kept"] = False
+    if params.ig_cell_min_umis > 0 or params.ig_lone_min_junction_umis > 0:
+        ig = df["chain"].isin(("IGH", "IGK", "IGL"))
+        drop = np.zeros(len(df), bool)
+        if params.ig_cell_min_umis > 0:
+            tot = df["umis"].where(ig, 0).groupby(df["bcix"]).transform("sum")
+            drop |= (ig & (tot < params.ig_cell_min_umis)).to_numpy()
+        if params.ig_lone_min_junction_umis > 0:
+            kp = df["kept"] & df["productive"].astype(bool) & ig
+            n_kp = kp.groupby(df["bcix"]).transform("sum")
+            drop |= (kp & (n_kp == 1) & (df["junction_umis"] < params.ig_lone_min_junction_umis)).to_numpy()
         df.loc[drop, "kept"] = False
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)

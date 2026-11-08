@@ -588,3 +588,29 @@ def fw_from_c(codes, off, cdiag, todo):
                     best = d
                     out[t] = q
     return out
+
+
+@njit(cache=True, parallel=True)
+def cys_from_motif(codes, off, fw, todo, dmin, dmax, upstream):
+    """Cys104 found in the read itself for reads with a Phe/Trp118 anchor and no V call (a somatically mutated V that the
+    k-mer index misses), after TRUST4's V motif (Y-Y-C; the Tyr may sit one codon further up, as in its reference
+    annotation): a TGY codon in frame with Phe/Trp118, dmin..dmax nt upstream of it, with TAY 3 or 6 nt before it; the most
+    upstream such codon, and only where the read holds ``upstream`` nt before it (so a Cys further up would be seen).
+    Returns the Cys codon start in the read or -1, per entry of ``todo``. Ported from TRUST4 (MIT), SeqSet.hpp HasMotif."""
+    out = np.full(len(todo), -1, np.int32)
+    for t in prange(len(todo)):
+        r = todo[t]
+        a = off[r]
+        f = fw[r]
+        for d in range(dmax - (dmax - dmin) % 3, dmin - 1, -3):
+            q = f - d
+            if q < upstream:
+                continue
+            if not (codes[a + q] == 3 and codes[a + q + 1] == 2 and (codes[a + q + 2] == 3 or codes[a + q + 2] == 1)):
+                continue
+            y3 = codes[a + q - 3] == 3 and codes[a + q - 2] == 0 and (codes[a + q - 1] == 3 or codes[a + q - 1] == 1)
+            y6 = codes[a + q - 6] == 3 and codes[a + q - 5] == 0 and (codes[a + q - 4] == 3 or codes[a + q - 4] == 1)
+            if y3 or y6:
+                out[t] = q
+                break
+    return out
