@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common as C  # noqa: E402
 import drain_worker as D  # noqa: E402
 import stagequeue as Q  # noqa: E402
+import whitelist_check as W  # noqa: E402
 
 HOL_WAIT_S = 1200        # an older sample that does not fit yet may be overtaken by newer ones for this long
 MEM_FRAC = 0.85
@@ -260,6 +261,12 @@ class Run(threading.Thread):
             sc = C.species_check(os.path.join(scr, "singlet.log"))
             if sc and sc["verdict"] == "DISAGREE":
                 log("[multi] WARNING %s: %s" % (gsm, sc["line"]))
+            wl = W.worker_check(os.path.join(scr, "singlet.log"), os.path.join(scr, "out"))   # second whitelist guard: never publish a 10x sample without its list
+            if wl is not None and not wl["ok"]:   # a broken install, not the sample: claim back with the attempt refunded, no more admissions
+                D.halt(a, root, self, W.detail(wl), "multi")
+                keep_claim = True
+                self.result = "halt: whitelist check: %s" % wl["why"]
+                return
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
@@ -270,7 +277,7 @@ class Run(threading.Thread):
             pairs = man.get("pairs", 0)
             C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine="gpu", compute_s=round(compute_s, 1),
                    wall_s=round(time.time() - self.t0, 1), pairs=pairs, staged_bytes=man.get("bytes"), out_public_bytes=pub, publish=up,
-                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, via="multi", concurrent=man.get("_n_running"))
+                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, whitelist_check=wl, via="multi", concurrent=man.get("_n_running"))
             self.result = "done %.0fs %.3f Mpairs/s own, peak %s GB (est %.0f), scratch %.1f GB" % (
                 compute_s, pairs / 1e6 / max(compute_s, 1e-9), "%.1f" % peak if peak else "?", self.mem_est, tmp_b / 1e9)
         except Q.Preempted:
@@ -364,7 +371,7 @@ def main():
             Q.reap(a.stage, log=log)
             reap_runs()
             c = None
-            if len(running) < a.concurrency and not (a.max_samples and n_done + len(running) >= a.max_samples):
+            if len(running) < a.concurrency and not D.HALT.is_set() and not (a.max_samples and n_done + len(running) >= a.max_samples):
                 adm = Admitter(budget, a.route, free_tmp_gb(a.scratch), hol, a.min_pairs, a.max_pairs, a.accept_1fg2)
 
                 def accept(m, adm=adm):
@@ -391,6 +398,9 @@ def main():
                 continue
             if running:
                 idle_since = time.time()
+            elif D.HALT.is_set():   # D.halt: the running samples have finished, nothing new was admitted
+                log("[multi] halted after a failed whitelist check: exit %d after %d samples" % (W.EXIT_HALT, n_done))
+                return W.EXIT_HALT
             elif a.max_samples and n_done >= a.max_samples:
                 break
             elif time.time() - idle_since > a.idle_exit_min * 60:

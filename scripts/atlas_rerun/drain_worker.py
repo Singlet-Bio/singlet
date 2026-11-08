@@ -30,6 +30,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common as C  # noqa: E402
 import stagequeue as Q  # noqa: E402
+import whitelist_check as W  # noqa: E402
 
 
 def log(m):
@@ -212,11 +213,32 @@ def write_private_sidecar(a, ccfg, man, out_dir):
             "build_s": round(time.time() - t0, 1)}
 
 
+HALT = threading.Event()   # set after a failed whitelist check: the worker claims nothing more and exits with W.EXIT_HALT
+
+
+def halt(a, root, job, detail, via):
+    """A finished sample failed the whitelist check: the install is broken, not the sample. Its claim goes back to ready/ with the attempt
+    refunded (event "released"), a "worker_halt" event records why, and HALT stops the worker before its next claim."""
+    log("[%s] HALT %s: whitelist check: %s" % (via, job.gsm, detail))
+    job.heart.stop.set()
+    if os.path.isdir(job.claim):
+        Q.release(a.stage, job.gsm, job.claim, refund=True)
+    C.emit(root, "released", job.gsm, attempt=job.man.get("attempts", 1), stage="compute", reason="whitelist_missing", via=via)
+    C.emit(root, "worker_halt", job.gsm, reason="whitelist_missing", detail=detail, via=via)
+    HALT.set()
+
+
 def finish_phase(a, cfg, ccfg, job):
     """Publish (per-sample Beta upload), then delete the staged reads and the scratch. Runs in a thread beside the next compute."""
     root, gsm, claim, man, scr, heart = ccfg["root"], job.gsm, job.claim, job.man, job.scr, job.heart
     try:
         out_dir = os.path.join(scr, "out")
+        # second whitelist guard, read from this sample (common.require_whitelists is the first, at start): a 10x sample that ran without
+        # its whitelist took the sorted-BAM pileup and barcode auto-discovery, so it is failed in the ledger and never published
+        wl = W.worker_check(os.path.join(scr, "singlet.log"), out_dir)
+        if wl is not None and not wl["ok"]:
+            halt(a, root, job, W.detail(wl), "drain")
+            return "halt: whitelist check: %s" % wl["why"]
         side = None if getattr(a, "no_private_sidecar", False) else write_private_sidecar(a, ccfg, man, out_dir)
         up = publish(a, man, out_dir, cfg, ccfg, scr, claim)
         sc = C.species_check(os.path.join(scr, "singlet.log"))
@@ -229,7 +251,7 @@ def finish_phase(a, cfg, ccfg, job):
         Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
         C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(job.compute_s, 1),
                wall_s=round(time.time() - job.t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
-               publish=up, species_check=sc, private_sidecar=side, via="drain")
+               publish=up, species_check=sc, whitelist_check=wl, private_sidecar=side, via="drain")
         return "done (publish %.0fs after compute)" % (time.time() - job.t0 - job.compute_s)
     except Exception as e:  # noqa: BLE001
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e)[:1500])
@@ -306,6 +328,8 @@ def main():
     idle_since, n = time.time(), 0
     try:
         while True:
+            if HALT.is_set():
+                break
             Q.reap(a.stage, log=log)
             c = Q.claim_ready(a.stage, accept=accept)
             if c:
@@ -322,11 +346,16 @@ def main():
                     break
                 continue
             settle()
+            if HALT.is_set():
+                break
             if time.time() - idle_since > a.idle_exit_min * 60:
                 log("[drain] idle %.0f min: exit after %d samples" % (a.idle_exit_min, n))
                 break
             time.sleep(15)
         settle()
+        if HALT.is_set():
+            log("[drain] halted after a failed whitelist check: exit %d after %d samples" % (W.EXIT_HALT, n))
+            return W.EXIT_HALT
         return 0
     except Q.Preempted:
         # let a publish that is nearly done finish (it is idempotent anyway); otherwise give its sample back too
