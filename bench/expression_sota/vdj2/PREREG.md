@@ -211,3 +211,54 @@ and in combination on the development libraries; the setting with the highest po
 taken. `productive` is unchanged (a contig without a Phe/Trp end stays non-productive).
 
 **Result of the amendment (2026-11-07, development libraries only; job 804171, same code with `asm_fw_relax` off and on).** Pooled development BCR pairing 0.9164 (off) and 0.9161 (on), TRUST4 0.9159; the registered rule asked for +0.003. Per library the pairing moves by at most 0.0013 (nsclc22_b 0.8346 to 0.8333; the other four are unchanged), contig F1 by at most 0.0003, ARI and wrong-lineage rate not at all, TCR pairing on pbmc2_t and pbmc10k_t by -0.0004. The setting does not meet the dev rule and is not merged; the code stays off by default. The diagnosis stands as measured (the contigs with a mutated Phe118 are never assembled), but this change did not recover them: the recovery needs more than a relaxed terminal codon, and what else the assembly graph needs for those chains is not yet known.
+
+## Addendum 6 (2026-11-07, registered before any run of the change): mutated Phe/Trp118 chains, assembled and productive
+
+**Diagnosis (development libraries only, code at `gpu/frontier` b0a96f49).** Every chain of a reference-paired cell that the
+baseline gets wrong was traced through the assembler (a diagnostic run of `run_library` with hooks at the
+molecule read-support cut, the one-chain-per-molecule cut and the group step, and a copy of `assemble_group` that also returns its
+seeds, seed support and terminal votes). Of 8,012 reference-paired cells, 670 are wrong; they hold 949 wrong chains:
+
+| Outcome of the reference chain | Chains |
+|---|---|
+| Barcode is not a GEX-called cell (wrong for every method) | 474 |
+| Assembled, removed by a filter (mostly the cross filter) | 131 |
+| Assembled and kept, another contig of the chain has more UMIs | 105 |
+| Never assembled: Phe/Trp118 mutated (last codon not TTT/TTC/TGG) | 70 |
+| Never assembled: other | 91 |
+| Never assembled or near miss: Cell Ranger's junction starts or ends at another codon inside Singlet's junction | 42 |
+| Low-confidence contig, near miss with another cause | 36 |
+
+For the never-assembled chains the first stage that drops the reference junction is the anchor, not the path search: no read of the
+group puts a terminal (66 of the 70 mutated Phe/Trp118 chains and 22 others) or a seed (49 others and 29 boundary cases) on the
+reference junction although the reads carry its k-mers. The path search explains 14 chains, seed or terminal support below the cut
+21, and 7 have no classified read of the barcode that holds the junction. The registered `asm_bubble_mm` and `asm_repeat_len`
+target path-level errors, which are a small share, so they are not built.
+
+The mutated Phe/Trp118 chains include strong ones (plasma cells with thousands of UMIs, which Cell Ranger calls productive). The
+amendment to Addendum 5 relaxed the terminal codon but kept `productive` unchanged, so a recovered contig still ended in a codon
+other than Phe/Trp, stayed non-productive and never entered the pairing. That explains its null result.
+
+**Change.** Two Params fields, tested together as one setting:
+1. `asm_fw_relax=True`, exactly as registered in the amendment to Addendum 5.
+2. `fw_mut_productive=True` (new): a junction whose last codon is not Phe/Trp is productive when its J gene is called and the J
+   germline codon at the anchor is Phe or Trp (a somatic substitution of Phe/Trp118), and every other productivity check holds
+   (in frame, no stop codon, Cys start, J frame open).
+No other change: V, J and C calling, the reference, thresholds and filters stay as they are.
+
+**Libraries.** Development, confirmation and baseline as in Addendum 5. The fresh held-out library is named here, before the change
+is scored: **10x Genomics "Human B cells from a healthy donor pre-flu vaccination (v2)"**, file prefix
+`sc5p_v2_hs_B_prevax_10k_5gex_B` (Chromium Next GEM 5' v2, Cell Ranger 5.0.0 `multi`, about 8,660 cells with a productive
+heavy-light pair; BCR FASTQs from the dataset's FASTQ tarball, truth from its `vdj_b_filtered_contig_annotations.csv`, called cells
+from its GEX filtered matrix). A search of both repositories (all branches) and of the cluster's data and job folders found no
+earlier use. Only its page and its metrics summary have been read. It is run once, with the frozen code, first-Cys reference
+(`vdj_human_imgtcys.tsv.gz`, Cell Ranger >= 5), for Singlet and for TRUST4, and scored with `primary.py` and `compare_vdj.py`.
+
+**Rules.** The dev rule, the confirmation report and the held-out pass rule are those of Addendum 5, unchanged. Dev: keep the setting
+when pooled development BCR pairing rises by at least 0.003, no development library loses more than 0.005 in pairing or contig F1,
+pooled wrong-lineage rate rises by at most 0.001, clonotype ARI of no library falls by more than 0.02, TCR pairing and contig F1 of
+pbmc2_t and pbmc10k_t fall by at most 0.002 and wall time rises by at most 50%. Confirmation: pairing on pbmc3_b, ngpbmc3_b and
+melanoma_b before and after, with the gap to TRUST4; a library that loses more than 0.005 counts as a failure. Held-out: the
+difference Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95%
+interval, with wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's. If the setting fails the dev rule,
+nothing is merged, and the held-out library is still run once with the code as it then stands.
