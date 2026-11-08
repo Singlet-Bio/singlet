@@ -11,3 +11,35 @@ python/singlet/data/whitelists/ATTRIBUTION.md. 10x Genomics does not endorse thi
 data/fusion/arriba/LICENSE: the chimeric table applies Arriba's blacklist (blacklist_hg38_GRCh38_v2.5.1.tsv.gz, fetched by
 scripts/fetch_arriba_blacklist.sh, not stored in git). Arriba and its database files are MIT-licensed, copyright Deutsches
 Krebsforschungszentrum and Sebastian Uhrig. Uhrig S et al., Genome Research 31:448-460 (2021), doi:10.1101/gr.257246.119.
+
+Third-party code
+----------------
+include/singlet/pileup/arriba_cascade.h, src/pipeline/arriba_cascade_cli.cpp and tests/cpp/test_arriba_cascade.cpp port the fusion
+filter and scoring cascade of Arriba 2.5.1 (https://github.com/suhrig/arriba, commit 02bfd7d) to the engine's chimeric reads. They
+are derived from these Arriba source files: annotation.cpp, annotation.t.hpp, common.hpp, arriba.cpp, fusions.cpp,
+read_chimeric_alignments.cpp, read_stats.cpp, assembly.cpp, filter_duplicates.cpp, filter_uninteresting_contigs.cpp,
+filter_proximal_read_through.cpp, filter_inconsistently_clipped.cpp, filter_homopolymer.cpp, filter_small_insert_size.cpp,
+filter_long_gap.cpp, filter_same_gene.cpp, filter_hairpin.cpp, filter_mismatches.cpp, filter_low_entropy.cpp, filter_mismappers.cpp
+(kmer_to_int), merge_adjacent_fusions.cpp, filter_multimappers.cpp, filter_relative_support.cpp, filter_non_coding_neighbors.cpp,
+filter_intragenic_both_exonic.cpp, filter_min_support.cpp, filter_both_intronic.cpp, filter_in_vitro.cpp, recover_both_spliced.cpp,
+select_best.cpp, filter_marginal_read_through.cpp, recover_many_spliced.cpp, filter_blacklisted_ranges.cpp, filter_short_anchor.cpp,
+filter_end_to_end.cpp, filter_no_coverage.cpp, filter_genomic_support.cpp (assign_confidence) and output_fusions.cpp. Each ported
+function keeps its Arriba name and cites its source file. Uhrig S, Ellermann J, Walther T, et al. Accurate and efficient detection
+of gene fusions from RNA sequencing data. Genome Research 31:448-460 (2021), doi:10.1101/gr.257246.119. Arriba's license, which also
+covers its database files, is vendored at data/fusion/arriba/LICENSE and reproduced here:
+
+  The MIT/Expat License
+
+  Copyright (C) 2016-2025 Sebastian Uhrig (s.uhrig@dkfz.de)
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files
+  (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify,
+  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
