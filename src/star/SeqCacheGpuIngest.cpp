@@ -224,8 +224,11 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
                 // barcode read: 3-bit codes, 21 per word
                 const uint8_t* s1 = blk.r1_seq(i);
                 uint64_t* rw = out.r1.data() + r * out.r1w;
-                for (uint32_t x = 0; x < out.r1w; x++) rw[x] = 0;
-                for (uint32_t j = 0; j < L1; j++) rw[j / 21] |= (uint64_t) std::min<uint8_t>(s1[j], 4) << (3 * (j % 21));
+                for (uint32_t x = 0, j = 0; x < out.r1w; x++) {   // a word at a time
+                    uint64_t v = 0;
+                    for (uint32_t e = std::min<uint32_t>(L1, j + 21), s = 0; j < e; j++, s += 3) v |= (uint64_t) std::min<uint8_t>(s1[j], 4) << s;
+                    rw[x] = v;
+                }
                 pos += L2;
                 r++;
             }
