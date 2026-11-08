@@ -119,3 +119,44 @@ still rank below 44 false positives.
 With one or two supporting cells per truth fusion, the rule's first clause on the 1:1.5 mix needs a ranking that places
 two-cell pairs above every artifact. More reads will not supply that. The ranking needs evidence the table does not yet use, such
 as breakpoint consistency across cells or the known-fusion catalogue.
+
+### B6 ranking evidence: pre-registered score
+
+Written and committed before either mix is scored with it. The B6 rule (6de5821a) stays as it is. Only the order in which the
+engine's gene pairs are read changes, which enters clause 1 (recall at each comparator's false-positive count). Clause 2 counts
+the cells of each line with at least one supporting molecule, and no ranking changes that count. With the PR build at 6 of 8
+RUNX1–RUNX1T1 cells on 1:15, clause 2 will still fail whatever clause 1 does.
+
+For each unordered gene pair in the PASS rows of labelled cells, after the generic filters of `fusion_eval.engine_calls`
+(different named genes, no chrM, no same-chromosome pair within 1 Mb, unique placement), `fusion/fusion_rank.py` computes:
+
+- M, the molecules summed over cells and junctions, which is the current ranking.
+- Breakpoint clusters. Rows are sorted by donor and acceptor position, and a row joins the first cluster whose first row lies
+  within 5 bp at both ends. The top cluster has the most distinct cells.
+- C, the distinct cells in the top cluster. Within a cell, molecules are distinct barcode and UMI pairs.
+- f, the share of M in the top cluster, which measures agreement of the split-read position.
+- s, splice-site use at both ends: 0.5 for each end of the top cluster that lies within 2 bp of an annotated exon boundary in
+  the run's GRCh38-2024-A GTF. Every PASS row already carries a GT/AG motif.
+- K = 1 when the pair appears as a fusion (A::B, either order) in the Mitelman Database MCGENE table, else 0.
+
+| Variant | Score |
+|---|---|
+| baseline | M |
+| cells | C |
+| agreement | M · f |
+| splice | M · (1 + s) |
+| breakpoint (feature 1) | C · f · (1 + s) |
+| known (feature 2) | M · (1 + 4K) |
+| combined | C · f · (1 + s) · (1 + 4K) |
+
+Ties are broken by M, and pairs still tied are counted together, which is the conservative reading of the curve. The weight of
+4 lets a known fusion outrank an artifact with up to five times its support.
+
+The known-fusion prior uses the Mitelman Database of Chromosome Aberrations and Gene Fusions in Cancer (Mitelman F, Johansson B,
+Mertens F; mitelmandatabase.isb-cgc.org), licensed CC BY 4.0. The release of 2026-10-05 was used, with zip sha256 `e63ff330aa237db7291cac9efdb9e0573e9ea35888768db4c5e282ef258f9244`.
+ChimerDB 4.0 publishes no license terms, so it is not used, and COSMIC is excluded. Mitelman curates published fusions,
+including those reported in K562 and Kasumi-1, so the prior favors the truth pairs by construction. The table therefore reports
+every variant with and without it.
+
+Both mixes are scored for the PR build (run tag `chimfix-a704996d-r2`: blacklist and recurrent flag) and the soft-clip prototype
+(`chimproto-a8d58f06-sc20`). The PR build sets the verdict.
