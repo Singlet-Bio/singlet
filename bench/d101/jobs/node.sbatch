@@ -34,9 +34,11 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in $(seq 9 20); do printf 'dlsc-%s\tdlsc\t4\t16\t-\t%s\n' $r "$(run dl.sbatch $r KIND=sc)"; done
   for r in $(seq 9 20); do printf 'hla-%s\thla\t8\t24\tdlsc-%s\t%s\n' $r $r "$(run hla_sc.sbatch $r)"; done
   for r in $(seq 1 60); do printf 'geuv-%s\tgeuv\t8\t24\t-\t%s\n' $r "$(run geuv_hla.sbatch $r)"; done
+  # stock T1K on every read of each library (B5 comparator); confirmation libraries first
+  for r in 13 14 15 16 18 20 8 1 4 5 2 3 6 7 9 10 11 12; do printf 't1ksc-%s\tt1ksc\t16\t48\tdlsc-%s\t%s\n' $r $r "$(run stock_t1k_sc.sbatch $r)"; done
 } > $TF
 $ENV/bin/python3 $J/node_run.py $TF --state $J/state --logs $J/tasklogs --cpus $(( NC * 2 )) --mem $MEMG \
-  --limit dlsc=4 --limit dlbulk=2 --limit geuv=6 --limit run=2 --stop-after 12000
+  --limit dlsc=4 --limit dlbulk=2 --limit geuv=6 --limit run=2 --limit t1ksc=2 --stop-after 12000
 # Scoring (cheap; reruns on whatever has finished). HLA results are owner-only.
 chmod 700 $J/results
 $ENV/bin/python3 $J/score_hla.py geuvadis --truth $J/geuv/truth.txt --res $J/geuv/res > $J/results/hla_geuvadis.json 2>&1
