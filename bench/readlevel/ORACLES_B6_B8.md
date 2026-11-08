@@ -160,3 +160,8 @@ every variant with and without it.
 
 Both mixes are scored for the PR build (run tag `chimfix-a704996d-r2`: blacklist and recurrent flag) and the soft-clip prototype
 (`chimproto-a8d58f06-sc20`). The PR build sets the verdict.
+
+Addendum, written before the run it describes. The 20-base prototype still misses one comparator cell per mix, because the
+supporting read never reaches the chimeric pass. The second pass runs with `--chimSegmentMin 15`, so a read whose unaligned tail
+is 15 to 19 bases can form a chimera but is never sent there. One more prototype run sets the soft-clip threshold to that same
+15 bases (`chimproto-a8d58f06-sc15`). It is scored with the formula above, unchanged, and reported beside the others.
