@@ -36,6 +36,10 @@ one() {   # sample study assay run instrument urls odp
     ( cd $d && timeout 600 $bp download --r1 ${files[0]} --r2 ${files[1]} --staging-dir $d/st-$bn -o $d/$bn.1fq ) > $log 2>&1
     tag=$(tr '\r' '\n' < $log | grep -a -o -E "\[singlet-download\] Protocol: [A-Za-z0-9._-]+" | tail -1 | sed 's/.*: //')
     conf=$(tr '\r' '\n' < $log | grep -a -o -E "Protocol: [A-Za-z0-9._-]+ \(confidence: [0-9]+" | tail -1 | grep -o -E "[0-9]+$")
+    # the gate rejects non-10x libraries before the Protocol line; its REJECT line carries the detector's tag
+    [ -z "$tag" ] && { g=$(grep -a -o -E "\[singlet-gate\] REJECT .* tag=[A-Za-z0-9._-]+ confidence=[0-9]+" $log | tail -1)
+      [ -n "$g" ] && { tag=gate:$(echo "$g" | sed 's/.* tag=//; s/ confidence=.*//'); conf=${g##*=}; }; }
+    [ -z "$tag" ] && grep -a -q "data_incomplete" $log && tag=data_incomplete
     wl=$(grep -a -o -E "whitelist validation: [0-9]+/[0-9]+ match \([0-9]+" $log | tail -1 | grep -o -E "[0-9]+$")
     r1l=$(grep -a -o -E "R1 length: [0-9]+, R2 length: [0-9]+" $log | tail -1 | sed 's/R1 length: //; s/, R2 length: /\//')
     ev=$(grep -a "3./5. check" $log | tail -1 | sed 's/.*check: //; s/[;,] */ /g')

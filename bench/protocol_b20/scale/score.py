@@ -48,7 +48,7 @@ def main(path):
         if b == "-":
             by["(no pair)"][assay][1] += 1
             continue
-        ok = bool(re.search(EXPECT.get(assay, "^$"), tag))
+        ok = bool(re.search(EXPECT.get(assay, "^$"), tag.replace("gate:", "")))
         by[b][assay][0] += ok
         by[b][assay][1] += 1
         if not ok:
