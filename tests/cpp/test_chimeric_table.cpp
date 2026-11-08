@@ -179,16 +179,16 @@ int main() {
 
     oc.blacklist_path = dir + "/bl.tsv";
     oc.recurrent_path = dir + "/rec.tsv";
-    Stats sb;
-    auto rb = build_rows(bcs, oc, sb);
-    CHECK(sb.blacklist_entries == 4, "four blacklist entries read");
-    CHECK(sb.blacklisted_junctions == 3 && sb.blacklisted_rows == 3, "position pair, gene + any and range entries drop their junctions");
+    Stats sbl;
+    auto rb = build_rows(bcs, oc, sbl);
+    CHECK(sbl.blacklist_entries == 4, "four blacklist entries read");
+    CHECK(sbl.blacklisted_junctions == 3 && sbl.blacklisted_rows == 3, "position pair, gene + any and range entries drop their junctions");
     bool kept7 = false;
     for (const auto& r : rb) if (r.donor_chr == "chr6" && r.donor_pos == 400) kept7 = true;
     CHECK(kept7, "an entry with an unsupported keyword keeps the junction");
     fp = nullptr;
     for (const auto& r : rb) if (r.donor_gene == "FWD") fp = &r;
-    CHECK(fp && fp->filter == "recurrent" && sb.recurrent_rows == 1, "gene pair on the recurrent list is flagged (either order)");
+    CHECK(fp && fp->filter == "recurrent" && sbl.recurrent_rows == 1, "gene pair on the recurrent list is flagged (either order)");
     CHECK(rb.size() == 2, "two rows remain");
     Stats sw = write_table(bcs, oc);
     std::vector<std::string> ol;
