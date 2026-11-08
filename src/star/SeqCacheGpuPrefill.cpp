@@ -1944,12 +1944,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 std::vector<uint32_t> sc;
                 for (uint64 r = 0; r < g_handoffNReads; r++) { const uint32 q = g_handoffReadRecord[r]; if (q != 0xFFFFFFFFu && q < out.e10.recMapped.size() && (out.e10.recMapped[q] & 2)) sc.push_back((uint32_t) r); }
                 std::vector<std::string> so[2]; std::string ws;
-                if (!e10FormatUnmapped(P, sc, (int) P.runThreadN, so, ws)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, --chimeric): " + ws + "
-",
+                if (!e10FormatUnmapped(P, sc, (int) P.runThreadN, so, ws)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, --chimeric): " + ws + "\n",
                                                                            std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
                 for (int im = 0; im < 2; im++) for (auto &x : so[im]) P.inOut->outSoftclipStream[im].write(x.data(), x.size());
-                P.inOut->logMain << "ENGINE_GPU: --chimeric soft-clip route: " << sc.size() << " reads with a record
-";
+                P.inOut->logMain << "ENGINE_GPU: --chimeric soft-clip route: " << sc.size() << " reads with a record\n";
             }
             P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
                              << " multi, " << S.unmappedAll << " unmapped: " << nUnmappedRec << " Unmapped.out records" << (e16bg.on ? ", written after STAR's loop" : " written") << "), " << e10nSJ
