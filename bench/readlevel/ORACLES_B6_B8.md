@@ -207,4 +207,4 @@ The missing cell has the same cause on both mixes. The supporting read (barcode 
 the other missed cells (GTACTTTCATACTACG, GGTGTTAGTCCCTACT). The 15-base route costs 5.8% more second-pass reads than the PR build
 (6.78 M against 6.41 M on 1:1.5) and adds nothing over 20 bases. Two explanations remain open. The main pass may align the read
 with a shorter clip, or the engine may route it elsewhere before alignment. The comparators' copy of the 1:15 read carries
-barcode CCTTACGATCCCGAAA, one mismatch from the whitelist entry, which points at barcode handling.
+barcode CCTTACGATCCCGAAA, one mismatch from the cell it was assigned to, which points at barcode correction for that read.
