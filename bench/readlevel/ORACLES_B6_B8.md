@@ -42,7 +42,7 @@ in `results/`.
 | Oracle | Engine | Best comparator | Verdict |
 |---|---|---|---|
 | B6 chimeric junctions | PR #220: clause 1 fails on 1:1.5 (best 2 of 3 with the combined score), clause 2 fails on both mixes (RUNX1–RUNX1T1 6 of 8 cells on 1:15). Soft-clip prototype with the combined score: clause 1 passes on both mixes, clause 2 one cell short on each | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **fail** |
-| B7 TE counts | pending (804377) | pending | pending |
+| B7 TE counts | pending: the A375 comparators finish in 804425 or 804512; mESC comparators rerun in 804512 after a mate swap | pending | pending |
 | B8 reads per UMI | 96.9% of Cell Ranger molecules matched; matched TVD 0.0153; saturation 0.7288 vs 0.7248 | Cell Ranger 3.0 is the reference | **pass** |
 
 ### B8: the 1.48 molecule ratio is intron-only molecules
