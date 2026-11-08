@@ -768,14 +768,15 @@ public:
         std::unique_ptr<LookAhead> look;
         if (config_.stream_lookahead && config_.cb_from_cr && config_.cb_corrector) {
             ei_ahead_ = has_gene_model_ && !gpu_covers_;
+            post_ahead_ = !gpu_covers_;
             look.reset(new LookAhead(*this, fp, hdr));
             std::cerr << "[singlet-pileup] stream look-ahead: records decoded and CBs resolved on a reader thread"
                       << (ei_ahead_ ? ", exon and intron overlaps taken there too" : "") << "\n";
         }
         auto next_record = [&]() -> bool {
             if (!look) return sam_read1(fp, hdr, b) >= 0;
-            if (look->next(b, look_cur_, look_ei_)) return true;
-            look_cur_ = nullptr; look_ei_ = nullptr;
+            if (look->next(b, look_cur_, look_ei_, post_cur_)) return true;
+            look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
             return false;
         };
         while (next_record()) {
@@ -1281,7 +1282,10 @@ public:
                 // Splice junction extraction (always for primary alignments)
                 if (config_.count_sj) {
                     PROF_START(sj);
-                    if (!gpu_covers_) extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats);
+                    if (!gpu_covers_) {
+                        if (post_cur_) post_set(kPostSj, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);
+                        else extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats, cur_read_gene_);
+                    }
                     PROF_END(prof, sj);
                 }
             }
@@ -1290,10 +1294,14 @@ public:
             // Only use high-MAPQ reads for variant calling accuracy
             if (high_mapq) {
                 PROF_START(variant);
-                int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
-                if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
-                    pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
-                                         umi_str, umi_len, stats);
+                if (post_cur_ && !gpu_covers_) {
+                    post_set(kPostVariant, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);   // the overlap search too
+                } else {
+                    int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
+                    if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
+                        pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
+                                             umi_str, umi_len, stats, cur_read_gene_);
+                    }
                 }
                 PROF_END(prof, variant);
             }
@@ -1302,7 +1310,10 @@ public:
             // MAPQ gate: multimapped reads (NH>1, low MAPQ; e.g. NUMT-derived) reach this point, so require high_mapq here.
             if (config_.count_mt && high_mapq && is_chrm(tid)) {
                 PROF_START(mt_pileup);
-                if (!gpu_covers_) pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                if (!gpu_covers_) {
+                    if (post_cur_) post_set(kPostMt, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);
+                    else pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                }
                 PROF_END(prof, mt_pileup);
             }
             PROF_BAM_IO_RESTART;
@@ -1311,7 +1322,14 @@ public:
 #ifdef SINGLET_PROFILE
         if (_loop_start) prof.t_loop = ProfileCounters::rdtsc() - _loop_start;
 #endif
-        look_cur_ = nullptr; look_ei_ = nullptr;
+        look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
+        if (look) {   // the post stage's steps are complete once finish() returns
+            look->finish();
+            stats.sj_hits += post_stats_.sj_hits;
+            stats.snp_hits += post_stats_.snp_hits;
+            stats.mt_pileup_bases += post_stats_.mt_pileup_bases;
+            post_stats_ = PileupStats{};
+        }
         b = b_own;
         look.reset();   // stops and joins the reader (after a strand abort it may hold up to one more batch, unread)
 
@@ -3523,6 +3541,24 @@ private:
         std::vector<uint32_t> scratch;
         void clear() { blocks.clear(); bov.clear(); ovl.clear(); }
     };
+    // Steps the loop defers to the post stage (LookAhead::post) for one record: its splice junctions, its SNP bases and its chrM
+    // bases, with the barcode, UMI and gene the loop had for it. While the stream runs, the state these steps fill (sj_*, snp_cons_,
+    // mt_*) is touched by the post stage alone, and it sees the records in stream order, as the loop would have.
+    enum : uint8_t { kPostSj = 1, kPostVariant = 2, kPostMt = 4 };
+    struct PostRec { uint8_t steps; int umi_len; int32_t tid; uint32_t bc; uint32_t gene; const char* umi; };
+    PostRec* post_cur_ = nullptr;       // look_cur_'s post-stage slot (null without a post stage)
+    bool post_ahead_ = false;           // set before the reader starts: a post stage runs (CPU path, look-ahead on)
+    PileupStats post_stats_;            // the post stage's counts (sj_hits, snp_hits, mt_pileup_bases), added to the run's after finish()
+    void post_set(uint8_t step, int32_t tid, uint32_t bc, const char* umi, int umi_len) {
+        PostRec& p = *post_cur_;
+        p.steps |= step; p.tid = tid; p.bc = bc; p.umi = umi; p.umi_len = umi_len; p.gene = cur_read_gene_;
+    }
+    void run_post(bam1_t* b, const PostRec& p) {
+        if (p.steps & kPostSj) extract_splice_junctions(b, p.tid, p.bc, p.umi, p.umi_len, post_stats_, p.gene);
+        if ((p.steps & kPostVariant) && has_variant_overlap(p.tid, b->core.pos, bam_endpos(b)))
+            pileup_aligned_bases(b, p.tid, p.bc, p.umi, p.umi_len, post_stats_, p.gene);
+        if (p.steps & kPostMt) pileup_mt_bases(b, p.bc, post_stats_);
+    }
     const LookRec* look_cur_ = nullptr;
     const LookEI* look_ei_ = nullptr;   // the batch of look_cur_
     bool ei_ahead_ = false;             // set before the reader starts: the exon/intron section runs on the CPU (gene model, no W11 "on")
@@ -3576,24 +3612,34 @@ private:
         r.ei = 1;
     }
     // The stream reader: decodes records into a ring of batches and resolves each one (look_resolve) on its own thread; next()
-    // hands the loop the records in stream order. Stopped and joined by stop() or the destructor.
+    // hands the loop the records in stream order. With a post stage (post_ahead_), a batch the loop is done with goes to a third
+    // thread, which runs the loop's deferred per-record steps (PostRec, run_post) in stream order before the reader reuses the
+    // batch. finish() hands over the loop's last batch and joins the post stage; stop() (or the destructor) joins the reader.
     struct LookAhead {
         static constexpr size_t kBatches = 8, kRecs = 2048;
-        struct Batch { std::vector<bam1_t*> rec; std::vector<LookRec> look; LookEI ei; size_t n = 0; bool last = false; bool full = false; };
-        const PileupEngine& eng; htsFile* fp; sam_hdr_t* hdr;
+        enum : int { kFree = 0, kFull = 1, kDone = 2 };   // kFull: read, for the loop; kDone: the loop is done, for the post stage
+        struct Batch {
+            std::vector<bam1_t*> rec; std::vector<LookRec> look; std::vector<PostRec> post; LookEI ei;
+            size_t n = 0, n_post = 0; bool last = false; int state = kFree;
+        };
+        PileupEngine& eng; htsFile* fp; sam_hdr_t* hdr;
         Batch ring[kBatches];
-        std::mutex mu; std::condition_variable cv_full, cv_free;
-        bool stop_ = false;
-        std::thread th;
+        std::mutex mu; std::condition_variable cv_full, cv_free, cv_post;
+        bool stop_ = false, finished_ = false;
+        const bool post_on;
+        std::thread th, th_post;
         uint64_t seq = 0; size_t pos = 0; Batch* cur = nullptr;
-        LookAhead(const PileupEngine& e, htsFile* f, sam_hdr_t* h) : eng(e), fp(f), hdr(h) {
+        LookAhead(PileupEngine& e, htsFile* f, sam_hdr_t* h) : eng(e), fp(f), hdr(h), post_on(e.post_ahead_) {
             for (auto& B : ring) {
                 B.rec.resize(kRecs); B.look.resize(kRecs);
+                if (post_on) B.post.resize(kRecs);
                 for (auto& r : B.rec) r = bam_init1();
             }
             th = std::thread([this] { read(); });
+            if (post_on) th_post = std::thread([this] { post(); });
         }
         ~LookAhead() {
+            finish();
             stop();
             for (auto& B : ring) for (auto* r : B.rec) bam_destroy1(r);
         }
@@ -3602,7 +3648,7 @@ private:
                 Batch& B = ring[k % kBatches];
                 {
                     std::unique_lock<std::mutex> lk(mu);
-                    cv_free.wait(lk, [&] { return !B.full || stop_; });
+                    cv_free.wait(lk, [&] { return B.state == kFree || stop_; });
                     if (stop_) return;
                 }
                 B.n = 0; B.last = false; B.ei.clear();
@@ -3611,28 +3657,67 @@ private:
                     eng.look_resolve(B.rec[B.n], B.look[B.n], B.ei);
                     ++B.n;
                 }
-                { std::lock_guard<std::mutex> lk(mu); B.full = true; }
+                { std::lock_guard<std::mutex> lk(mu); B.state = kFull; }
                 cv_full.notify_one();
                 if (B.last) return;
             }
         }
-        // The next record and its resolved CB; false at the end of the stream.
-        bool next(bam1_t*& b, const LookRec*& lr, const LookEI*& ei) {
+        // The post stage: the batches the loop is done with, in stream order, each record's deferred steps.
+        void post() {
+            for (uint64_t k = 0;; ++k) {
+                Batch& B = ring[k % kBatches];
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_post.wait(lk, [&] { return B.state == kDone || finished_; });
+                    if (B.state != kDone) return;   // finished, and every batch handed over is done
+                }
+                for (size_t i = 0; i < B.n_post; ++i)
+                    if (B.post[i].steps) eng.run_post(B.rec[i], B.post[i]);
+                { std::lock_guard<std::mutex> lk(mu); B.state = kFree; }
+                cv_free.notify_one();
+            }
+        }
+        // The loop is done with records [0, n) of the current batch: to the post stage, or straight back to the reader.
+        void release(size_t n) {
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                cur->n_post = n;
+                cur->state = post_on ? kDone : kFree;
+            }
+            if (post_on) cv_post.notify_one(); else cv_free.notify_one();
+            cur = nullptr;
+        }
+        // The next record, its resolved CB, its batch's look-ahead data, and its post-stage slot (null without a post stage).
+        // False at the end of the stream.
+        bool next(bam1_t*& b, const LookRec*& lr, const LookEI*& ei, PostRec*& pr) {
             for (;;) {
-                if (cur && pos < cur->n) { b = cur->rec[pos]; lr = &cur->look[pos]; ei = &cur->ei; ++pos; return true; }
+                if (cur && pos < cur->n) {
+                    b = cur->rec[pos]; lr = &cur->look[pos]; ei = &cur->ei;
+                    pr = post_on ? &cur->post[pos] : nullptr;
+                    if (pr) pr->steps = 0;
+                    ++pos;
+                    return true;
+                }
                 if (cur) {
                     const bool last = cur->last;
-                    { std::lock_guard<std::mutex> lk(mu); cur->full = false; }
-                    cv_free.notify_one();
-                    cur = nullptr;
+                    release(cur->n);
                     if (last) return false;
                     ++seq;
                 }
                 Batch& B = ring[seq % kBatches];
                 std::unique_lock<std::mutex> lk(mu);
-                cv_full.wait(lk, [&] { return B.full; });
+                cv_full.wait(lk, [&] { return B.state == kFull; });
                 cur = &B; pos = 0;
             }
+        }
+        // After the loop: the records it took from the current batch go to the post stage (after a strand abort the batch is
+        // partly read), then the post stage drains and is joined. The deferred steps' results are complete when this returns.
+        void finish() {
+            if (cur) release(pos);
+            if (!th_post.joinable()) return;
+            { std::lock_guard<std::mutex> lk(mu); finished_ = true; }
+            cv_post.notify_all();
+            th_post.join();
         }
         void stop() {
             if (!th.joinable()) return;
@@ -4282,7 +4367,7 @@ private:
     // For each N op: donor = ref_pos (last exonic base + 1), acceptor = ref_pos + len
     void extract_splice_junctions(bam1_t* b, int32_t tid, uint32_t bc_idx,
                                   const char* umi_str, int umi_len,
-                                  PileupStats& stats) {
+                                  PileupStats& stats, uint32_t read_gene) {
         if (config_.sj_unique_only && alignment_is_multimapped(b)) return;
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
@@ -4334,7 +4419,7 @@ private:
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
                     // R9: molecules are counted at finalize, after UMI correction
                     if (config_.umi_dedup) {
-                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, cur_read_gene_);
+                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, read_gene);
                     } else {
                         sj_acc_.increment(sj_idx, bc_idx);
                         stats.sj_hits++;
@@ -4357,7 +4442,7 @@ private:
 
     void pileup_aligned_bases(bam1_t* b, int32_t tid, uint32_t bc_idx,
                               const char* umi_str, int umi_len,
-                              PileupStats& stats) {
+                              PileupStats& stats, uint32_t read_gene) {
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
         int32_t query_pos = 0;
@@ -4390,7 +4475,7 @@ private:
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
                             snp_cons_.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
                                           SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
-                                          cur_read_gene_);
+                                          read_gene);
                             stats.snp_hits++;
                         }
                     }
