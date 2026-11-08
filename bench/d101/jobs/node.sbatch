@@ -33,7 +33,9 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in 1 2 3 4 5 6 7 8; do printf 'redi-%s\tredi\t16\t48\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools.sbatch $r)"; done
   for r in $(seq 9 20); do printf 'dlsc-%s\tdlsc\t4\t16\t-\t%s\n' $r "$(run dl.sbatch $r KIND=sc)"; done
   for r in $(seq 9 20); do printf 'hla-%s\thla\t8\t24\tdlsc-%s\t%s\n' $r $r "$(run hla_sc.sbatch $r)"; done
-  for r in $(seq 1 60); do printf 'geuv-%s\tgeuv\t8\t24\t-\t%s\n' $r "$(run geuv_hla.sbatch $r)"; done
+  printf 'arcas-env\tenv\t4\t16\t-\t%s\n' "$(run arcas_env.sbatch 0)"
+  # geuv2: Geuvadis with all four typings (stock T1K, Singlet, Singlet K=2, arcasHLA); samples with all four outputs exit at once
+  for r in $(seq 1 60); do printf 'geuv2-%s\tgeuv\t8\t24\tarcas-env\t%s\n' $r "$(run geuv_hla.sbatch $r)"; done
   # stock T1K on every read of each library (B5 comparator); confirmation libraries first
   for r in 13 14 15 16 18 20 8 1 4 5 2 3 6 7 9 10 11 12; do printf 't1ksc-%s\tt1ksc\t16\t48\tdlsc-%s\t%s\n' $r $r "$(run stock_t1k_sc.sbatch $r)"; done
 } > $TF

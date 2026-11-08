@@ -59,6 +59,17 @@ def read_t1k(path):
     return out
 
 
+def read_arcas(path):
+    """arcasHLA genotype: {"A": ["A*01:01:01", "A*02:01:01"], ...}"""
+    out = {}
+    with open(path) as f:
+        for g, v in json.load(f).items():
+            v = [two_field(x) for x in v] + [None]
+            if v[0] is not None:
+                out[g] = [v[0], v[1] if v[1] is not None else v[0]]
+    return out
+
+
 def score(truth, calls, genes):
     per = {g: [0, 0] for g in genes}
     for s, tg in truth.items():
@@ -87,12 +98,16 @@ def geuvadis(a):
                 i1, i2 = h.index(f"HLA-{g} 1"), h.index(f"HLA-{g} 2")
                 tg[g] = [alts(v[i1]), alts(v[i2])]
             truth[v[si]] = tg
-    methods = {}
-    for m in ("t1k", "singlet"):
-        calls = {}
-        for p in glob.glob(os.path.join(a.res, "*", f"{m}_genotype.tsv")):
-            calls[os.path.basename(os.path.dirname(p))] = read_t1k(p)
-        methods[m] = score(truth, calls, GENES5)
+    readers = {"t1k": ("t1k_genotype.tsv", read_t1k), "singlet": ("singlet_genotype.tsv", read_t1k),
+               "singlet_k2": ("singlet_k2_genotype.tsv", read_t1k), "arcashla": ("arcashla.genotype.json", read_arcas)}
+    allc = {}
+    for m, (fn, rd) in readers.items():
+        allc[m] = {os.path.basename(os.path.dirname(p)): rd(p) for p in glob.glob(os.path.join(a.res, "*", fn))}
+    methods = {m: score(truth, c, GENES5) for m, c in allc.items()}
+    # the same samples for every method that has any output, so the comparison is paired
+    have = [m for m in allc if allc[m]]
+    common = set.intersection(*(set(allc[m]) for m in have)) if have else set()
+    paired = {m: score(truth, {s: allc[m][s] for s in common}, GENES5) for m in have}
     same = 0
     n = 0
     for d in glob.glob(os.path.join(a.res, "*")):
@@ -100,7 +115,7 @@ def geuvadis(a):
         if os.path.exists(p1) and os.path.exists(p2):
             n += 1
             same += read_t1k(p1) == read_t1k(p2)
-    return {"set": "Geuvadis RNA-seq (E-GEUV-1) vs Abi-Rached 2018", "methods": methods, "identical_2field_genotypes": [same, n]}
+    return {"set": "Geuvadis RNA-seq (E-GEUV-1) vs Abi-Rached 2018", "methods": methods, "paired": paired, "identical_2field_genotypes": [same, n]}
 
 
 def nih(a):

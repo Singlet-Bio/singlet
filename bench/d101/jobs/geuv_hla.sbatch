@@ -15,7 +15,9 @@ T1K=$REF/hla/t1k; BIN=${BIN:?singlet binary with hla-prefilter}; D=$W/jobs/d101/
 read -r S RUN U1 U2 POP <<< "$(awk -v n=$SLURM_ARRAY_TASK_ID 'NR==n' $D/list.tsv)"
 [ -n "${S:-}" ] || exit 0
 KF=$W/jobs/d101/hlaprior/hlaidx_rna_seq.K2.fa   # the frequency-prior index (alleles recorded in >= 2 cells), see hla_prior_test.sh
-O=$D/res/$S; [ -s $O/singlet_genotype.tsv ] && [ -s $O/t1k_genotype.tsv ] && { [ ! -s $KF ] || [ -s $O/singlet_k2_genotype.tsv ]; } && { echo "done $S"; exit 0; }; mkdir -p $O; chmod 700 $O
+AE=$W/envs/arcashla   # arcasHLA comparator (arcas_env.sbatch), run on the same FASTQs when the env is built
+O=$D/res/$S; [ -s $O/singlet_genotype.tsv ] && [ -s $O/t1k_genotype.tsv ] && { [ ! -s $KF ] || [ -s $O/singlet_k2_genotype.tsv ]; } \
+  && { [ ! -f $AE/.ok ] || [ -s $O/arcashla.genotype.json ]; } && { echo "done $S"; exit 0; }; mkdir -p $O; chmod 700 $O
 SCR=/tmp/$USER-geuv-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 export PATH=$ENV/bin:$PATH LD_LIBRARY_PATH=$ENV/lib
 # EBI drops long transfers mid-file, so resume (-C -) until the file is complete and passes gzip -t.
@@ -41,4 +43,11 @@ if [ -s $KF ]; then
   cp $SCR/k2/k2_genotype.tsv $O/singlet_k2_genotype.tsv || { echo "K2 T1K failed for $S"; tail -5 $O/singlet_k2.log; }
 fi
 gzip -1 -c $SCR/pf_1.fq > $O/pf_1.fq.gz; gzip -1 -c $SCR/pf_2.fq > $O/pf_2.fq.gz
+# arcasHLA as published for FASTQ input: genotype pseudoaligns every pair to its HLA index (kallisto), no prefilter.
+if [ -f $AE/.ok ]; then
+  ta=$(date +%s.%N)
+  PATH=$AE/bin:$PATH arcasHLA genotype -t $T -g A,B,C,DQB1,DRB1 -o $SCR/arcas $F1 $F2 > $O/arcashla.log 2>&1
+  cp $SCR/arcas/*.genotype.json $O/arcashla.genotype.json || { echo "arcasHLA failed for $S"; tail -5 $O/arcashla.log; }
+  echo "arcashla_s $(awk "BEGIN{print $(date +%s.%N)-$ta}")" >> $O/times.txt
+fi
 cat $O/counts.json; cmp -s $O/t1k_genotype.tsv $O/singlet_genotype.tsv && echo "GENOTYPE IDENTICAL" || { echo "GENOTYPE DIFFERS"; diff $O/t1k_genotype.tsv $O/singlet_genotype.tsv | head; }
