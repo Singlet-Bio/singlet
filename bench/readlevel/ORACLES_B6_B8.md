@@ -357,3 +357,70 @@ fusion information. A cell is Ku812 by KIT genotype when its PacBio row has at l
 For each caller this check reports the share of KIT-genotype Ku812 cells in which it finds BCR–ABL1 and its BCR–ABL1 calls
 in HMC1.2 cells. HMC1.2 is heterozygous for its KIT mutations, so a few HMC1.2 cells with only wild-type reads will sit in the
 Ku812 group and pull every caller's share down by the same amount.
+
+## B6 held-out result: pass on the registered rule, tied with Arriba
+
+One frozen engine run (chimproto-68d44117, soft-clip at 15 bases, job 804554) sent 13.6 million of the library's 71.3 million
+read pairs into the chimeric pass. STAR-Fusion and Arriba ran on the same reads. Scoring used the PacBio genotype labels
+(547 Ku812, 2,111 HMC1.2 cells) with the committed rule 6de5821a and the combined score of 3f35b10a (`results/b6_holdout_rank_pacbio*.json`,
+`results/b6_holdout_cells.json`).
+
+**Clause 1 passes.** STAR-Fusion makes two calls and misses BCR–ABL1, so at two false positives both callers have zero recall.
+Arriba finds BCR–ABL1 among 610 calls. The engine's combined score ranks BCR–ABL1 seventh, so the engine reaches full recall
+after six false positives, long before Arriba's 609.
+
+**Clause 2 passes, as a tie.** The engine and Arriba each find BCR–ABL1 in 2 of 547 Ku812 cells (0.37%) and in 3 of 2,111
+HMC1.2 cells (0.14%), well under the 0.5% ceiling. STAR-Fusion finds it in no cell. As the registration expected, 3' chemistry
+puts very few reads across the breakpoint, so every caller's cell recall is low.
+
+| Truth rank of BCR–ABL1 (engine pairs in labelled cells) | full Mitelman prior | leave-truth-out prior |
+|---|---|---|
+| combined (verdict) | 7 | 610 |
+| known (prior alone) | 2 | 11 |
+| breakpoint (C·f·(1+s)) | 579 | 579 |
+| cells / agreement / splice | 27 / 32 / 6 | same |
+| baseline (molecules) | 10 | 10 |
+
+Every variant passes clause 1, because Arriba's 609 false positives set a deep bar. The ranking itself reproduces the dev
+finding: breakpoint features alone place BCR–ABL1 near the bottom, and the leave-truth-out prior moves the combined score to
+rank 610. The good rank of the verdict score therefore comes from the Mitelman prior knowing BCR–ABL1.
+
+**Fusion-independent check (KIT genotype only; `results/b6_holdout_rank_kit*.json`).** Among 1,104 KIT wild-type cells the
+engine and Arriba each find BCR–ABL1 in one cell (0.09%), and STAR-Fusion in none. Both make 7 calls among 2,498 KIT-mutant
+cells (0.28%), and STAR-Fusion makes none. The KIT-mutant group includes 372 cells that also carry a BCR::ABL1 long read
+(ambient molecules or doublets), so some of these "false" calls may sit in Ku812 material. Clause 2 passes on these labels too,
+again as a tie with Arriba.
+
+**Secondary checks.** Across all 4,400 PacBio-genotyped cells the engine calls BCR–ABL1 in 9 cells and Arriba in 10, and 6
+of each set carry a PacBio BCR::ABL1 read. This matches the authors' report of about six Ku812 cells with junction reads. On the
+translated hashtag labels no caller finds BCR–ABL1 in a "Ku812" cell, and the engine makes one call in the other group against
+Arriba's four.
+
+**Verdict.** B6 passes the registered rule on held-out data. The pass rests on parity with Arriba at the cell level and on
+the known-fusion prior for ranking, with no evidence of better sensitivity than Arriba.
+
+## Soft-clip route in PR #220: CPU = GPU
+
+The route went into PR #220 (fix/chimeric-strand-calls, 79961da4): 200af961 adds it, 928144a6 fixes a literal, 601eb0ca adds
+the GPU device path, and 79961da4 fixes another literal. Reads with a GPU record skip STAR's loop at E10 levels 4 and 5, so the
+device record kernel flags the unique mappers with at least 15 unaligned bases and the prefill writes them out. Without that
+step the GPU path routed 43 reads against the CPU's 19,237 on pbmc2m.
+
+Gate job 804598 ran on one RTX 8000 (g008) with `SINGLET_ENGINE_GPU_MIN_CC=70`. CPU references came from 928144a6, whose CPU
+code is the same as 79961da4's. Host ctest passes, with test 33 skipped as before. Both 8-sample gates are IDENTICAL CPU
+against GPU on every sample: the defaults (gate A) and `--chimeric` (gate B). On all 8 samples the chimeric table has the same
+sorted rows, and both paths send the same reads into the second pass (`results/chimgate_804598_parity.tsv`).
+
+| Sample | Unmapped reads | Soft-clip reads | Added by soft-clip | GPU wall, defaults → --chimeric (s) |
+|---|---|---|---|---|
+| pbmc2m | 123,500 | 19,237 | 15.6% | 40 → 70 |
+| pbmc10m | 582,190 | 95,470 | 16.4% | 63 → 95 |
+| pbmc1k_v3 | 3,582,744 | 624,844 | 17.4% | 204 → 271 |
+| pbmc1k_v2 | 6,372,909 | 553,605 | 8.7% | 211 → 313 |
+| pbmc1k_cite_v3 | 2,479,234 | 447,809 | 18.1% | 163 → 215 |
+| pbmc5p_v1 | 4,818,388 | 125,983 | 2.6% | 201 → 278 |
+| neuron1k_v3 | 4,071,521 | 450,382 | 11.1% | 167 → 221 |
+| nuclei2k_v2 | 22,941,319 | 1,868,692 | 8.1% | 415 → 648 |
+
+The soft-clip route adds 3% to 18% to the second pass's reads. The wall-time column covers the whole chimeric pass, unmapped
+and soft-clip reads together, which runs as a CPU STAR job after the GPU main pass.

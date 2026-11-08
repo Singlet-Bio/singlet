@@ -1,0 +1,9 @@
+sample	table_cpu	table_gpu	same_rows	split_cpu	split_gpu
+pbmc2m	025773e9662ff37f	025773e9662ff37f	yes		142737 reads into the second pass (123500 unmapped, 19237 mapped with >= 15 unaligned bases)
+pbmc10m	e7827f4881ca1241	e7827f4881ca1241	yes		677660 reads into the second pass (582190 unmapped, 95470 mapped with >= 15 unaligned bases)
+pbmc1k_v3	026a6b48149c14b6	026a6b48149c14b6	yes	4207588 reads into the second pass (3582744 unmapped, 624844 mapped with >= 15 unaligned bases)	4207588 reads into the second pass (3582744 unmapped, 624844 mapped with >= 15 unaligned bases)
+pbmc1k_v2	16cd369f57aa0e64	16cd369f57aa0e64	yes	6926514 reads into the second pass (6372909 unmapped, 553605 mapped with >= 15 unaligned bases)	6926514 reads into the second pass (6372909 unmapped, 553605 mapped with >= 15 unaligned bases)
+pbmc1k_cite_v3	ce7091d5c0c31870	ce7091d5c0c31870	yes	2927043 reads into the second pass (2479234 unmapped, 447809 mapped with >= 15 unaligned bases)	2927043 reads into the second pass (2479234 unmapped, 447809 mapped with >= 15 unaligned bases)
+pbmc5p_v1	14fed4401e7bddb0	14fed4401e7bddb0	yes	4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)	4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+neuron1k_v3	4943f1028e932b7b	4943f1028e932b7b	yes	4521903 reads into the second pass (4071521 unmapped, 450382 mapped with >= 15 unaligned bases)	4521903 reads into the second pass (4071521 unmapped, 450382 mapped with >= 15 unaligned bases)
+nuclei2k_v2	e6506bb0d3d51905	e6506bb0d3d51905	yes	24810011 reads into the second pass (22941319 unmapped, 1868692 mapped with >= 15 unaligned bases)	24810011 reads into the second pass (22941319 unmapped, 1868692 mapped with >= 15 unaligned bases)
