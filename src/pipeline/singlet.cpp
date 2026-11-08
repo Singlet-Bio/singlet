@@ -3756,30 +3756,26 @@ static int singlet_main(int argc, char* argv[]) {
                 }
             }
             if (!wl_name.empty()) {
-                // Resolve path: <binary-dir>/../whitelists/<file>
+                // $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs, the order of singlet
+                // download and encode). The run path read only the install directory, so a binary outside an install tree fell back
+                // to barcode auto-discovery even with the variable set (Kang 10x v1: 285,088 discovered barcodes on one run, 21,727 on another).
                 bool resolved = false;
-                char exe_buf[PATH_MAX];
-                ssize_t exe_len = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf)-1);
-                if (exe_len > 0) {
-                    exe_buf[exe_len] = '\0';
-                    std::string bin_dir(exe_buf);
-                    auto slp = bin_dir.rfind('/');
-                    if (slp != std::string::npos) bin_dir.resize(slp);
-                    std::string candidate = bin_dir + "/../whitelists/" + wl_name;
+                for (const auto& dir : singlet::fq::resolve_whitelist_dirs({})) {
+                    const std::string candidate = dir + "/" + wl_name;
                     struct stat wl_stat;
                     if (stat(candidate.c_str(), &wl_stat) == 0) {
                         whitelist_file = candidate;
                         whitelist_auto_resolved = true;
                         resolved = true;
-                        std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag
-                                  << " → " << wl_name << "\n";
+                        std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag << " → " << candidate << "\n";
+                        break;
                     }
                 }
                 if (!resolved) {
-                    // Whitelist file not found at install path (or readlink failed)
+                    // not in $SINGLET_WHITELIST_DIR nor <binary dir>/../whitelists
                     std::cerr << "[singlet] Whitelist " << wl_name
                               << " not found for " << proto_tag
-                              << " — using barcode auto-discovery\n";
+                              << " — using barcode auto-discovery (looked in $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists)\n";
                     whitelist_file = "None";
                     whitelist_auto_resolved = true;
                 }
