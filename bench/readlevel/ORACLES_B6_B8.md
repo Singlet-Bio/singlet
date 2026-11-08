@@ -589,3 +589,32 @@ for TEs as well, is what the scte rule does for reads on TEs outside coding exon
 
 `SINGLET_TE_ALL_RULES=1` writes `te_counts.scte.1pz` and `te_counts.solote.1pz` beside `te_counts.1pz`, so one engine run
 scores all three rules against the committed rule.
+
+### B7 port: first scores (provisional, scTE pending)
+
+Jobs 804679 (build 349fd32f, host ctest 166 of 166, engine on both datasets) and 804708 (build 060b322c with the contig fix, host
+ctest 166 of 166, mESC rerun) ran the engine with `SINGLET_TE_ALL_RULES=1`. scTE's output for this round was still being written
+by 804624, so the numbers below come from te_eval with the scTE slot left out (`jobs/teport/prov/`). 804708 scores the full rule
+with scTE as soon as `te/<dataset>/scte.h5ad` appears (`jobs/teport/results/b7_<dataset>_<variant>.json`). "Old" is the scored
+feat/te-counts build (rlo-13ee63ac); the singlet rule on the new build gives identical numbers.
+
+| Variant | A375 Spearman, all | A375 Spearman, young | mESC AUROC, MERVL fraction |
+|---|---|---|---|
+| Engine, old (singlet rule) | 0.9699 | 0.9791 | 0.6185 |
+| Engine, scte rule | 0.9657 | 0.9727 | 0.6211 |
+| Engine, solote rule | 0.9686 | 0.9767 | 0.6219 |
+| SoloTE | 0.9688 | 0.9860 | 0.6695 |
+
+The counting rule moves the scores by less than 0.01, so porting the rules does not close B7. Two findings outside the rule
+explain more of the gap.
+
+**mESC: the engine discards high-copy multimappers.** The engine's STAR pass reports 4.47 M reads (2.1%) as mapped to too many
+loci, against 9,971 in the comparators' STARsolo run, which allows 100 loci (`--outFilterMultimapNmax 100 --winAnchorMultimapNmax
+100`). MERVL-int and MT2_Mm are high-copy families, so these are the reads that carry the 2C signal. Raising the engine's
+multimapper limit for TE counting is the next experiment; it changes the aligner, not the counter.
+
+**A375: the comparators see 30 of the engine's cells.** The engine calls 4,309 cells. STARsolo in `te_bench.sbatch` used the
+3M-february-2018 whitelist (R1 is 28 bases) and kept 163, of which 30 match the engine's barcodes, so every A375 score rests on
+a 30-cell pseudobulk. The engine's barcodes do not look like 3M-february-2018 barcodes, so the comparators likely need another
+whitelist (the engine's detected one). The committed rule is unchanged; the comparator run needs the matching whitelist before
+the A375 clause can be read.
