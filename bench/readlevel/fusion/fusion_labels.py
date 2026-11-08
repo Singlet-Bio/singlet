@@ -2,9 +2,10 @@
 """Cell-line labels (K562 or Kasumi-1) for the Penter 2024 mixes, independent of any fusion call.
 
 Two independent signals, both from the engine's run on the mix:
-* genotype: the engine's donor demultiplexing (donor_assignments.tsv) splits the two lines into two donors;
+* genotype: the engine's donor demultiplexing (donor_assignments.tsv) splits the cells into genotype clusters (an aneuploid line can
+  come out as more than one);
 * expression: K562 is an erythroleukemia line with high embryonic/fetal globin (HBG1, HBG2, HBZ, HBE1) and GYPA; Kasumi-1 has none.
-Each donor is named by its mean globin score; a cell gets a label only when it is a singlet of that donor. The table reports how often
+Each donor is named by its median globin score; a cell gets a label only when it is a singlet of that donor. The table reports how often
 the globin score and the genotype agree and the line ratio, which should follow the mix (1:1.5 or 1:15).
 
     PZ_SO=.../_pz.so python fusion_labels.py --engine OUT --out labels.tsv --summary labels.json
@@ -49,7 +50,7 @@ def main():
     r = pz.read_1pz(os.path.join(a.engine, "exon_counts.1pz"))
     M = sp.csc_matrix((r["data"], r["indices"], r["indptr"]), shape=(r["m"], r["n"]))
     names = list(r["rownames"])
-    rows = [i for i, n in enumerate(names) if any(t in GLOBIN for t in n.replace("|", ":").split(":"))]
+    rows = [i for i, n in enumerate(names) if any(t in GLOBIN for t in n.replace("|", "_").split("_")[:2])]  # rows: GENEID_NAME_locus (exons)
     tot = np.asarray(M.sum(axis=0)).ravel()
     glob = np.asarray(M[rows].sum(axis=0)).ravel()
     score = np.log1p(1e4 * glob / np.maximum(tot, 1))
@@ -79,13 +80,14 @@ def main():
         if c in sc:
             by_donor[d].append(sc[c])
     means = {d: float(np.mean(v)) for d, v in by_donor.items()}
-    if len(means) != 2:
-        raise SystemExit(f"expected 2 donors, got {means}")
-    k562 = max(means, key=means.get)
-    lab = {c: ("K562" if d == k562 else "Kasumi-1") for c, d in singlets.items()}
-    # expression-only call: threshold halfway between the two donors' median scores
     med = {d: float(np.median(v)) for d, v in by_donor.items()}
-    thr = (med[k562] + min(med.values())) / 2 if len(med) == 2 else None
+    if len(med) < 2 or not rows:
+        raise SystemExit(f"cannot label: donors {means}, globin rows {len(rows)}")
+    # the demultiplexer may split one aneuploid line into several genotype clusters: each donor is named by its median globin
+    # score against the midpoint between the highest and lowest donor medians
+    thr = (max(med.values()) + min(med.values())) / 2
+    line_of = {d: ("K562" if v > thr else "Kasumi-1") for d, v in med.items()}
+    lab = {c: line_of[d] for c, d in singlets.items()}
     agree = sum(1 for c, l in lab.items() if c in sc and ((sc[c] > thr) == (l == "K562")))
     with open(a.out, "w") as f:
         f.write("barcode\tline\n")
@@ -95,7 +97,7 @@ def main():
     s = {"cells_called": len(called), "labelled_singlets": len(lab), "lines": dict(cnt),
          "ratio_kasumi_per_k562": round(cnt["Kasumi-1"] / max(cnt["K562"], 1), 3),
          "donor_status": dict(collections.Counter(don[c] for c in called if c in don)),
-         "globin_mean_by_donor": means, "globin_threshold": thr, "genotype_expression_agreement": round(agree / max(len(lab), 1), 4),
+         "globin_mean_by_donor": means, "globin_median_by_donor": med, "line_of_donor": line_of, "globin_threshold": thr, "genotype_expression_agreement": round(agree / max(len(lab), 1), 4),
          "globin_rows": [names[i] for i in rows]}
     with open(a.summary, "w") as f:
         json.dump(s, f, indent=1)
