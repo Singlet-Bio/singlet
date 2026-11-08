@@ -2242,6 +2242,17 @@ public:
             const size_t lo = nR * t / nT, hi = nR * (t + 1) / nT;
             char umi[32];
             for (size_t r = lo; r < hi; ++r) {
+            // the reads are in barcode order and their signatures and alignments are not: fetch ahead, a signature 24 reads ahead, its
+            // first alignment and that alignment's results 12 ahead, its CIGAR 4 ahead (the hand-off pass does the same)
+            if (r + 24 < hi) __builtin_prefetch(S.at(R[r + 24].sig));
+            if (r + 12 < hi) {
+                const uint64_t o = S[R[r + 12].sig].aln_off;
+                if (o < A.size()) { __builtin_prefetch(A.at(o)); __builtin_prefetch(out.alnStat.data() + o); __builtin_prefetch(out.alnGene.data() + o); }
+            }
+            if (r + 4 < hi) {
+                const uint64_t o = S[R[r + 4].sig].aln_off;
+                if (o < A.size()) __builtin_prefetch(OPS.at(A[o].ops_off));
+            }
             const ReadRec& rr = R[r];
             const SigRec& sg = S[rr.sig];
             int p = -1;
@@ -2258,8 +2269,13 @@ public:
             if (st & 4) L.st.wrong_strand++;
             if (st & 16) L.st.multigene_reads++;
             if (st & 8) L.st.cross_gene_intron_reads++;
-            for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
-            umi[std::min(ulen, 21)] = 0;
+            bool umiMade = false;   // the UMI's text, made for the reads that record one (a poly(A) site or a V(D)J hit)
+            auto makeUmi = [&]() {
+                if (umiMade) return;
+                umiMade = true;
+                for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
+                umi[std::min(ulen, 21)] = 0;
+            };
             const char* umi_str = ulen > 0 ? umi : nullptr;
             const int umi_len = ulen > 0 ? std::min(ulen, 21) : 0;
             const uint32_t* ops = OPS.at(a.ops_off);
@@ -2315,7 +2331,7 @@ public:
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) { L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); }
+                if (ok) { makeUmi(); L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); }
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2329,6 +2345,7 @@ public:
                     L.ov.clear();
                     vdj_model_.query(a.tid, s0, e0, L.ov);
                     if (!L.ov.empty()) {   // replayed in read order after the chunks (vdj_umi_ and vdj_acc_ are not thread-safe)
+                        makeUmi();
                         HostLocal::VdjEv ev; ev.bc = static_cast<uint32_t>(rr.bc); ev.vg = L.ov[0]; ev.gene = nh == 1 ? gene : UINT32_MAX; ev.ulen = umi_len;
                         std::memcpy(ev.umi, umi, sizeof(ev.umi));
                         L.vdj.push_back(ev);

@@ -74,7 +74,9 @@ typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;
 // gpu/bold-kern2 (on by default; SINGLET_BOLD_WSHRINK=0 turns it off): lane B with the windows' aligns in a per-batch pool (Work::waP) and smaller NWA / NKEEP.
 // A read that needs more than these capacities ends Overflow and goes to the host lane (STAR's limits), as lane B's own overflows do.
-typedef Caps<      160,     8,  128,   128,  32,    4096, 20,  32,   32,    4096, true> LaneBc;
+// Capacities raised from NW 128, NWA 32, NKEEP 32 (SINGLET_ENGINE_GPU_OVSTAT=1 on pbmc1k_v3: of lane B's 177,686 overflows at STEPS_B 8192,
+// 70,154 were keep, 67,260 wa and 39,995 win; nuclei2k_v2 mostly keep). A read over a capacity is mapped by the host pool, so results do not change.
+typedef Caps<      160,     8,  128,   192,  50,    4096, 20,  32,   64,    4096, true> LaneBc;
 
 // ---- dedup
 __global__ void k_hash(const char* seq, const u64* off, u64 n, u64* h1, u64* h2, uint8_t* hasN) {
@@ -1131,7 +1133,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const double tF0 = now();
     double tS = tF0;   // E12: start of the current step
     auto step = [&](const char* k) { const double t = now(); stepAdd(k, t - tS); tS = t; };
-    cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
+    const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
+    if (initRc != cudaSuccess) cudaGetLastError();
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
@@ -1912,12 +1915,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 nbM = envU("SINGLET_ENGINE_GPU_NBM", NEW ? 393216 : 262144, 4096);
     const bool nbBset = std::getenv("SINGLET_ENGINE_GPU_NBB") != nullptr;
     const u64 nbB0 = envU("SINGLET_ENGINE_GPU_NBB", NEW ? 131072 : 65536, 1024);
-    // heavy-read split (gpu/bold-split, redeveloped): SINGLET_ENGINE_GPU_STEPS_B sets lane B's stitching step budget (default 2048; a read over it
+    // heavy-read split (gpu/bold-split, redeveloped): SINGLET_ENGINE_GPU_STEPS_B sets lane B's stitching step budget (default 8192; a read over it
     // ends Overflow and the host pool maps it with STAR's limits, so results do not change). "auto": a controller moves the budget between
     // batches (start 2048, bounds 64..8192): idle pool threads with an empty queue halve it, a queue the pool cannot drain before lane B ends doubles it
     const char* sbE = std::getenv("SINGLET_ENGINE_GPU_STEPS_B");
     const bool autoReq = sbE && std::string(sbE) == "auto";
-    const u64 stepsB = autoReq ? 2048 : envU("SINGLET_ENGINE_GPU_STEPS_B", 2048, 1);
+    // default 8192 (was 2048): on pbmc1k_v3 the host pool then maps 177,686 reads instead of 198,643 at 45 instead of 65 core-s per run,
+    // and lane B's kernels take about the same time (most of the rest overflow a capacity, not the budget; 65536 changes nothing more)
+    const u64 stepsB = autoReq ? 2048 : envU("SINGLET_ENGINE_GPU_STEPS_B", 8192, 1);
     struct AutoB { std::atomic<u64> budget{2048}; double t = 0, batch = 0; std::string log; } autoB;
     // sequences per chunk: the lanes' device buffers scale with it (SINGLET_ENGINE_GPU_CHUNK, default 16M; E17: smaller when the budget needs it)
     const char* ceE = std::getenv("SINGLET_ENGINE_GPU_CHUNK");
@@ -2828,7 +2833,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                       (unsigned long long)nChunks, (unsigned long long)nbA, (unsigned long long)nbMlog, (unsigned long long)nbBlog, b2gb(g_bud.peak), g_bud.peakAt.c_str());
         out.log += bl;
         out.log += "engine_gpu: E17 lanes: " + planLog + "\n";
-        if (autoReq || stepsB != 2048)
+        if (autoReq || stepsB != 8192)
             out.log += "engine_gpu: STEPS_B " + (autoReq ? "auto, changes: " + (autoB.log.empty() ? std::string("none") : autoB.log) : std::to_string(stepsB)) + "\n";
     }
     char line[512];

@@ -169,10 +169,37 @@ struct Clip {
 
 // an allocator that default-initializes (resize does not zero-fill): the decode's large per-read arrays are first touched by the parsing
 // threads that write every element, instead of a serial fill first (E11 step 4)
+// Large arrays (64 MB and up) also ask for transparent hugepages on their 2 MB-aligned interior: with THP in "madvise" mode (as on
+// Clipper) they otherwise fault in 4 KB at a time, and the parallel first touches of many threads contend on the process's page tables
+// (the mapper's record copies, the decode's arrays). Placement only: the bytes are the same. SINGLET_NOINIT_HUGEPAGE=0 turns it off.
+// cudaInitDevice's third argument: deviceFlags (cudaDeviceScheduleBlockingSync: a host thread waiting on the device sleeps) are applied
+// only with cudaInitDeviceFlagsAreValid (0x01) there. Every call passed 0 before, so the contexts ran with schedule "auto", which spins a
+// waiting thread while the process has fewer contexts than cores (the lane-driving thread burned about the lanes' kernel time in CPU).
+// SINGLET_GPU_SCHEDULE_AUTO=1 restores that (0).
+inline unsigned gpuInitFlags() {
+    static const unsigned f = [] { const char* e = std::getenv("SINGLET_GPU_SCHEDULE_AUTO"); return (e && e[0] == '1') ? 0u : 0x01u; }();
+    return f;
+}
+inline bool noinitHugepage() {
+    static const bool on = [] { const char* e = std::getenv("SINGLET_NOINIT_HUGEPAGE"); return !(e && e[0] == '0'); }();
+    return on;
+}
 template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U> struct rebind { using other = NoInitAlloc<U>; };
     NoInitAlloc() = default;
     template <class U> NoInitAlloc(const NoInitAlloc<U>&) noexcept {}
+    T* allocate(std::size_t n) {
+        T* p = std::allocator<T>::allocate(n);
+#if defined(__linux__)
+        const std::size_t b = n * sizeof(T);
+        constexpr std::uintptr_t H = std::uintptr_t(2) << 20;
+        if (b >= (std::size_t(64) << 20) && noinitHugepage()) {
+            const std::uintptr_t a = (reinterpret_cast<std::uintptr_t>(p) + H - 1) & ~(H - 1), e = (reinterpret_cast<std::uintptr_t>(p) + b) & ~(H - 1);
+            if (e > a) madvise(reinterpret_cast<void*>(a), e - a, MADV_HUGEPAGE);
+        }
+#endif
+        return p;
+    }
     template <class U> void construct(U* p) noexcept(std::is_nothrow_default_constructible<U>::value) { ::new ((void*) p) U; }
     template <class U, class... A> void construct(U* p, A&&... a) { ::new ((void*) p) U(std::forward<A>(a)...); }
 };
