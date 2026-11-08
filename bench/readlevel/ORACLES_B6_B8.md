@@ -625,3 +625,12 @@ Under owner rule D-111, B6 is closed at parity with Arriba on the held-out run. 
 branch feat/arriba-cascade (fbeaa915) stays unmerged, and its dev scores above are kept as a record. One observation is left
 for later. The engine's fusion ranking depends on the Mitelman prior: without it, the held-out truth ranks 579th on breakpoint
 features and 610th with the leave-truth-out prior.
+
+## B7 A375 comparator correction (before the verdict)
+
+A375 (GSE212945) is a Multiome gene-expression library. The engine resolved its whitelist as `gex_737K-arc-v1`, but the
+comparators' STARsolo run chose `3M-february-2018` from the 28-base R1 and called 163 cells, of which only 30 match the
+engine's 4,309. Most comparator reads therefore carried no valid cell barcode. The first A375 score (job 804624: engine
+0.9699 and 0.9791, scTE 0.9664 and 0.9784, SoloTE 0.9688 and 0.9860, over all and young subfamilies) used that run and is kept
+as a record only. STARsolo, scTE and SoloTE are rerun on A375 with `CBWL_OVERRIDE` set to the 737K-arc list, and the rule is
+unchanged.

@@ -38,6 +38,7 @@ if [ $SWAP = 1 ]; then t=$R1; R1=$R2; R2=$t; L1=$L2; fi
 # 10x names for the engine
 F=$D/10x; mkdir -p $F; ln -sfn $R1 $F/${NAME}_S1_L001_R1_001.fastq.gz; ln -sfn $R2 $F/${NAME}_S1_L001_R2_001.fastq.gz
 if [ "$L1" -ge 28 ]; then CBWL=$WL/3M-february-2018.txt; UMIL=12; else CBWL=$WL/737K-august-2016.txt; UMIL=10; fi
+[ -n "${CBWL_OVERRIDE:-}" ] && CBWL=$CBWL_OVERRIDE   # e.g. a Multiome GEX library (737K-arc), which R1 length cannot tell from 3' v3
 echo "R1 length $L1 -> whitelist $(basename $CBWL), UMI $UMIL"
 
 # engine (SKIP_ENGINE=1: the run happens elsewhere)
