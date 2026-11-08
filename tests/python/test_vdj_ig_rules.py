@@ -60,3 +60,17 @@ def test_pair_rescue_gives_back_both_chains_of_a_clone_member():
     df = A.filter_contigs(pd.DataFrame(rows), A.Params(ambient_rescue="none", ig_pair_rescue=True))
     assert _kept(df, 1, "IGH") and _kept(df, 1, "IGK")
     assert not _kept(df, 2, "IGH") and not _kept(df, 2, "IGK")
+
+
+def test_barcode_floor_drops_a_few_ambient_ig_molecules_and_keeps_b_cells():
+    rows = [_row(0, "IGK", "TGTCAGCAGTATAAT", 40), _row(0, "IGH", "TGTGCGAGAGATTAC", 90)]  # a B cell
+    rows += [_row(1, "IGL", "TGCAGCTCATATACA", 2)]  # a T-cell droplet: two IG molecules
+    rows += [_row(2, "IGK", "TGTCAACAGAGTTAC", 3)]  # three UMIs of one junction, one of them over the junction
+    rows[-1]["junction_umis"] = 1
+    rows += [_row(3, "TRB", "TGTGCCAGCAGTTTA", 1)]  # TCR chains are untouched
+    df = A.filter_contigs(pd.DataFrame(rows), A.Params())
+    assert _kept(df, 0, "IGK") and _kept(df, 0, "IGH")
+    assert not _kept(df, 1, "IGL") and not _kept(df, 2, "IGK")
+    assert _kept(df, 3, "TRB")
+    off = A.filter_contigs(pd.DataFrame(rows), A.Params(ig_cell_min_umis=0, ig_lone_min_junction_umis=0))
+    assert _kept(off, 1, "IGL") and _kept(off, 2, "IGK")

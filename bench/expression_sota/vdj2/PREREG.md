@@ -373,3 +373,43 @@ TRUST4 24 minutes on 914 reference-paired cells.
 (-0.0110), and contig F1 is above TRUST4's. Wrong-lineage fails: 109 of 1,829 Singlet chains with a known GEX lineage sit in a
 non-B lineage, a rate of 0.0596 against the limit of 0.0062 (Cell Ranger's 0.0012 plus 0.005). The library is not re-run, and the
 rule and comparator stay as registered.
+
+## Addendum 9 (2026-11-08, registered before any file of the library is opened): IG barcode floor, confirmed on King 2021 tonsil
+
+**Failure.** On the Addendum 8 library 6% of Singlet's IG chains sat in GEX T cells, against 0.1% for Cell Ranger. On the
+development libraries those chains carry a median of 1 UMI, 72% of them at most 2, and most are the only IG chain of their
+barcode. Cell Ranger confirms 2% of them, while TRUST4's barcode report holds 72%.
+
+**How the comparators suppress them.** TRUST4 (`trust-barcoderep.pl`) applies no abundance floor. It calls a barcode B
+when its most abundant locus is IG. Its one ambient filter, `scripts/barcoderep-filter.py`, is a cross filter (2% of a
+barcode holding >= 50 of the same CDR3), which `run-trust4` does not call and which our cross filter already covers. No
+TRUST4 code is therefore ported. Cell Ranger's documented V(D)J cell rules are what remove these chains: a barcode needs
+>= 3 UMIs, and a lone productive contig needs more than one UMI over its junction. Singlet reimplements both rules from the
+documentation, for IG chains only (TCR is unchanged): `ig_cell_min_umis=3` and `ig_lone_min_junction_umis=2`, both now
+defaults.
+
+**Development measurement** (an exploratory sweep by refiltering the Addendum 6 runs). Pooled wrong-lineage falls from
+0.0031 to 0.0009 (Cell Ranger 0.0008). Correct pairing is unchanged at 0.9217 (TRUST4 0.9159), and contig F1 is unchanged
+or higher on every library. The confirmation libraries were not scored.
+
+**Library.** King et al. 2021, paediatric tonsil, unsorted immune cells of donors BCP8 and BCP9 ("Total" in the deposit),
+10x 5' v1. The BCR reads and Cell Ranger 3.0.0 `vdj` filtered contigs come from ArrayExpress E-MTAB-9003, and the GEX
+filtered matrices (Cell Ranger 3.0.0 `count`) from E-MTAB-9005. It comes from another study, tissue and donors than every
+library used so far. A search of both repositories (all branches, commit messages included) and of the cluster's data
+folders found no earlier use, only mentions in the launch held-out panel and a literature index. Only the dataset pages
+have been read. The data are staged and hash-locked by the launch held-out panel (`sprint/heldout-launch/MANIFEST.md` in
+the project repository). The run waits for that manifest and uses the files it locks.
+
+**Run.** One Singlet run per donor at the commit that adds this addendum (defaults), with the second-Cys reference (Cell
+Ranger 3), the `737K-august-2016` whitelist, and one TRUST4 run on the same reads. Truth is the deposited Cell Ranger
+filtered contig annotations. Cells and lineage labels come from the deposited GEX matrices. The setting off is reported
+from a refilter with both floors at 0. If the deposit holds no Cell Ranger contig annotations, or its GEX barcodes do not
+match the BCR barcodes, the run stops before either tool starts and this is reported.
+
+**Rule.** The Addendum 6 rule on the two donors pooled, wrong-lineage included. The difference Singlet minus TRUST4 in
+correct pairing must be at least the negative half-width of its paired bootstrap 95% interval. The wrong-lineage rate must
+be at most Cell Ranger's plus 0.005, and contig F1 must be above TRUST4's. A pass meets the B12 endpoint. A fail is
+reported, and the library is not run again.
+
+**Observations, out of scope.** The never-assembled chains (Addendum 6 breakdown: the seed and anchor losses) and other
+pairing gains are recorded only. A port of TRUST4's V motif as a Cys104 fallback was written and then dropped unmeasured.
