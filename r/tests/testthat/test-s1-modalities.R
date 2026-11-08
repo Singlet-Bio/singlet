@@ -175,3 +175,52 @@ test_that("singlet_cells(modalities = ) slices one member", {
         expect_identical(S4Vectors::metadata(sub)$singlet_s1$modalities, "splice_junctions")
     })
 })
+
+ambient_root <- local({
+    cache <- NULL
+    function() {
+        if (!is.null(cache)) return(cache)
+        env <- Sys.getenv("SINGLET_S1_AMBIENT_ROOT")  # python -P tests/python/_s1_synth.py /some/dir --ambient
+        if (nzchar(env) && file.exists(file.path(env, "truth_GSM9000001_ambient.mtx"))) {
+            cache <<- normalizePath(env, winslash = "/")
+            return(cache)
+        }
+        py <- Sys.getenv("SINGLET_PYTHON", Sys.which("python"))
+        top <- testthat::test_path("..", "..", "..")
+        script <- normalizePath(file.path(top, "tests", "python", "_s1_synth.py"), mustWork = FALSE)
+        if (!nzchar(py) || !file.exists(script)) return(NA_character_)
+        out <- file.path(tempdir(), "s1_synth_ambient")
+        res <- suppressWarnings(tryCatch(
+            system2(py, c("-P", shQuote(script), shQuote(out), "--ambient"), stdout = TRUE, stderr = TRUE,
+                    env = c(paste0("PYTHONPATH=", normalizePath(file.path(top, "python"), mustWork = FALSE)))),
+            error = function(e) NULL))
+        if (is.null(res) || !file.exists(file.path(out, "truth_GSM9000001_ambient.mtx"))) return(NA_character_)
+        cache <<- normalizePath(out, winslash = "/")
+        cache
+    }
+})
+
+test_that("ambient-corrected counts load only on request, never in the default", {
+    expect_identical(singlet:::.s1_normalize_modalities("ambient"), "ambient_corrected")
+    expect_false("ambient_corrected" %in% singlet:::.s1_normalize_modalities(NULL))
+    testthat::skip_if_not_installed("SingleCellExperiment")
+    root <- ambient_root()
+    if (is.na(root)) testthat::skip("no ambient test study: python -P tests/python/_s1_synth.py <dir> --ambient")
+    with_x_cache({
+        st <- singlet_study(X_GSE, base = root)
+        expect_true("ambient_corrected" %in% singlet_study_modalities(st, X_G1))
+        mem <- st$samples[[X_G1]]$members
+        len <- function(...) sum(vapply(c("cells", ...), function(n) as.numeric(mem[[n]]$len), numeric(1)))
+        def <- sample_bytes(st, X_G1, NULL)  # packs first
+        def <- sample_bytes(st, X_G1, NULL)
+        expect_lte(def$bytes, len("exon_counts.1pz", "intron_counts.1pz") + 128)
+        expect_false("ambient_corrected" %in% SummarizedExperiment::assayNames(def$sce))
+        opt <- sample_bytes(st, X_G1, c("counts", "ambient_corrected"))
+        expect_gte(opt$bytes, len("exon_counts.1pz", "intron_counts.1pz", "ambient_corrected_counts.1pz"))
+        expect_identical(SummarizedExperiment::assayNames(opt$sce), c("counts", "ambient_corrected"))
+        tr <- Matrix::readMM(file.path(root, sprintf("truth_%s_ambient.mtx", X_G1)))
+        expect_equal(sum(abs(SummarizedExperiment::assay(opt$sce, "ambient_corrected") - tr)), 0)
+        expect_equal(sum(abs(SummarizedExperiment::assay(opt$sce, "counts") - SummarizedExperiment::assay(def$sce, "counts"))), 0)
+        expect_error(singlet:::.s1_read_study(st, X_G3, modalities = "ambient_corrected"), "no requested sample has ambient_corrected")
+    })
+})

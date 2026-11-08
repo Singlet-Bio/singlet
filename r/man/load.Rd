@@ -59,7 +59,9 @@ naming \code{legacy = TRUE}; setting the environment variable
 members' byte ranges are fetched). \code{"counts"} (assay \code{counts} =
 spliced + unspliced; needs the exon and intron matrices),
 \code{"spliced"} (assay, exon matrix only), \code{"unspliced"} (assay,
-intron matrix only), \code{"splice_junctions"} and \code{"psi"}
+intron matrix only), \code{"ambient_corrected"} (assay: counts with each
+called cell's estimated ambient molecules removed; never part of the
+default), \code{"splice_junctions"} and \code{"psi"}
 (\code{altExp}s on the junctions; junction matrix only, \code{psi} is
 the true percent spliced in), \code{"mt"} and \code{"vdj"}
 (\code{altExp}s). The cell table is always read. \code{NULL} (default)
@@ -72,8 +74,9 @@ whole and only subset, with a warning.}
 level of \code{colData$cell_type} (default 2, compartment and lineage) and
 an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.}
 
-\item{include_unvalidated}{Also keep the unvalidated \code{qc_doublet_score} in
-\code{colData}; published Research Alpha objects never carry it (local outputs only).}
+\item{include_unvalidated}{Also keep the columns a default load leaves out:
+the unvalidated \code{qc_doublet_score} and the donor assignment's doublet
+calls (\code{don_best_doublet}, \code{don_best_singlet}, \code{don_cell_status}).}
 
 \item{sample_facts}{Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
 \code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},

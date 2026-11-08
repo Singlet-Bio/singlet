@@ -137,6 +137,27 @@ def test_obs_columns_order_categories_and_hidden_doublet_score():
     assert set(only) == {"cell_type", "cell_type_deepest_ontology_term_id", "qc_doublet_score"}
 
 
+def test_obs_columns_hide_the_doublet_calls_and_keep_the_donor():
+    """The default obs keeps the donor id and its probability; the doublet calls come back only on request."""
+    calls = {
+        "don_best_doublet": ["donor0,donor1", "donor0,donor1"],
+        "don_best_singlet": ["donor0", "donor1"],
+        "don_cell_status": ["singlet", "doublet"],
+    }
+    cols = {
+        "barcode": ["AAA", "CCC"],
+        "called": np.array([True, True]),
+        "don_donor_id": ["donor0", "donor1"],
+        "don_prob_max": np.array([0.99, 0.6], np.float32),
+        **calls,
+    }
+    assert set(L.CALL_LAYER) == set(calls) and set(L.HIDDEN) >= set(calls) | {"qc_doublet_score"}
+    d = L.obs_columns(cols, 2)
+    assert {"don_donor_id", "don_prob_max"} <= set(d) and not set(calls) & set(d)
+    assert set(calls) <= set(L.obs_columns(cols, 2, include_unvalidated=True))
+    assert set(L.obs_columns(cols, 2, columns=["don_cell_status"])) == {"don_cell_status"}
+
+
 def test_to_frame_fills_columns_a_sample_lacks():
     import pandas as pd
 
@@ -238,6 +259,7 @@ def test_to_anndata_obs_has_the_labels(labelled, env):
     ):
         assert c in obs.columns, c
     assert "qc_doublet_score" not in obs.columns and "barcode" not in obs.columns
+    assert "don_prob_max" in obs.columns and not set(L.CALL_LAYER) & set(obs.columns)
     assert list(obs.columns[:2]) == ["gsm_id", "cell_type"]
     one = obs[obs["gsm_id"] == G1]
     # the cells are in sorted-barcode order: map each back to its matrix column
@@ -274,7 +296,7 @@ def test_to_anndata_options_and_writable_h5ad(labelled, env, tmp_path):
     ad = st.to_anndata(
         ["GSM9000001"], cell_type_level=6, cell_type_min_score=0.0, include_unvalidated=True
     )
-    assert "qc_doublet_score" in ad.obs.columns
+    assert "qc_doublet_score" in ad.obs.columns and set(L.CALL_LAYER) <= set(ad.obs.columns)
     assert ad.obs["cell_type_level"].max() == 4
     p = tmp_path / "x.h5ad"
     ad.write_h5ad(p)
@@ -320,8 +342,13 @@ def test_load_s2_has_the_labels(labelled, env):
     root, s = labelled
     key = s.truth["GSM9000001"]["key"]
     ad = client.load(str(root.joinpath(*key.split("/"))))
-    assert {"cell_type", "sex_chrom", "called_ed"} <= set(ad.obs.columns)
-    assert "qc_doublet_score" not in ad.obs.columns
+    assert {"cell_type", "sex_chrom", "called_ed", "don_donor_id", "don_prob_max"} <= set(ad.obs.columns)
+    assert "qc_doublet_score" not in ad.obs.columns and not set(L.CALL_LAYER) & set(ad.obs.columns)
+    full = client.load(str(root.joinpath(*key.split("/"))), include_unvalidated=True)
+    assert set(L.CALL_LAYER) <= set(full.obs.columns)
+    st = client.open_study(s.manifest["gse"], base=str(root))
+    dbl = st.cells("don_cell_status == 'doublet'", samples=["GSM9000001"])  # the hidden calls still filter
+    assert dbl.n_obs > 0 and "don_cell_status" not in dbl.obs.columns
 
 
 # =================================================================================================================== live

@@ -45,7 +45,8 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 \item{cell_type_level, cell_type_min_score}{Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 it (default 0, none); see \code{\link{singlet_labels}}.}
 
-\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).}
+\item{include_unvalidated}{Also keep the columns a default load leaves out: \code{qc_doublet_score} (unvalidated) and the
+donor assignment's doublet calls \code{don_best_doublet}, \code{don_best_singlet} and \code{don_cell_status}.}
 
 \item{sample_facts}{Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
 \code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},

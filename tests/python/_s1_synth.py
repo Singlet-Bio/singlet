@@ -127,13 +127,15 @@ class Synth:
         extras: bool = False,
         junction_table: bool = False,
         labels: bool = False,
+        ambient: bool = False,
     ) -> "Synth":
         """``extras`` adds feature-level members: ``sj_counts.1pz`` (inline junction names; GSM9000001 and GSM9000003 have
         overlapping, different junction sets) and ``vdj_gene_usage.1pz`` (GSM9000001 only). ``junction_table`` stores the junction rows
         as ids into a shared junction table (the 30 junctions both samples have; each sample's others go to ``sj_counts.1pz.local``).
         ``labels`` adds the Research Alpha per-cell columns to GSM9000001's cells table (:meth:`label_columns`: cell type path and
         per-level confidences, sex, ancestry, ``called_ed``, ``qc_doublet_score``, categorical ``don_donor_id`` / ``cyc_phase``
-        with their labels in recipe members of the manifest); GSM9000003 stays without them."""
+        with their labels in recipe members of the manifest); GSM9000003 stays without them. ``ambient`` adds
+        ``ambient_corrected_counts.1pz`` (exon-pack gene rows) to GSM9000001."""
         self.jx = None
         if extras and junction_table:
             from singlet.s1 import junctions as J
@@ -215,6 +217,18 @@ class Synth:
                     K.FLAG_LEGACY | K.FLAG_ANNDATA,
                 )
             extra_truth = {}
+            if ambient and gsm == "GSM9000001":
+                am_blob, am_csc = self._matrix(
+                    len(self.exon_names), n, seed + 400, self.exon_pack, bcs, dens // 3, chunk_cols
+                )
+                w.add_matrix(
+                    "ambient_corrected_counts.1pz",
+                    am_blob,
+                    bytes.fromhex(_pz2.read_header(am_blob)["digest"]),
+                    {"m": len(self.exon_names), "n": n},
+                    K.FLAG_LEGACY,
+                )
+                extra_truth["ambient_g"] = self._gene_level(am_csc, self.exon_names, gene_ids)
             if extras:
                 lo = 0 if gsm != "GSM9000003" else 30
                 sj_names = self.junction_names(lo, lo + 60)
@@ -450,6 +464,11 @@ class Synth:
         cols["cyc_phase"] = (cells_mod.DT_U8, (idx % 2).astype(np.uint8))
         cols["qc_doublet_score"] = (F, (idx % 5 / 5.0).astype(np.float32))
         cols["don_donor_id"] = (cells_mod.DT_U8, (idx % 3 == 0).astype(np.uint8))
+        # the donor assignment's probability (shown) and its doublet calls (call layer: hidden by default)
+        cols["don_prob_max"] = (F, (0.5 + idx % 5 / 10.0).astype(np.float32))
+        cols["don_cell_status"] = (S, ["doublet" if i % 6 == 5 else "singlet" for i in range(n)])
+        cols["don_best_singlet"] = (S, ["donor0"] * n)
+        cols["don_best_doublet"] = (S, ["donor0,unassigned"] * n)
         cols["mts_pct_heteroplasmic"] = (F, (idx % 4 / 4.0).astype(np.float32))
         return cols
 
@@ -524,8 +543,9 @@ if __name__ == "__main__":
     with_labels = (
         "--labels" in sys.argv[2:]
     )  # label columns on GSM9000001, and truth_<GSM>_labels.tsv
+    with_ambient = "--ambient" in sys.argv[2:]  # ambient_corrected_counts.1pz on GSM9000001, and truth_<GSM>_ambient.mtx
     os.makedirs(out, exist_ok=True)
-    s = Synth(out).build(extras=extras, labels=with_labels)
+    s = Synth(out).build(extras=extras, labels=with_labels, ambient=with_ambient)
     with open(os.path.join(out, "genes.txt"), "w") as fh:
         fh.write("\n".join("%s\t%s" % (g, n) for g, n in s.exon_pack.gene_table()) + "\n")
     for gsm, t in s.truth.items():
@@ -556,4 +576,6 @@ if __name__ == "__main__":
             scipy.io.mmwrite(os.path.join(out, "truth_%s_sj.mtx" % gsm), t["sj"][:, cols])
             with open(os.path.join(out, "truth_%s_sj_names.txt" % gsm), "w") as fh:
                 fh.write("\n".join(t["sj_names"]) + "\n")
+        if "ambient_g" in t:
+            scipy.io.mmwrite(os.path.join(out, "truth_%s_ambient.mtx" % gsm), t["ambient_g"][:, cols])
     print(out)

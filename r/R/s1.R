@@ -457,6 +457,7 @@ print.singlet_study <- function(x, ...) {
     counts = c("exon_counts.1pz", "intron_counts.1pz"),  # counts assay = spliced + unspliced
     spliced = "exon_counts.1pz",
     unspliced = "intron_counts.1pz",
+    ambient_corrected = "ambient_corrected_counts.1pz",  # assay: counts minus each cell's estimated ambient molecules (only on request)
     splice_junctions = "sj_counts.1pz",                    # altExp: reads per junction
     psi = "sj_counts.1pz",                                 # altExp: percent spliced in, computed from the junctions
     mt = "mt_heteroplasmy.1pz",
@@ -465,13 +466,17 @@ print.singlet_study <- function(x, ...) {
     gene_activity = "atac_gene_activity.1pz")              # altExp: ATAC fragments per gene
 .s1_modality_alias <- c(x = "counts", exon = "spliced", intron = "unspliced", junctions = "splice_junctions",
                         sj = "splice_junctions", splice_psi = "psi", mt_heteroplasmy = "mt", vdj_gene_usage = "vdj",
-                        peaks = "atac", chromatin = "atac")
-.s1_gene_members <- c("exon_counts.1pz", "intron_counts.1pz")
-.s1_gene_modalities <- c("counts", "spliced", "unspliced")
+                        peaks = "atac", chromatin = "atac", ambient = "ambient_corrected",
+                        ambient_corrected_counts = "ambient_corrected")
+.s1_gene_members <- c("exon_counts.1pz", "intron_counts.1pz")  # what a read fetches when no modality is named
+.s1_gene_level_members <- c(.s1_gene_members, "ambient_corrected_counts.1pz")  # matrices whose rows are on the gene axis
+.s1_gene_modalities <- c("counts", "spliced", "unspliced", "ambient_corrected")
+# the default load: uncorrected counts and their layers; corrections such as ambient_corrected only when named
+.s1_default_modalities <- c("counts", "spliced", "unspliced")
 
 # Canonical names (vocabulary order) of `modalities`; NULL keeps counts + spliced + unspliced (counts alone without layers).
 .s1_normalize_modalities <- function(modalities, layers = TRUE) {
-    if (is.null(modalities)) return(if (layers) .s1_gene_modalities else "counts")
+    if (is.null(modalities)) return(if (layers) .s1_default_modalities else "counts")
     k <- tolower(trimws(as.character(modalities)))
     k <- ifelse(k %in% names(.s1_modality_alias), unname(.s1_modality_alias[k]), k)
     bad <- setdiff(k, names(.s1_modality_members))
@@ -518,7 +523,7 @@ print.singlet_study <- function(x, ...) {
 #'
 #' @param x A \code{singlet_study} or a GEO Series accession.
 #' @param gsm Optional sample accession: only that sample's modalities.
-#' @return A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{splice_junctions},
+#' @return A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{ambient_corrected}, \code{splice_junctions},
 #'   \code{psi}, \code{mt}, \code{vdj}, \code{atac}, \code{gene_activity}.
 #' @export
 singlet_study_modalities <- function(x, gsm = NULL) {
@@ -716,10 +721,10 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     }
     cols <- lapply(cells$columns, function(v) if (is.list(v)) v else v[sel + 1L])
     c_hi <- sel[[length(sel)]] + 1L
-    parts <- list(exon = NULL, intron = NULL)
+    parts <- list(exon = NULL, intron = NULL, ambient = NULL)
     features <- list()
     for (name in present) {
-        gene_level <- name %in% .s1_gene_members
+        gene_level <- name %in% .s1_gene_level_members
         mref <- mem[[name]]
         if (is.null(mref) || mref$len == 0) next
         buf <- bl[[name]]
@@ -761,16 +766,17 @@ singlet_study_modalities <- function(x, gsm = NULL) {
             part <- if (length(pieces) == 1L) pieces[[1L]] else do.call(cbind, pieces)
         }
         if (gene_level) {
-            parts[[if (name == "exon_counts.1pz") "exon" else "intron"]] <- part
+            parts[[switch(name, exon_counts.1pz = "exon", intron_counts.1pz = "intron", "ambient")]] <- part
         } else {
             rownames(part) <- pz2_names_(buf, TRUE)$names
             features[[name]] <- part
         }
     }
-    list(gsm = gsm, sel = sel, cols = cols, exon = parts$exon, intron = parts$intron, features = features, n_rows = n_rows)
+    list(gsm = gsm, sel = sel, cols = cols, exon = parts$exon, intron = parts$intron, ambient = parts$ambient, features = features,
+         n_rows = n_rows)
 }
 
-.s1_sample_empty <- function(r) is.null(r$exon) && is.null(r$intron) && length(r$features) == 0L
+.s1_sample_empty <- function(r) is.null(r$exon) && is.null(r$intron) && is.null(r$ambient) && length(r$features) == 0L
 
 # Assays and altExps of the selected modalities from per-sample reads `ok` (each with `ord`, the cell order, and `cn`, the cell
 # names). counts / spliced / unspliced are gene assays; splice_junctions, psi, mt, vdj, atac and gene_activity are altExps (SummarizedExperiment) on
@@ -791,8 +797,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
             else if (is.null(un)) sp else if (is.null(sp)) un else sp + un
         })))
     }
-    for (a in intersect(c("spliced", "unspliced"), mods)) {
-        what <- if (a == "spliced") "exon" else "intron"
+    for (a in intersect(c("spliced", "unspliced", "ambient_corrected"), mods)) {
+        what <- switch(a, spliced = "exon", unspliced = "intron", ambient_corrected = "ambient")
         lacking <- vapply(ok, function(r) is.null(r[[what]]), NA)
         if (any(lacking) && explicit) {
             warning(sprintf("assay %s omitted: %s have no %s", a, paste(vapply(ok[lacking], `[[`, "", "gsm"), collapse = ", "),
@@ -981,7 +987,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param cache_dir Cache directory (see \code{\link{load}}).
 #' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
 #'   it (default 0, none); see \code{\link{singlet_labels}}.
-#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated; local outputs only, published objects never carry it).
+#' @param include_unvalidated Also keep the columns a default load leaves out: \code{qc_doublet_score} (unvalidated) and the
+#'   donor assignment's doublet calls \code{don_best_doublet}, \code{don_best_singlet} and \code{don_cell_status}.
 #' @param sample_facts Add the structured sample facts of the singlet.bio study API to \code{colData}: \code{tissue_type},
 #'   \code{cell_line}, \code{cell_line_cellosaurus_id}, \code{tumor_sample_type}, \code{disease},
 #'   \code{disease_ontology_term_id}, \code{donor_status} and \code{sample_kind} (factors; \code{NA} where the sample's
