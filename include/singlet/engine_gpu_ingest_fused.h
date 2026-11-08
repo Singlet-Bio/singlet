@@ -2,8 +2,8 @@
 #pragma once
 // The fused .1fq pass (SeqCacheGpuIngest.cpp decodeScan): the pipeline's head scan and the packed-read decode (engine_gpu_ingest.h phase A)
 // from one read and one decompression of each block. It fills the head scan's per-block results and counters exactly as RunSet::scan_head
-// does, and the packed reads exactly as decodeReads does after a head scan; startParent then finds the reads decoded. Needs a fixed cDNA
-// read length (the arrays are sized from the block headers before any block is decoded). dropFused releases the reads when the pipeline
+// does, and the packed reads exactly as decodeReads does after a head scan; startParent then finds the reads decoded. Needs the header's cDNA
+// read length, which trimming only shortens (the arrays are sized from it and the block headers before any block is decoded). dropFused releases the reads when the pipeline
 // does not use the ingest after all (a 5' prefix to clip).
 #include <cstdint>
 #include <string>

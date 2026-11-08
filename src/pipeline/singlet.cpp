@@ -5082,10 +5082,10 @@ static int singlet_main(int argc, char* argv[]) {
                 std::string err;
                 const int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
                 // The fused pass (engine_gpu_ingest_fused.h): the head scan and the packed-read decode from one decompression of each block,
-                // where the decode would start right after this scan anyway (the early decode, a fixed cDNA length). The head scan's results
+                // where the decode would start right after this scan anyway (the early decode, a cDNA length bound in the header). The head scan's results
                 // are the same; the decode is then done before the reference load instead of beside it. SINGLET_INGEST_FUSED=0: two passes.
                 const auto& h0f = runs->header();
-                const uint32_t r2fixed = (h0f.flags & singlet::fq::Flags::TRIMMED) ? 0u : static_cast<uint32_t>(h0f.stream_lengths[1]);
+                const uint32_t r2fixed = h0f.stream_lengths[1];   // the cDNA read length (TRIMMED: before trimming, which only shortens reads); 0: variable
                 const char* fuE = std::getenv("SINGLET_INGEST_FUSED");
                 const char* eaE = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
                 bool fused = !(fuE && fuE[0] == '0') && !(eaE && eaE[0] == '0') && r2fixed > 0;
