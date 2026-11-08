@@ -8430,7 +8430,7 @@ static int singlet_main(int argc, char* argv[]) {
             // 3' protocols (10x v2/v3/v4, Drop-seq, etc.) use NO explicit adapter
             // clipping: STAR's alignment soft-clipping handles polyA naturally.
             //
-            // Beta aligner profile (known_protocols().cr4; 10x 3' v2/v3 only): CellRanger4 clipping shortens Lread
+            // Beta aligner profile (known_protocols().cr4; 10x 3' v2/v3 and Visium): CellRanger4 clipping shortens Lread
             // before STAR's relative filters (TSO/polyA read-through reads newly map), the junction guard
             // (--alignSJoverhangMin 8, unannotated non-canonical introns removed) raises junction precision, and the
             // mismatch-ratio cap removes the newly placed cross-species reads. Passes the frozen ground-truth gate

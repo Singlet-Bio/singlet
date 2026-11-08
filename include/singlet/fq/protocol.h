@@ -201,7 +201,9 @@ inline const std::vector<CandidateSpec>& known_protocols() {
         // R1(28bp): BC(16bp@0) + UMI(12bp@16), geometrically identical to 10x v3.
         // Spot list visium-v1.txt (4,992 barcodes, rebuilt from 10x public datasets, bundled): Visium v1 libraries hit it in 90-96%
         // of reads and the 3M list in about 1%, so the list tells Visium from 3' v3. Classified as SPATIAL_RNA.
-        {"10x-visium", 24, 28, 0, 16, 16, 12, "visium-v1.txt", "", 0, false},
+        // Beta aligner profile on, as STARsolo's Space Ranger-like run (CellRanger4 clip), with poly(A) trimming off (apply_protocol_to_writer):
+        // on the anterior mouse brain slide spot profiles go from r 0.986 to 0.993 against Space Ranger (STARsolo 0.989).
+        {"10x-visium", 24, 28, 0, 16, 16, 12, "visium-v1.txt", "", 0, false, "", {}, true},
 
         // ── CITE-seq GEX ──
         // R1(28bp): CB(16bp@0) + UMI(12bp@16) — identical geometry to 10x-3p-v3.
@@ -1943,8 +1945,10 @@ inline void apply_protocol_to_writer(
         }
     }
 
-    // Enable polyA trimming for 3' protocols
-    if (is_3prime_protocol(proto.tag)) {
+    // Enable polyA trimming for 3' protocols. Not for 10x Visium: STARsolo and Space Ranger align the full cDNA read, and the trimmer
+    // cuts genomic A-rich tracts too. On Visium it removed the A-rich body of BC1 RNA (Bc1: 20 k molecules against STARsolo's 2.95 M,
+    // 2.91 M untrimmed); the CellRanger4 clip of the Beta aligner profile removes the real poly(A) tails instead.
+    if (is_3prime_protocol(proto.tag) && proto.tag != "10x-visium") {
         wcfg.polya_trim = true;
         wcfg.polya_min_len = 10;
         wcfg.polya_max_mm = 1;
