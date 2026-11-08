@@ -395,15 +395,11 @@ void ReadAlign::outReadsSoftclip()
     if (P.outReadsUnmapped!="Fastx" || !chunkOutSoftclipStream[0].is_open())
         return;
     for (uint im=0;im<P.readNends;im++) {
-        chunkOutSoftclipStream[im] << readNameMates[im] <<" "<<im<<":"<< readFilter <<": "<< readNameExtra[im] <<"
-";
-        chunkOutSoftclipStream[im] << Read0[im] <<"
-";
+        chunkOutSoftclipStream[im] << readNameMates[im] <<" "<<im<<":"<< readFilter <<": "<< readNameExtra[im] <<"\n";
+        chunkOutSoftclipStream[im] << Read0[im] <<"\n";
         if (readFileType==2) {
-            chunkOutSoftclipStream[im] << "+
-";
-            chunkOutSoftclipStream[im] << Qual0[im] <<"
-";
+            chunkOutSoftclipStream[im] << "+\n";
+            chunkOutSoftclipStream[im] << Qual0[im] <<"\n";
         };
     };
 };
