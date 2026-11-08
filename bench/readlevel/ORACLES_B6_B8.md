@@ -451,6 +451,111 @@ the ranking and is restated from the same run. Each ported filter's effect is re
 each mix, in the order of Arriba's own log. Inputs Arriba needs that this data lacks are substituted, and each substitution is
 listed with the results.
 
+## B6 ranking without the prior: result (D-109)
+
+The port is C++ in the engine: `include/singlet/pileup/arriba_cascade.h` with a one-sample CLI
+(`src/pipeline/arriba_cascade_cli.cpp`) and the unit test `tests/cpp/test_arriba_cascade.cpp` on Singlet-Bio/singlet branch
+`feat/arriba-cascade` (c3c5c6e7, b13e8a7c, fbeaa915). No Python port was needed. The scored binary was built from b13e8a7c, and
+fusion_rank.py from d4b45ff6 adds the `arriba` variant. Job 804706 on Clipper wrote the outputs to `$J/arriba-cascade/`. It took
+about 3 minutes and 10 GB per mix.
+
+**Verdict.** Without the prior, the cascade passes clause 1 on mix1to15 and fails it on mix1to1p5. RUNX1–RUNX1T1 ranks first
+on mix1to15. On mix1to1p5 the cascade calls NUP214–XKR3 (rank 9) and RUNX1–RUNX1T1 (rank 7) but discards BCR–ABL1, so at
+Arriba's 44 false positives it recovers two of three truth pairs where Arriba recovers all three. Clause 2 passes on both mixes,
+as before. The prior-bearing `combined` score still passes both mixes. With the truth pairs left out of the prior, it fails
+mix1to1p5 in the same way the cascade does.
+
+| mix | variant | BCR–ABL1 | NUP214–XKR3 | RUNX1–RUNX1T1 | recall at STAR-Fusion's FP (engine / STAR-Fusion) | recall at Arriba's FP (engine / Arriba) | clause 1 |
+|---|---|---|---|---|---|---|---|
+| mix1to15 | arriba | discarded | absent | 1 | 0.33 / 0.33 (6 FP) | 0.33 / 0.33 (39 FP) | pass |
+| mix1to15 | combined | 11 | absent | 1 | 0.33 / 0.33 | 0.67 / 0.33 | pass |
+| mix1to15 | combined, leave-truth-out | 755 | absent | 1 | 0.33 / 0.33 | 0.33 / 0.33 | pass |
+| mix1to15 | breakpoint | 753 | absent | 1 | 0.33 / 0.33 | 0.33 / 0.33 | pass |
+| mix1to1p5 | arriba | discarded | 9 | 7 | 0.67 / 0.00 (9 FP) | 0.67 / 1.00 (44 FP) | fail |
+| mix1to1p5 | combined | 5 | 3 | 2 | 1.00 / 0.00 | 1.00 / 1.00 | pass |
+| mix1to1p5 | combined, leave-truth-out | 69 | 27 | 18 | 0.00 / 0.00 | 0.67 / 1.00 | fail |
+| mix1to1p5 | breakpoint | 62 | 20 | 12 | 0.00 / 0.00 | 0.67 / 1.00 | fail |
+
+Ranks count tied pairs together. "Absent" means the engine holds no NUP214–XKR3 chimeric read from a labelled cell. As a call set,
+the cascade passes 81 gene pairs on mix1to15 and 102 on mix1to1p5, against Arriba's 40 and 47.
+
+**Why BCR–ABL1 is lost.** On mix1to1p5 the engine holds the e14a2 junction (chr22:23290413 to chr9:130854064, splice sites at both
+ends) as one molecule plus a UMI duplicate, and a second breakpoint as one more molecule. `min_support` (two reads) discards both.
+Arriba's own call on this mix is a single read at low confidence, and Arriba keeps such calls only through its known-fusions
+recovery, which the registration excludes. The gap is therefore the catalogue term, and without it the cascade behaves as Arriba
+would. Arriba's call on mix1to15 is RUNX1–RUNX1T1 alone, and the engine sees one BCR–ABL1 molecule there.
+
+**Per-filter effect.** Reads remaining after each read-level filter and candidate breakpoints remaining after each fusion-level
+step, in Arriba's log order (job 804706, `mix*.seq.log.tsv`).
+
+| step | mix1to15 | mix1to1p5 |
+|---|---|---|
+| junction lines | 9,186,887 | 10,503,246 |
+| reads from labelled cells | 6,731,047 | 7,505,378 |
+| duplicates | 6,423,708 | 7,208,755 |
+| uninteresting_contigs | 6,322,973 | 7,102,254 |
+| read_through | 6,321,361 | 7,100,569 |
+| inconsistently_clipped | 6,321,361 | 7,100,569 |
+| homopolymer | 1,896,714 | 1,975,034 |
+| small_insert_size, long_gap | 1,896,714 | 1,975,034 |
+| same_gene | 1,896,703 | 1,975,030 |
+| hairpin | 1,847,849 | 1,921,261 |
+| mismatches | 122,463 | 131,176 |
+| low_entropy | 98,731 | 105,665 |
+| candidate breakpoints (find_fusions) | 56,460 | 57,174 |
+| merge_adjacent | 56,300 | 56,980 |
+| multimappers | 24,521 | 24,093 |
+| non_coding_neighbors | 24,521 | 24,093 |
+| intragenic_exonic | 21,239 | 20,772 |
+| min_support | 1,345 | 1,487 |
+| relative_support | 821 | 936 |
+| intronic | 619 | 688 |
+| in_vitro | 618 | 688 |
+| spliced (recovery) | 625 | 693 |
+| select_best | 452 | 474 |
+| marginal_read_through | 452 | 474 |
+| many_spliced (recovery) | 465 | 496 |
+| blacklist | 118 | 159 |
+| short_anchor | 110 | 146 |
+| end_to_end | 107 | 140 |
+| no_coverage | 85 | 109 |
+| select_best | 82 | 102 |
+| calls: high / medium / low | 10 / 36 / 36 | 9 / 41 / 52 |
+
+Before the cascade, 2,113,693 and 2,621,493 lines carry a barcode outside the labelled cells, 825 and 962 match two cells, and
+341,322 and 375,413 fail Arriba's segment disjoining. The read-sequence filters do most of the work, as in Arriba's own log on
+mix1to15, where homopolymer leaves 1,380,543 reads and mismatches 159,437. A run without read sequences (those three filters
+skipped, multimapper scores from STAR) passes 192 and 231 pairs and ranks the truth pairs lower: RUNX1–RUNX1T1 4th on mix1to15,
+NUP214–XKR3 20th and RUNX1–RUNX1T1 15th on mix1to1p5.
+
+**Substitutions.** Arriba reads a BAM file. The engine keeps STAR's junction file, so these inputs stand in.
+
+- Each junction line becomes Arriba's single-end split-read record (the longer segment is the split read, mate 1 a copy of it),
+  as `remove_malformed_alignments` builds it for single-end BAM records.
+- Duplicates use Arriba's external marking: a read is a duplicate when an earlier read has the same cell, UMI and breakpoints.
+- Read sequences come from the sample's .1fq, decoded with `singlet decode`, whose read names match the engine's (r<n>). Every
+  loaded read found its sequence at the expected length.
+- Coverage, which Arriba counts from all alignments in 20-base windows, is the mean read depth of the most-counted gene
+  overlapping the position: count × 110 / effective length from `gene_expression.tsv`. A fragment starts or ends in a window when
+  a counted gene overlaps it. This touches in_vitro, the spliced recovery, marginal_read_through, no_coverage and confidence.
+- The e-value's library size is STAR's uniquely plus multi-mapped reads of the main pass.
+- Strandedness comes from Arriba's own `detect_strandedness`, which finds "no" as the comparator run did. The fragment length
+  falls back to Arriba's 200 because single-end data give no estimate.
+- Gene sets are ordered by gene ID where Arriba orders them by pointer, and fusions sit in an ordered map, so ties resolve the
+  same way on every run.
+
+**Not ported.** Viral-contig filters, since GRCh38-2024-A has no viral contigs. Known fusions and tags, excluded by the
+registration. Internal tandem duplication detection and read-through extraction from ordinary alignments, because no main-pass
+BAM is kept. `homologs` and `mismappers`, which need Arriba's k-mer index of gene sequences and are a separate port. `isoforms`,
+which adds breakpoints to pairs that already pass and so leaves pair ranks unchanged. Genomic support (no WGS). The transcript,
+peptide and protein-domain output columns. `small_insert_size` and `inconsistently_clipped` are ported but have nothing to act on
+in single-end data.
+
+**Tests.** The unit test covers the annotation index, splice sites, contig patterns, k-mers, the split-read record, the whole
+cascade on a synthetic GTF and junction file, and low_entropy. It passes 30 of 30 at fbeaa915 (job 804712). The branch's host
+ctest at b13e8a7c (inside job 804706) passed 163 of 164. The one failure was this test expecting `min_support` for a single-read
+spliced fusion, which ends in `in_vitro` as it does in Arriba; fbeaa915 corrects the expectation.
+
 ## B7: scTE and SoloTE against the engine's TE counter (D-109)
 
 Owner decision D-109 asks for parity by porting the competitor's code. scTE (JiekaiLab/scTE at 566f6ab3) is MIT licensed, so
