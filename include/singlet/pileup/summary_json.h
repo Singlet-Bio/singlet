@@ -20,8 +20,10 @@ namespace singlet {
 /// Comprehensive pipeline run metrics.
 struct PipelineSummary {
     // Schema required keys (§3.6)
-    /// Schema version. 1.1 adds git_sha + reference_manifest_sha256 (both optional/empty for older callers).
-    std::string schema_version  = "1.1";
+    /// Schema version. 1.1 adds git_sha + reference_manifest_sha256 (both optional/empty for older callers). 1.2 drops memory_tier: it
+    /// described the run (bucketed from its peak RSS, so it could change between runs near a tier boundary), not the sample, and is
+    /// now in private/run_metadata.json (write_run_metadata_json).
+    std::string schema_version  = "1.2";
     std::string track           = "A";  ///< "A" (STAR-only) or "B" (cascade)
 
     // Sample info
@@ -63,7 +65,7 @@ struct PipelineSummary {
 
     // Resource usage
     double      peak_rss_gb   = 0.0;
-    std::string memory_tier   = "unknown"; ///< "Small"|"Medium"|"Large"|"XLarge"|"unknown"
+    std::string memory_tier   = "unknown"; ///< "Small"|"Medium"|"Large"|"XLarge"|"unknown"; written to private/run_metadata.json only
 
     // Timing (seconds)
     double wall_seconds   = 0.0;
@@ -188,7 +190,6 @@ inline bool write_summary_json(const PipelineSummary& s, const std::string& file
     f << "  \"n_cells_called\": "         << s.estimated_cells               << ",\n";
     f << "  \"median_umi_per_cell\": "    << jd(s.median_umis_per_cell)      << ",\n";
     f << "  \"median_genes_per_cell\": "  << jd(s.median_genes_per_cell)     << ",\n";
-    f << "  \"memory_tier\": \""          << json_escape(s.memory_tier)      << "\",\n";
     f << "  \"peak_rss_gb\": "            << jd(s.peak_rss_gb)               << ",\n";
     f << "  \"wall_seconds\": "           << jd(s.wall_seconds)              << ",\n";
     f << "  \"track\": \""               << json_escape(s.track)            << "\",\n";
@@ -245,6 +246,24 @@ inline bool write_summary_json(const PipelineSummary& s, const std::string& file
         first_meta = false;
     }
     f << "}\n";
+    f << "}\n";
+    return f.good();
+}
+
+/// Write the run's private metadata (schema 1.2 of summary.json moved memory_tier here) to `filepath`, normally
+/// <out>/private/run_metadata.json: the memory tier, the peak RSS and the timings. These describe the process that ran, vary between
+/// runs of the same input, and never reach a public object (private/ is private: run_provenance.h is_private_output).
+inline bool write_run_metadata_json(const PipelineSummary& s, const std::string& filepath) {
+    std::ofstream f(filepath);
+    if (!f) return false;
+    auto jd = [](double v) -> double { return (v == 0.0) ? 0.0 : v; };
+    f << "{\n";
+    f << "  \"note\": \"run metadata: describes the run, not the sample; varies between runs of the same input\",\n";
+    f << "  \"sample_id\": \""      << json_escape(s.sample_id)   << "\",\n";
+    f << "  \"memory_tier\": \""    << json_escape(s.memory_tier) << "\",\n";
+    f << "  \"peak_rss_gb\": "      << jd(s.peak_rss_gb)          << ",\n";
+    f << "  \"timings\": { \"wall_seconds\": " << jd(s.wall_seconds) << ", \"star_seconds\": " << jd(s.star_seconds)
+      << ", \"pileup_seconds\": " << jd(s.pileup_seconds) << ", \"export_seconds\": " << jd(s.export_seconds) << " }\n";
     f << "}\n";
     return f.good();
 }
