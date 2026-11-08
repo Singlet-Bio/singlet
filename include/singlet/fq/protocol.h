@@ -446,6 +446,12 @@ inline bool hamming1_match(const uint8_t* bc, uint16_t len,
 //     poly(A)15 / poly(T)15 = 23-32 / 1.4-30 in 3', 15 / 32 in 5'.
 // A 5' R1 sequenced past BC+UMI also shows the 5' TSO tail (TTTCTTATATGGG) where
 // a 3' R1 shows poly(dT); that decides alone when present.
+// With R2 reads of 75 nt or more, the absence of the 3' TSO decides: a long 5' R2
+// can run into the poly(A) tail, so poly(A) outnumbers poly(T) there too (B20,
+// GSM4987144, 10x 5' v1 with a 110-nt R2: 3' TSO 0, poly(A) 118, poly(T) 8 per
+// 20000), while every 3' library of B20 shows the 3' TSO in 1.6-19% of R2 reads.
+// R2 reads without any poly(A)/poly(T) run carry no strand evidence and stay 3'.
+// Shorter R2 reads keep the poly(T) > poly(A) condition.
 struct FivePrimeEvidence {
     uint32_t n = 0;          // spots examined
     uint32_t r1_tso = 0;     // R1: 5' TSO tail right after BC+UMI
@@ -453,10 +459,15 @@ struct FivePrimeEvidence {
     uint32_t r2_smart = 0;   // R2: 3' kit TSO (CAGAGTACATGGG) anywhere
     uint32_t r2_polya = 0;   // R2: 15-base poly(A) run anywhere
     uint32_t r2_polyt = 0;   // R2: 15-base poly(T) run anywhere
+    uint64_t r2_bases = 0;   // R2 bases examined (mean R2 length = r2_bases / n)
     bool is_5prime() const {
         if (r1_tso + r1_polyt >= 50) return r1_tso > 4 * r1_polyt;
-        // no 3' TSO (< 0.2%), and poly(T) outnumbers poly(A) in R2
-        return n >= 500 && 500ull * r2_smart < n && r2_polyt >= 10 && r2_polyt > r2_polya;
+        if (n < 500 || 500ull * r2_smart >= n) return false;   // the 3' TSO in >= 0.2% of R2 reads: 3'
+        // long R2 reads without the 3' TSO that reach transcript ends as cDNA does (poly(A) or poly(T) runs in 0.1-10% of reads; a
+        // feature-barcode read, tag + poly(A), has one in nearly every read and stays 3'): 5'
+        const uint64_t runs = static_cast<uint64_t>(r2_polya) + r2_polyt;
+        if (r2_bases >= 75ull * n && 1000ull * runs >= n && 10ull * runs < n) return true;
+        return r2_polyt >= 10 && r2_polyt > r2_polya;           // short R2: poly(T) outnumbers poly(A)
     }
 };
 
@@ -493,6 +504,7 @@ FivePrimeEvidence five_prime_evidence(const std::vector<SpotT>& spots, uint16_t 
             if (trun >= 15) polyt = true;
             if (!smart && j + 13 <= s.r2_len && mism(s.r2_seq, j, kSmart) == 0) smart = true;
         }
+        ev.r2_bases += s.r2_len;
         ev.r2_smart += smart;
         ev.r2_polya += polya;
         ev.r2_polyt += polyt;

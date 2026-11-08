@@ -52,7 +52,7 @@ std::string random_seq(std::mt19937& rng, int n) {
 // r1_extra: bases sequenced past BC+UMI (26). R2 features at the rates measured on
 // 10x data (per read): 3' has the 3'-kit TSO (4%), poly(A) 3% and poly(T) 0.2%;
 // 5' has no 3'-kit TSO, poly(A) 1.5% and poly(T) 3%.
-std::vector<Spot> spots(bool five, int r1_extra, uint32_t seed) {
+std::vector<Spot> spots(bool five, int r1_extra, uint32_t seed, double pa = -1, double pt = -1, int r2_len = 90, double psmart = -1) {
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> u01(0.0, 1.0);
     std::vector<Spot> out;
@@ -63,12 +63,14 @@ std::vector<Spot> spots(bool five, int r1_extra, uint32_t seed) {
             r1 += (five ? std::string("TTTCTTATATGGG") : std::string(13, 'T')) + random_seq(rng, r1_extra - 13);
         std::string ins;
         double x = u01(rng);
-        double p_smart = five ? 0.0 : 0.04, p_a = five ? 0.015 : 0.03, p_t = five ? 0.03 : 0.002;
+        double p_smart = psmart >= 0 ? psmart : five ? 0.0 : 0.04;
+        double p_a = pa >= 0 ? pa : five ? 0.015 : 0.03, p_t = pt >= 0 ? pt : five ? 0.03 : 0.002;
         if (x < p_smart) ins = "AAGCAGTGGTATCAACGCAGAGTACATGGG";
         else if (x < p_smart + p_a) ins = std::string(20, 'A');
         else if (x < p_smart + p_a + p_t) ins = std::string(20, 'T');
         std::string r2 = random_seq(rng, 30) + ins;
-        r2 += random_seq(rng, 90 - static_cast<int>(r2.size()));
+        if (static_cast<int>(r2.size()) < r2_len) r2 += random_seq(rng, r2_len - static_cast<int>(r2.size()));
+        else r2.resize(r2_len);
         sp.r1_seq = enc(r1); sp.r2_seq = enc(r2);
         sp.r1_len = static_cast<uint16_t>(r1.size()); sp.r2_len = static_cast<uint16_t>(r2.size());
         out.push_back(std::move(sp));
@@ -86,6 +88,16 @@ void test_five_prime_evidence() {
     auto few = spots(true, 0, 5);
     few.resize(300);
     CHECK(!five_prime_evidence(few, 26).is_5prime(), "too few spots -> stays 3'");
+    // B20: GSM4987144 (5' v1, R2 110 nt) has more poly(A) than poly(T) in R2; the absent 3' TSO decides
+    CHECK(five_prime_evidence(spots(true, 0, 6, 0.006, 0.0004, 110), 26).is_5prime(), "5', long R2, poly(A) > poly(T), no 3' TSO -> 5'");
+    // the 3' library of B20 with the fewest 3' TSO reads (GSM9038586, 1.6%) stays 3'
+    CHECK(!five_prime_evidence(spots(false, 0, 7, 0.027, 0.002, 110, 0.016), 26).is_5prime(), "3', long R2, 3' TSO in 1.6% -> 3'");
+    CHECK(!five_prime_evidence(spots(false, 0, 8, 0.03, 0.002, 150, 0.04), 26).is_5prime(), "3', 150-nt R2 -> 3'");
+    CHECK(!five_prime_evidence(spots(false, 0, 11, 0.0, 0.0, 110, 0.0), 26).is_5prime(), "R2 without TSO or poly(A)/poly(T) runs -> no evidence, stays 3'");
+    CHECK(!five_prime_evidence(spots(false, 0, 12, 0.9, 0.0, 110, 0.0), 26).is_5prime(), "feature-barcode R2 (poly(A) in 90%), no TSO -> stays 3'");
+    // short R2 keeps the poly(T) > poly(A) condition
+    CHECK(!five_prime_evidence(spots(true, 0, 9, 0.006, 0.0004, 50), 26).is_5prime(), "5', 50-nt R2, poly(A) > poly(T) -> undecided, stays 3'");
+    CHECK(five_prime_evidence(spots(true, 0, 10, 0.015, 0.03, 50), 26).is_5prime(), "5', 50-nt R2, poly(T) > poly(A) -> 5'");
 }
 
 // ── Synthetic BAMs ────────────────────────────────────────────────────────
