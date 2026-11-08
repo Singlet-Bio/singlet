@@ -238,7 +238,7 @@ __device__ __forceinline__ void refine_primary(AA& x, const DPar& P) {
     if ((P.rules & 8) && x.flags == 6 && x.flank) { x.flags = 5; x.intron = MAXU; }
     if (x.hasn) x.flags |= 8u;
 }
-__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, DPar P, GRes* out) {
+__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, const uint8_t* tsp, uint32_t ntsp, DPar P, GRes* out) {
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
     SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0};
     auto is_mt = [&](uint32_t g) { return g < ngmt && gmt[g] != 0; };
@@ -264,8 +264,10 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
             auto note = [&](uint32_t g) { note_set(g, fg, sec, amb, nuc); };
             auto notex = [&](uint32_t g) { note_set(g, xfg, xsec, xamb, xnuc); };
             uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
+            uint32_t spm = 0;                                                                                        // genomes of the alignments (joint reference)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
+                { const int32_t t = A[sg.aln_off + k].tid; if (t >= 0 && (uint32_t)t < ntsp) spm |= tsp[t]; }
                 const bool multi = (x.multi & 1u) != 0, exo = (x.multi & 2u) != 0;
                 if (A[sg.aln_off + k].flags & 2) {
                     if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here
@@ -306,7 +308,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                     }
                 }
             }
-            const bool X = (P.rules & 4096) && xs;   // mm_verdict: judged on the exonic alignments
+            const bool X = (P.rules & 4096) && xs && (spm & (spm - 1)) == 0;   // mm_verdict: judged on the exonic alignments, within one genome
             const bool am = X ? xamb : amb;
             if (am && mg != MAXU && (X ? (xnuc && mexo) : nuc)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
             else if (X) { if (!xamb && xfg != MAXU && xg != MAXU) { r.gene = xg; r.exon = xex; r.intron = xin; r.flags = xfl ? xfl : 5; } }
@@ -630,6 +632,7 @@ struct Inputs {
     SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: low-quality mask per read, dp.qw words (dp.use_q)
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
+    uint8_t* tsp = nullptr; uint32_t ntsp = 0;   // per tid: genome bit of a joint reference (PileupInput::tidSpecies); ntsp = 0: one genome
     DGene GM{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0};   // kFlank (ng = 0: not uploaded)
 };
 struct Outputs {
@@ -844,7 +847,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     AA* aa = A.alloc<AA>(std::max(nA, 1));
     k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM); T.mark("1.annotate");
     // 2 signature level
-    GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.dp, gr);
+    GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.tsp, in.ntsp, in.dp, gr);
     uint32_t *c_sj = A.alloc<uint32_t>(nS), *c_snp = A.alloc<uint32_t>(nS), *c_mt = A.alloc<uint32_t>(nS), *c_ind = A.alloc<uint32_t>(nS);
     k_lists<false><<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, in.ops, in.seq, in.SN, in.dp, c_sj, c_snp, c_mt, c_ind, nullptr, nullptr, nullptr, nullptr);
     uint32_t *o_sj = scan_u32(A, c_sj, nS), *o_snp = scan_u32(A, c_snp, nS), *o_mt = scan_u32(A, c_mt, nS), *o_ind = scan_u32(A, c_ind, nS);

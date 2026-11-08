@@ -14,6 +14,12 @@
 //   r6 NH 3  primary MT, secondaries NUMT exon, B intron      MT under both (kMtPrefer tie on {MT, NUMT})
 //   r7 NH 2  primary MT, secondary C intron                   MT under both; a NUMT tie (mt_numt_rescued) only under 2957
 // The result must not depend on the record order (serial run() over unsorted BAMs in several orders) or the worker split (run_parallel).
+//
+// Joint (barnyard) reference, contigs <genome>___<contig>: the rule decides only when all alignments lie in one genome.
+//   H GRCh38___chr1 101-1000 (exons 101-200, 901-1000); R GRCm39___1 (exon 101-300, an 18S-like pseudogene); M GRCm39___2 as H.
+//   b1 NH 2  primary H intron, secondary R exon     ambiguous (H, R) under both: the alignments span two genomes
+//   b2 NH 2  primary M intron, secondary R exon     2957: ambiguous (M, R)   7053: R (one genome)
+//   b3 NH 1  H exon                                 H under both
 
 #include <unistd.h>
 
@@ -169,6 +175,61 @@ void check_expected(const Result& r, uint32_t rules, const std::string& tag) {
     CHECK(r.em == (on ? em_on : em_off), tag + ": G-EM pairs");
 }
 
+const char* kJointHeader = "@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:GRCh38___chr1\tLN:2000\n@SQ\tSN:GRCm39___1\tLN:2000\n"
+                           "@SQ\tSN:GRCm39___2\tLN:2000\n";
+
+std::vector<std::string> joint_records() {
+    return {sam_line("b1", 0, "GRCh38___chr1", 500, "AAAAAAAAAA", 2), sam_line("b1", 256, "GRCm39___1", 150, "AAAAAAAAAA", 2),
+            sam_line("b2", 0, "GRCm39___2", 500, "CCCCCCCCCC", 2), sam_line("b2", 256, "GRCm39___1", 160, "CCCCCCCCCC", 2),
+            sam_line("b3", 0, "GRCh38___chr1", 150, "GGGGGGGGGG", 1)};
+}
+
+bool write_joint(const std::string& dir, const std::string& name, const std::vector<std::string>& recs) {
+    std::ofstream g(dir + "/mini.gtf");
+    auto gl = [&](const char* chr, const char* feat, int s, int e, const char* id) {
+        g << chr << "\t.\t" << feat << "\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << id << "\"; gene_name \"" << id
+          << "\"; transcript_id \"" << id << "-T\";\n";
+    };
+    gl("GRCh38___chr1", "gene", 101, 1000, "H"); gl("GRCh38___chr1", "exon", 101, 200, "H"); gl("GRCh38___chr1", "exon", 901, 1000, "H");
+    gl("GRCm39___1", "gene", 101, 300, "R"); gl("GRCm39___1", "exon", 101, 300, "R");
+    gl("GRCm39___2", "gene", 101, 1000, "M"); gl("GRCm39___2", "exon", 101, 200, "M"); gl("GRCm39___2", "exon", 901, 1000, "M");
+    g.close();
+    std::ofstream b(dir + "/barcodes.tsv");
+    b << kBC << "\n";
+    b.close();
+    std::ofstream f(dir + "/" + name + ".sam");
+    f << kJointHeader;
+    for (const auto& r : recs) f << r;
+    f.close();
+    return std::system(("samtools view -b -o " + dir + "/" + name + ".bam " + dir + "/" + name + ".sam 2>/dev/null").c_str()) == 0;
+}
+
+void check_joint(const std::string& dir) {
+    std::system(("mkdir -p " + dir).c_str());
+    const auto recs = joint_records();
+    if (!write_joint(dir, "j", recs) ||
+        std::system(("samtools sort -o " + dir + "/js.bam " + dir + "/j.bam 2>/dev/null && samtools index " + dir + "/js.bam").c_str()) != 0) {
+        CHECK(false, "joint reference BAM");
+        return;
+    }
+    for (uint32_t rules : {2957u, 7053u}) {
+        const std::string rt = "joint rules " + std::to_string(rules);
+        const bool on = rules & singlet::intron_rule::kExonPrecedence;
+        const Result ref = run_case(dir, dir + "/js.bam", rules, 0);
+        auto g = ref.by_gene;
+        CHECK(g["H"] == 1, rt + ": H gets b3");
+        CHECK(g["R"] == (on ? 1 : 0), rt + ": R gets b2 only with kExonPrecedence, never the cross-genome b1");
+        CHECK(g["M"] == 0, rt + ": M gets nothing");
+        const std::vector<std::string> em_on = {"AAAAAAAAAA H R"}, em_off = {"AAAAAAAAAA H R", "CCCCCCCCCC M R"};
+        CHECK(ref.em == (on ? em_on : em_off), rt + ": G-EM pairs (b1 stays ambiguous)");
+        if (ref.em != (on ? em_on : em_off)) std::cout << "    " << ref.text() << "\n";
+        const std::vector<std::string> rev(recs.rbegin(), recs.rend());
+        if (write_joint(dir, "jr", rev)) CHECK(run_case(dir, dir + "/jr.bam", rules, 0).text() == ref.text(), rt + ": run(reversed) == run(sorted)");
+        for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/js.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+    }
+    std::system(("rm -rf " + dir).c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -235,6 +296,8 @@ int main() {
         CHECK(a_on["A"] == 3, "4493: A gets r1, r2 and r5");
     }
     std::system(("rm -rf " + dir).c_str());
+    std::cout << "\n=== joint reference ===\n";
+    check_joint(dir + "_joint");
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
     return n_fail == 0 ? 0 : 1;
 }
