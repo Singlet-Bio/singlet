@@ -1,5 +1,6 @@
 # singlet binary
-add_executable(singlet singlet.cpp gpu_pool.cpp)   # gpu_pool.cpp: `singlet gpu-pool` (E21)
+add_executable(singlet singlet.cpp gpu_pool.cpp role_cpu.cpp)   # gpu_pool.cpp: `singlet gpu-pool` (E21); role_cpu.cpp: SINGLET_ROLE_CPU=1
+target_link_libraries(singlet PRIVATE ${CMAKE_DL_LIBS})   # role_cpu.cpp: dlsym
 target_link_libraries(singlet PRIVATE
     singlet_pileup
     singlet_fq

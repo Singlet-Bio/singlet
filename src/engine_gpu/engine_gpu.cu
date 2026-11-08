@@ -558,6 +558,13 @@ __global__ void k_p3w(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
     }
     if (lane == 0) { bst[k] = (uint8_t)s; outLen[o] = (uint16_t)bl.n; }
 }
+// SINGLET_ENGINE_GPU_OVSTAT=1: per lane, its overflowed reads by reason (OvWhy), logged with the lane's configuration (diagnostic only)
+static bool ovStatOn() { static const bool on = [] { const char* e = std::getenv("SINGLET_ENGINE_GPU_OVSTAT"); return e && e[0] == '1'; }(); return on; }
+template <class C> __global__ void k_ovhist(u64 nb, const Work<C>* work, const uint8_t* st, unsigned long long* hist) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= nb || st[k] != (uint8_t)Status::Overflow) return;
+    atomicAdd(hist + ((unsigned)work[k].ov & 15u), 1ull);
+}
 __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k < n) dst[k] = s[k];
@@ -763,6 +770,8 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     }
     devNote();
     const double tK = now(); stepAdd(sn + ".alloc", tK - tA);
+    unsigned long long* dOvH = nullptr;
+    if (ovStatOn()) { EG_CK(dmal(&dOvH, 16 * 8)); EG_CK(cudaMemset(dOvH, 0, 16 * 8)); }
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
@@ -807,6 +816,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
         }
         EG_CK(cudaGetLastError());
+        if (dOvH) k_ovhist<C><<<G, T>>>(nb, dWork, dSt + b0, dOvH);
         if (onBatch && *onBatch) {   // the batch's statuses now (the next batch's kernels wait for the host for this copy's duration)
             std::vector<uint8_t> hs(nb);
             EG_CK(d2h(hs.data(), dSt + b0, nb));
@@ -823,6 +833,13 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     if constexpr (C::COMPACT) {
         char b[160]; snprintf(b, sizeof b, "[wshrink: %llu pool rounds, %llu read-rounds deferred] ", (unsigned long long)nRounds, (unsigned long long)nDeferred); g_laneLog += b;
         dfree(dPool); dfree(dNeed); dfree(dWb); dfree(dWkey); dfree(dPend); dfree(dWcnt);
+    }
+    if (dOvH) {
+        unsigned long long h[16]; EG_CK(d2h(h, dOvH, 16 * 8)); dfree(dOvH);
+        static const char* why[] = {"none", "lread", "split", "pc", "win", "wa", "winbin", "exons", "wtr", "keep", "blob", "steps"};
+        std::string o = "[ov " + sn + ":";
+        for (int i = 0; i < 16; i++) if (h[i]) { char b[48]; snprintf(b, sizeof b, " %s %llu", i < 12 ? why[i] : "?", h[i]); o += b; }
+        g_laneLog += o + "] ";
     }
     dfree(dCtr); dfree(dKey); dfree(dPerm);
     dfree(dIdx); dfree(dWork); dfree(dRbuf); dfree(dBst); dfree(dNent); dfree(dBase); dfree(dBits);   // E17: before the packed results
@@ -923,6 +940,7 @@ struct HostPool {
     void start(int nt, u64 nChunks, std::function<void(int, const Task&)> f) {
         fn = std::move(f); pend.assign(nChunks, 0); nThreads = nt;
         for (int t = 0; t < nt; t++) th.emplace_back([this, t]() {
+            singlet::set_thread_name("gm-hostpool");   // profiling: per-role CPU (SINGLET_ROLE_CPU)
             for (;;) {
                 Task tk;
                 { std::unique_lock<std::mutex> lk(mu); cv.wait(lk, [&] { return stop || !qu.empty(); }); if (stop) return; tk = qu.front(); qu.pop_front(); }
@@ -1136,6 +1154,13 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
     if (initRc != cudaSuccess) cudaGetLastError();
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
+    {   // diagnostic: whether the schedule flag took (a context made earlier in this process keeps its own flags)
+        unsigned fl = 0; cudaGetDeviceFlags(&fl);
+        char b[160]; snprintf(b, sizeof b, "engine_gpu: device flags 0x%x (schedule %s), cudaInitDevice: %s\n", fl,
+                              (fl & cudaDeviceScheduleMask) == cudaDeviceScheduleBlockingSync ? "blocking sync" : (fl & cudaDeviceScheduleMask) == cudaDeviceScheduleSpin ? "spin" :
+                              (fl & cudaDeviceScheduleMask) == cudaDeviceScheduleYield ? "yield" : "auto", cudaGetErrorString(initRc));
+        out.log += b;
+    }
     double t0 = now();
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
     std::string memLog;
@@ -1143,7 +1168,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     memMark("start");
     step("init");
     // ---- index (G with 200 bytes of padding on each side, as STAR's G1)
-    nvch.next("mapDistinct: index");
+    nvch.next("mapDistinct: index"); singlet::set_thread_name("gm-index");
     const u64 PAD = 200;
     GenomeView D = H;
     char* dG1 = nullptr; u64* dSA = nullptr; u64* dSAi = nullptr;
@@ -1242,6 +1267,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             cudaMemset(dSA, 0, saBytes + 64 + 8); cudaMemset(dSAi, 0, saiBytes + 64 + 8);
             if (cudaDeviceSynchronize() != cudaSuccess) return fail("index memset");
             idxTh = std::thread([&, dG1, dSA, dSAi] {
+                singlet::set_thread_name("gm-idxup");
                 cudaSetDevice(device);
                 idxOk = SI.copy(dG1, H.G - PAD, H.nGenome + 2 * PAD) && SI.copy(dSA, H.SA, saBytes) && SI.copy(dSAi, H.SAi, saiBytes) && SI.finish();
                 tIdxEnd = now();
@@ -1276,7 +1302,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     D.sjdbMotif = dsm; D.sjdbShiftLeft = dsl; D.sjdbShiftRight = dsr; D.sjdbStrand = dst;
     step("tables.h2d");
     // ---- reads
-    nvch.next("mapDistinct: reads");
+    nvch.next("mapDistinct: reads"); singlet::set_thread_name("gm-reads");
     u64 n = in.off.size() - 1;
     out.nReads = n;
     char* dSeq = nullptr; u64* dOff = nullptr;
@@ -1344,6 +1370,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     };
     // E17 lean: the entries and masks into the region now (as mapDistinct's E10 copy does after the products), off the device
     auto entToRegion = [&]() {
+        singlet::ThreadNameScope tnRole("gm-ent2reg");
         if (!e10 || entHost) return;
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const double t0e = now();
@@ -1480,7 +1507,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     singlet_engine_gpu::NoInitVector<uint32_t> readRep(n);
     if (!RC) {
     // ---- dedup
-    nvch.next("mapDistinct: dedup");
+    nvch.next("mapDistinct: dedup"); singlet::set_thread_name("gm-dedup");
     t0 = now();
     u64 *dH1, *dH2; uint8_t* dN; uint32_t *dOrder, *dHead; unsigned long long* dColl;
     g_bud.at = "dedup";
@@ -1510,6 +1537,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // E17: only the representatives' (clipped) sequences stay on the device, at their positions in rep (the lanes and E8's gather address them
     // by position from here on); the copy of every read leaves the device
     auto compact = [&](const uint32_t* dR, u64 nR) -> bool {
+        singlet::ThreadNameScope tnRole("gm-compact");
         g_bud.at = "compact";
         u64* dOffR = nullptr; char* dSeqR = nullptr;
         if (dmal(&dOffR, (nR + 1) * 8 + 8) != cudaSuccess) return false;
@@ -1582,7 +1610,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     }
     } else {
     // ---- P3-MEM-03: the reads phase by read chunks (upload, CellRanger4 and STAR clip, E10's entries and masks into the region, R11, the
-    nvch.next("mapDistinct: reads by chunk (P3-MEM-03)");
+    nvch.next("mapDistinct: reads by chunk (P3-MEM-03)"); singlet::set_thread_name("gm-rcreads");
     // hashes of the clipped reads to the host), then the dedup by hash partition (the sort and the group heads on the device, the byte-for-byte
     // check on the host). Only a chunk of reads, or a partition's keys, is on the device at a time; what follows is E17's lean mode, which
     // needs on the host what this leaves there: hcs / hoffC (the clipped spans), readRep, rep in sequence order, the entries in the region.
@@ -1726,7 +1754,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     out.secUpload = now() - tR0;
     step("rc.reads");
     // ---- the dedup by hash partition: partition p holds the reads whose h1 falls in [p, p+1) * 2^64 / NP, in read order
-    nvch.next("mapDistinct: dedup by partition");
+    nvch.next("mapDistinct: dedup by partition"); singlet::set_thread_name("gm-rcdedup");
     const double tD0 = now();
     t0 = tD0;
     const char* rpE = std::getenv("SINGLET_ENGINE_GPU_RPARTS");
@@ -1887,7 +1915,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     memMark("index+distinct");
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
-    nvch.next("mapDistinct: map chunks");
+    nvch.next("mapDistinct: map chunks"); singlet::set_thread_name("gm-chunks");
     u64 nGpuMapped = 0;
     // a chunk of distinct sequences in two halves: the device lanes (gpuPart, under the caller's device lock) and the host lane and records
     // (hostPart, after in.release(): they hold the GPU for nothing)
@@ -2208,6 +2236,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         }
         out.secHostLane += now() - th0;
         stepAdd("hostlane", now() - th0);
+        singlet::set_thread_name("gm-recprep");   // restored by tnHost
         const double tR0 = now();
         out.nHostLane += repH.size();
         if (e2e) {   // E8: the host lane's results packed for the upload (records only of the reads it mapped)
@@ -2233,6 +2262,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     };
     // a chunk's records copied to their places (s0, b0, r0: the chunk's first sequence byte, blob byte and record)
     auto hostCopy = [&](ChunkRes& cr, u64 s0, u64 b0, u64 r0) {
+        singlet::ThreadNameScope tnRole("gm-reccopy");
         const double tC = now();
         const std::vector<uint32_t>& repc = cr.repc; const u64 c0 = cr.c0, nK = repc.size();
         const u64 chunkIx = chunksDone;
@@ -2262,6 +2292,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     auto hostAll = [&]() -> bool {
         for (auto& cr : chunks) if (!hostPrep(cr)) return false;
         const double tA0 = now();
+        singlet::ThreadNameScope tnRole("gm-recalloc");
         u64 S = out.seq.size(), Bt = out.blob.size(), R = out.seqOff.size() - 1;
         std::vector<u64> s0(chunks.size()), b0(chunks.size()), r0(chunks.size());
         for (u64 c = 0; c < chunks.size(); c++) {
@@ -2292,6 +2323,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // hook's reads (the products' rules); needs readRecord
     std::vector<uint64_t> hkPre; bool entPre = false;
     auto entHostPass = [&](std::vector<uint64_t>& hookList) {
+        singlet::ThreadNameScope tnRole("gm-enthost");
         const double t0e = now();
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         e6::ReadEntry* E = (e6::ReadEntry*) (RG.base + entOff); uint64_t* Mq = qmOff ? (uint64_t*) (RG.base + qmOff) : nullptr;
@@ -2319,6 +2351,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     };
     u64 capRec = cap; int recSlots = 1;
     auto e2eBuild = [&](std::string& why) -> bool {
+        singlet::ThreadNameScope tnRole("gm-e2e");
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const u64 nRec = out.seqOff.size() - 1;
         if (nRec == 0 || recSrc.size() != nRec || recRead.size() != nRec) { why = "no records"; return false; }
@@ -2527,6 +2560,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     // summed; the junctions are merged by key (counts summed, overhang maxed, as products' reduction); the unmapped reads come from
     // readRecord and the records' mapped flags. E11's keep is filled in parts (the reads' CR/UR by read chunks of their aux).
     auto e2eBuildRC = [&](std::string& why) -> bool {
+        singlet::ThreadNameScope tnRole("gm-e2erc");
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const u64 nRec = out.seqOff.size() - 1;
         if (nRec == 0 || out.readRecord.size() != n) { why = "no records"; return false; }
@@ -2745,6 +2779,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     };
     // per read: its record (sequence-cache result) or NONE; final once every hostPart ran
     auto fillReadRecord = [&]() {
+        singlet::ThreadNameScope tnRole("gm-readrec");
         singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);   // set for every representative, the only reads readRep names
         parallelFor(rep.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
         out.readRecord.assign(n, NONE);
