@@ -913,7 +913,92 @@ static int cmd_download(int argc, char* argv[]) {
     singlet::fq::SraEncoder encoder;
     auto stats = encoder.encode(sra_input, ecfg);
 
-    if (stats.exit_code != 0) return stats.exit_code;
+    // Metadata JSON (when requested): the catalog fields of the job script's JSON, the final protocol and how it was chosen.
+    auto write_metadata_json = [&]() -> int {
+        if (metadata_json_path.empty()) return 0;
+        // Compute today's date as YYYY-MM-DD
+        std::time_t now = std::time(nullptr);
+        char date_buf[16];
+        std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", std::localtime(&now));
+
+        // Extract SRR accession (strip path+extension for the srr_ids field)
+        std::string srr_acc = input_name;
+        {
+            auto sl = srr_acc.rfind('/');
+            if (sl != std::string::npos) srr_acc = srr_acc.substr(sl + 1);
+            auto dt = srr_acc.rfind('.');
+            if (dt != std::string::npos) srr_acc = srr_acc.substr(0, dt);
+        }
+
+        // Preserve fields from any pre-existing metadata JSON (e.g. written by
+        // the job script before calling singlet download).  Crucially: organism,
+        // taxon_id, gsm_id, gse_id, modality, geo_title, geo_source_name must NOT
+        // be overwritten with empty values — they were populated from the catalog
+        // by the job script and are critical for species auto-detection in the
+        // subsequent singlet process step.
+        std::string pre_organism, pre_taxon_id, pre_gsm, pre_gse;
+        std::string pre_modality, pre_geo_title, pre_geo_source;
+        {
+            std::ifstream pre_mf2(metadata_json_path);
+            if (pre_mf2.is_open()) {
+                std::string pre_json((std::istreambuf_iterator<char>(pre_mf2)), {});
+                // Re-use species_detect's JSON extractor (same simple logic)
+                auto extract = [&](const std::string& key) -> std::string {
+                    auto pos = pre_json.find("\"" + key + "\"");
+                    if (pos == std::string::npos) return "";
+                    pos = pre_json.find(':', pos);
+                    if (pos == std::string::npos) return "";
+                    pos = pre_json.find('"', pos + 1);
+                    if (pos == std::string::npos) return "";
+                    auto end = pre_json.find('"', pos + 1);
+                    if (end == std::string::npos) return "";
+                    return pre_json.substr(pos + 1, end - pos - 1);
+                };
+                pre_organism   = extract("organism");
+                pre_taxon_id   = extract("taxon_id");
+                pre_gsm        = extract("gsm_id");
+                pre_gse        = extract("gse_id");
+                pre_modality   = extract("modality");
+                pre_geo_title  = extract("geo_title");
+                pre_geo_source = extract("geo_source_name");
+            }
+        }
+
+        std::ofstream mf(metadata_json_path);
+        if (!mf.is_open()) {
+            std::cerr << "ERROR: cannot write metadata JSON: " << metadata_json_path << "\n";
+            return 1;
+        }
+        mf << "{\n"
+           << "  \"gsm_id\": \"" << pre_gsm << "\",\n"
+           << "  \"gse_id\": \"" << pre_gse << "\",\n"
+           << "  \"organism\": \"" << pre_organism << "\",\n"
+           << "  \"taxon_id\": " << (pre_taxon_id.empty() ? "0" : pre_taxon_id) << ",\n"
+           << "  \"protocol\": \"" << stats.protocol_tag << "\",\n"
+           << singlet::fq::protocol_provenance_json(stats.decision)
+           << "  \"modality\": \"" << pre_modality << "\",\n"
+           << "  \"srr_ids\": [\"" << srr_acc << "\"],\n"
+           << "  \"read_count\": " << stats.total_reads << ",\n"
+           << "  \"geo_title\": \"" << pre_geo_title << "\",\n"
+           << "  \"geo_source_name\": \"" << pre_geo_source << "\",\n"
+           << "  \"singlet_version\": \"" << singlet::kVersion << "\",\n"
+           << "  \"pipeline_date\": \"" << date_buf << "\"\n"
+           << "}\n";
+        mf.close();
+        if (!pre_organism.empty())
+            std::cerr << "[singlet-download] Metadata JSON preserved organism: "
+                      << pre_organism << " (taxon " << pre_taxon_id << ")\n";
+        std::cerr << "[singlet-download] Metadata JSON: " << metadata_json_path << "\n";
+        return 0;
+    };
+
+    if (stats.exit_code != 0) {
+        if (stats.decision.source == "excluded") {
+            std::cerr << "[singlet-download] Protocol excluded: " << stats.decision.exclusion_reason << "\n";
+            write_metadata_json();
+        }
+        return stats.exit_code;
+    }
 
     if (stg) {
         if (!stg->initialised()) { std::cerr << "[singlet-download] --stage-out: no reads reached the stage encoder\n"; return 2; }
@@ -983,81 +1068,7 @@ static int cmd_download(int argc, char* argv[]) {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // Write metadata JSON if requested
-    if (!metadata_json_path.empty()) {
-        // Compute today's date as YYYY-MM-DD
-        std::time_t now = std::time(nullptr);
-        char date_buf[16];
-        std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", std::localtime(&now));
-
-        // Extract SRR accession (strip path+extension for the srr_ids field)
-        std::string srr_acc = input_name;
-        {
-            auto sl = srr_acc.rfind('/');
-            if (sl != std::string::npos) srr_acc = srr_acc.substr(sl + 1);
-            auto dt = srr_acc.rfind('.');
-            if (dt != std::string::npos) srr_acc = srr_acc.substr(0, dt);
-        }
-
-        // Preserve fields from any pre-existing metadata JSON (e.g. written by
-        // the job script before calling singlet download).  Crucially: organism,
-        // taxon_id, gsm_id, gse_id, modality, geo_title, geo_source_name must NOT
-        // be overwritten with empty values — they were populated from the catalog
-        // by the job script and are critical for species auto-detection in the
-        // subsequent singlet process step.
-        std::string pre_organism, pre_taxon_id, pre_gsm, pre_gse;
-        std::string pre_modality, pre_geo_title, pre_geo_source;
-        {
-            std::ifstream pre_mf2(metadata_json_path);
-            if (pre_mf2.is_open()) {
-                std::string pre_json((std::istreambuf_iterator<char>(pre_mf2)), {});
-                // Re-use species_detect's JSON extractor (same simple logic)
-                auto extract = [&](const std::string& key) -> std::string {
-                    auto pos = pre_json.find("\"" + key + "\"");
-                    if (pos == std::string::npos) return "";
-                    pos = pre_json.find(':', pos);
-                    if (pos == std::string::npos) return "";
-                    pos = pre_json.find('"', pos + 1);
-                    if (pos == std::string::npos) return "";
-                    auto end = pre_json.find('"', pos + 1);
-                    if (end == std::string::npos) return "";
-                    return pre_json.substr(pos + 1, end - pos - 1);
-                };
-                pre_organism   = extract("organism");
-                pre_taxon_id   = extract("taxon_id");
-                pre_gsm        = extract("gsm_id");
-                pre_gse        = extract("gse_id");
-                pre_modality   = extract("modality");
-                pre_geo_title  = extract("geo_title");
-                pre_geo_source = extract("geo_source_name");
-            }
-        }
-
-        std::ofstream mf(metadata_json_path);
-        if (!mf.is_open()) {
-            std::cerr << "ERROR: cannot write metadata JSON: " << metadata_json_path << "\n";
-            return 1;
-        }
-        mf << "{\n"
-           << "  \"gsm_id\": \"" << pre_gsm << "\",\n"
-           << "  \"gse_id\": \"" << pre_gse << "\",\n"
-           << "  \"organism\": \"" << pre_organism << "\",\n"
-           << "  \"taxon_id\": " << (pre_taxon_id.empty() ? "0" : pre_taxon_id) << ",\n"
-           << "  \"protocol\": \"" << stats.protocol_tag << "\",\n"
-           << "  \"modality\": \"" << pre_modality << "\",\n"
-           << "  \"srr_ids\": [\"" << srr_acc << "\"],\n"
-           << "  \"read_count\": " << stats.total_reads << ",\n"
-           << "  \"geo_title\": \"" << pre_geo_title << "\",\n"
-           << "  \"geo_source_name\": \"" << pre_geo_source << "\",\n"
-           << "  \"singlet_version\": \"" << singlet::kVersion << "\",\n"
-           << "  \"pipeline_date\": \"" << date_buf << "\"\n"
-           << "}\n";
-        mf.close();
-        if (!pre_organism.empty())
-            std::cerr << "[singlet-download] Metadata JSON preserved organism: "
-                      << pre_organism << " (taxon " << pre_taxon_id << ")\n";
-        std::cerr << "[singlet-download] Metadata JSON: " << metadata_json_path << "\n";
-    }
+    if (int rc = write_metadata_json(); rc != 0) return rc;
 
     return 0;
 }
@@ -2741,6 +2752,86 @@ static int cmd_nonhost(int argc, char* argv[]) {
 // ════════════════════════════════════════════════════════════
 // singlet genome — Load/unload genome into System V shared memory
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// singlet whitelists fetch — download the barcode lists that are not bundled (GEM-X), pinned by sha256
+// ════════════════════════════════════════════════════════════
+
+static int cmd_whitelists(int argc, char* argv[]) {
+    std::string action = argc >= 1 ? argv[0] : "";
+    std::string dir;
+    std::vector<std::string> files;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--dir" && i + 1 < argc) dir = argv[++i];
+        else if (!a.empty() && a[0] != '-') files.push_back(a);
+        else { std::cerr << "singlet whitelists: unknown option " << a << "\n"; return 1; }
+    }
+    if (action != "fetch" && action != "list") {
+        std::cerr << "Usage: singlet whitelists fetch [--dir DIR] [FILE ...]   download the lists that are not bundled, checked by sha256\n"
+                     "       singlet whitelists list  [--dir DIR]              show them and whether each is installed\n"
+                     "DIR defaults to $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists.\n";
+        return (action.empty() || action == "-h" || action == "--help") ? 0 : 1;
+    }
+    if (dir.empty()) {
+        const auto dirs = singlet::fq::resolve_whitelist_dirs({});
+        if (!dirs.empty()) {
+            dir = dirs.front();
+        } else {
+            char buf[4096];
+            const ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+            const std::string exe = len > 0 ? std::string(buf, static_cast<size_t>(len)) : std::string();
+            const auto pos = exe.rfind('/');
+            if (pos == std::string::npos) { std::cerr << "singlet whitelists: cannot locate the binary; pass --dir\n"; return 1; }
+            dir = exe.substr(0, pos) + "/../whitelists";
+        }
+    }
+    auto shq = [](const std::string& x) {
+        std::string o = "'";
+        for (char c : x) {
+            if (c == '\'') o += "'\\''";
+            else o += c;
+        }
+        return o + "'";
+    };
+    int bad = 0;
+    for (const auto& f : singlet::fq::fetchable_whitelists()) {
+        if (!files.empty() && std::find(files.begin(), files.end(), std::string(f.file)) == files.end()) continue;
+        const std::string dst = dir + "/" + f.file;
+        const std::string have = singlet::sha256_file(dst);
+        if (action == "list") {
+            std::cout << f.file << "\t" << (have.empty() ? "absent" : have == f.sha256 ? "installed" : "MISMATCH") << "\t"
+                      << f.chemistry << "\t" << f.url << "\n";
+            continue;
+        }
+        if (have == f.sha256) { std::cerr << "[whitelists] " << f.file << ": present, sha256 ok\n"; continue; }
+        if (std::system(("mkdir -p " + shq(dir)).c_str()) != 0) { std::cerr << "[whitelists] cannot create " << dir << "\n"; return 1; }
+        const std::string part = dst + ".part";
+        std::cerr << "[whitelists] " << f.file << ": downloading " << f.url << " (" << f.bytes << " bytes)\n";
+        const std::string cmd = "curl -fsSL --retry 5 --retry-delay 5 -o " + shq(part) + " " + shq(f.url);
+        if (std::system(cmd.c_str()) != 0) {
+            std::cerr << "[whitelists] ERROR: download failed: " << f.url << "\n";
+            std::remove(part.c_str());
+            ++bad;
+            continue;
+        }
+        const std::string got = singlet::sha256_file(part);
+        if (got != f.sha256) {
+            std::cerr << "[whitelists] ERROR: " << f.file << " sha256 " << got << " differs from the pinned " << f.sha256
+                      << "; the file was not installed\n";
+            std::remove(part.c_str());
+            ++bad;
+            continue;
+        }
+        if (std::rename(part.c_str(), dst.c_str()) != 0) {
+            std::cerr << "[whitelists] ERROR: cannot write " << dst << "\n";
+            ++bad;
+            continue;
+        }
+        std::cerr << "[whitelists] " << f.file << ": installed in " << dir << " (sha256 ok)\n";
+    }
+    return bad ? 1 : 0;
+}
+
 static int cmd_genome(int argc, char* argv[]) {
     if (argc < 1) {
         std::cerr
@@ -2865,6 +2956,7 @@ static void usage(const char* prog) {
         << "  " << prog << " <file.1fq> [options]        Process .1fq → .1pz (align + pileup)\n"
         << "  " << prog << " download <SRR> [-o]         Stream SRA → .1fq archive\n"
         << "  " << prog << " encode --reads R1 R2 [-o]   Encode FASTQ pair → .1fq archive\n"
+        << "  " << prog << " whitelists fetch [--dir DIR]  Download the barcode lists that are not bundled (GEM-X), sha256-pinned\n"
         << "  " << prog << " screen-runs RUN1 [RUN2 ...]  Per-run screen (1M reads): chemistry, 5', feature barcodes\n"
         << "  " << prog << " decode <file.1fq> [--r1 R1 --r2 R2]  Decode .1fq → FASTQ\n"
         << "  " << prog << " genome load <genome-dir>    Load genome into shared RAM (~40s, once)\n"
@@ -3231,6 +3323,8 @@ static int singlet_main(int argc, char* argv[]) {
                 return cmd_nonhost(argc - 2, argv + 2);
             if (sub == "build-nonhost-db")
                 return cmd_build_nonhost_db(argc - 2, argv + 2);
+            if (sub == "whitelists")
+                return cmd_whitelists(argc - 2, argv + 2);
             if (sub == "screen-runs")
                 return singlet::fq::screen_runs_main(argc - 2, argv + 2);
             if (sub == "build-host-filter")
@@ -4005,7 +4099,7 @@ static int singlet_main(int argc, char* argv[]) {
             if (is_visium_mode)
                 std::cerr << "[singlet] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             // Visium: the spot list (visium-v1.txt, rebuilt from 10x public datasets) is the whitelist when installed,
-            // so STAR corrects spot barcodes. Protocol detection is unchanged: it cannot tell Visium from 3' v3.
+            // so STAR corrects spot barcodes. Detection tells Visium from 3' v3 by the same list.
             if (is_visium_mode && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
                 char exe_buf[PATH_MAX];
                 ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
@@ -9359,6 +9453,23 @@ static int singlet_main(int argc, char* argv[]) {
     export_cfg.n_donors = n_donors;
     export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
     export_cfg.genome_dir = genome_dir;
+
+    // The counted strand decides 3' against 5' for the 10x pairs that share the barcode read and whitelist: the cDNA read aligns sense
+    // in 3' kits and antisense in 5' kits. When the strand probe or the safety net counted the other orientation than the detected
+    // protocol implies, report the sibling so the label matches the counts (a 26-base R1 holds no TSO or poly(T) to tell them apart).
+    if (onefq_mode && engine_ptr && config.stranded && !strand_from_user) {
+        static constexpr uint8_t kSiblings[][2] = {{1, 4}, {2, 5}, {13, 14}};   // 10x 3' / 5' v3, v2, v4
+        const bool rev = engine_ptr->reverse_strand();
+        for (const auto& s : kSiblings) {
+            const uint8_t to = (onefq_protocol_id == s[0] && rev) ? s[1] : (onefq_protocol_id == s[1] && !rev) ? s[0] : 0;
+            if (to) {
+                std::cerr << "[singlet] Protocol relabeled by strand: id " << static_cast<int>(onefq_protocol_id) << " -> "
+                          << static_cast<int>(to) << " (cDNA read counted " << (rev ? "antisense, 5'" : "sense, 3'") << ")\n";
+                onefq_protocol_id = to;
+                break;
+            }
+        }
+    }
 
     // ── §3.6 fields for summary.json ──
     {

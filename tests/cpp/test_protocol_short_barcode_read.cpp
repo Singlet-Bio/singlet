@@ -136,6 +136,10 @@ int main() {
         c.confidence = singlet::fq::Confidence::HIGH;
         c.wl_match_rate = 0.001;
         CHECK(!singlet::fq::protocol_wl_floor_error(c).empty(), "0.1% hit rate on an auto-detected 10x protocol is an error");
+        c.wl_match_rate = 0.08;
+        CHECK(!singlet::fq::protocol_wl_floor_error(c).empty(), "8% (an inDrop library on the 3' v1 list) is an error");
+        c.wl_match_rate = 0.15;
+        CHECK(singlet::fq::protocol_wl_floor_error(c).empty(), "15% (the weakest real 10x library seen) is fine");
         c.wl_match_rate = 0.6;
         CHECK(singlet::fq::protocol_wl_floor_error(c).empty(), "60% is fine");
         c.wl_match_rate = 0.001;
