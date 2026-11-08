@@ -9479,9 +9479,11 @@ static int singlet_main(int argc, char* argv[]) {
             pa.push_back(unm1); pa.push_back(unm2);
             for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
             pa.push_back(prefix);
-            for (const char* s : {"--chimSegmentMin", "15", "--chimJunctionOverhangMin", "15", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1",
-                                  "--chimMultimapNmax", "10", "--chimMultimapScoreRange", "3", "--chimScoreJunctionNonGTAG", "-4",
-                                  "--chimNonchimScoreDropMin", "10"})
+            // Arriba's published chimeric settings (Uhrig et al. 2021): short segments (10 bases), unaligned tails up to 30 points and
+            // read gaps up to 3 bases, which droplet reads of 90 bases need (B6: the 15-base settings lost RUNX1-RUNX1T1 reads)
+            for (const char* s : {"--chimSegmentMin", "10", "--chimJunctionOverhangMin", "10", "--chimScoreMin", "1", "--chimScoreDropMax", "30",
+                                  "--chimScoreJunctionNonGTAG", "0", "--chimScoreSeparation", "1", "--alignSJstitchMismatchNmax", "5", "-1", "5", "5",
+                                  "--chimSegmentReadGapMax", "3", "--chimMultimapNmax", "50", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1"})
                 pa.push_back(s);
             std::vector<char*> pv;
             pv.push_back(const_cast<char*>("STAR"));
