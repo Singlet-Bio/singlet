@@ -41,7 +41,7 @@ in `results/`.
 
 | Oracle | Engine | Best comparator | Verdict |
 |---|---|---|---|
-| B6 chimeric junctions | PR #220: clause 1 fails on 1:1.5 (best 2 of 3 with the combined score), clause 2 fails on both mixes (RUNX1–RUNX1T1 6 of 8 cells on 1:15). Soft-clip prototype with the combined score: clause 1 passes on both mixes, clause 2 one cell short on each | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **fail** |
+| B6 chimeric junctions | Arriba chimeric settings (#220, e967c1e7) + soft-clip 15 + combined score: both clauses met on both mixes. Without the Mitelman prior, 1:1.5 clause 1 reaches 2 of 3 against Arriba 3 of 3 | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **pass, prior-dependent** |
 | B7 TE counts | pending: the A375 comparators finish in 804425 or 804512; mESC comparators rerun in 804512 after a mate swap | pending | pending |
 | B8 reads per UMI | 96.9% of Cell Ranger molecules matched; matched TVD 0.0153; saturation 0.7288 vs 0.7248 | Cell Ranger 3.0 is the reference | **pass** |
 
@@ -252,3 +252,36 @@ The run declared here sets the second pass to Arriba's published chimeric settin
 Both mixes are rerun without soft-clip and with soft-clip at 20 and at 15 bases, keeping the blacklist and the existing
 149-pair recurrent list. They are scored with the committed rule and the pre-registered scores, unchanged, including the
 leave-truth-out prior. The run tags end in `-arriba`.
+
+### B6 results with Arriba's chimeric settings
+
+Prototype build chimproto-68d44117 carries PR #220 at e967c1e7 (where the second pass now uses Arriba's settings) plus the
+soft-clip route, which runs only when its environment variable is set. All runs were in job 804425, with the committed rule and
+the pre-registered scores unchanged. Recall is read at STAR-Fusion's and Arriba's false-positive counts (9 and 44 on 1:1.5, 6
+and 39 on 1:15). Results are in `results/b6_*_rank_{nosc,sc20,sc15}_arriba[_lto].json`.
+
+| Soft-clip | Score | 1:1.5 recall | 1:15 recall | Clause 1 | 1:1.5 cells (BCR–ABL1, NUP214–XKR3, RUNX1–RUNX1T1) | 1:15 RUNX1–RUNX1T1 cells | Clause 2 |
+|---|---|---|---|---|---|---|---|
+| none | breakpoint features only | 0 / 1/3 | 1/3 / 1/3 | fail | 0, 1, 2 | 6 | fail |
+| none | combined | 2/3 / 2/3 | 2/3 / 2/3 | fail | 0, 1, 2 | 6 | fail |
+| none | combined, leave-truth-out | 0 / 1/3 | 1/3 / 1/3 | fail | | | |
+| 20 bases | breakpoint features only | 0 / 2/3 | 1/3 / 1/3 | fail | 1, 2, 3 | 7 | fail |
+| 20 bases | combined | 1 / 1 | 1/3 / 2/3 | pass | 1, 2, 3 | 7 | fail |
+| 20 bases | combined, leave-truth-out | 0 / 2/3 | 1/3 / 1/3 | fail | | | |
+| 15 bases | breakpoint features only | 0 / 2/3 | 1/3 / 1/3 | fail | 1, 2, 3 | 8 | **pass** |
+| 15 bases | Mitelman prior only | 2/3 / 1 | 1/3 / 2/3 | pass | 1, 2, 3 | 8 | **pass** |
+| 15 bases | combined | 1 / 1 | 1/3 / 2/3 | **pass** | 1, 2, 3 | 8 | **pass** |
+| 15 bases | combined, leave-truth-out | 0 / 2/3 | 1/3 / 1/3 | fail | | | |
+
+The comparators reach 1, 2 and 3 cells on 1:1.5 (Arriba) and 8 on 1:15, and no caller marks a cell of the other line.
+
+**Verdict: B6 passes the committed rule** with Arriba's chimeric settings, the soft-clip route at 15 bases and the combined
+score. On both mixes the engine matches or beats both comparators at their false-positive counts, and it matches the best
+comparator's cell recall for every truth fusion with a false-positive rate of 0.
+
+The pass rests on the known-fusion prior. On breakpoint features alone, or with the truth pairs removed from Mitelman, the engine
+reaches 2 of 3 truth fusions within Arriba's 44 false positives on 1:1.5, against Arriba's 3 of 3. On 1:15 it ties both
+comparators without the prior. Clause 2 does not depend on the ranking, and it is met because Arriba's settings and the 15-base
+route recover the two traced reads. Two further caveats belong with the verdict. The 15-base threshold and the change of settings
+were chosen after the first misses on these mixes, although each was declared before its run was scored. The soft-clip route is
+also a CPU-path prototype.
