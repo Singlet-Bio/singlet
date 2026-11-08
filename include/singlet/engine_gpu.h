@@ -343,7 +343,44 @@ inline void admitTurnstile(int device) {
     if (fd < 0) return;
     flock(fd, LOCK_SH); flock(fd, LOCK_UN); close(fd);
 }
-inline int lockDeviceImpl(int* lockFd) {
+// Waiting for a slot (gpu/anyslot): every slot of the candidate devices is polled every 10 ms with a non-blocking flock, so a waiter takes
+// whichever slot frees first instead of queuing on slot (pid mod slots) while another slot sits idle. A short holder (all but the prefill's
+// mapping: the E20 relock, Solo, the pileup, the non-host screen; 1 to 8 s) holds the device's ".prio" file shared while it waits, and a long
+// holder (the prefill, ~26 s) leaves a free slot to it, so the short phases stop queuing behind whole prefills. Which process holds the device
+// when changes no output. SINGLET_ENGINE_GPU_LOCKWAIT=fixed: the blocking wait on slot (pid mod slots) as before.
+inline bool lockWaitFixed() { const char* e = std::getenv("SINGLET_ENGINE_GPU_LOCKWAIT"); return e != nullptr && std::string(e) == "fixed"; }
+inline std::string slotLockPath(int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; }
+inline std::string prioPath(int d) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + ".prio"; }
+// polls the slots of `devs` (slot-major, as the first-free scan) until one is free; returns its fd (-1 when no lock file opens) and sets *device
+inline int pollSlots(const std::vector<int>& devs, int slots, bool longHold, int* device) {
+    struct Cand { int d, k, fd; };
+    std::vector<Cand> c;
+    for (int k = 0; k < slots; k++)
+        for (int d : devs) c.push_back({d, k, open(slotLockPath(d, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666)});
+    std::vector<std::pair<int, int>> prio;   // (device, fd of its .prio file)
+    for (int d : devs) prio.push_back({d, open(prioPath(d).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666)});
+    if (!longHold) for (auto& p : prio) if (p.second >= 0) flock(p.second, LOCK_SH);
+    bool any = false;
+    for (auto& x : c) any = any || x.fd >= 0;
+    int got = -1;
+    for (int round = 0; any && got < 0; round++) {
+        if (round > 0) usleep(10000);
+        for (int d : devs) admitTurnstile(d);
+        for (auto& x : c) {
+            if (x.fd < 0) continue;
+            if (longHold) {   // a short holder waits on this device: the free slot is its
+                int pf = -1;
+                for (auto& p : prio) if (p.first == x.d) pf = p.second;
+                if (pf >= 0) { if (flock(pf, LOCK_EX | LOCK_NB) != 0) continue; flock(pf, LOCK_UN); }
+            }
+            if (flock(x.fd, LOCK_EX | LOCK_NB) == 0) { got = x.fd; *device = x.d; x.fd = -1; break; }
+        }
+    }
+    for (auto& x : c) if (x.fd >= 0) close(x.fd);
+    for (auto& p : prio) if (p.second >= 0) close(p.second);   // closing drops the shared lock
+    return got;
+}
+inline int lockDeviceImpl(int* lockFd, bool longHold) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
     const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
@@ -351,6 +388,14 @@ inline int lockDeviceImpl(int* lockFd) {
     const int nDev = deviceCount() > 0 ? deviceCount() : 1;
     int device = -1;
     *lockFd = -1;
+    if (!lockWaitFixed()) {
+        std::vector<int> devs;
+        if (dv != nullptr) devs.push_back(std::atoi(dv));
+        else for (int d = 0; d < nDev; d++) devs.push_back(d);
+        device = devs[0];
+        *lockFd = pollSlots(devs, slots, longHold, &device);
+        return device;
+    }
     if (dv != nullptr) {
         device = std::atoi(dv);
         admitTurnstile(device);
@@ -376,9 +421,10 @@ inline int lockDeviceImpl(int* lockFd) {
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
-inline int lockDevice(int* lockFd) {
+// longHold: the prefill's mapping (see pollSlots); every other phase is a short holder
+inline int lockDevice(int* lockFd, bool longHold = false) {
     int d;
-    { singlet::NvtxRange nvWait("device lock: wait"); d = lockDeviceImpl(lockFd); }
+    { singlet::NvtxRange nvWait("device lock: wait"); d = lockDeviceImpl(lockFd, longHold); }
     if (*lockFd >= 0) {
         const unsigned long long id = singlet::nvtx_start("device lock: held");
         if (id) { std::lock_guard<std::mutex> g(lockRangesMutex()); lockRanges()[*lockFd] = id; }
@@ -404,6 +450,7 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     *lockFd = -1;
+    if (!lockWaitFixed()) { int d = device; *lockFd = pollSlots({device}, slots, false, &d); return; }
     admitTurnstile(device);
     for (int k = 0; k < slots; k++) {
         int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);

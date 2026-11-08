@@ -1484,7 +1484,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
     time_t tWait = time(nullptr);
     int lockFd = -1;
-    int device = singlet_engine_gpu::lockDevice(&lockFd);
+    int device = singlet_engine_gpu::lockDevice(&lockFd, /*longHold=*/true);
     time_t tLock = time(nullptr);
     singlet_tail::mark("prefill: device %d locked", device);   // E20: the start stage's end (bench/fable/lockclip/e20_start.py)
     int hostThreads = (int) P.runThreadN;
