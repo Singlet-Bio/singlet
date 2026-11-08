@@ -14,9 +14,10 @@
 //   - duplicates: reads carry a cell barcode and UMI, so Arriba's external duplicate marking (-u) is used; a read is a duplicate when an
 //     earlier read (in read-name order) has the same cell, UMI and breakpoints;
 //   - multi-mapping chimeric reads are the lines of one read name (num_chim_aln > 1), numbered in file order as Arriba numbers HI tags;
-//   - coverage (Arriba counts every alignment of the BAM in 20-bp windows): no BAM is kept, so a breakpoint's coverage is the engine's
-//     count for the most-counted annotated gene overlapping it (gene_expression.tsv), and "a fragment starts/ends here" holds when a
-//     counted gene overlaps the window; with no gene counts, coverage is unknown (-1, as Arriba returns for contigs without coverage);
+//   - coverage (Arriba counts every alignment of the BAM in 20-bp windows): no BAM is kept, so a breakpoint's coverage is the mean read
+//     depth of the most-counted annotated gene overlapping it, count * (read length + window) / effective length from gene_expression.tsv
+//     (read length 90, window 20), and "a fragment starts/ends here" holds when a counted gene overlaps the window; with no gene counts,
+//     coverage is unknown (-1, as Arriba returns for contigs without coverage);
 //   - mapped reads (the e-value's library size): STAR's uniquely and multi-mapped reads of the main pass, given by the caller;
 //   - read-through and tandem-duplication candidates that Arriba extracts from ordinary (non-chimeric) alignments are not available;
 //   - with no read sequences, the homopolymer, mismatches and low_entropy filters are skipped and multi-mapper scores fall back to STAR's.
@@ -37,7 +38,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstdio>
 #include <functional>
+#include <iterator>
 #include <list>
 #include <map>
 #include <memory>
@@ -2480,8 +2483,9 @@ inline bool load_gene_counts(const std::string& path, coverage_t& cov) {
         if (header) { header = false; if (ln.compare(0, 7, "gene_id") == 0) return; }
         auto f = detail::split(ln, '\t');
         if (f.size() < 4) return;
-        double c = std::atof(f[3].c_str());
-        cov.count_by_gene_id[strip_ensembl_version_number(f[0])] = (unsigned int)std::min(c, 4e9);
+        const double c = std::atof(f[3].c_str()), eff = std::max(110.0, std::atof(f[2].c_str()));
+        const double depth = c > 0 ? std::max(1.0, std::round(c * 110.0 / eff)) : 0.0;  // singlet: mean depth over a 20-bp window of 90-bp reads
+        cov.count_by_gene_id[strip_ensembl_version_number(f[0])] = (unsigned int)std::min(depth, 4e9);
     });
     cov.known = ok && !cov.count_by_gene_id.empty();
     return cov.known;
