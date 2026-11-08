@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
@@ -129,11 +130,13 @@ inline const std::vector<CandidateSpec>& known_protocols() {
          "indrop_bc1.txt", "GAGTGATTGCTTGTGACGCCTT", 10, false, "",
          {"indrop_bc1.txt", "indrop_bc2.txt"}},
 
-        // ── 10x Chromium v4 (GEM-X) ──
-        // Same geometry as v3: R1(28bp) = BC(16bp) + UMI(12bp), R2 = cDNA
-        // Uses same 3M barcode set (compatible with 3M-february-2018.txt)
-        {"10x-3p-v4", 13, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false},
-        {"10x-5p-v4", 14, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false,
+        // ── 10x Chromium GEM-X: 3' v4 and 5' v3 ──
+        // Same geometry as v3: R1(28bp) = BC(16bp) + UMI(12bp), R2 = cDNA. GEM-X has its own barcode lists, which are not bundled:
+        // `singlet whitelists fetch` downloads them (kFetchableWhitelists). Without the list neither spec is ever chosen (detection skips
+        // it in favor of 10x-3p-v3, the lower id of the same geometry) and a GEM-X call fails with the fetch command named.
+        // "10x-5p-v4" is the engine's name for 10x's GEM-X Single Cell 5' v3 kit.
+        {"10x-3p-v4", 13, 28, 0, 16, 16, 12, "3M-3pgex-may-2023.txt", "", 0, false},
+        {"10x-5p-v4", 14, 28, 0, 16, 16, 12, "3M-5pgex-jan-2023.txt", "", 0, false,
          "AAGCAGTGGTATCAACGCAGAGTACATGGG"},
 
         // ── DNBelab C4 (MGI) ──
@@ -665,6 +668,7 @@ ProtocolCandidate detect_protocol(
     // Enforces the stated intent in known_protocols(): "Without WL, detection falls
     // back to 10x-3p-v3."
     std::unordered_map<uint64_t, int> wl_geometries;   // geometry -> number of WL protocols with it
+    std::unordered_map<uint64_t, uint8_t> wl_geometry_min_id;   // geometry -> lowest protocol_id of a WL protocol with it
     auto pack_geom5 = [](uint16_t r1, uint16_t bco, uint16_t bcl,
                          uint16_t umio, uint16_t umil) -> uint64_t {
         // Combine five 16-bit fields into one 64-bit integer for unambiguous keying.
@@ -677,8 +681,10 @@ ProtocolCandidate detect_protocol(
     };
     for (const auto& k : known_protocols()) {
         if (!k.whitelist_file.empty()) {
-            ++wl_geometries[pack_geom5(k.r1_len, k.bc_offset, k.bc_len,
-                                       k.umi_offset, k.umi_len)];
+            const uint64_t g = pack_geom5(k.r1_len, k.bc_offset, k.bc_len, k.umi_offset, k.umi_len);
+            ++wl_geometries[g];
+            auto [mit, fresh] = wl_geometry_min_id.emplace(g, k.protocol_id);
+            if (!fresh && k.protocol_id < mit->second) mit->second = k.protocol_id;
         }
     }
 
@@ -757,11 +763,14 @@ ProtocolCandidate detect_protocol(
                 it = wl_cache.emplace(cache_key, std::move(wl_hashes)).first;
             }
             const auto& wl_hashes = it->second;
-            // A WL protocol whose list is not installed and whose geometry another WL protocol shares (10x-visium without
-            // visium-v1.txt) cannot tell itself apart: skip it, as the no-WL suppression above does.
-            if (wl_hashes.empty() && cand->linker.empty() &&
-                wl_geometries[pack_geom5(cand->r1_len, cand->bc_offset, cand->bc_len, cand->umi_offset, cand->umi_len)] >= 2)
-                continue;
+            // A WL protocol whose list is not installed cannot tell itself apart from a WL protocol of the same geometry: skip it when
+            // one with a lower protocol_id exists (10x-visium without visium-v1.txt, GEM-X without its lists), so the lowest id of
+            // the geometry (10x-3p-v3 for 28 nt) stays as the fallback even when no list is installed at all.
+            if (wl_hashes.empty() && cand->linker.empty()) {
+                const auto mit = wl_geometry_min_id.find(
+                    pack_geom5(cand->r1_len, cand->bc_offset, cand->bc_len, cand->umi_offset, cand->umi_len));
+                if (mit != wl_geometry_min_id.end() && mit->second < cand->protocol_id) continue;
+            }
             if (!wl_hashes.empty()) {
                 has_wl = true;
                 curr_wl_size = wl_hashes.size();
@@ -1118,9 +1127,12 @@ ProtocolCandidate detect_protocol(
     // low match rate should not prevent the swap: AUTOFIX-E2E-A2-READ-SWAP.
     // 10x 3' and 5' of one generation are indistinguishable above; switch to the
     // 5' sibling when the cDNA read looks 5' (see five_prime_evidence).
+    // Only a sibling that shares the whitelist is a candidate: GEM-X 3' and 5' have lists of their own, which decide alone.
     if (!inverted && !concat_mode && best.tag.rfind("10x-3p-v", 0) == 0) {
         std::string five = "10x-5p-" + best.tag.substr(7);
-        if (const CandidateSpec* fp = find_protocol_spec(five)) {
+        const CandidateSpec* tp = find_protocol_spec(best.tag);
+        const CandidateSpec* fp = find_protocol_spec(five);
+        if (fp && tp && fp->whitelist_file == tp->whitelist_file) {
             auto ev = five_prime_evidence(probe_spots,
                 static_cast<uint16_t>(best.umi_offset + best.umi_length));
             std::cerr << "[protocol_detect] 3'/5' check: R1 5'-TSO " << ev.r1_tso << " / polyT "
@@ -1218,6 +1230,222 @@ inline std::string protocol_wl_floor_error(const ProtocolCandidate& d) {
                   "is the barcode read and its length, or name the protocol with --protocol.",
                   d.tag.c_str(), d.wl_match_rate * 100.0, spec->whitelist_file.c_str(), kProtocolWlRateFloor * 100.0);
     return buf;
+}
+
+// ── Barcode lists that are fetched, not bundled ──
+// 10x ships the GEM-X lists only inside Cell Ranger. `singlet whitelists fetch` downloads the copies that the Broad Institute publishes
+// for its WARP/Optimus pipelines (public bucket gcp-public-data--broad-references) over HTTPS and refuses any file whose sha256 differs
+// from the pin below.
+struct FetchableWhitelist {
+    const char* file;      // file name in the whitelist directory (as named in known_protocols())
+    const char* url;       // HTTPS source
+    const char* sha256;    // pinned digest of the file as published
+    uint64_t bytes;        // size as published
+    const char* chemistry; // what it serves
+};
+
+inline const std::vector<FetchableWhitelist>& fetchable_whitelists() {
+    static const std::vector<FetchableWhitelist> v = {
+        {"3M-3pgex-may-2023.txt",
+         "https://storage.googleapis.com/gcp-public-data--broad-references/optimus_whitelists/3M-3pgex-may-2023.txt",
+         "62df04844ed0d1281b302f862ec0d005d3298fc169f507f68dd6e8d4cb5ccccd", 125337600ull, "10x GEM-X Single Cell 3' v4 (10x-3p-v4)"},
+        {"3M-5pgex-jan-2023.txt",
+         "https://storage.googleapis.com/gcp-public-data--broad-references/optimus_whitelists/3M-5pgex-jan-2023.txt",
+         "b402db8acbcd3a076bf50991538d6c08464ddb137e0b81916a9fa92cf222dd0d", 62668800ull, "10x GEM-X Single Cell 5' v3 (10x-5p-v4)"},
+    };
+    return v;
+}
+
+inline const FetchableWhitelist* find_fetchable_whitelist(const std::string& file) {
+    for (const auto& f : fetchable_whitelists())
+        if (file == f.file) return &f;
+    return nullptr;
+}
+
+// Error text for a call whose barcode list must be fetched and is absent, "" otherwise (list present, or bundled).
+inline std::string fetched_whitelist_missing_error(const std::string& tag, const std::vector<std::string>& dirs) {
+    const CandidateSpec* spec = find_protocol_spec(tag);
+    if (!spec || spec->whitelist_file.empty() || !find_fetchable_whitelist(spec->whitelist_file)) return "";
+    for (const auto& d : dirs) {
+        struct stat st;
+        if (stat((d + "/" + spec->whitelist_file).c_str(), &st) == 0 && S_ISREG(st.st_mode)) return "";
+    }
+    return spec->tag + " needs the barcode list " + spec->whitelist_file +
+           ", which is not bundled and was not found in the whitelist directory. Run `singlet whitelists fetch` (add --dir DIR for a "
+           "directory other than <binary dir>/../whitelists) to download it, then run again. No other list is substituted.";
+}
+
+// ── Low-confidence calls against the GEO chemistry ──
+// The campaign passes each sample's GEO chemistry as "protocol" in --metadata-json. When detection is confident (MEDIUM or HIGH) the
+// detector's call stands. When it is not (LOW or NONE) and GEO names a different chemistry, both calls are tested on the same probe reads
+// with the same evidence: the share of barcode reads found in the call's whitelist (at least kProtocolWlRateFloor) and, for a 10x 3'/5'
+// pair that shares one list, the strand check of five_prime_evidence(). The call that passes is taken. When both pass, or neither does,
+// the run is excluded with the reason recorded; nothing is guessed.
+
+struct ProtocolCallTest {
+    std::string tag;           // canonical tag tested ("" when the name is not a known protocol)
+    double wl_rate = -1.0;     // share of probe barcode reads in the whitelist; -1 when not measured
+    uint32_t n = 0;            // probe reads examined
+    std::string strand;        // "3p" or "5p" when the strand check applied, else ""
+    bool pass = false;
+    std::string why;           // reason a call fails ("" when it passes)
+};
+
+struct ProtocolDecision {
+    std::string source;        // "detector", "geo", "excluded"; "forced" for an explicit --protocol; "" when not decided
+    std::string tag;           // final call ("" when excluded)
+    Confidence detector_confidence = Confidence::NONE;
+    std::string detector_tag;
+    std::string geo_raw;       // the GEO chemistry as given ("" when none)
+    std::string geo_tag;       // its canonical tag ("" when unknown or none)
+    ProtocolCallTest detector_test, geo_test;
+    FivePrimeEvidence strand_evidence;
+    bool strand_measured = false;
+    std::string exclusion_reason;
+};
+
+// Test one call on oriented probe reads (R1 = barcode read).
+template<typename SpotT>
+ProtocolCallTest test_protocol_call(const std::string& tag, const std::vector<SpotT>& spots,
+                                    const std::vector<std::string>& whitelist_dirs,
+                                    const FivePrimeEvidence* strand_ev = nullptr, uint32_t max_spots = 10000) {
+    ProtocolCallTest t;
+    const CandidateSpec* spec = find_protocol_spec(tag);
+    if (!spec) { t.why = "'" + tag + "' is not a known protocol"; return t; }
+    t.tag = spec->tag;
+    if (spec->whitelist_file.empty() || spec->bc_len < 14) {
+        t.why = spec->tag + " has no barcode whitelist to test against";
+        return t;
+    }
+    std::unordered_set<uint64_t> wl;
+    for (const auto& d : whitelist_dirs) {
+        wl = load_whitelist_hashes(d + "/" + spec->whitelist_file, spec->bc_len);
+        if (!wl.empty()) break;
+    }
+    if (wl.empty()) {
+        t.why = "whitelist " + spec->whitelist_file + " is not installed" +
+                (find_fetchable_whitelist(spec->whitelist_file) ? " (singlet whitelists fetch)" : "");
+        return t;
+    }
+    const bool exact = wl.size() >= 100000;   // as detect_protocol: one-mismatch matching only for small lists
+    uint32_t hits = 0;
+    for (const auto& s : spots) {
+        if (t.n >= max_spots) break;
+        ++t.n;
+        if (s.r1_len < spec->bc_offset + spec->bc_len) continue;
+        const uint8_t* bc = s.r1_seq.data() + spec->bc_offset;
+        if (exact ? wl.count(hash_barcode(bc, spec->bc_len)) > 0 : hamming1_match(bc, spec->bc_len, wl)) ++hits;
+    }
+    t.wl_rate = t.n ? static_cast<double>(hits) / t.n : 0.0;
+    if (t.wl_rate < kProtocolWlRateFloor) {
+        char buf[160];
+        std::snprintf(buf, sizeof buf, "%.1f%% of barcode reads in %s (floor %.0f%%)", t.wl_rate * 100.0,
+                      spec->whitelist_file.c_str(), kProtocolWlRateFloor * 100.0);
+        t.why = buf;
+        return t;
+    }
+    // Strand: a 10x 3' and 5' kit that share a list differ only in the cDNA read.
+    const bool is3 = spec->tag.rfind("10x-3p-v", 0) == 0, is5 = spec->tag.rfind("10x-5p-v", 0) == 0;
+    if (strand_ev && (is3 || is5)) {
+        const std::string sib = (is3 ? "10x-5p-" : "10x-3p-") + spec->tag.substr(7);
+        const CandidateSpec* sp = find_protocol_spec(sib);
+        if (sp && sp->whitelist_file == spec->whitelist_file) {
+            const bool five = strand_ev->is_5prime();
+            t.strand = five ? "5p" : "3p";
+            if (five != is5) {
+                t.why = std::string("strand check: the cDNA read looks ") + (five ? "5'" : "3'");
+                return t;
+            }
+        }
+    }
+    t.pass = true;
+    return t;
+}
+
+// The policy on two tested calls (pure; unit-tested on its own). An empty detector_tag means detection made no call.
+inline ProtocolDecision decide_protocol_call(ProtocolDecision d) {
+    auto take = [&](const char* src, const std::string& tag) { d.source = src; d.tag = tag; d.exclusion_reason.clear(); return d; };
+    if (d.geo_raw.empty() || d.geo_tag.empty() || d.geo_tag == d.detector_tag ||
+        d.detector_confidence >= Confidence::MEDIUM)
+        return take("detector", d.detector_tag);
+    const bool dp = d.detector_test.pass, gp = d.geo_test.pass;
+    if (dp && !gp) return take("detector", d.detector_tag);
+    if (gp && !dp) return take("geo", d.geo_tag);
+    d.source = "excluded";
+    d.tag.clear();
+    const std::string dn = d.detector_tag.empty() ? std::string("no call") : d.detector_tag;
+    if (dp && gp)
+        d.exclusion_reason = "low-confidence detection " + dn + " and GEO chemistry " + d.geo_tag +
+                             " both pass the whitelist and strand checks";
+    else
+        d.exclusion_reason = "low-confidence detection " + dn + " (" + d.detector_test.why + ") and GEO chemistry " + d.geo_tag +
+                             " (" + d.geo_test.why + ") both fail";
+    return d;
+}
+
+// Whole policy on oriented probe reads: test the detector's call, and the GEO call when GEO names a different chemistry.
+template<typename SpotT>
+ProtocolDecision resolve_protocol_call(const std::string& detector_tag, Confidence detector_conf, const std::string& geo_raw,
+                                       const std::vector<SpotT>& spots, const std::vector<std::string>& whitelist_dirs) {
+    ProtocolDecision d;
+    d.detector_tag = (detector_tag == "UNKNOWN") ? "" : detector_tag;
+    d.detector_confidence = detector_conf;
+    d.geo_raw = geo_raw;
+    if (const CandidateSpec* g = geo_raw.empty() ? nullptr : find_protocol_spec(geo_raw)) d.geo_tag = g->tag;
+    // Strand evidence for a 10x call, measured after that call's BC + UMI.
+    FivePrimeEvidence ev_d, ev_g;
+    auto strand_for = [&](const std::string& tag, FivePrimeEvidence& ev) -> const FivePrimeEvidence* {
+        const CandidateSpec* s = find_protocol_spec(tag);
+        if (!s || (s->tag.rfind("10x-3p-v", 0) != 0 && s->tag.rfind("10x-5p-v", 0) != 0)) return nullptr;
+        ev = five_prime_evidence(spots, static_cast<uint16_t>(s->umi_offset + s->umi_len));
+        d.strand_evidence = ev;
+        d.strand_measured = true;
+        return &ev;
+    };
+    if (d.detector_tag.empty()) d.detector_test.why = "no call";
+    else d.detector_test = test_protocol_call(d.detector_tag, spots, whitelist_dirs, strand_for(d.detector_tag, ev_d));
+    if (!d.geo_tag.empty() && d.geo_tag != d.detector_tag)
+        d.geo_test = test_protocol_call(d.geo_tag, spots, whitelist_dirs, strand_for(d.geo_tag, ev_g));
+    else if (!geo_raw.empty() && d.geo_tag.empty())
+        d.geo_test.why = "'" + geo_raw + "' is not a known protocol";
+    return decide_protocol_call(d);
+}
+
+// Provenance fields for the metadata JSON: one field per line, each ending with ",\n"; no braces.
+inline std::string protocol_provenance_json(const ProtocolDecision& d) {
+    auto q = [](const std::string& s) {
+        std::string o = "\"";
+        for (char c : s) {
+            if (c == '"' || c == '\\') o += '\\';
+            o += (c == '\n' || c == '\r' || c == '\t') ? ' ' : c;
+        }
+        return o + "\"";
+    };
+    auto rate = [](double r) {
+        if (r < 0) return std::string("null");
+        char b[32];
+        std::snprintf(b, sizeof b, "%.4f", r);
+        return std::string(b);
+    };
+    std::string o;
+    o += "  \"protocol_source\": " + q(d.source) + ",\n";
+    o += "  \"protocol_confidence\": " + std::to_string(static_cast<int>(d.detector_confidence)) + ",\n";
+    o += "  \"protocol_detector\": " + q(d.detector_tag) + ",\n";
+    o += "  \"protocol_geo\": " + q(d.geo_raw) + ",\n";
+    o += "  \"protocol_evidence\": {\"detector_wl_rate\": " + rate(d.detector_test.wl_rate) +
+         ", \"detector_test\": " + q(d.detector_test.pass ? "pass" : d.detector_test.why) +
+         ", \"geo_wl_rate\": " + rate(d.geo_test.wl_rate) +
+         ", \"geo_test\": " + q(d.geo_test.pass ? "pass" : d.geo_test.why) +
+         ", \"wl_floor\": " + rate(kProtocolWlRateFloor) + ", \"spots\": " + std::to_string(std::max(d.detector_test.n, d.geo_test.n));
+    if (d.strand_measured) {
+        const auto& e = d.strand_evidence;
+        o += ", \"strand\": {\"spots\": " + std::to_string(e.n) + ", \"r1_5p_tso\": " + std::to_string(e.r1_tso) +
+             ", \"r1_polyt\": " + std::to_string(e.r1_polyt) + ", \"r2_3p_tso\": " + std::to_string(e.r2_smart) +
+             ", \"r2_polya\": " + std::to_string(e.r2_polya) + ", \"r2_polyt\": " + std::to_string(e.r2_polyt) + "}";
+    }
+    o += "},\n";
+    o += "  \"protocol_exclusion_reason\": " + q(d.exclusion_reason) + ",\n";
+    return o;
 }
 
 // Check if protocol is a 3' protocol (polyA trimming appropriate)
