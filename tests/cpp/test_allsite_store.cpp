@@ -13,7 +13,7 @@
 #include "singlet/pileup/allsite_store.h"
 
 namespace A = singlet::allsite;
-using CSC = SparseAccumulator<uint16_t>::CSCMatrix;
+using CSC = singlet::SparseAccumulator<uint16_t>::CSCMatrix;
 static int n_fail = 0;
 #define CHECK(cond, msg) do { if (!(cond)) { std::cout << "FAIL " << msg << "\n"; ++n_fail; } } while (0)
 
