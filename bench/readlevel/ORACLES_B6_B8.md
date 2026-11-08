@@ -285,3 +285,39 @@ comparators without the prior. Clause 2 does not depend on the ranking, and it i
 route recover the two traced reads. Two further caveats belong with the verdict. The 15-base threshold and the change of settings
 were chosen after the first misses on these mixes, although each was declared before its run was scored. The soft-clip route is
 also a CPU-path prototype.
+
+## B6 held-out run: registration
+
+The coordinator records B6 as a development pass on the Penter mixes. The held-out run decides it. This registration is
+committed before any held-out data are downloaded or any tool is run on them.
+
+**Library.** GEO GSE329598 (SRA SRP696266; bioRxiv 10.64898/2026.05.06.723232): Ku812, a CML line carrying BCR::ABL1, mixed
+with HMC1.2, a mast-cell line with no BCR::ABL1, and labelled with hashtags. The chemistry is 10x 3' v3.1, with reverse
+transcription and PCR extension lengthened to enrich long molecules. The authors confirmed BCR::ABL1 by Sanger sequencing and by
+targeted PacBio long reads from the same 10x library. Runs: gene expression SRR38330751 and SRR38330752, hashtags SRR38330749
+and SRR38330750. The PacBio per-cell count table is `GSM9707175_Leukemic_cell_lines_long_read_count_table.csv.gz`. No setting
+was tuned on this library. Its main weakness is that 3' chemistry places few reads across the breakpoint (the authors report
+about six Ku812 cells with junction reads), so recall will be low for every caller and the run tests false positives as much
+as sensitivity.
+
+**Cell labels.** Hashtag reads (TotalSeq-B0253 `TTCCGCCTCTCTTTG`, B0254 `AGTAAGTTCAGCGTA`, searched in the first 40 bases of
+the feature read) are counted per corrected cell barcode as distinct UMIs. A cell takes a hashtag when that hashtag holds at
+least 70% of its hashtag UMIs and at least 10 UMIs, and other cells are left out. The hashtag whose cells carry BCR::ABL1 long
+reads more often (PacBio table, at least one read) is named Ku812 and the other HMC1.2. If fewer than half of the feature reads
+contain either hashtag, the run stops before any caller runs.
+
+**Truth.** BCR–ABL1 in Ku812 cells. HMC1.2 cells are the negative population.
+
+**Rule.** The B6 rule (6de5821a) on this single library. Clause 1: the engine's recall over labelled cells, read at each
+comparator's false-positive count, is at least that comparator's recall. Clause 2: the engine's BCR–ABL1 cell recall in Ku812
+cells is at least the best comparator's, with a false-positive rate in HMC1.2 cells at most max(that comparator's rate, 0.5%).
+
+**Frozen configuration.** PR #220 at e967c1e7 (Arriba chimeric settings) plus the soft-clip route at 15 bases, as built in
+chimproto-68d44117 with `SINGLET_CHIM_SOFTCLIP_MIN=15`. It runs with `--chimeric`, Arriba's v2.5.1 blacklist and the 149-pair
+PBMC recurrent list, and is ranked by the combined score of 3f35b10a. The verdict uses this configuration only.
+
+**Reported beside the verdict, all from the same single engine run:** the combined score with the full Mitelman prior;
+breakpoint features alone (`breakpoint`, `cells`, `agreement`, `splice`); the Mitelman prior alone; and the leave-truth-out
+`known` and `combined` scores. STAR-Fusion 1.15.1 and Arriba 2.5.1 run on the same reads (R2) with the commands used for
+Penter. As a secondary check outside the verdict, each caller's BCR–ABL1 cells are compared with the cells that have PacBio
+BCR::ABL1 reads. There is one engine run and one scoring, with no reruns after seeing results.
