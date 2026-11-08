@@ -1085,6 +1085,32 @@ std::string deviceId(int device) {
     return s;
 }
 int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return 0; return n; }
+
+static int g_preCtxDevice = -1;   // the device whose context preLockInit made (reset to -1 by a device reset in mapDistinct's fail)
+int preLockDevice() {
+    const char* pl = std::getenv("SINGLET_ENGINE_GPU_PRELOCK");
+    if (pl != nullptr && pl[0] == '0') return -1;
+    if (const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE"); dv != nullptr && *dv) return std::atoi(dv);
+    return deviceCount() == 1 ? 0 : -1;
+}
+bool preLockInit(int device) {
+    const cudaError_t rc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());
+    if (rc != cudaSuccess) { cudaGetLastError(); return false; }
+    if (cudaSetDevice(device) != cudaSuccess || cudaFree(nullptr) != cudaSuccess) { cudaGetLastError(); return false; }
+    g_preCtxDevice = device;
+    return true;
+}
+bool hostRegister(void* p, size_t n) {
+    if (p == nullptr || n == 0) return false;
+    if (cudaHostRegister(p, n, cudaHostRegisterDefault) != cudaSuccess) { cudaGetLastError(); return false; }
+    return true;
+}
+void hostUnregister(void* p) { if (p != nullptr && cudaHostUnregister(p) != cudaSuccess) cudaGetLastError(); }
+static bool pageLocked(const void* p) {
+    cudaPointerAttributes a{};
+    if (cudaPointerGetAttributes(&a, p) != cudaSuccess) { cudaGetLastError(); return false; }
+    return a.type == cudaMemoryTypeHost;
+}
 #include "shared_index.cuh"
 
 // P3-MEM-03: a record chunk's offsets shifted by the earlier chunks' counts (alignments, sequence bytes, operations); a read's record local
@@ -1144,7 +1170,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (idxTh.joinable()) idxTh.join();
         out.log += "engine_gpu: " + e + "\n"; e9::soloKeepRelease(); out.e10.soloKept = false;
         g_d2h = nullptr; DR.release(); SR.release(); SI.release();
-        cudaDeviceReset(); g_bud.reset(0, 0); return false;
+        cudaDeviceReset(); g_preCtxDevice = -1; g_bud.reset(0, 0); return false;
     };
     // E17: the sample does not fit the device memory budget (decided before the allocation that would exceed it); the caller stops the run
     // with this message unless SINGLET_ENGINE_GPU_MEM_FALLBACK=cpu lets STAR map every read
@@ -1156,8 +1182,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const double tF0 = now();
     double tS = tF0;   // E12: start of the current step
     auto step = [&](const char* k) { const double t = now(); stepAdd(k, t - tS); tS = t; };
-    const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
-    if (initRc != cudaSuccess) cudaGetLastError();
+    if (g_preCtxDevice != device) {   // pre-lock: preLockInit made this device's context before the slot was taken
+        const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
+        if (initRc != cudaSuccess) cudaGetLastError();
+    }
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
@@ -1307,7 +1335,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     if (RC) {}   // P3-MEM-03: by chunks, at the dedup below
     else if (staged) {
         if (dmal(&dSeq, in.seq.size() + 8) != cudaSuccess || dmal(&dOff, (n + 1) * 8 + 8) != cudaSuccess) return fail("out of device memory (reads)");
-        if (!SR.copy(dSeq, in.seq.data(), in.seq.size()) || !SR.copy(dOff, in.off.data(), (n + 1) * 8) || !SR.finish()) return fail("reads upload");
+        if (pageLocked(in.seq.data()) && pageLocked(in.off.data())) {   // pre-lock registered the reads: one DMA each, no bounce buffers
+            if (cudaMemcpyAsync(dSeq, in.seq.data(), in.seq.size(), cudaMemcpyHostToDevice, SR.s) != cudaSuccess
+                || cudaMemcpyAsync(dOff, in.off.data(), (n + 1) * 8, cudaMemcpyHostToDevice, SR.s) != cudaSuccess || !SR.finish()) return fail("reads upload (page-locked)");
+        } else if (!SR.copy(dSeq, in.seq.data(), in.seq.size()) || !SR.copy(dOff, in.off.data(), (n + 1) * 8) || !SR.finish()) return fail("reads upload");
     } else {
     if (!upload(in.seq.data(), in.seq.size(), dSeq, err) || !upload((const u64*)in.off.data(), n + 1, dOff, err)) return fail(err);
     }

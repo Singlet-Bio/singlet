@@ -1482,6 +1482,22 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
+    // pre-lock (engine_gpu.h preLockDevice): with the device known in advance, its context and the page-locked reads are made before the
+    // slot is taken, so the hold keeps only the DMA (the context's init and the bounce-buffer copy leave it). Unregistered after the hold.
+    bool preCtx = false, regSeq = false, regOff = false;
+    double preS = 0;
+    if (const int preDev = singlet_engine_gpu::preLockDevice(); preDev >= 0 && !in.seq.empty() && in.off.size() > 1) {
+        const auto tp = std::chrono::steady_clock::now();
+        preCtx = singlet_engine_gpu::preLockInit(preDev);
+        if (preCtx) {
+            regSeq = singlet_engine_gpu::hostRegister(in.seq.data(), in.seq.size());
+            regOff = regSeq && singlet_engine_gpu::hostRegister(in.off.data(), in.off.size() * sizeof(in.off[0]));
+            if (regSeq && !regOff) { singlet_engine_gpu::hostUnregister(in.seq.data()); regSeq = false; }
+        }
+        preS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tp).count();
+        P.inOut->logMain << "ENGINE_GPU: pre-lock: device " << preDev << " context " << (preCtx ? "made" : "NOT made") << ", reads "
+                         << (regOff ? "page-locked" : "not page-locked") << " (" << in.seq.size() + in.off.size() * sizeof(in.off[0]) << " bytes) in " << preS << " s\n";
+    }
     time_t tWait = time(nullptr);
     int lockFd = -1;
     int device = singlet_engine_gpu::lockDevice(&lockFd, /*longHold=*/true);
@@ -1564,6 +1580,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     }
     in.release();
+    if (regOff) singlet_engine_gpu::hostUnregister(in.off.data());
+    if (regSeq) singlet_engine_gpu::hostUnregister(in.seq.data());
     singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
     time_t tGpu = time(nullptr);
     if (ok && tableMode) {   // per table sequence -> per read, in file order

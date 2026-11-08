@@ -292,6 +292,13 @@ struct Output {
 bool available(std::string* why = nullptr);
 int deviceCount();
 std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
+// Pre-lock setup (SINGLET_ENGINE_GPU_PRELOCK, default on): while the prefill waits for its slot, the context of a device known in advance
+// (SINGLET_ENGINE_GPU_DEVICE, as gpu-pool sets it, or the only device) is made and the reads are page-locked, so the slot's hold keeps only
+// the DMA. preLockDevice: that device or -1. preLockInit: the context (mapDistinct then skips its cudaInitDevice on that device).
+int preLockDevice();
+bool preLockInit(int device);
+bool hostRegister(void* p, size_t n);   // cudaHostRegister; false (and nothing registered) on failure
+void hostUnregister(void* p);
 
 // map the distinct sequences of `in` on device `device`; the host lane (reads past the GPU lanes' capacities) uses
 // `hostThreads` threads. `host` holds host pointers to STAR's genome and suffix arrays (G with its 200-byte padding on each side).
