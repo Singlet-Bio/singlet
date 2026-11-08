@@ -121,6 +121,11 @@ struct DonorAssignment {
     float doublet_llr = 0.0f;       // log-lik(best pair) - log-lik(best single donor), reads only
 };
 
+// lgamma without the global signgam: std::lgamma (glibc lgamma, lgammaf) stores the sign in one global that every thread of the fit
+// writes on every call; lgamma_r / lgammaf_r return the same values and keep the sign local.
+static inline float demux_lgamma(float x) { int sg; return ::lgammaf_r(x, &sg); }
+static inline double demux_lgamma(double x) { int sg; return ::lgamma_r(x, &sg); }
+
 // ============================================================================
 // Digamma approximation — asymptotic series, accurate for x > 0.5
 // ============================================================================
@@ -492,8 +497,8 @@ static void run_vb_inplace(
 
     float prev_elbo = static_cast<float>(result.elbo);
     const float log_inv_k  = -std::log(static_cast<float>(K));
-    const float lgamma_prior = std::lgamma(s1_prior + s2_prior)
-                             - std::lgamma(s1_prior) - std::lgamma(s2_prior);
+    const float lgamma_prior = demux_lgamma(s1_prior + s2_prior)
+                             - demux_lgamma(s1_prior) - demux_lgamma(s2_prior);
 
     for (int iter = 0; iter < max_iter; ++iter) {
 
@@ -649,7 +654,7 @@ static void run_vb_inplace(
                 const float* d12j = d12.data() + j * K;
                 for (int k = 0; k < K; ++k) {
                     const float a = s1j[k], b = s2j[k];
-                    e -= std::lgamma(a + b) - std::lgamma(a) - std::lgamma(b)
+                    e -= demux_lgamma(a + b) - demux_lgamma(a) - demux_lgamma(b)
                          - lgamma_prior
                          + (a - s1_prior) * d1j[k] + (b - s2_prior) * d2j[k]
                          - (a + b - s1_prior - s2_prior) * d12j[k];
@@ -1340,7 +1345,7 @@ static AlleleTables build_allele_tables(
             a[2] = (1.0 - eps) * c_hom; b[2] = eps * c_hom;
             for (int g = 0; g < 3; ++g) {
                 c[g] = a[g] + b[g];
-                ln[g] = std::lgamma(a[g]) + std::lgamma(b[g]) - std::lgamma(c[g]);
+                ln[g] = demux_lgamma(a[g]) + demux_lgamma(b[g]) - demux_lgamma(c[g]);
             }
         }
     };
@@ -1350,8 +1355,8 @@ static AlleleTables build_allele_tables(
         double l[3] = {lpr0[j], lpr1[j], lpr2[j]};
         if (dpt > 0.0)
             for (int g = 0; g < 3; ++g)
-                l[g] += std::lgamma(st.a[g] + a) + std::lgamma(st.b[g] + bb)
-                      - std::lgamma(st.c[g] + dpt) - st.ln[g];
+                l[g] += demux_lgamma(st.a[g] + a) + demux_lgamma(st.b[g] + bb)
+                      - demux_lgamma(st.c[g] + dpt) - st.ln[g];
         const double mx = std::max(l[0], std::max(l[1], l[2]));
         double sum = 0.0;
         for (int g = 0; g < 3; ++g) { pg[g] = std::exp(l[g] - mx); sum += pg[g]; }
