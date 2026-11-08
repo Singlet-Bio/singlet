@@ -14,6 +14,7 @@ import argparse
 import gzip
 import json
 import math
+import random
 
 
 def pearson(x, y):
@@ -78,8 +79,42 @@ def read_reditools(path, strand_of):
             a, c, g, t = (int(x) for x in v[ix["BaseCount[A,C,G,T]"]].strip("[]").split(","))
             ref, alt = (a, g) if s == "+" else (t, c)
             if ref + alt:
-                out[key] = (alt / (ref + alt), ref + alt)
+                out[key] = (alt / (ref + alt), ref + alt, alt)
     return out
+
+
+DEPTH_BINS = [(5, 10), (10, 20), (20, 50), (50, None)]
+
+
+def downsample(alt, depth, n, rng):
+    """Edited count after drawing n of depth reads without replacement (hypergeometric)."""
+    if n >= depth:
+        return alt
+    a, d, k = alt, depth, 0
+    for _ in range(n):
+        if rng.random() < a / d:
+            k += 1
+            a -= 1
+        d -= 1
+    return k
+
+
+def matched_depth(both, sg, rs, bulk, seed=1):
+    """Both-covered sites at matched depth: REDItools3 reads downsampled to Singlet's UMI count per site, and both tools
+    stratified by Singlet UMI depth, so reads-versus-UMIs depth does not decide the comparison."""
+    rng = random.Random(seed)
+    ds = []
+    for k in both:
+        n = sg[k][1]
+        e = downsample(rs[k][2], rs[k][1], n, rng)
+        ds.append((e / min(n, rs[k][1]), bulk[k]))
+    bins = {}
+    for lo, hi in DEPTH_BINS:
+        ks = [k for k in both if sg[k][1] >= lo and (hi is None or sg[k][1] < hi)]
+        bins[f"{lo}-{hi - 1}" if hi else f"{lo}+"] = {"singlet": stats([(sg[k][0], bulk[k]) for k in ks]),
+                                                      "reditools3_sc": stats([(rs[k][0], bulk[k]) for k in ks])}
+    return {"reditools3_downsampled_to_singlet_umis": stats(ds), "singlet": stats([(sg[k][0], bulk[k]) for k in both]),
+            "by_singlet_umi_depth": bins, "seed": seed}
 
 
 def main():
@@ -112,7 +147,8 @@ def main():
         "donor": a.label, "min_bulk_reads": a.min_bulk, "min_sc_depth": a.min_sc,
         "sites_singlet_covered": len(sg), "sites_bulk_qualifying": len(good_bulk),
         "singlet": stats(list(s_pairs.values())), "reditools3_sc": stats(list(r_pairs.values())),
-        "shared": {"singlet": stats([s_pairs[k] for k in shared]), "reditools3_sc": stats([r_pairs[k] for k in shared])},
+        "shared": {"singlet": stats([s_pairs[k] for k in shared]), "reditools3_sc": stats([r_pairs[k] for k in shared]),
+                   "matched_depth": matched_depth(shared, sg, rs, good_bulk)},
         "level_definition": "edited / (ref + edited); Singlet in UMIs, REDItools3 in reads; + sites A>G, - sites T>C",
     }
     if a.sites:
@@ -129,6 +165,7 @@ def main():
             "reditools3_sc": {"coverage": len(r_cov) / n if n else None, **stats([(rs[k][0], good_bulk[k]) for k in r_cov])},
             "both_covered": {"singlet": stats([(sg[k][0], good_bulk[k]) for k in both]),
                              "reditools3_sc": stats([(rs[k][0], good_bulk[k]) for k in both])},
+            "both_covered_matched_depth": matched_depth(both, sg, rs, good_bulk),
         }
         res["secondary_note"] = "singlet / reditools3_sc / shared above are on sites Singlet selected (Singlet depth >= min_sc)"
     with open(a.out, "w") as f:
