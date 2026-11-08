@@ -273,3 +273,11 @@ and wall time rises by at most 11% (nsclc22_b). The setting meets the dev rule a
 0.9123 (pbmc3_b 0.9515 to 0.9584, ngpbmc3_b 0.9394 to 0.9505, melanoma_b 0.8927 to 0.8976), with no library losing; the gap to
 TRUST4 (0.9198) narrows from -0.0136 to -0.0075 (95% interval -0.0122 to -0.0031). The held-out library is run next, once, with
 these defaults.
+
+**Held-out result of Addendum 6 (2026-11-08, job 804485, the single registered run; frozen code f78f51b7, first-Cys reference).**
+On `sc5p_v2_hs_B_prevax_10k_5gex_B` (8,662 reference-paired cells), correct pairing is 0.9702 for Singlet (95% interval 0.9666 to
+0.9738) and 0.9718 for TRUST4. The difference is -0.0016 with a paired bootstrap 95% interval of -0.0054 to +0.0021, so its
+half-width is 0.0037 and the difference lies above the negative half-width. The wrong-lineage rate is 0 for Singlet and for Cell
+Ranger, and contig F1 is 0.9815 for Singlet against 0.7316 for TRUST4. All three conditions of the registered rule hold: **pass**.
+The point estimate stays 0.0016 below TRUST4, within the interval.
+
