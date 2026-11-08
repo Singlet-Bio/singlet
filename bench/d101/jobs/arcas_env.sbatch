@@ -18,6 +18,12 @@ if [ ! -f $E/.ok ]; then
   export PATH=$E/bin:$PATH
   git lfs install --skip-repo
   arcasHLA reference --commit $IMGT_3660 -v 2>&1 | tail -8 || true
+  # IMGT/HLA ships hla.dat zipped since 3.5x; arcasHLA 0.6.0 reads it unzipped, so unzip and rebuild from the checked-out release
+  IM=$(ls -d $E/share/arcas-hla*/dat/IMGTHLA)
+  if [ ! -s $IM/hla.dat ] && [ -s $IM/hla.dat.zip ]; then
+    python3 -m zipfile -e $IM/hla.dat.zip $IM/ && git -C $IM log -1 --format='IMGTHLA %H %s'
+    arcasHLA reference --rebuild -v 2>&1 | tail -8 || true
+  fi
   ls $E/share/arcas-hla*/dat/ref/ | head
   if ls $E/share/arcas-hla*/dat/ref/*.idx >/dev/null 2>&1; then touch $E/.ok; else echo "arcasHLA reference not built; Geuvadis runs go ahead without it"; fi
 fi
