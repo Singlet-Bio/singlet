@@ -17,11 +17,18 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_pr
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists SINGLET_REF_BASE=$REF SINGLET_STALL_TIMEOUT=3600
 D=$W/data/b20/SRR13296299; O=$W/jobs/protocol_b20/5pv1-$SLURM_JOB_ID; mkdir -p $D $O; T=$SLURM_CPUS_PER_TASK
 SCR=/tmp/$USER-5pv1-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
+part() {   # url out s e: append to out until it holds bytes s..e (EBI closes long transfers early)
+  local url=$1 out=$2 s=$3 e=$4 t have
+  for t in $(seq 1 30); do have=$(stat -c %s $out 2>/dev/null || echo 0)
+    [ $have -ge $((e - s + 1)) ] && return 0
+    curl -sS --retry 5 -r $((s + have))-$e "$url" >> $out; done
+  return 1
+}
 fetch() {   # url out bytes: 8 resumable byte ranges
   local url=$1 out=$2 n=$3 k s e
   [ -s $out ] && [ $(stat -c %s $out) = $n ] && return 0
   for k in 0 1 2 3 4 5 6 7; do s=$((n * k / 8)); e=$((n * (k + 1) / 8 - 1))
-    curl -sS --retry 5 -r $s-$e -o $out.p$k "$url" & done; wait
+    part "$url" $out.p$k $s $e & done; wait
   cat $out.p? > $out && rm -f $out.p?; [ $(stat -c %s $out) = $n ]
 }
 B=https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR132/099/SRR13296299
