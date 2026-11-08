@@ -2301,6 +2301,7 @@ public:
         sam_hdr_t* hdr = sam_hdr_read(fp);
         if (!hdr) { hts_close(fp); std::cerr << "[allsite] not run: no BAM header\n"; return; }
         gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));
+        gpu_col_->prefer_raw_umi(true);   // UB in the sorted BAM is the corrected UMI and merges molecules the serial pass keeps apart
         bam1_t* b = bam_init1();
         uint64_t n = 0;
         while (sam_read1(fp, hdr, b) >= 0) {
