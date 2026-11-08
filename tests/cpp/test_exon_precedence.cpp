@@ -286,6 +286,50 @@ void check_chrm(const std::string& dir) {
     }
 }
 
+// intron_rule::kTxCompat (16384), STARsolo Gene's transcript concordance. chr1, all on +: P (one transcript, exon 101-300) under the readthrough
+// R (one transcript, exons 21-80, 101-250, 501-600). Unique reads (MAPQ 255):
+//   t1 241-260 (20M)                overlaps exons of P and R; inside P's exon, past R's exon end      6541: dropped  with 16384: P
+//   t2 151-170 (20M)                inside the exons of both                                            dropped under both
+//   t3 241-250, 501-510 (10M250N10M) R's junction 250 -> 501; P does not contain it                     6541: dropped  with 16384: R
+//   t4 241-250, 491-500 (10M240N10M) a junction no transcript has                                       dropped under both
+std::string tx_line(const std::string& q, int pos, const std::string& cigar, const std::string& umi) {
+    return q + "\t0\tchr1\t" + std::to_string(pos) + "\t255\t" + cigar + "\t*\t0\t0\t" + std::string(20, 'A') + "\t*\tCB:Z:" + kBC + "\tUB:Z:" + umi +
+           "\tNH:i:1\n";
+}
+
+void check_tx(const std::string& dir) {
+    std::system(("mkdir -p " + dir).c_str());
+    {
+        std::ofstream g(dir + "/mini.gtf");
+        auto gl = [&](const char* feat, int s, int e, const char* gid, const char* tid) {
+            g << "chr1\t.\t" << feat << "\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << gid << "\"; gene_name \"" << gid
+              << "\"; transcript_id \"" << tid << "\";\n";
+        };
+        gl("gene", 101, 300, "P", "P1"); gl("exon", 101, 300, "P", "P1");
+        gl("gene", 21, 600, "R", "R1"); gl("exon", 21, 80, "R", "R1"); gl("exon", 101, 250, "R", "R1"); gl("exon", 501, 600, "R", "R1");
+        std::ofstream b(dir + "/barcodes.tsv");
+        b << kBC << "\n";
+        std::ofstream f(dir + "/t.sam");
+        f << kHeader << tx_line("t1", 241, "20M", "AAAAAAAAAA") << tx_line("t2", 151, "20M", "CCCCCCCCCC")
+          << tx_line("t3", 241, "10M250N10M", "GGGGGGGGGG") << tx_line("t4", 241, "10M240N10M", "TTTTTTTTTT");
+    }
+    if (std::system(("samtools sort -o " + dir + "/ts.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/ts.bam").c_str()) != 0) {
+        CHECK(false, "kTxCompat BAM");
+        return;
+    }
+    for (bool on : {false, true}) {
+        const uint32_t rules = 14733u | (on ? singlet::intron_rule::kTxCompat : 0u);
+        const std::string rt = "kTxCompat rules " + std::to_string(rules);
+        const Result ref = run_case(dir, dir + "/ts.bam", rules, 0);
+        auto g = ref.by_gene;
+        CHECK(g["P"] == (on ? 1 : 0), rt + ": P gets t1 only with kTxCompat");
+        CHECK(g["R"] == (on ? 1 : 0), rt + ": R gets t3 only with kTxCompat");
+        if (g["P"] != (on ? 1 : 0) || g["R"] != (on ? 1 : 0)) std::cout << "    " << ref.text() << "\n";
+        for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ts.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+    }
+    std::system(("rm -rf " + dir).c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -354,6 +398,8 @@ int main() {
     std::cout << "\n=== chrM precedence ===\n";
     check_chrm(dir);
     std::system(("rm -rf " + dir).c_str());
+    std::cout << "\n=== transcript compatibility ===\n";
+    check_tx(dir + "_tx");
     std::cout << "\n=== joint reference ===\n";
     check_joint(dir + "_joint");
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
