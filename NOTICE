@@ -1,19 +1,34 @@
-Singlet includes code ported from the following open-source projects.
+Singlet
+Copyright (c) Singlet contributors. Licensed under the terms in LICENSE.
 
+Third-party data
+----------------
+python/singlet/data/whitelists/visium-v1.txt, visium-v1_coordinates.tsv, 737K-arc-v1-atac-gex.tsv.gz and
+737K-cratac-v1.txt.gz were rebuilt from 10x Genomics public datasets, licensed under Creative Commons Attribution 4.0
+International (CC BY 4.0). Source datasets, URLs, checksums and the rebuilding method:
+python/singlet/data/whitelists/ATTRIBUTION.md. 10x Genomics does not endorse this software.
+
+Third-party code
+----------------
 TRUST4 (https://github.com/liulab-dfci/TRUST4), MIT License
 Copyright (c) 2018 Li Song, X. Shirley Liu
   python/singlet/vdj/_kernels.py, cys_from_motif: the V motif (Y-Y-C) of SeqSet.hpp HasMotif and the Tyr offset of its
   reference CDR3 annotation, used to place Cys104 in reads without a V call (TRUST4 commit a3fedd4a).
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
-rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
-persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
-Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
