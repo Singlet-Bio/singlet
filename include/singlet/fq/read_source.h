@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "compress.h"
+#include "prefix_probe.h"
 #include "reader.h"
 #include "types.h"
 
@@ -123,10 +124,12 @@ class RunSet {
     // cDNA column's lengths (the quality and later columns are not read), for the pipeline's work before STAR when STAR's prefill decodes
     // the reads itself. Counts what file mode's decode counts from the same reads: the dictionary slots of every stored read (bc_freq,
     // idx <= dictionary size), and, for the reads given to STAR (both mates non-empty), their number, bases and the longest cDNA read; the
-    // 5' prefix probe's sample as FIFO pass 1 takes it; with r11, R11's exact CB counts (by dictionary slot, or the CB of a read outside
-    // the dictionary). A .1fq with a barcode dictionary and 2-bit sequences only (head_scan_supported). Thread-safe like decode().
+    // 5' prefix probe's reads, offered to the same ContentProbeSampler as the decode routes offer them (every read given to STAR, with
+    // its barcode read as decode_payload builds it and its cDNA codes), so the probe holds the same records on every route; with r11,
+    // R11's exact CB counts (by dictionary slot, or the CB of a read outside the dictionary). A .1fq with a barcode dictionary and 2-bit
+    // sequences only (head_scan_supported). Thread-safe like decode().
     struct HeadScanOptions {
-        uint32_t probe_per_block = 0;            // 0: no probe sample
+        ContentProbeSampler* sampler = nullptr;  // nullptr: no probe sample
         uint64_t* bc_freq = nullptr;             // dictionary size + 1 counters, added atomically
         bool r11 = false;
         int cb0 = 0, cbl = 0, umi0 = 0, umil = 0;   // R11: the barcode read's layout (0-based)
@@ -135,8 +138,7 @@ class RunSet {
     struct BlockHead {
         uint32_t n_stored = 0, n_out = 0, max_r2 = 0;
         uint64_t bases_out = 0;
-        std::vector<std::string> probe;                // cDNA reads, ACGTN
-        std::vector<std::string> r11_raw;              // R11: the CB of each counted read outside the dictionary (ACGTN)
+        std::vector<std::string> r11_raw;             // R11: the CB of each counted read outside the dictionary (ACGTN)
     };
     bool head_scan_supported(std::string* why = nullptr) const {
         const char* w = nullptr;
@@ -215,7 +217,8 @@ class RunSet {
         std::vector<uint32_t>& idx = sc.idx;
         grow(idx, n);
         std::vector<const uint8_t*>& raw_bc = sc.raw_bc;
-        if (o.r11) { grow(raw_bc, n); std::fill(raw_bc.begin(), raw_bc.begin() + n, nullptr); }
+        const bool probe = o.sampler != nullptr;
+        if (o.r11 || probe) { grow(raw_bc, n); std::fill(raw_bc.begin(), raw_bc.begin() + n, nullptr); }
         uint32_t last = UINT32_MAX;
         uint64_t run = 0;
         auto flush = [&]() { if (run && o.bc_freq) __atomic_fetch_add(&o.bc_freq[last], run, __ATOMIC_RELAXED); run = 0; };
@@ -223,7 +226,7 @@ class RunSet {
             uint64_t v;
             p += pack::decode_varint(p, v);
             idx[i] = static_cast<uint32_t>(v);
-            if (v == dict_n) { if (o.r11) raw_bc[i] = p; p += bcl; }
+            if (v == dict_n) { if (o.r11 || probe) raw_bc[i] = p; p += bcl; }
             if (idx[i] <= dict_n) { if (idx[i] != last) { flush(); last = idx[i]; } ++run; }
         }
         flush();
@@ -231,6 +234,13 @@ class RunSet {
         std::vector<uint8_t>& umi = sc.umi;               // read only within each read's own length (umi_len)
         std::vector<uint16_t>& umi_len = sc.umi_len;
         if (o.r11) { grow(umi, static_cast<size_t>(n) * 64); grow(umi_len, n); std::fill(umi_len.begin(), umi_len.begin() + n, 0); }
+        // the probe: where each read's UMI and cDNA codes are, unpacked only for the reads given to STAR (below)
+        std::vector<const uint8_t*>& umi_p = sc.umi_p;
+        std::vector<const uint8_t*>& r2_p = sc.r2_p;
+        std::vector<uint16_t>& umi_l = sc.umi_l;
+        std::vector<uint8_t>& umi_hn = sc.umi_hn;
+        std::vector<uint8_t>& r2_hn = sc.r2_hn;
+        if (probe) { grow(umi_p, n); grow(r2_p, n); grow(umi_l, n); grow(umi_hn, n); grow(r2_hn, n); }
         for (uint32_t i = 0; i < n; ++i) {
             uint64_t len = umi_fixed;
             if (umi_fixed == 0) p += pack::decode_varint(p, len);
@@ -241,15 +251,14 @@ class RunSet {
                 if (has_n) pack::apply_n_bitmap(p + pb, static_cast<uint32_t>(len), umi.data() + static_cast<size_t>(i) * 64);
                 umi_len[i] = static_cast<uint16_t>(len);
             }
+            if (probe) { umi_p[i] = p; umi_l[i] = static_cast<uint16_t>(len); umi_hn[i] = has_n; }
             p += pb;
             if (has_n) p += pack::n_bitmap_bytes(static_cast<uint32_t>(len));
         }
-        // the cDNA column: lengths, and the sampled reads' bases
-        const uint32_t stride = o.probe_per_block ? std::max<uint32_t>(1u, n / o.probe_per_block) : 0;
+        // the cDNA column: lengths (and, for the probe, where each read's codes are)
         std::vector<uint16_t>& r2len = sc.r2len;
         grow(r2len, n);
         std::fill(r2len.begin(), r2len.begin() + n, 0);
-        std::vector<uint8_t> tmp;
         static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
         for (uint32_t i = 0; i < n && p < end; ++i) {
             uint64_t len = r2_fixed;
@@ -258,18 +267,11 @@ class RunSet {
             const uint8_t has_n = *p++;
             const uint32_t pb = pack::packed_bytes(static_cast<uint32_t>(len));
             r2len[i] = static_cast<uint16_t>(len);
-            if (stride && len > 0 && (i % stride) == 0 && h.probe.size() < 20000) {
-                tmp.resize(len);
-                pack::unpack_2bit(p, static_cast<uint32_t>(len), tmp.data());
-                if (has_n) pack::apply_n_bitmap(p + pb, static_cast<uint32_t>(len), tmp.data());
-                std::string s(len, ' ');
-                for (uint64_t j = 0; j < len; ++j) s[j] = kNt[std::min<uint8_t>(tmp[j], 4)];
-                h.probe.push_back(std::move(s));
-            }
+            if (probe) { r2_p[i] = p; r2_hn[i] = has_n; }
             p += pb;
             if (has_n) p += pack::n_bitmap_bytes(static_cast<uint32_t>(len));
         }
-        std::vector<uint8_t> r1(r1_len);
+        std::vector<uint8_t> r1(r1_len), pr1(probe ? r1_len : 0), pumi, pr2;
         last = UINT32_MAX;
         run = 0;
         auto flush11 = [&]() { if (run && o.r11_dict) __atomic_fetch_add(&o.r11_dict[last], run, __ATOMIC_RELAXED); run = 0; };
@@ -278,6 +280,31 @@ class RunSet {
             ++h.n_out;
             h.bases_out += r2len[i];
             h.max_r2 = std::max<uint32_t>(h.max_r2, r2len[i]);
+            if (probe) {   // the probe's offer, with the bytes decode_payload gives the decode routes' offer
+                std::fill(pr1.begin(), pr1.end(), 0);
+                const uint16_t ul = umi_l[i];
+                if (pumi.size() < ul + 8u) pumi.resize(ul + 8u);
+                if (ul > 0) {
+                    pack::unpack_2bit(umi_p[i], ul, pumi.data());
+                    if (umi_hn[i]) pack::apply_n_bitmap(umi_p[i] + pack::packed_bytes(ul), ul, pumi.data());
+                }
+                if (bc_start > 0 && ul > 0) std::memcpy(pr1.data(), pumi.data(), std::min<size_t>(std::min(bc_start, ul), r1_len));
+                if (bc_start < r1_len) {
+                    uint8_t* bcd = pr1.data() + bc_start;
+                    const size_t bcw = std::min<size_t>(bcl, r1_len - bc_start);
+                    if (idx[i] < dict_n) std::memcpy(bcd, r.bc_dict_flat().data() + static_cast<size_t>(idx[i]) * bcl, bcw);
+                    else if (raw_bc[i] && !n_miss) std::memcpy(bcd, raw_bc[i], bcw);
+                    else std::memset(bcd, 4, bcw);
+                }
+                const uint16_t sfx_dst = bc_start + bcl;
+                if (sfx_dst < r1_len && bc_start < ul)
+                    std::memcpy(pr1.data() + sfx_dst, pumi.data() + bc_start, std::min<size_t>(ul - bc_start, r1_len - sfx_dst));
+                const uint16_t l2 = r2len[i];
+                if (pr2.size() < l2 + 8u) pr2.resize(l2 + 8u);
+                pack::unpack_2bit(r2_p[i], l2, pr2.data());
+                if (r2_hn[i]) pack::apply_n_bitmap(r2_p[i] + pack::packed_bytes(l2), l2, pr2.data());
+                o.sampler->offer(pr1.data(), r1_len, pr2.data(), l2);
+            }
             if (!o.r11) continue;
             // the barcode read as decode_payload builds it: UMI prefix, the dictionary (or raw, or N) barcode, UMI suffix
             std::fill(r1.begin(), r1.end(), 0);
@@ -321,6 +348,9 @@ class RunSet {
         std::vector<uint32_t> idx;
         std::vector<const uint8_t*> raw_bc;
         std::vector<uint16_t> umi_len, r2len;
+        std::vector<const uint8_t*> umi_p, r2_p;   // scan_head's probe: each read's packed UMI and cDNA codes
+        std::vector<uint16_t> umi_l;
+        std::vector<uint8_t> umi_hn, r2_hn;
         ZSTD_DCtx* z = nullptr;
         ~BlockScratch() { if (z) ZSTD_freeDCtx(z); }
     };
