@@ -282,11 +282,13 @@ int main() {
     // The 5' probe's read set is the same on every route: the decode routes offer decode()'s reads, E13's head scan (scan_head, and
     // the fused decode_scan) offers its own reconstruction of the same reads. 10x 3' v3 with variable (poly(A)-trimmed) and fixed cDNA
     // lengths, and split-seq (barcode after the UMI); dictionary and raw barcodes, N in barcode, UMI and cDNA, empty cDNA reads.
+    // With a barcode dictionary the file holds R1 as barcode + UMI (the reader's UMI length is R1 length minus barcode length), so the
+    // split-seq layout's R1 is its 10 UMI bases and 8 barcode bases.
     {
         struct Layout { const char* name; uint8_t protocol; uint16_t r1, bc_off, bc_len, umi_off, umi_len, r2_fixed; bool trim; };
         const Layout lays[] = {{"10x-v3 variable", 1, 28, 0, 16, 16, 12, 0, true},
                                {"10x-v3 fixed", 1, 28, 0, 16, 16, 12, 91, false},
-                               {"splitseq", 11, 66, 10, 8, 0, 10, 0, false}};
+                               {"splitseq", 11, 18, 10, 8, 0, 10, 0, false}};
         for (const Layout& L : lays) {
             const std::string path = dir + "/probe_" + std::to_string(L.protocol) + "_" + std::to_string(L.r2_fixed) + ".1fq";
             std::mt19937 rng(7u + L.protocol + L.r2_fixed);
