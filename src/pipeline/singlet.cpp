@@ -60,6 +60,7 @@
 #include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
+#include "singlet/pileup/chimeric_table.h"
 #include "singlet/pileup/species_detect.h"
 #include "singlet/pileup/nonhost/min_sketch.h"
 #include "singlet/pileup/nonhost/host_kmer_filter.h"
@@ -2959,6 +2960,12 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --chimeric             Second STAR pass in chimeric mode on the unmapped reads -> chimeric_junctions.tsv.gz\n"
+        << "  --chimeric-blacklist F Arriba blacklist for the chimeric table (default <ref-base>/pileup_indices/fusion/\n"
+        << "                         blacklist_hg38_GRCh38_v2.5.1.tsv.gz on GRCh38, when present; 'none' = no blacklist)\n"
+        << "  --chimeric-recurrent F Recurrent gene pairs flagged in the table's filter column (default <ref-base>/pileup_indices/\n"
+        << "                         fusion/chimeric_recurrent_GRCh38.tsv on GRCh38, when present; 'none' = no flags)\n"
+        << "  --chimeric-noncanonical  Keep non-canonical-motif junctions in the chimeric table (default: GT/AG only)\n"
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
@@ -3291,6 +3298,11 @@ static int singlet_main(int argc, char* argv[]) {
     std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
     if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
+    bool chimeric = false;                  // --chimeric: second STAR pass in chimeric mode on the reads the main pass left unmapped -> chimeric_junctions.tsv.gz (the main pass is not changed)
+    std::string fusion_catalog_path;        // --fusion-catalog: output of scripts/build_fusion_catalog.py
+    std::string chimeric_blacklist_path;    // --chimeric-blacklist: Arriba blacklist ("none" = off; default under <ref-base>/pileup_indices/fusion)
+    std::string chimeric_recurrent_path;    // --chimeric-recurrent: recurrent gene pairs, flagged in the table ("none" = off)
+    bool chimeric_noncanonical = false;     // --chimeric-noncanonical: keep non-canonical-motif junctions in the table
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
@@ -3480,6 +3492,11 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
         else if (arg == "--memory-tier" && i+1 < argc) memory_tier_cfg = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
+        else if (arg == "--chimeric") { chimeric = true; setenv("SINGLET_CHIM_SOFTCLIP_MIN", "15", 0); }   // soft-clip route on (15 bases) unless set; 0 turns it off
+        else if (arg == "--fusion-catalog" && i+1 < argc) fusion_catalog_path = argv[++i];
+        else if (arg == "--chimeric-blacklist" && i+1 < argc) chimeric_blacklist_path = argv[++i];
+        else if (arg == "--chimeric-recurrent" && i+1 < argc) chimeric_recurrent_path = argv[++i];
+        else if (arg == "--chimeric-noncanonical") chimeric_noncanonical = true;
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -8205,7 +8222,7 @@ static int singlet_main(int argc, char* argv[]) {
             // NONHOST-UNMAPPED-CAPTURE: write unmapped reads to FASTQ when any nonhost index is provided.
             // STAR writes: ${out_prefix}star_Unmapped.out.mate1 (cDNA, R2) and .mate2 (barcode, R1).
             // NonHostScreener runs on mate1 (cDNA) after STAR+pileup complete.
-            if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty()) {
+            if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty() || chimeric) {
                 args.push_back("--outReadsUnmapped"); args.push_back("Fastx");
             }
 
@@ -8531,6 +8548,10 @@ static int singlet_main(int argc, char* argv[]) {
             }
 #endif
 
+            if (chimeric) {   // the second (chimeric) pass maps the unmapped reads with the same index and barcode settings
+                std::ofstream af(out_prefix + "/star_args.txt");
+                for (size_t ai = 1; ai + 1 < args.size(); ++ai) af << args[ai] << "\n";
+            }
             // Call bundled STAR directly — no exec, no external binary needed.
             singlet::set_thread_name("star-main");   // STAR's child: its threads inherit it or rename (star-map, star-prefill)
             int rc = star_main_impl(
@@ -9549,6 +9570,114 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+
+    // ── chimeric / fusion junction table (opt-in): second STAR pass on the reads the main pass left unmapped ──
+    if (chimeric) {
+        const std::string unm1 = out_prefix + "/star_Unmapped.out.mate1", unm2 = out_prefix + "/star_Unmapped.out.mate2";
+        const std::string sc1 = out_prefix + "/star_Softclip.out.mate1", sc2 = out_prefix + "/star_Softclip.out.mate2";
+        std::error_code sc_ec;
+        const bool softclip = std::filesystem::exists(sc1) && std::filesystem::exists(sc2) && std::filesystem::file_size(sc1, sc_ec) > 0;
+        std::vector<std::string> base_args;
+        {
+            std::ifstream af(out_prefix + "/star_args.txt");
+            for (std::string l; std::getline(af, l);) base_args.push_back(l);
+        }
+        bool solo_fastq = false;
+        for (size_t k = 0; k + 1 < base_args.size(); ++k)
+            if (base_args[k] == "--soloType" && (base_args[k + 1] == "CB_UMI_Simple" || base_args[k + 1] == "CB_UMI_Complex")) solo_fastq = true;
+        if (base_args.empty() || !solo_fastq || !std::filesystem::exists(unm1) || !std::filesystem::exists(unm2)) {
+            std::cerr << "[singlet] chimeric: skipped (needs a FASTQ barcode run with unmapped reads written)\n";
+        } else {
+            StopWatch chim_sw;
+            uint64_t chim_in = 0;   // reads going into the second pass (FASTQ records of the cDNA mate)
+            uint64_t chim_sc = 0;   // of which mapped reads routed by their unaligned part (Softclip.out)
+            { std::ifstream uf(unm1); std::string l; while (std::getline(uf, l)) ++chim_in; chim_in /= 4; }
+            if (softclip) { std::ifstream uf(sc1); std::string l; while (std::getline(uf, l)) ++chim_sc; chim_sc /= 4; }
+            std::cerr << "[singlet] chimeric: " << chim_in + chim_sc << " reads into the second pass (" << chim_in << " unmapped, " << chim_sc
+                      << " mapped with >= " << (getenv("SINGLET_CHIM_SOFTCLIP_MIN") ? getenv("SINGLET_CHIM_SOFTCLIP_MIN") : "0") << " unaligned bases)\n";
+            static const std::set<std::string> drop = {
+                "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
+                "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
+                "--readFilesIn", "--readFilesCommand", "--readFilesType", "--soloFeatures", "--soloOutFileNames", "--soloMultiMappers"};
+            std::vector<std::string> pa;
+            bool skipping = false;
+            for (const auto& s : base_args) {
+                if (s.rfind("--", 0) == 0) skipping = drop.count(s) > 0;
+                if (!skipping) pa.push_back(s);
+            }
+            const std::string prefix = out_prefix + "/chim_";
+            for (const char* s : {"--readFilesIn"}) pa.push_back(s);
+            pa.push_back(softclip ? unm1 + "," + sc1 : unm1); pa.push_back(softclip ? unm2 + "," + sc2 : unm2);
+            for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
+            pa.push_back(prefix);
+            // Arriba's published chimeric settings (Uhrig et al. 2021): short segments (10 bases), unaligned tails up to 30 points and
+            // read gaps up to 3 bases, which droplet reads of 90 bases need (B6: the 15-base settings lost RUNX1-RUNX1T1 reads)
+            for (const char* s : {"--chimSegmentMin", "10", "--chimJunctionOverhangMin", "10", "--chimScoreMin", "1", "--chimScoreDropMax", "30",
+                                  "--chimScoreJunctionNonGTAG", "0", "--chimScoreSeparation", "1", "--alignSJstitchMismatchNmax", "5", "-1", "5", "5",
+                                  "--chimSegmentReadGapMax", "3", "--chimMultimapNmax", "50", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1"})
+                pa.push_back(s);
+            std::vector<char*> pv;
+            pv.push_back(const_cast<char*>("STAR"));
+            for (auto& s : pa) pv.push_back(const_cast<char*>(s.c_str()));
+            pv.push_back(nullptr);
+            pid_t pp = fork();
+            if (pp == 0) {
+                int dn = open("/dev/null", O_WRONLY);
+                if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
+                unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF"); unsetenv("SINGLET_GPU_PILEUP");   // the second pass is a CPU STAR run
+                unsetenv("SINGLET_CHIM_SOFTCLIP_MIN");   // that writes no Softclip.out of its own
+                _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
+            }
+            int ws = 0;
+            const bool ran = pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+            std::error_code ec;
+            std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
+            std::filesystem::remove(sc1, ec); std::filesystem::remove(sc2, ec);
+            std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
+            if (!ran) {
+                std::cerr << "[singlet] chimeric: the second STAR pass failed\n";
+            } else {
+                singlet::chimeric::Config cc;
+                cc.junction_path = prefix + "Chimeric.out.junction";
+                cc.gtf_path = config.exon_gtf_path;
+                cc.catalog_path = fusion_catalog_path;
+                cc.out_path = out_prefix + "/chimeric_junctions.tsv.gz";
+                cc.reverse_strand = engine_ptr->reverse_strand();   // the strand probe's verdict orients non-canonical lines
+                cc.canonical_only = !chimeric_noncanonical;
+                {   // default annotation files on GRCh38: <ref-base>/pileup_indices/fusion/ (scripts/fetch_arriba_blacklist.sh, data/fusion/)
+                    std::string rb = ref_base;
+                    if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+                    const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+                    auto pick = [&](const std::string& given, const char* file) -> std::string {
+                        if (given == "none") return "";
+                        if (!given.empty()) return given;
+                        if (rb.empty() || !human) return "";
+                        const std::string cand = rb + "/pileup_indices/fusion/" + file;
+                        return std::filesystem::exists(cand) ? cand : "";
+                    };
+                    cc.blacklist_path = pick(chimeric_blacklist_path, "blacklist_hg38_GRCh38_v2.5.1.tsv.gz");
+                    cc.recurrent_path = pick(chimeric_recurrent_path, "chimeric_recurrent_GRCh38.tsv");
+                }
+                const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+                std::cerr << "[singlet] chimeric: second pass " << chim_sw.elapsed_s() << " s; " << cs.lines << " junction lines, " << cs.kept_lines << " kept, "
+                          << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous, "
+                          << cs.noncanonical << " non-canonical, " << cs.reoriented << " turned to transcript orientation (library "
+                          << (cc.reverse_strand ? "antisense" : "sense") << "); blacklist " << (cc.blacklist_path.empty() ? std::string("none") : cc.blacklist_path)
+                          << ": " << cs.blacklisted_junctions << " junctions, " << cs.blacklisted_rows << " rows dropped; " << cs.rows
+                          << " rows in " << cs.cells << " cells, " << cs.recurrent_rows << " flagged recurrent, " << cs.annotated << " in the catalogue"
+                          << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
+            }
+            // the second pass's own files: logs carry timings and paths (they differ between runs), the junction file is the table's input
+            const char* keep = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");
+            for (const char* f : {"Log.out", "Log.final.out", "Log.progress.out", "Log.std.out", "SJ.out.tab", "Chimeric.out.junction"}) {
+                if (keep && *keep == '1' && std::string(f) == "Chimeric.out.junction") continue;
+                std::filesystem::remove(prefix + f, ec);
+            }
+            std::filesystem::remove_all(prefix + "_STARtmp", ec);
+        }
+        std::error_code ec2;
+        std::filesystem::remove(out_prefix + "/star_args.txt", ec2);
+    }
 
     // ── T4: CITE-seq ADT/HTO processing ──────────────────────────────────────
     // After GEX export, do a second pass through the .1fq to match ADT tags.
