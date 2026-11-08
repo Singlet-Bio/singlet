@@ -281,6 +281,9 @@ class FastqEncoder {
         else if (auto_r2_maxlen > 0)
             wcfg.r2_maxlen = auto_r2_maxlen;
         if (cfg.no_trim) wcfg.polya_trim = false;
+        if (cfg.trim_polya && !cfg.no_trim && is_3prime_protocol(detected.tag)) {   // --trim-polya (10x Visium's pre-1.3.x behavior)
+            wcfg.polya_trim = true; wcfg.polya_min_len = 10; wcfg.polya_max_mm = 1;
+        }
         if (cfg.no_dedup) wcfg.deduped = false;
         if (cfg.sort_by_bc) wcfg.sort_by_bc = true;
 

@@ -482,6 +482,7 @@ static int cmd_download(int argc, char* argv[]) {
     uint16_t r2_maxlen = 0;
     bool   no_dedup = true;   // streaming = no dedup by default
     bool   no_trim  = false;
+    bool   trim_polya = false;
     bool   sort_by_bc = true;
     bool   show_profile = true;
     int    vdb_threads = 4;
@@ -517,6 +518,7 @@ static int cmd_download(int argc, char* argv[]) {
                 << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels,\n"
                 << "                       2, 11, 25, 37; read by STAR's adapter clip and the SNP / mtDNA callers)\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
+                << "  --trim-polya         Trim poly(A) on 10x Visium too (off there by default, as STARsolo and Space Ranger)\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
                 << "  --codec-level N      Codec level (default: 4)\n"
                 << "  --block-size N       Reads per block (default: 500000)\n"
@@ -571,6 +573,7 @@ static int cmd_download(int argc, char* argv[]) {
         else if (arg == "--max-reads" && i+1 < argc)
             max_reads = static_cast<uint64_t>(std::atoll(argv[++i]));
         else if (arg == "--no-trim") no_trim = true;
+        else if (arg == "--trim-polya") trim_polya = true;
         else if (arg == "--sort-by-bc") sort_by_bc = true;
         else if (arg == "--no-sort-by-bc") sort_by_bc = false;
         else if (arg == "--no-profile") show_profile = false;
@@ -759,6 +762,7 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim  = no_trim;
+    ecfg.trim_polya = trim_polya;
     ecfg.sort_by_bc = sort_by_bc;
     ecfg.vdb_threads = vdb_threads;
     ecfg.max_reads = max_reads;
@@ -1091,6 +1095,7 @@ static int cmd_encode(int argc, char* argv[]) {
     uint16_t r2_maxlen = 0;
     bool no_dedup = false;
     bool no_trim = false;
+    bool trim_polya = false;
     bool sort_by_bc = true;
     bool verbose = false;
     std::vector<std::string> whitelist_dirs;
@@ -1110,6 +1115,7 @@ static int cmd_encode(int argc, char* argv[]) {
                 << "  --quality MODE       none|binned|binned2|full|binned-legacy (default: binned = 4 Illumina levels)\n"
                 << "  --no-dedup           Skip PCR duplicate collapsing\n"
                 << "  --no-trim            Skip polyA/adapter trimming\n"
+                << "  --trim-polya         Trim poly(A) on 10x Visium too (off there by default, as STARsolo and Space Ranger)\n"
                 << "  --codec NAME         zstd|lz4|none (default: zstd)\n"
                 << "  --codec-level N      Codec level (default: 4)\n"
                 << "  --block-size N       Reads per block (default: 500000)\n"
@@ -1141,6 +1147,7 @@ static int cmd_encode(int argc, char* argv[]) {
             whitelist_dirs.push_back(argv[++i]);
         else if (arg == "--no-dedup") no_dedup = true;
         else if (arg == "--no-trim") no_trim = true;
+        else if (arg == "--trim-polya") trim_polya = true;
         else if (arg == "--sort-by-bc") sort_by_bc = true;
         else if (arg == "--no-sort-by-bc") sort_by_bc = false;
         else if (arg == "--verbose" || arg == "-v") verbose = true;
@@ -1192,6 +1199,7 @@ static int cmd_encode(int argc, char* argv[]) {
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim = no_trim;
+    ecfg.trim_polya = trim_polya;
     ecfg.sort_by_bc = sort_by_bc;
     ecfg.verbose = verbose;
     ecfg.progress_cb = [](uint64_t reads, uint64_t total) {
