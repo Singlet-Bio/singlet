@@ -71,8 +71,8 @@ comparators() {
   ( [ -s $O/scte.h5ad ] && exit 0   # finished earlier
     cd $SCR && mkdir -p scte && cd scte
     [ -s $O/scte_idx.exclusive.idx ] || { scTE_build -te $SCR/scte.bed -gene $G/genes/genes.gtf -o $O/scte_idx > $O/scte_build.log 2>&1; }
-    /usr/bin/time -v -o $O/scte_time.txt scTE -i $BAM -o $O/scte -x $O/scte_idx.exclusive.idx --hdf5 True -CB CB -UMI UB -p $((C/2)) \
-      --min_genes 100 --expect-cells 20000 > $O/scte.log 2>&1 ) &
+    /usr/bin/time -v -o $O/scte_time.txt scTE -i $BAM -o scte -x $O/scte_idx.exclusive.idx --hdf5 True -CB CB -UMI UB -p $((C/2)) \
+      --min_genes 100 --expect-cells 20000 > $O/scte.log 2>&1 && mv -f scte.h5ad $O/scte.h5ad ) &   # -o takes a bare name: scTE builds its temp paths from it
   local P1=$!
   ( ls $O/solote/*/*_MATRIX/matrix.mtx* >/dev/null 2>&1 && exit 0   # finished earlier
     /usr/bin/time -v -o $O/solote_time.txt python $T/SoloTE/SoloTE_pipeline.py --threads $((C/2)) --bam $BAM --teannotation $O/solote_te.bed \
