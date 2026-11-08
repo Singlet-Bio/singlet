@@ -114,7 +114,8 @@ class Params:
     # codon, which asm_fw_relax assembles) is productive when the rest of the productivity checks hold
     fw_mut_productive: bool = True
     # True: in the ig_top_min_umis rescue a kept chain of the class blocks the strongest contig only when it has as many UMIs
-    ig_top_weaker_kept: bool = True
+    # (off: it did not beat the setting off on the registered fresh library, PREREG Addendum 8)
+    ig_top_weaker_kept: bool = False
     # True: the strongest heavy and light contigs of a barcode with no kept IG chain, both removed by the cross filter, come
     # back together (a B cell of an expanded clone whose plasma cells hold its junctions at > 10x the UMIs)
     ig_pair_rescue: bool = False

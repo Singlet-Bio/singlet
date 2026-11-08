@@ -47,7 +47,7 @@ def test_weaker_kept_light_chain_does_not_block_the_cells_own():
              _row(1, "IGL", "TGCAGCTCATATACA", 3)]  # B cell: its own IGK (cross-filtered) and a stray IGL
     df = A.filter_contigs(pd.DataFrame(rows), A.Params(ig_top_weaker_kept=False))
     assert not _kept(df, 1, "IGK")
-    df = A.filter_contigs(pd.DataFrame(rows), A.Params())
+    df = A.filter_contigs(pd.DataFrame(rows), A.Params(ig_top_weaker_kept=True))
     assert _kept(df, 1, "IGK")
 
 

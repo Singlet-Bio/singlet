@@ -357,3 +357,19 @@ first read with `gzip.BadGzipFile`: the dataset's tarball stores its FASTQs as p
 same unreadable input. Neither tool produced any output, so no result was produced or seen. The rerun compresses the same reads with
 gzip into a new folder and is otherwise identical: same commit, settings, whitelist, rules and comparator. It counts as this
 addendum's one run.
+
+**Result (2026-11-08, Slurm 804625, commit 9bb0e777).** The rerun read the gzip copies of the same reads. Singlet took 3 minutes and
+TRUST4 24 minutes on 914 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| `ig_top_weaker_kept` on (#224) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+| `ig_top_weaker_kept` off (#222) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+
+*Addendum 7 rule: fail.* The refilter with the setting off changed none of the 5,427 contigs, so pairing is equal and
+`ig_top_weaker_kept` is turned off (default `False` from this commit on).
+
+*Addendum 6 rule, Singlet against TRUST4: fail.* The pairing difference passes, because -0.0088 is above the negative half-width
+(-0.0110), and contig F1 is above TRUST4's. Wrong-lineage fails: 109 of 1,829 Singlet chains with a known GEX lineage sit in a
+non-B lineage, a rate of 0.0596 against the limit of 0.0062 (Cell Ranger's 0.0012 plus 0.005). The library is not re-run, and the
+rule and comparator stay as registered.
