@@ -178,8 +178,7 @@ void prof_dump() {
     FILE* f = std::fopen(path, "w");
     if (!f) return;
     const size_t n = std::min(p_n.load(), p_cap);
-    std::fprintf(f, "# pid %d hz %d samples %zu taken %zu
-", (int) getpid(), prof_hz(), n, p_n.load());
+    std::fprintf(f, "# pid %d hz %d samples %zu taken %zu\n", (int) getpid(), prof_hz(), n, p_n.load());
     if (FILE* m = std::fopen("/proc/self/maps", "r")) {   // the executable mappings: start-end perms offset dev inode path
         char line[1024];
         while (std::fgets(line, sizeof line, m)) if (std::strstr(line, " r-xp ") || std::strstr(line, " r-x")) std::fprintf(f, "M %s", line);
@@ -191,12 +190,10 @@ void prof_dump() {
         for (char* c = nm; *c; c++) if (*c == ' ') *c = '_';
         std::fprintf(f, "S %s", nm[0] ? nm : "?");
         for (int k = 0; k < x.n && k < kDepth; k++) std::fprintf(f, " %lx", (unsigned long) x.pc[k]);
-        std::fputc('
-', f);
+        std::fputc('\n', f);
     }
     std::fclose(f);
-    std::fprintf(stderr, "[prof] pid %d: %zu samples to %s
-", (int) getpid(), n, path);
+    std::fprintf(stderr, "[prof] pid %d: %zu samples to %s\n", (int) getpid(), n, path);
 }
 void prof_start() {
     const int hz = prof_hz();
