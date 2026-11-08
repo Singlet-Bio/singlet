@@ -6,13 +6,24 @@
 // the CUDA runtime); the definition forwards to glibc's. Off (the default) it is one extra call per thread start. It changes no output.
 // pthread_setname_np is defined the same way: when a thread renames itself (a phase of the main thread, say), the CPU it used since its
 // last rename is charged to the old name, so a long-lived thread's time splits by the phases it ran instead of landing on its last name.
+//
+// SINGLET_PROF=<hz> (with SINGLET_PROF_DIR=<dir>) is a sampling profiler for nodes where perf and nsys's CPU sampling are closed: a SIGPROF
+// timer on the process's CPU time records the running thread's name and call stack (backtrace) up to SINGLET_PROF_MAX samples (default
+// 400000), and at exit each process (STAR's forked child too: the timer is re-armed after fork) writes <dir>/prof-<pid>.txt with its
+// executable mappings, for symbolizing offline. A diagnostic: the signal can interrupt system calls (SA_RESTART restarts most).
 #if defined(__linux__)
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include <dirent.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <execinfo.h>
 #include <pthread.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <time.h>
@@ -22,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <atomic>
 #include <mutex>
 
 namespace {
@@ -127,8 +139,87 @@ void report() {
     std::fprintf(stderr, "\n");
 }
 void child_reset() { g_nroles = 0; g_ncharged = 0; t_mark = 0; new (&g_mu) std::mutex(); }   // a forked child starts its own table (STAR's child, the pool's runs)
+// ---- SINGLET_PROF: the sampling profiler
+constexpr int kDepth = 30;
+struct Sample { char name[16]; int n; void* pc[kDepth]; };
+Sample* p_buf = nullptr;
+size_t p_cap = 0;
+std::atomic<size_t> p_n{0};
+bool p_done = false;
+int prof_hz() {
+    static const int h = [] { const char* v = std::getenv("SINGLET_PROF"); return v ? std::atoi(v) : 0; }();
+    return h;
+}
+void prof_handler(int, siginfo_t*, void*) {
+    const int saved = errno;
+    const size_t i = p_n.fetch_add(1, std::memory_order_relaxed);
+    if (i < p_cap) {
+        Sample& x = p_buf[i];
+        prctl(PR_GET_NAME, x.name, 0, 0, 0);
+        x.n = backtrace(x.pc, kDepth);
+    }
+    errno = saved;
+}
+void prof_arm(int hz) {
+    itimerval it{};
+    const long us = std::max(1000L, 1000000L / std::max(1, hz));
+    it.it_interval.tv_sec = it.it_value.tv_sec = us / 1000000;
+    it.it_interval.tv_usec = it.it_value.tv_usec = us % 1000000;
+    setitimer(ITIMER_PROF, &it, nullptr);
+}
+void prof_child() { p_n.store(0); p_done = false; prof_arm(prof_hz()); }   // fork resets the timer; the buffer's pages copy on write
+void prof_dump() {
+    if (!p_buf || p_done) return;
+    p_done = true;
+    itimerval z{}; setitimer(ITIMER_PROF, &z, nullptr);
+    const char* dir = std::getenv("SINGLET_PROF_DIR");
+    char path[512];
+    std::snprintf(path, sizeof path, "%s/prof-%d.txt", dir && *dir ? dir : ".", (int) getpid());
+    FILE* f = std::fopen(path, "w");
+    if (!f) return;
+    const size_t n = std::min(p_n.load(), p_cap);
+    std::fprintf(f, "# pid %d hz %d samples %zu taken %zu
+", (int) getpid(), prof_hz(), n, p_n.load());
+    if (FILE* m = std::fopen("/proc/self/maps", "r")) {   // the executable mappings: start-end perms offset dev inode path
+        char line[1024];
+        while (std::fgets(line, sizeof line, m)) if (std::strstr(line, " r-xp ") || std::strstr(line, " r-x")) std::fprintf(f, "M %s", line);
+        std::fclose(m);
+    }
+    for (size_t i = 0; i < n; i++) {
+        const Sample& x = p_buf[i];
+        char nm[17] = {0}; std::memcpy(nm, x.name, 16);
+        for (char* c = nm; *c; c++) if (*c == ' ') *c = '_';
+        std::fprintf(f, "S %s", nm[0] ? nm : "?");
+        for (int k = 0; k < x.n && k < kDepth; k++) std::fprintf(f, " %lx", (unsigned long) x.pc[k]);
+        std::fputc('
+', f);
+    }
+    std::fclose(f);
+    std::fprintf(stderr, "[prof] pid %d: %zu samples to %s
+", (int) getpid(), n, path);
+}
+void prof_start() {
+    const int hz = prof_hz();
+    if (hz <= 0) return;
+    const char* mx = std::getenv("SINGLET_PROF_MAX");
+    p_cap = mx ? std::strtoull(mx, nullptr, 10) : 400000;
+    void* m = mmap(nullptr, p_cap * sizeof(Sample), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if (m == MAP_FAILED) { p_cap = 0; return; }
+    p_buf = (Sample*) m;
+    void* warm[4]; backtrace(warm, 4);   // loads libgcc's unwinder now, not inside the first signal
+    struct sigaction sa{};
+    sa.sa_sigaction = prof_handler;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGPROF, &sa, nullptr);
+    pthread_atfork(nullptr, nullptr, prof_child);
+    std::atexit(prof_dump);
+    prof_arm(hz);
+}
+
 struct Init {
     Init() {
+        prof_start();
         if (!role_on()) return;
         pthread_atfork(nullptr, nullptr, child_reset);
         std::atexit(report);
@@ -136,8 +227,8 @@ struct Init {
 } g_init;
 }  // namespace
 
-// a process that ends with _exit (STAR's child) skips atexit: it calls this first. Nothing without SINGLET_ROLE_CPU=1.
-extern "C" void singlet_role_cpu_report() { if (role_on()) report(); }
+// a process that ends with _exit (STAR's child) skips atexit: it calls this first. Nothing without SINGLET_ROLE_CPU=1 or SINGLET_PROF.
+extern "C" void singlet_role_cpu_report() { if (role_on()) report(); prof_dump(); }
 
 extern "C" int pthread_create(pthread_t* t, const pthread_attr_t* a, void* (*fn)(void*), void* arg) noexcept {
     create_fn real = real_create();
