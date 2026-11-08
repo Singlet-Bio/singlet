@@ -109,10 +109,10 @@ class Params:
     # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
     ig_lone_spread: int = 5
     # True: a Phe/Trp118 codon mutated to another non-stop codon still ends the junction when the J motif continues (_codon_at)
-    asm_fw_relax: bool = False
+    asm_fw_relax: bool = True
     # True: a junction ending at the J anchor codon in place of Phe/Trp (a somatic substitution of the germline Phe/Trp118
     # codon, which asm_fw_relax assembles) is productive when the rest of the productivity checks hold
-    fw_mut_productive: bool = False
+    fw_mut_productive: bool = True
     threads: int = 8
 
 

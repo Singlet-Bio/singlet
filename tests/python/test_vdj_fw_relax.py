@@ -44,7 +44,7 @@ def test_cys_unaffected_by_relax():
 
 def test_mutated_phe_chain_is_assembled_and_productive():
     """A somatic Phe118 -> Val substitution (TTT -> GTT) in every transcript of one J gene: with asm_fw_relax and
-    fw_mut_productive the chain is assembled, ends at the mutated codon and is productive; without them it is lost."""
+    fw_mut_productive (the defaults) the chain is assembled, ends at the mutated codon and is productive; without them it is lost."""
     import dataclasses
 
     import pytest
@@ -76,7 +76,7 @@ def test_mutated_phe_chain_is_assembled_and_productive():
         return {(b[:-2], c): n for b, c, n in k[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
 
     on = run(asm_fw_relax=True, fw_mut_productive=True)
-    off = run()
+    off = run(asm_fw_relax=False, fw_mut_productive=False)
     assert sum(on.get(k) == t[0] for k, t in lacking.items()) >= 0.9 * len(lacking)
     assert sum(off.get(k) == t[0] for k, t in lacking.items()) == 0
     # chains with a canonical Phe/Trp118 are unchanged

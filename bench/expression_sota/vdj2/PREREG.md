@@ -262,3 +262,14 @@ melanoma_b before and after, with the gap to TRUST4; a library that loses more t
 difference Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95%
 interval, with wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's. If the setting fails the dev rule,
 nothing is merged, and the held-out library is still run once with the code as it then stands.
+
+**Result of Addendum 6 (2026-11-07, development and confirmation libraries; job 804415, same code with both flags off and on).**
+Pooled development BCR pairing rises from 0.9164 to 0.9217 (+0.0053; TRUST4 0.9159), and every development library gains:
+chx10k_b 0.9407 to 0.9534, pbmc10k_b 0.9740 to 0.9792, pbmc2_b 0.9328 to 0.9346, nsclc22_b 0.8346 to 0.8423, melv11_b 0.9272
+to 0.9318. The guards hold: contig F1 moves by at most -0.0008 (pbmc2_b), clonotype ARI does not fall, the pooled wrong-lineage
+rate moves from 0.00297 to 0.00306, TCR pairing on pbmc2_t and pbmc10k_t falls by 0.0004 each and TCR contig F1 by at most 0.0005,
+and wall time rises by at most 11% (nsclc22_b). The setting meets the dev rule and is adopted: `asm_fw_relax` and
+`fw_mut_productive` are on by default. Confirmation: pooled pairing on pbmc3_b, ngpbmc3_b and melanoma_b rises from 0.9062 to
+0.9123 (pbmc3_b 0.9515 to 0.9584, ngpbmc3_b 0.9394 to 0.9505, melanoma_b 0.8927 to 0.8976), with no library losing; the gap to
+TRUST4 (0.9198) narrows from -0.0136 to -0.0075 (95% interval -0.0122 to -0.0031). The held-out library is run next, once, with
+these defaults.
