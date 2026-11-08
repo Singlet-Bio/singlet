@@ -262,9 +262,10 @@ class Run(threading.Thread):
             if sc and sc["verdict"] == "DISAGREE":
                 log("[multi] WARNING %s: %s" % (gsm, sc["line"]))
             wl = W.worker_check(os.path.join(scr, "singlet.log"), os.path.join(scr, "out"))   # second whitelist guard: never publish a 10x sample without its list
-            if wl is not None and not wl["ok"]:
-                log("[multi] FAILED %s: whitelist check: %s" % (gsm, W.detail(wl)))
-                self.result = settle_failure(a, root, gsm, claim, man, "whitelist_missing", W.detail(wl))
+            if wl is not None and not wl["ok"]:   # a broken install, not the sample: claim back with the attempt refunded, no more admissions
+                D.halt(a, root, self, W.detail(wl), "multi")
+                keep_claim = True
+                self.result = "halt: whitelist check: %s" % wl["why"]
                 return
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
@@ -370,7 +371,7 @@ def main():
             Q.reap(a.stage, log=log)
             reap_runs()
             c = None
-            if len(running) < a.concurrency and not (a.max_samples and n_done + len(running) >= a.max_samples):
+            if len(running) < a.concurrency and not D.HALT.is_set() and not (a.max_samples and n_done + len(running) >= a.max_samples):
                 adm = Admitter(budget, a.route, free_tmp_gb(a.scratch), hol, a.min_pairs, a.max_pairs, a.accept_1fg2)
 
                 def accept(m, adm=adm):
@@ -397,6 +398,9 @@ def main():
                 continue
             if running:
                 idle_since = time.time()
+            elif D.HALT.is_set():   # D.halt: the running samples have finished, nothing new was admitted
+                log("[multi] halted after a failed whitelist check: exit %d after %d samples" % (W.EXIT_HALT, n_done))
+                return W.EXIT_HALT
             elif a.max_samples and n_done >= a.max_samples:
                 break
             elif time.time() - idle_since > a.idle_exit_min * 60:

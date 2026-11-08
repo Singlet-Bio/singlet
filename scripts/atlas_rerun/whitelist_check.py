@@ -21,6 +21,7 @@ import json
 import os
 import sys
 
+EXIT_HALT = 5   # a drain worker's exit status after a failed check: the install is broken, so the worker stops (not the sample's fault)
 AUTO = "using barcode auto-discovery"
 NOT_FOUND = "not found for "
 NO_HEADER = "cannot read .1fq header"
@@ -85,8 +86,9 @@ def check(log_path, out_dir):
 
 
 def worker_check(log_path, out_dir):
-    """check() for the drain workers, or None when $S9_NO_WL_CHECK is set (tests with a fake engine, as in common.require_whitelists)."""
-    if os.environ.get("S9_NO_WL_CHECK"):
+    """check() for the drain workers, or None when $S9_NO_WL_CHECK is set (tests with a fake engine, as in common.require_whitelists).
+    $S9_WL_LOG_CHECK=1 keeps this check on under $S9_NO_WL_CHECK (a test whose fake engine writes the log lines)."""
+    if os.environ.get("S9_NO_WL_CHECK") and not os.environ.get("S9_WL_LOG_CHECK"):
         return None
     return check(log_path, out_dir)
 

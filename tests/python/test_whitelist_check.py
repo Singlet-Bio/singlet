@@ -112,7 +112,7 @@ def finish(tmp_path, monkeypatch, log, missing):
     events, published, released = [], [], []
     monkeypatch.setattr(D.C, "emit", lambda root, ev, gsm, **kw: events.append(dict(kw, event=ev, gsm=gsm)))
     monkeypatch.setattr(D, "publish", lambda *a, **kw: published.append(a) or "none")
-    monkeypatch.setattr(D.Q, "release", lambda stage, gsm, claim, failed=False: released.append((gsm, failed)))
+    monkeypatch.setattr(D.Q, "release", lambda stage, gsm, claim, failed=False, refund=False: released.append((gsm, failed, refund)))
     monkeypatch.setattr(D.Q, "finish", lambda stage, gsm, claim: None)
     monkeypatch.setattr(D.C, "species_check", lambda p: None)
     a = types.SimpleNamespace(no_private_sidecar=True, stage=str(tmp_path / "stage"), engine="gpu")
@@ -122,16 +122,103 @@ def finish(tmp_path, monkeypatch, log, missing):
     return res, events, published, released
 
 
-def test_finish_phase_never_publishes_a_sample_without_its_whitelist(tmp_path, monkeypatch):
+@pytest.fixture(autouse=True)
+def no_halt():
+    D.HALT.clear()
+    yield
+    D.HALT.clear()
+
+
+def test_finish_phase_halts_the_worker_on_a_sample_without_its_whitelist(tmp_path, monkeypatch):
     res, events, published, released = finish(tmp_path, monkeypatch, NOT_FOUND, True)
-    assert res.startswith("failed: whitelist check")
+    assert res.startswith("halt: whitelist check")
     assert published == []
-    assert [(e["event"], e["reason"]) for e in events] == [("failed", "whitelist_missing")]
-    assert "not found for 10x-3p-v3" in events[0]["detail"]
-    assert released == [("GSM1", False)]  # requeued for another attempt, not dropped
+    assert [(e["event"], e["reason"]) for e in events] == [("released", "whitelist_missing"), ("worker_halt", "whitelist_missing")]
+    assert "not found for 10x-3p-v3" in events[1]["detail"]
+    assert released == [("GSM1", False, True)]  # back to ready/ with the attempt refunded: the install is at fault, not the sample
+    assert D.HALT.is_set()
 
 
 def test_finish_phase_publishes_a_sample_with_its_whitelist(tmp_path, monkeypatch):
     res, events, published, released = finish(tmp_path, monkeypatch, RESOLVED, False)
-    assert res.startswith("done") and len(published) == 1
+    assert res.startswith("done") and len(published) == 1 and not D.HALT.is_set()
     assert [e["event"] for e in events] == ["done"] and events[0]["whitelist_check"]["ok"] is True
+
+
+def test_drain_worker_claims_nothing_after_a_halt(tmp_path, monkeypatch):
+    # drain_worker.main: HALT checked before every claim; the worker exits W.EXIT_HALT after its in-flight publish
+    claims = []
+    monkeypatch.setattr(D.Q, "claim_ready", lambda stage, accept=None: claims.append(stage))
+    monkeypatch.setattr(D.Q, "reap", lambda stage, log=None: None)
+    monkeypatch.setattr(D.Q, "init", lambda stage: None)
+    monkeypatch.setattr(D.Q, "sweep_scratch", lambda *a, **kw: None)
+    monkeypatch.setattr(D.Q, "install_sigterm", lambda: None)
+    monkeypatch.setattr(D.C, "require_pinned_binary", lambda *a, **kw: None)
+    monkeypatch.setattr(D.C, "require_whitelists", lambda *a, **kw: None)
+    monkeypatch.setattr(D.C, "load_config", lambda p: {"binary": {"path": "x"}})
+    monkeypatch.setattr(D.C, "cluster_cfg", lambda cfg, c: {"root": str(tmp_path), "ref_base": str(tmp_path)})
+    monkeypatch.setattr(sys, "argv", ["drain_worker.py", "--stage", str(tmp_path / "stage"), "--engine", "gpu", "--config", "c.json", "--mem-gb", "0", "--scratch", str(tmp_path)])
+    D.HALT.set()
+    assert D.main() == W.EXIT_HALT
+    assert claims == []
+
+
+# ── multi_drain end to end: the first failed check stops admissions, the running samples finish, the worker exits W.EXIT_HALT ──
+
+FAKE_WL = """#!/usr/bin/env python3
+import json, os, sys, time
+a = sys.argv[1:]
+src = open(a[0]).read().strip()
+out = a[a.index("--out-prefix") + 1]
+os.makedirs(out, exist_ok=True)
+time.sleep(1.0)
+if src == "nowl":
+    print("[singlet] Whitelist 3M-february-2018.txt not found for 10x-3p-v3 - using barcode auto-discovery", flush=True)
+else:
+    print("[singlet] Auto-resolved whitelist: 10x-3p-v3 -> 3M-february-2018.txt", flush=True)
+json.dump({"pileup_threads": 1, "whitelist_missing": src == "nowl"}, open(os.path.join(out, "pileup_stats.json"), "w"))
+open(os.path.join(out, "counts.txt"), "w").write("counts of " + src)
+"""
+
+PINNED_DISK = """
+import collections, runpy, shutil, sys
+U = collections.namedtuple("usage", "total used free")
+shutil.disk_usage = lambda p: U(500e9, 0, 500e9)
+sys.path.insert(0, sys.argv[1])
+sys.argv = [sys.argv[1] + "/multi_drain.py"] + sys.argv[2:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+"""
+
+
+@pytest.mark.skipif(not os.path.exists("/usr/bin/time"), reason="needs GNU time (Linux)")
+def test_multi_drain_halts_after_a_failed_whitelist_check(tmp_path):
+    import stagequeue as Q
+
+    stage = str(tmp_path / "stage")
+    Q.init(stage)
+    root = str(tmp_path / "root")
+    fake = tmp_path / "fake_singlet.py"
+    fake.write_text(FAKE_WL)
+    fake.chmod(fake.stat().st_mode | 0o111)
+    cfg = tmp_path / "config.json"
+    json.dump({"binary": {"path": str(fake)}, "references": {"Homo sapiens": "GRCh38-2024-A", "*": "auto"},
+               "clusters": {"clipper": {"root": root, "ref_base": str(tmp_path / "ref")}}}, open(cfg, "w"))
+    for gsm, body in (("GSM1", "ok"), ("GSM2", "nowl"), ("GSM3", "ok"), ("GSM4", "ok")):
+        d = os.path.join(stage, "ready", gsm)
+        os.makedirs(d)
+        open(os.path.join(d, "sample.1fq"), "w").write(body)
+        json.dump({"pairs": 20_000_000, "bytes": 10, "runs": ["sample"], "gse": "GSE1", "organism": "Homo sapiens"},
+                  open(os.path.join(d, "manifest.json"), "w"))
+    r = subprocess.run([sys.executable, "-c", PINNED_DISK, SCRIPTS, "--stage", stage, "--config", str(cfg), "--concurrency", "1",
+                        "--scratch", str(tmp_path / "scr"), "--mem-gb", "370", "--no-cgroup", "--idle-exit-min", "0.05", "--publish", "none"],
+                       capture_output=True, text=True, timeout=170, env=dict(os.environ, S9_NO_WL_CHECK="1", S9_WL_LOG_CHECK="1"))
+    log = r.stdout + r.stderr
+    assert r.returncode == W.EXIT_HALT, log
+    assert sorted(os.listdir(os.path.join(stage, "ready"))) == ["GSM2", "GSM3", "GSM4"], log  # GSM2 back, GSM3 and GSM4 never claimed
+    assert json.load(open(os.path.join(stage, "ready", "GSM2", "manifest.json")))["attempts"] == 0  # the attempt refunded
+    assert os.listdir(os.path.join(stage, "failed")) == [] and os.listdir(os.path.join(stage, "claimed")) == []
+    ev = [json.load(open(os.path.join(root, "inbox", f))) for f in sorted(os.listdir(os.path.join(root, "inbox")))]
+    assert [e["gsm"] for e in ev if e["event"] == "done"] == ["GSM1"]
+    assert [(e["event"], e["gsm"], e.get("reason")) for e in ev if e["event"] in ("released", "worker_halt")] == [
+        ("released", "GSM2", "whitelist_missing"), ("worker_halt", "GSM2", "whitelist_missing")]
+    assert not [e for e in ev if e["event"] == "failed"]
