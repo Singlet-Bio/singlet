@@ -2795,7 +2795,7 @@ static int cmd_whitelists(int argc, char* argv[]) {
     for (const auto& f : singlet::fq::fetchable_whitelists()) {
         if (!files.empty() && std::find(files.begin(), files.end(), std::string(f.file)) == files.end()) continue;
         const std::string dst = dir + "/" + f.file;
-        const std::string have = singlet::pileup::sha256_file(dst);
+        const std::string have = singlet::sha256_file(dst);
         if (action == "list") {
             std::cout << f.file << "\t" << (have.empty() ? "absent" : have == f.sha256 ? "installed" : "MISMATCH") << "\t"
                       << f.chemistry << "\t" << f.url << "\n";
@@ -2812,7 +2812,7 @@ static int cmd_whitelists(int argc, char* argv[]) {
             ++bad;
             continue;
         }
-        const std::string got = singlet::pileup::sha256_file(part);
+        const std::string got = singlet::sha256_file(part);
         if (got != f.sha256) {
             std::cerr << "[whitelists] ERROR: " << f.file << " sha256 " << got << " differs from the pinned " << f.sha256
                       << "; the file was not installed\n";
