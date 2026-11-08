@@ -39,6 +39,8 @@ ct() {  # host ctest of a branch tip, named after the tip
   for r in 13 14 15 16 18 20 8 1 4 5 2 3 6 7 9 10 11 12; do printf 't1ksc-%s\tt1ksc\t16\t48\tdlsc-%s\t%s\n' $r $r "$(run stock_t1k_sc.sbatch $r)"; done
   # B4 primary: the same comparison on a site set chosen independently of both tools (bulk STAR depth, raw sc depth)
   for r in 1 2 3 4 5 6 7 8; do printf 'redin-%s\tredi\t8\t32\trun-%s,star-%s\t%s\n' $r $r $r "$(run reditools_neutral.sbatch $r)"; done
+  # D-109 difference 1: donor A with --editing-min-baseq 30 (build + run + score on the neutral sample)
+  printf 'bq30-1\tbq30\t24\t180\tredin-1\tenv ROW=1 SLURM_CPUS_PER_TASK=$TASK_CPUS SLURM_JOB_ID=%s-bq30 bash %s/edit_bq30.sbatch\n' "$SLURM_JOB_ID" "$J"
 } > $TF
 $ENV/bin/python3 $J/node_run.py $TF --state $J/state --logs $J/tasklogs --cpus $(( NC * 2 )) --mem $MEMG \
   --limit dlsc=4 --limit dlbulk=2 --limit geuv=3 --limit run=2 --limit t1ksc=1 --limit redi=2 --stop-after 12000
