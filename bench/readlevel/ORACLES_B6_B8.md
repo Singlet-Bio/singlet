@@ -387,7 +387,7 @@ rank 610. The good rank of the verdict score therefore comes from the Mitelman p
 
 **Fusion-independent check (KIT genotype only; `results/b6_holdout_rank_kit*.json`).** Among 1,104 KIT wild-type cells the
 engine and Arriba each find BCR–ABL1 in one cell (0.09%), and STAR-Fusion in none. Both make 7 calls among 2,498 KIT-mutant
-cells (0.28%), and STAR-Fusion makes none. The KIT-mutant group includes 372 cells that also carry a BCR::ABL1 long read
+cells (0.28%), and STAR-Fusion makes none. The KIT-mutant group includes 387 cells that also carry a BCR::ABL1 long read
 (ambient molecules or doublets), so some of these "false" calls may sit in Ku812 material. Clause 2 passes on these labels too,
 again as a tie with Arriba.
 
