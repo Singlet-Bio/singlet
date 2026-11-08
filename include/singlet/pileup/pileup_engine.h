@@ -2122,11 +2122,12 @@ public:
         P.umi_dedup = in.umiDedup; P.directional = in.directional; P.umi_len = in.umiLen;
         P.threads = static_cast<unsigned>(std::max(1, std::max(config_.finalize_threads, config_.threads)));
         P.progress = [] { singlet::rearm_stall_watchdog("allsite pass"); };
+        P.defer_build = true;   // finalize_allsite builds the matrices for the called cells once they are known
         AllSiteView v(in);
         allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
         allsite_ok_ = true;
         std::cerr << "[allsite] " << allsite_.sites.size() << " sites (>= " << P.min_alt_molecules << " ALT molecules in >= " << P.min_alt_cells
-                  << " barcodes), DP entries " << allsite_.dp.data.size() << ", AD entries " << allsite_.ad.data.size() << "; reads " << allsite_.reads_used
+                  << " barcodes), DP records " << allsite_.dp_records << ", AD records " << allsite_.ad_records << "; reads " << allsite_.reads_used
                   << ", mismatch observations " << allsite_.mismatch_obs << ", molecules " << allsite_.molecules << " (ambiguous " << allsite_.ambiguous
                   << ", other " << allsite_.other << ") in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
     }
@@ -3021,6 +3022,7 @@ public:
     bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
     allsite::Result allsite_;   // D-101 (allsite.h); allsite_ok_ once computed
     bool allsite_ok_ = false;
+    bool allsite_built_ = false;   // finalize_allsite ran
     std::vector<uint32_t> gpu_cell_reads_, gpu_cell_mols_;   // W11 "on": per-cell molecule-store reads and molecules from the GPU
     // W11 "on": the per-cell saturation inputs the molecule store would give (empty when the CPU store was used)
     bool gpu_saturation(std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>>& cells) const {
@@ -3041,6 +3043,18 @@ public:
 #endif
     }
     bool allsite_ready() const { return allsite_ok_; }
+    // Builds the all-site matrices for the barcodes marked in keep (null: every barcode); called once, after cell calling. A false result
+    // (the entries do not fit int32 column pointers) turns the member off.
+    bool finalize_allsite(const std::vector<uint8_t>* keep) {
+        if (!allsite_ok_ || allsite_built_) return allsite_ok_;
+        allsite_built_ = true;
+        const auto t0 = std::chrono::steady_clock::now();
+        if (!allsite_.finalize(keep)) { allsite_ok_ = false; return false; }
+        std::cerr << "[allsite] matrices built for " << (keep ? "the called cells" : "every barcode") << ": DP entries " << allsite_.dp.data.size()
+                  << ", AD entries " << allsite_.ad.data.size() << " in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s
+";
+        return true;
+    }
     const allsite::Result& allsite() const { return allsite_; }
     std::vector<std::string> allsite_names() const {
         std::vector<std::string> v; v.reserve(allsite_.sites.size());

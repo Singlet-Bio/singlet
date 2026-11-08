@@ -22,6 +22,8 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <iostream>
+#include <memory>
 #include <fstream>
 #include <string>
 #include <thread>
@@ -90,6 +92,7 @@ struct Params {
     unsigned threads = 8;
     uint64_t block_hits = 8000000;   // counting works on blocks of sites with about this many read-site hits, so each thread's
                                      // consensus table stays bounded (a whole contig of a 400M-read library needs hundreds of GB)
+    bool defer_build = false;        // keep the counts as triplets; Result::finalize builds the matrices (for the called cells only)
     std::function<void()> progress;  // called (from worker threads) after each contig's discovery and each counting block; the
                                      // engine re-arms its stall watchdog here, since an LCL's pass runs well past an hour
 };
@@ -100,6 +103,13 @@ struct Result {
     std::vector<Site> sites;                                         // row order
     SparseAccumulator<uint16_t>::CSCMatrix ad, dp;                   // rows = sites, columns = barcodes
     uint64_t reads_used = 0, mismatch_obs = 0, molecules = 0, ambiguous = 0, other = 0;
+    uint64_t dp_records = 0, ad_records = 0;                         // per-(barcode, site, molecule-batch) counts before they are summed
+    std::vector<uint64_t> site_dp, site_ad;                          // per site, summed over every barcode (filled by finalize)
+    // With Params::defer_build the matrices stay empty until finalize(keep): keep[c] != 0 marks the barcodes to build (null: all). The
+    // column pointers are int32, so a library whose barcodes together hold over 2^31 entries (an LCL, with millions of near-empty
+    // droplets) only fits once restricted to its called cells. Returns false, leaving the matrices empty, when it still does not fit.
+    std::function<bool(Result&, const std::vector<uint8_t>*)> finalize_fn;
+    bool finalize(const std::vector<uint8_t>* keep) { return finalize_fn ? finalize_fn(*this, keep) : true; }
 };
 
 namespace detail {
@@ -156,7 +166,8 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
     std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { const uint64_t na = cnt[a + 1] - cnt[a], nb = cnt[b + 1] - cnt[b]; return na != nb ? na > nb : a < b; });
 
     struct PerTid { std::vector<Site> sites; std::vector<Tri> ad, dp; uint64_t obs = 0; Stats st; };
-    std::vector<PerTid> out(n_tid);
+    auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
+    auto& out = *out_sp;
     std::atomic<uint32_t> next{0};
     auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };   // as k_lists + q_pass
     auto walk = [&](uint64_t r, auto&& on_base) {   // on_base(pos, nt16 code, record index) for every aligned base of read r (quality: pass_q)
@@ -286,13 +297,27 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
     res.sites.reserve(row0[n_tid]);
     for (uint32_t t = 0; t < n_tid; ++t) { for (const auto& s : out[t].sites) res.sites.push_back(s);
         res.mismatch_obs += out[t].obs; res.molecules += out[t].st.snp_molecules; res.ambiguous += out[t].st.snp_molecules_ambiguous; res.other += out[t].st.snp_molecules_other; }
-    auto build = [&](bool is_ad, SparseAccumulator<uint16_t>::CSCMatrix& m) {
+    for (uint32_t t = 0; t < n_tid; ++t) { res.ad_records += out[t].ad.size(); res.dp_records += out[t].dp.size(); }
+    auto row0_sp = std::make_shared<std::vector<uint32_t>>(std::move(row0));
+    auto build = [out_sp, row0_sp, n_tid, n_barcodes](bool is_ad, SparseAccumulator<uint16_t>::CSCMatrix& m, const std::vector<uint8_t>* keep,
+                                                       std::vector<uint64_t>& site_sum) -> bool {
+        auto& out = *out_sp; const auto& row0 = *row0_sp;
+        site_sum.assign(row0[n_tid], 0);
         std::vector<Tri> all;
         size_t n = 0; for (uint32_t t = 0; t < n_tid; ++t) n += (is_ad ? out[t].ad : out[t].dp).size();
         all.reserve(n);
-        for (uint32_t t = 0; t < n_tid; ++t) { auto& v = is_ad ? out[t].ad : out[t].dp; for (const auto& x : v) all.push_back({x.cell, x.row + row0[t], x.val}); std::vector<Tri>().swap(v); }
+        for (uint32_t t = 0; t < n_tid; ++t) {
+            auto& v = is_ad ? out[t].ad : out[t].dp;
+            for (const auto& x : v) {
+                site_sum[x.row + row0[t]] += x.val;
+                if (!keep || (x.cell < keep->size() && (*keep)[x.cell])) all.push_back({x.cell, x.row + row0[t], x.val});
+            }
+            std::vector<Tri>().swap(v);
+        }
         std::sort(all.begin(), all.end(), [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; });
         m.nrows = row0[n_tid]; m.ncols = n_barcodes; m.indptr.assign(n_barcodes + 1, 0); m.indices.clear(); m.data.clear();
+        if (all.size() >= static_cast<size_t>(INT32_MAX)) { std::cerr << "[allsite] " << all.size() << " entries do not fit the int32 column pointers; the member is not built
+"; return false; }
         for (size_t i = 0; i < all.size();) {   // duplicates (one per molecule) summed, saturated at 65535
             size_t j = i; uint64_t v = 0; while (j < all.size() && all[j].cell == all[i].cell && all[j].row == all[i].row) v += all[j++].val;
             m.indices.push_back(static_cast<int32_t>(all[i].row)); m.data.push_back(static_cast<uint16_t>(std::min<uint64_t>(v, 65535)));
@@ -300,8 +325,14 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
             i = j;
         }
         for (uint32_t c = 0; c < n_barcodes; ++c) m.indptr[c + 1] += m.indptr[c];
+        return true;
     };
-    build(true, res.ad); build(false, res.dp);
+    res.finalize_fn = [build](Result& r, const std::vector<uint8_t>* keep) -> bool {
+        const bool a = build(true, r.ad, keep, r.site_ad), d = build(false, r.dp, keep, r.site_dp);
+        if (!a || !d) { r.ad = {}; r.dp = {}; return false; }
+        return true;
+    };
+    if (!P.defer_build) res.finalize(nullptr);
     return res;
 }
 
@@ -314,8 +345,9 @@ inline std::string site_name(const Site& s, const std::vector<std::string>& tid_
 inline bool write_sites_tsv(const std::string& path, const Result& r, const std::vector<std::string>& tid_names,
                             const std::vector<uint8_t>* per_cell = nullptr) {
     std::vector<uint64_t> dp(r.sites.size(), 0), ad(r.sites.size(), 0);
-    for (size_t k = 0; k < r.dp.data.size(); ++k) dp[static_cast<size_t>(r.dp.indices[k])] += r.dp.data[k];
-    for (size_t k = 0; k < r.ad.data.size(); ++k) ad[static_cast<size_t>(r.ad.indices[k])] += r.ad.data[k];
+    if (r.site_dp.size() == r.sites.size() && r.site_ad.size() == r.sites.size()) { dp = r.site_dp; ad = r.site_ad; }
+    else for (size_t k = 0; k < r.dp.data.size(); ++k) dp[static_cast<size_t>(r.dp.indices[k])] += r.dp.data[k];
+    if (r.site_ad.size() != r.sites.size()) for (size_t k = 0; k < r.ad.data.size(); ++k) ad[static_cast<size_t>(r.ad.indices[k])] += r.ad.data[k];
     const std::string tmp = path + ".tmp";
     gzFile f = gzopen(tmp.c_str(), "wb6");
     if (!f) return false;

@@ -1802,6 +1802,17 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
     const bool demux_thread_ran = demux_thread.joinable();
+    // D-101: build the all-site matrices now that the cells are called, for those cells only (every barcode when no cell call ran).
+    // An LCL's millions of near-empty droplets hold over 2^31 entries together, which the int32 column pointers cannot index.
+    if (engine.allsite_ready()) {
+        std::vector<uint8_t> keep_cells;
+        if (export_cfg.run_cell_calling) {
+            keep_cells.assign(barcodes.size(), 0);
+            for (uint32_t c : cc_result.cell_indices) if (c < keep_cells.size()) keep_cells[c] = 1;
+        }
+        if (!engine.finalize_allsite(export_cfg.run_cell_calling ? &keep_cells : nullptr)) std::cerr << "[allsite] member dropped
+";
+    }
     if (demux_thread.joinable()) {
         demux_thread.join();
         write_donor_assignments(out_prefix + "/donor/donor_assignments.tsv",
