@@ -110,6 +110,9 @@ class Params:
     ig_lone_spread: int = 5
     # True: a Phe/Trp118 codon mutated to another non-stop codon still ends the junction when the J motif continues (_codon_at)
     asm_fw_relax: bool = False
+    # True: a junction ending at the J anchor codon in place of Phe/Trp (a somatic substitution of the germline Phe/Trp118
+    # codon, which asm_fw_relax assembles) is productive when the rest of the productivity checks hold
+    fw_mut_productive: bool = False
     threads: int = 8
 
 
@@ -740,7 +743,13 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
                 c = int(np.flatnonzero(ref.names == cn)[0]) if (ref.names == cn).any() else c
             aa = R.translate(junc)
             inframe = len(junc) % 3 == 0
-            prod = inframe and "*" not in aa and aa[:1] == "C" and aa[-1:] in ("F", "W")
+            end_ok = aa[-1:] in ("F", "W")
+            if not end_ok and params.fw_mut_productive and j >= 0 and ref.segs[j].anchor >= 0:
+                # a somatic substitution of Phe/Trp118 (Val, Leu, ...): the junction ends at the J anchor codon, whose
+                # germline codon is Phe/Trp; Cell Ranger and IMGT call such a chain productive
+                js = ref.segs[j]
+                end_ok = R.translate(js.seq[js.anchor : js.anchor + 3], 0) in ("F", "W")
+            prod = inframe and "*" not in aa and aa[:1] == "C" and end_ok
             if prod and j >= 0:
                 js = ref.segs[j]
                 # J frame continues the junction frame: the F/W codon of the junction is the J anchor codon
