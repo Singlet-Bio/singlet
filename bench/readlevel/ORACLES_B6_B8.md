@@ -36,11 +36,12 @@ B8 passes when, over the cells both callers keep,
 ## Results
 
 Jobs: part 1 is 804363 (build, every engine run, comparators, B7 fetch and STARsolo, plus the B6/B8 evaluations as steps inside
-it); part 2 is 804377 (after 804363: scTE, SoloTE, nanopore truth, te_eval). Every number below is in `results/`.
+it); part 2 is 804425 (scTE, SoloTE, nanopore truth, te_eval, and the B6 fix builds and reruns as steps). Every number below is
+in `results/`.
 
 | Oracle | Engine | Best comparator | Verdict |
 |---|---|---|---|
-| B6 chimeric junctions | 0 of 3 truth fusions at matched false positives on both mixes; cell recall at most 1 cell per fusion | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **fail** |
+| B6 chimeric junctions | Original build: 0 of 3 truth fusions at matched false positives on both mixes. With fixes 1–2 (#220): 1 of 3 on 1:15, tying both comparators, 0 of 3 on 1:1.5; 6 RUNX1–RUNX1T1 cells on 1:15 | Arriba 3 of 3 (1:1.5, 44 false positives); STAR-Fusion and Arriba 1 of 3 (1:15); 8 RUNX1–RUNX1T1 cells | **fail** |
 | B7 TE counts | pending (804377) | pending | pending |
 | B8 reads per UMI | 96.9% of Cell Ranger molecules matched; matched TVD 0.0153; saturation 0.7288 vs 0.7248 | Cell Ranger 3.0 is the reference | **pass** |
 
@@ -87,3 +88,34 @@ Proposed fix (engine code left untouched here):
    support across unrelated samples.
 3. Check whether main-pass reads with a long soft clip should also go to the chimeric pass. Today only unmapped reads do, which may
    explain the missing 1:1.5 support. This one is a hypothesis.
+
+### B6 rescore after fixes 1 and 2 (Singlet-Bio/singlet#220)
+
+Fixes 1 and 2 are in `fix/chimeric-strand-calls` at a704996d: transcript-strand gene names, canonical-motif junctions only by
+default, Arriba v2.5.1's GRCh38 blacklist, and a `filter=recurrent` flag for the 149 pairs that recur with at least two molecules
+in two of three PBMC samples (`results/chimeric_recurrent_GRCh38.tsv`). Scoring keeps only PASS rows and uses the committed rule
+unchanged. All runs were steps inside job 804425 on one node.
+
+| Run | 1:1.5 recall at Arriba's 44 FP | 1:1.5 cells (BCR–ABL1, NUP214–XKR3, RUNX1–RUNX1T1) | 1:15 recall at 6 / 39 FP | 1:15 RUNX1–RUNX1T1 cells | Verdict |
+|---|---|---|---|---|---|
+| Arriba | 3 of 3 | 1, 2, 3 | 1 of 3 | 8 | |
+| STAR-Fusion | 0 of 3 at 9 FP | 0, 0, 0 | 1 of 3 | 8 | |
+| Fixes 1–2, blacklist (`b6_*_fix12bl.json`) | 0 of 3 | 0, 1, 1 | 1 of 3 / 1 of 3 | 6 | fail |
+| Fixes 1–2, blacklist and recurrent flag (`b6_*_fix123.json`) | 0 of 3 | 0, 1, 1 | 1 of 3 / 1 of 3 | 6 | fail |
+| Plus soft-clip prototype, 20 bases (`b6_*_sc20.json`) | 0 of 3 | 1, 2, 2 | 1 of 3 / 1 of 3 | 7 | fail |
+
+No caller calls a truth fusion in a cell of the other line, so every false-positive rate is 0. The fixes close the 1:15 ranking
+gap and keep it closed. B6 still fails on two counts: the 1:1.5 mix ranks none of the truth fusions above the artifacts, and the
+1:15 mix reaches 6 RUNX1–RUNX1T1 cells against the comparators' 8. The recurrent flag removes few calls (49 to 46 pairs in two or
+more cells on 1:1.5), because the artifacts that now lead are canonical-motif pairs specific to these cell lines.
+
+Fix 3 was prototyped because 1:1.5 stayed short (`proto/chimeric-softclip` at a8d58f06, CPU path only). Sending reads that leave
+at least 20 cDNA bases unaligned to the chimeric pass raises second-pass input by 4.0% on both mixes (6.41 M to 6.67 M reads on
+1:1.5, 5.79 M to 6.02 M on 1:15). It recovers most of the missing support: the engine now ties Arriba on BCR–ABL1 and NUP214–XKR3
+cells in the 1:1.5 mix and sits one cell short on RUNX1–RUNX1T1 in each mix. The cost lands in precision. Non-canonical junction
+lines rise by about half, and pairs called in two or more cells grow from 46 to 88 on 1:1.5, so the truth pairs, at two cells each,
+still rank below 44 false positives.
+
+With one or two supporting cells per truth fusion, the rule's first clause on the 1:1.5 mix needs a ranking that places
+two-cell pairs above every artifact. More reads will not supply that. The ranking needs evidence the table does not yet use, such
+as breakpoint consistency across cells or the known-fusion catalogue.
