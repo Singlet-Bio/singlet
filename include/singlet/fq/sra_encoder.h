@@ -768,6 +768,9 @@ class SraEncoder {
                 {
                     std::unordered_map<std::string, uint16_t> seen_wls;
                     for (const auto& spec : known_protocols()) {
+                        // A spec without a barcode in the read (10x-atac: bc_len 0, barcode in the index read) has nothing to
+                        // scan for: hashing an empty barcode "matched" every read and replaced low-confidence calls.
+                        if (spec.bc_len < 8) continue;
                         if (!spec.whitelist_file.empty() &&
                             !seen_wls.count(spec.whitelist_file)) {
                             seen_wls[spec.whitelist_file] = spec.bc_len;

@@ -73,9 +73,10 @@ constexpr uint16_t kShortBarcodeReadMaxTrim = 4;
 constexpr uint16_t kShortBarcodeReadMinUmi = 8;
 
 // A whitelist protocol with a barcode of at least 14 nt that was chosen by auto-detection must find its barcodes in its whitelist.
-// Random 16-mers hit a 3.6 M list about once in a million; real 10x libraries hit 50-95%. Below this rate the reads are not this
-// chemistry (or the whitelist is missing) and counts from them would be garbage.
-constexpr double kProtocolWlRateFloor = 0.02;
+// Random 16-mers hit a 3.6 M list about once in a million; real 10x libraries hit 50-95%, the weakest seen (B20 at scale) 15%.
+// Below this rate the reads are not this chemistry (or the whitelist is missing) and counts from them would be garbage: an inDrop
+// library hit the 3' v1 list in 8% of reads (SRR10046401).
+constexpr double kProtocolWlRateFloor = 0.10;
 
 inline const std::vector<CandidateSpec>& known_protocols() {
     // Protocol specs: tag, id, r1_len, bc_off, bc_len, umi_off, umi_len,
@@ -195,9 +196,9 @@ inline const std::vector<CandidateSpec>& known_protocols() {
 
         // ── 10x Visium (Spatial Transcriptomics) ──
         // R1(28bp): BC(16bp@0) + UMI(12bp@16), geometrically identical to 10x v3.
-        // Spatial barcode WL (~4992 barcodes) is Space Ranger licensed — not bundled.
-        // Without WL, detection falls back to 10x-3p-v3. Classified as SPATIAL_RNA.
-        {"10x-visium", 24, 28, 0, 16, 16, 12, "", "", 0, false},
+        // Spot list visium-v1.txt (4,992 barcodes, rebuilt from 10x public datasets, bundled): Visium v1 libraries hit it in 90-96%
+        // of reads and the 3M list in about 1%, so the list tells Visium from 3' v3. Classified as SPATIAL_RNA.
+        {"10x-visium", 24, 28, 0, 16, 16, 12, "visium-v1.txt", "", 0, false},
 
         // ── CITE-seq GEX ──
         // R1(28bp): CB(16bp@0) + UMI(12bp@16) — identical geometry to 10x-3p-v3.
@@ -446,6 +447,12 @@ inline bool hamming1_match(const uint8_t* bc, uint16_t len,
 //     poly(A)15 / poly(T)15 = 23-32 / 1.4-30 in 3', 15 / 32 in 5'.
 // A 5' R1 sequenced past BC+UMI also shows the 5' TSO tail (TTTCTTATATGGG) where
 // a 3' R1 shows poly(dT); that decides alone when present.
+// With R2 reads of 75 nt or more, the absence of the 3' TSO decides: a long 5' R2
+// can run into the poly(A) tail, so poly(A) outnumbers poly(T) there too (B20,
+// GSM4987144, 10x 5' v1 with a 110-nt R2: 3' TSO 0, poly(A) 118, poly(T) 8 per
+// 20000), while every 3' library of B20 shows the 3' TSO in 1.6-19% of R2 reads.
+// R2 reads without any poly(A)/poly(T) run carry no strand evidence and stay 3'.
+// Shorter R2 reads keep the poly(T) > poly(A) condition.
 struct FivePrimeEvidence {
     uint32_t n = 0;          // spots examined
     uint32_t r1_tso = 0;     // R1: 5' TSO tail right after BC+UMI
@@ -453,10 +460,17 @@ struct FivePrimeEvidence {
     uint32_t r2_smart = 0;   // R2: 3' kit TSO (CAGAGTACATGGG) anywhere
     uint32_t r2_polya = 0;   // R2: 15-base poly(A) run anywhere
     uint32_t r2_polyt = 0;   // R2: 15-base poly(T) run anywhere
+    uint64_t r2_bases = 0;   // R2 bases examined (mean R2 length = r2_bases / n)
     bool is_5prime() const {
         if (r1_tso + r1_polyt >= 50) return r1_tso > 4 * r1_polyt;
-        // no 3' TSO (< 0.2%), and poly(T) outnumbers poly(A) in R2
-        return n >= 500 && 500ull * r2_smart < n && r2_polyt >= 10 && r2_polyt > r2_polya;
+        if (n < 500 || 500ull * r2_smart >= n) return false;   // the 3' TSO in >= 0.2% of R2 reads: 3'
+        // poly(A) runs in >= 1% of R2 reads and over four times the poly(T) runs: a sense cDNA read that reaches the tail, 3'
+        if (100ull * r2_polya >= n && r2_polya > 4ull * r2_polyt) return false;
+        // long R2 reads without the 3' TSO that reach transcript ends as cDNA does (poly(A) or poly(T) runs in 0.1-10% of reads; a
+        // feature-barcode read, tag + poly(A), has one in nearly every read and stays 3'): 5'
+        const uint64_t runs = static_cast<uint64_t>(r2_polya) + r2_polyt;
+        if (r2_bases >= 75ull * n && 1000ull * runs >= n && 10ull * runs < n) return true;
+        return r2_polyt >= 10 && r2_polyt > r2_polya;           // short R2: poly(T) outnumbers poly(A)
     }
 };
 
@@ -493,6 +507,7 @@ FivePrimeEvidence five_prime_evidence(const std::vector<SpotT>& spots, uint16_t 
             if (trun >= 15) polyt = true;
             if (!smart && j + 13 <= s.r2_len && mism(s.r2_seq, j, kSmart) == 0) smart = true;
         }
+        ev.r2_bases += s.r2_len;
         ev.r2_smart += smart;
         ev.r2_polya += polya;
         ev.r2_polyt += polyt;
@@ -649,7 +664,7 @@ ProtocolCandidate detect_protocol(
     // so it must never be chosen over one.
     // Enforces the stated intent in known_protocols(): "Without WL, detection falls
     // back to 10x-3p-v3."
-    std::unordered_set<uint64_t> wl_geometries;
+    std::unordered_map<uint64_t, int> wl_geometries;   // geometry -> number of WL protocols with it
     auto pack_geom5 = [](uint16_t r1, uint16_t bco, uint16_t bcl,
                          uint16_t umio, uint16_t umil) -> uint64_t {
         // Combine five 16-bit fields into one 64-bit integer for unambiguous keying.
@@ -662,8 +677,8 @@ ProtocolCandidate detect_protocol(
     };
     for (const auto& k : known_protocols()) {
         if (!k.whitelist_file.empty()) {
-            wl_geometries.insert(pack_geom5(k.r1_len, k.bc_offset, k.bc_len,
-                                            k.umi_offset, k.umi_len));
+            ++wl_geometries[pack_geom5(k.r1_len, k.bc_offset, k.bc_len,
+                                       k.umi_offset, k.umi_len)];
         }
     }
 
@@ -742,6 +757,11 @@ ProtocolCandidate detect_protocol(
                 it = wl_cache.emplace(cache_key, std::move(wl_hashes)).first;
             }
             const auto& wl_hashes = it->second;
+            // A WL protocol whose list is not installed and whose geometry another WL protocol shares (10x-visium without
+            // visium-v1.txt) cannot tell itself apart: skip it, as the no-WL suppression above does.
+            if (wl_hashes.empty() && cand->linker.empty() &&
+                wl_geometries[pack_geom5(cand->r1_len, cand->bc_offset, cand->bc_len, cand->umi_offset, cand->umi_len)] >= 2)
+                continue;
             if (!wl_hashes.empty()) {
                 has_wl = true;
                 curr_wl_size = wl_hashes.size();

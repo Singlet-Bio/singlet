@@ -663,13 +663,13 @@ static void test_wl_geometry_suppression() {
         CHECK(v3->umi_len == arc->umi_len, "v3 and arc same UMI");
     }
 
-    // 10x-visium has r1_len=28 but no whitelist — should be suppressed by v3/arc geometry
+    // 10x-visium has r1_len=28 like v3; its spot list visium-v1.txt tells them apart (skipped when the list is not installed)
     const singlet::fq::CandidateSpec* visium = nullptr;
     for (const auto& k : protos) {
         if (k.tag == "10x-visium") { visium = &k; break; }
     }
     if (visium) {
-        CHECK(visium->whitelist_file.empty(), "visium has no WL");
+        CHECK(visium->whitelist_file == "visium-v1.txt", "visium uses the visium-v1 spot list");
         CHECK(visium->r1_len == 28, "visium R1=28 (same as v3)");
     }
 }
