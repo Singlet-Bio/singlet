@@ -332,3 +332,18 @@ the hashtag split (10,416 against 309 cells) was not a cell-line mix. The regist
 translation table (`barcodes/translation/3M-february-2018_NXT.txt.gz`, column 2 to column 1) before the whitelist check. Every
 other label rule is unchanged. The labels are rebuilt while the engine and comparators are still running, and no caller output
 has been read. The uncorrected summary is kept as `results/b6_holdout_labels_untranslated.json`.
+
+### Label amendment (before any scoring)
+
+The translated hashtag labels fail an orthogonal check that uses no caller output. Of the 602 labelled cells in the PacBio
+table, 135 of 201 "Ku812" cells carry a KIT mutant long read (D816V or V560G, the HMC1.2 markers), and 104 of 401 "HMC1.2" cells
+carry a BCR::ABL1 long read. The hashtag split (308 against 10,362 barcodes) also matches neither the PacBio mix (934 BCR::ABL1
+cells, 2,373 KIT-mutant cells among 4,400) nor a plausible cell count, which points to ambient hashtag swamping the 70% rule.
+Hashtag labels this noisy would make clause 2 measure the labels, not the callers.
+
+The verdict therefore uses labels from the authors' orthogonal genotyping, declared here before any caller output is read.
+A cell is Ku812 when its PacBio row has at least one BCR::ABL1 read and no KIT mutant read at either site; it is HMC1.2 when it
+has at least one KIT mutant read (`KIT_c2447_MT` or `KIT_c1679_MT`) and no BCR::ABL1 read. Cells with both or neither are left
+out. Truth, rule, frozen configuration and the reported variants are unchanged. Because Ku812 cells are now defined by an
+expressed BCR::ABL1 molecule, recall here measures detection in cells known to express the fusion, so it will read higher than
+on hashtag-labelled cells. The translated hashtag labels are scored as well and reported as secondary.
