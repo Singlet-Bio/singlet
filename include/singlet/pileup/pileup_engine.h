@@ -343,6 +343,11 @@ struct ProfileCounters {
     uint64_t t_mt_pileup = 0;        // chrM base pileup
     uint64_t t_mm_buffer = 0;        // multi-mapper buffer management
     uint64_t t_chrm_buf = 0;         // chrM bam_dup1 buffering
+    uint64_t t_rrna = 0;             // the 1/64 rRNA sample
+    uint64_t t_ei_query = 0;         // within exon/intron: CIGAR blocks, exon and intron queries, strand filter, gene uniqueness
+    uint64_t t_ei_classify = 0;      // within exon/intron: classify_read + refine_read
+    uint64_t t_ei_count = 0;         // within exon/intron: count_read (unique) or the multimapper buffer (NH > 1)
+    uint64_t t_loop = 0;             // the stream loop, first record to the end of the stream
     uint64_t n_samples = 0;          // number of reads where timing was active
 
     static inline uint64_t rdtsc() {
@@ -370,10 +375,15 @@ struct ProfileCounters {
                   << "  mt base pileup:       " << sec(t_mt_pileup) << "s (" << pct(t_mt_pileup) << "%)\n"
                   << "  Multi-mapper buffer:  " << sec(t_mm_buffer) << "s (" << pct(t_mm_buffer) << "%)\n"
                   << "  chrM buffering:       " << sec(t_chrm_buf) << "s (" << pct(t_chrm_buf) << "%)\n"
+                  << "  rRNA sample:          " << sec(t_rrna) << "s (" << pct(t_rrna) << "%)\n"
+                  << "    exon/intron: queries " << sec(t_ei_query) << "s, classify " << sec(t_ei_classify) << "s, count/mm "
+                  << sec(t_ei_count) << "s\n"
+                  << "  Stream loop (first record to end): " << sec(t_loop) << "s\n"
                   << "  Samples: " << n_samples << " reads\n";
         double accounted = sec(t_bam_io + t_secondary + t_barcode + t_nh_mapq_umi +
                                t_exon_intron + t_sj + t_variant + t_mt_pileup +
-                               t_mm_buffer + t_chrm_buf);
+                               t_mm_buffer + t_chrm_buf + t_rrna);
+        std::cerr << "  Stream loop not in a section: " << (sec(t_loop) - accounted) << "s\n";
         std::cerr << "  Accounted: " << accounted << "s (" << (accounted / total_wall_s * 100.0)
                   << "%), Unaccounted: " << (total_wall_s - accounted)
                   << "s (" << ((total_wall_s - accounted) / total_wall_s * 100.0) << "%)\n\n";
@@ -743,6 +753,7 @@ public:
         double tsc_ghz = calibrate_tsc_ghz();
         std::cerr << "[PROFILE] TSC frequency: " << tsc_ghz << " GHz\n";
         uint64_t _bam_io_start = ProfileCounters::rdtsc();
+        uint64_t _loop_start = 0;
 #endif
 
         gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
@@ -767,6 +778,12 @@ public:
         };
         while (next_record()) {
             if (e16_first) { e16_first = false; singlet_tail::mark("parent: first BAM record"); }
+#ifdef SINGLET_PROFILE
+            if (!_loop_start) {
+                _loop_start = ProfileCounters::rdtsc();
+                _bam_io_start = _loop_start;   // the wait for STAR's first record is not BAM I/O
+            }
+#endif
             tee.write(hdr, b);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_col_) {
@@ -804,6 +821,7 @@ public:
             // (order-free-rules R4)
             if (b->core.l_qseq >= 21 && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))
                 && (hash_qname(bam_get_qname(b)) & 63) == 0) {
+                PROF_START(rrna);
                 ++stats.rrna_reads_sampled;
                 const uint8_t* qseq = bam_get_seq(b);
                 if (qseq) {
@@ -812,6 +830,7 @@ public:
                         _rrna_seq[static_cast<size_t>(_qi)] = seq_nt16_str[bam_seqi(qseq, _qi)];
                     if (rrna_detector_.detect(_rrna_seq)) ++stats.rrna_reads;
                 }
+                PROF_END(prof, rrna);
             }
 
             // Always skip supplementary alignments
@@ -1005,6 +1024,7 @@ public:
             if (has_gene_model_) {
                 PROF_START(exon_intron);
                 if (!gpu_covers_) {   // W11 "on": classification and everything that uses it comes from the GPU (gpu_pileup_apply)
+                PROF_START(ei_query);
                 // Extract aligned blocks from CIGAR
                 aligned_blocks_.clear();
                 bool read_has_n = false;
@@ -1139,10 +1159,14 @@ public:
                     }
                 }
 
+                PROF_END(prof, ei_query);
+                PROF_START(ei_classify);
                 ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                                 intron_overlaps, intron_gene, first_intron_idx,
                                                 stats);
                 refine_read(rf, aligned_blocks_, read_has_n, nh, tid, read_reverse, block_overlaps_);
+                PROF_END(prof, ei_classify);
+                PROF_START(ei_count);
                 if (nh == 1) cur_read_gene_ = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
                 if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                     uint64_t pk;
@@ -1214,6 +1238,7 @@ public:
                     }
                 }
 
+                PROF_END(prof, ei_count);
                 // N17: VDJ gene usage counting
                 if (has_vdj_ && !aligned_blocks_.empty()) {
                     vdj_overlaps_.clear();
@@ -1264,6 +1289,9 @@ public:
             PROF_BAM_IO_RESTART;
         }
         PROF_BAM_IO_ACCUM;  // account for last failed sam_read1
+#ifdef SINGLET_PROFILE
+        if (_loop_start) prof.t_loop = ProfileCounters::rdtsc() - _loop_start;
+#endif
         look_cur_ = nullptr;
         b = b_own;
         look.reset();   // stops and joins the reader (after a strand abort it may hold up to one more batch, unread)
