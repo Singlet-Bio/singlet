@@ -221,3 +221,34 @@ before the runs they describe, and neither changes the rule or the formula.
    Mitelman set (`fusion_rank.py --leave-truth-out`), so the truth fusions get K = 0 while every other pair keeps its K. This
    runs on the PR build and both soft-clip builds, and results go to `results/b6_*_rank_*_lto.json`. Whatever drop in recall it
    shows is the share of the clause-1 pass that depends on the prior having seen the answer.
+
+### B6 missing cell: trace, and the run it leads to (declared before scoring)
+
+Both reads behind the missing RUNX1–RUNX1T1 cell were traced from the raw FASTQ (`fusion/trace/`).
+
+| | 1:15 read SRR26063325.13217221 | 1:1.5 read SRR26063321.364249 |
+|---|---|---|
+| raw CB (qualities) | CCTTACGATCCCGAAA (`,:,:FFFF,,,:FFFF`) | ACTGCTCCATTGTGCA (all F) |
+| whitelist candidates within 1 mismatch | CCTTACGAGCCCGAAA only (position 9, Q11; 4,240 exact reads) | exact hit |
+| engine correction (counts only, quality F) | CCTTACGAGCCCGAAA, single candidate | exact |
+| STARsolo 1MM_multi (read qualities) | CCTTACGAGCCCGAAA, single candidate | exact |
+| comparators' cell | CCTTACGAGCCCGAAA | ACTGCTCCATTGTGCA |
+| engine main pass (STAR 2.7.11b replay) | mapped uniquely, 74M16S on RUNX1T1 | unmapped, too short |
+| engine chimeric pass settings | no junction | no junction |
+| STAR-Fusion settings | junction 67M23S / 67S23M | no junction |
+| Arriba settings | junction | junction 22M68S / 22S49M19S |
+
+Barcode correction is not the cause. With a single whitelist candidate, the engine and STARsolo agree on both reads, and the
+engine took in all 78,348,197 reads of the 1:15 mix. The engine's corrector does ignore barcode quality (the `.1fq` stores
+R1 as all F). That only matters when a barcode has several candidates, and it is a separate question for the gate.
+
+The reads are lost in the chimeric pass. Its settings (`--chimSegmentMin 15 --chimJunctionOverhangMin 15`, default
+`--chimScoreDropMax 20`) reject the 23-base segment of the 1:15 read and the 19-base unaligned tail of the 1:1.5 read. The
+1:15 read is also mapped in the main pass with 16 clipped bases, so only a soft-clip route at 16 bases or less sends it on.
+
+The run declared here sets the second pass to Arriba's published chimeric settings (`--chimSegmentMin 10
+--chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1
+--alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50`), the set that finds both reads above.
+Both mixes are rerun without soft-clip and with soft-clip at 20 and at 15 bases, keeping the blacklist and the existing
+149-pair recurrent list. They are scored with the committed rule and the pre-registered scores, unchanged, including the
+leave-truth-out prior. The run tags end in `-arriba`.
