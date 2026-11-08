@@ -2121,6 +2121,7 @@ public:
         P.skip_tid = chrm_tid_; P.use_qual = in.useQual; P.qwords = static_cast<int>(singlet_qmask::words()); P.skip_n = in.snpSkipN > 0;
         P.umi_dedup = in.umiDedup; P.directional = in.directional; P.umi_len = in.umiLen;
         P.threads = static_cast<unsigned>(std::max(1, std::max(config_.finalize_threads, config_.threads)));
+        P.progress = [] { singlet::rearm_stall_watchdog("allsite pass"); };
         AllSiteView v(in);
         allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
         allsite_ok_ = true;

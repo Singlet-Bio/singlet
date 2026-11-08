@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <fstream>
 #include <string>
 #include <thread>
@@ -89,6 +90,8 @@ struct Params {
     unsigned threads = 8;
     uint64_t block_hits = 8000000;   // counting works on blocks of sites with about this many read-site hits, so each thread's
                                      // consensus table stays bounded (a whole contig of a 400M-read library needs hundreds of GB)
+    std::function<void()> progress;  // called (from worker threads) after each contig's discovery and each counting block; the
+                                     // engine re-arms its stall watchdog here, since an LCL's pass runs well past an hour
 };
 
 struct Site { int32_t tid, pos; char ref, alt; uint32_t alt_molecules, alt_cells; };
@@ -236,11 +239,24 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
               for (size_t i = 0; i < nsite; ++i) { run += load[i]; acc += run; if (acc >= static_cast<int64_t>(P.block_hits) && i + 1 < nsite) { cuts.push_back(i + 1); acc = 0; } } }
             cuts.push_back(nsite);
             std::vector<int64_t>().swap(load);
+            // the reads of each block, in read order: a read joins every block its site range overlaps. Scanning all reads of the
+            // contig per block cost blocks x reads and ran an LCL's all-site pass past the watchdog.
+            const size_t nb = cuts.size() - 1;
+            std::vector<uint64_t> boff(nb + 1, 0);
+            auto block_of = [&](uint32_t si) { return static_cast<size_t>(std::upper_bound(cuts.begin(), cuts.end(), static_cast<size_t>(si)) - cuts.begin()) - 1; };
+            for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
+                const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) boff[b + 1]++; }
+            for (size_t b = 0; b < nb; ++b) boff[b + 1] += boff[b];
+            std::vector<uint32_t> bread(boff[nb]);
+            { std::vector<uint64_t> w(boff.begin(), boff.end() - 1);
+              for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
+                  const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) bread[w[b]++] = static_cast<uint32_t>(k - b0); } }
+            if (P.progress) P.progress();
             SnpConsensus cons; char ub[24]; TriAcc ad, dp;
             for (size_t bi = 0; bi + 1 < cuts.size(); ++bi) {
                 const size_t s0 = cuts[bi], s1 = cuts[bi + 1];
-                for (uint64_t k = b0; k < b1; ++k) {
-                    if (rl[k - b0] <= s0 || rf[k - b0] >= s1) continue;
+                for (uint64_t j = boff[bi]; j < boff[bi + 1]; ++j) {
+                    const uint64_t k = b0 + bread[j];
                     const uint64_t r = by_tid[k]; const auto& x = R.read(r);
                     umi_chars(x.umi3, ub);
                     // the read's sites: its aligned positions increase, so one cursor over the sorted site positions
@@ -255,6 +271,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                 }
                 cons.finalize(ad, dp, pt.st, P.directional != 0);
                 cons.clear();
+                if (P.progress) P.progress();
             }
             pt.ad.swap(ad.v); pt.dp.swap(dp.v);
         }
