@@ -1100,8 +1100,32 @@ __global__ void k_local_rr(const uint32_t* g, u64 n, uint32_t r0, uint32_t r1, u
     const uint32_t v = g[i];
     l[i] = (v != 0xFFFFFFFFu && v >= r0 && v < r1) ? v - r0 : 0xFFFFFFFFu;
 }
+static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
+                            Output& out);
+// An exception out of the body (thrust's temporaries throw std::bad_alloc when the device is full; a host allocation can too) aborted STAR's
+// process with "terminate called after throwing an instance of 'std::bad_alloc'" and the sample failed (pilot item 86, run c10: device OOM on
+// attempts 1 and 2, the throw on attempt 3). It is now a failed attempt like fail()'s: the body's staging buffers, shared-index client and
+// index thread are released by their destructors during the unwinding, then the device is reset, and the caller retries or lets STAR map
+// every read on the CPU (same outputs).
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
+    std::string why;
+    try {
+        return mapDistinctBody(P, H, saBytes, saiBytes, in, device, hostThreads, out);
+    } catch (const std::bad_alloc& e) {
+        why = std::string("an allocation failed (") + e.what() + ")";
+    } catch (const std::exception& e) {
+        why = std::string("an exception (") + e.what() + ")";
+    }
+    out.log += "engine_gpu: " + why + "; the device is reset
+";
+    e9::soloKeepRelease(); out.e10.soloKept = false;
+    g_d2h = nullptr;
+    cudaDeviceReset(); g_bud.reset(0, 0);
+    return false;
+}
+static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
+                            Output& out) {
     ::singlet::gpu_ledger::Phase ledger_phase("prefill");
     singlet::ThreadNameScope tnMap("gpu-map");   // mapDistinct's host threads inherit it (per-thread CPU by role)
     singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");   // NVTX ranges of the phases (SINGLET_NVTX=1; the d164b34d ranges, redeveloped)
