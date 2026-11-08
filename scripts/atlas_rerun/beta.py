@@ -4,7 +4,8 @@
 
 Two steps, both configurable under `beta` in config.json:
 
-  1. producer: turns the study's hand-off (`handoff/<GSE>.json`: the samples' `out_dir`s, never `private_dir`) into the
+  1. producer: turns the study's hand-off (`handoff/<GSE>.json`: the samples' `out_dir`s; of the private
+     directories only the donor depth tables, read locally for the ancestry labels) into the
      deployment layout under a work directory: `<work>/<GSE>.manifest.json` and the objects it names
      (`<work>/s1/s/<GSM>/<d16>.s1`, `<work>/s1/a/<GSM>/<d16>.parquet`). The command is `beta.producer` with `{gse}`,
      `{handoff}`, `{work}` filled in. The default is `s1_producer.py`, which reuses scripts/s1_publish.py (pack_gse, migrate, verify);

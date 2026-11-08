@@ -17,6 +17,10 @@ This replaces "pack a legacy bundle, upload it to data/<GSE>/<GSE>.singlet" in t
      `retired` (verify_ok 1) from the start and the site never offers a legacy URL for it. Without a token run `s1_campaign.py catalog-sql
      --rows-dir DIR` and apply the SQL (the primary route).
 
+With --labels the migrate step also runs the per-cell label step (cell type, sex and, with --af, ancestry) and writes the label
+columns into the cells table plus an `s1/a` sidecar, as Alpha did. Ancestry reads donor coverage tables from --restricted-sidecar,
+a local zip that is only read, never uploaded, and that must not sit inside --local-root.
+
 Dry run (no R2 writes) unless --apply. The last stdout line is `RESULT {json}`; the exit code is 0 when the study is live and
 its catalog rows were accepted (or not requested), 1 when it was not published, 3 when it is live but the catalog POST failed
 (rerun: `s1_campaign.py catalog-post --rows-dir DIR`). The gse/gsm catalog rows (titles, sources, ...) are not touched here.
@@ -99,6 +103,14 @@ def run_args(a: argparse.Namespace, gse: str, scratch: Path) -> List[str]:
                      ("--local-root", a.local_root), ("--part-size-mib", a.part_size_mib), ("--retry-sleep", a.retry_sleep)):
         if val is not None:
             args += [opt, str(val)]
+    # per-cell labels computed by the transcoder (cell type, sex, ancestry), as scripts/s1_migrate.sbatch LABELS=1 does for Alpha
+    if getattr(a, "labels", False):
+        args += ["--labels", "--labels-timeout", str(a.labels_timeout), "--labels-max-gb", str(a.labels_max_gb)]
+        if getattr(a, "af", None):
+            args += ["--af", str(Path(a.af).resolve())]
+        if getattr(a, "restricted_sidecar", None):
+            # per-donor depth tables for the ancestry labels: read by the transcoder in memory, never packed or uploaded
+            args += ["--migrate-args", json.dumps(["--restricted-sidecar", str(Path(a.restricted_sidecar).resolve())])]
     return args
 
 
@@ -116,6 +128,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--private", help="private bucket for the restricted sidecar (restricted/<GSE>/<GSE>.restricted.singlet)")
     ap.add_argument("--policy", help="release policy JSON (version, withheld_studies, excluded_samples; scripts/s1_campaign.py "
                     "--alpha-policy): genotype, mtDNA allele, ancestry-call, ambient, doublet and legacy layers never reach an object")
+    ap.add_argument("--labels", action="store_true", help="per-cell labels (cell type, sex, ancestry) computed by the transcoder into s1/a/")
+    ap.add_argument("--af", help="1000 Genomes super-population allele frequencies (parquet) for the ancestry labels")
+    ap.add_argument("--labels-timeout", type=float, default=1800.0, help="per-sample labelling time budget, seconds")
+    ap.add_argument("--labels-max-gb", type=float, default=24.0, help="per-sample labelling memory budget, GB")
+    ap.add_argument("--restricted-sidecar", help="local zip of per-donor depth tables (samples/<GSM>/donor/donor<k>_coverage.tsv) for "
+                    "the ancestry labels; read by the transcoder in memory, never uploaded (needs --labels)")
     ap.add_argument("--study-log-dir", help="migrate/verify output per study (kept)")
     ap.add_argument("--local-root", help="directories under this root instead of R2 (tests)")
     ap.add_argument("--scratch", default=None)
@@ -140,6 +158,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     a = ap.parse_args(argv)
     if a.private and a.private == a.public:
         ap.error("--private must differ from --public")
+    if a.restricted_sidecar and not a.labels:
+        ap.error("--restricted-sidecar is only read for the labels: add --labels")
+    if a.restricted_sidecar and a.local_root and Path(a.restricted_sidecar).resolve().is_relative_to(Path(a.local_root).resolve()):
+        ap.error("--restricted-sidecar must not live under --local-root (the store)")
 
     import tempfile
 

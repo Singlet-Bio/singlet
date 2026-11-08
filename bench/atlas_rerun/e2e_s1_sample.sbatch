@@ -56,10 +56,28 @@ $O io-stage --config $R/config.json --cluster clipper --batch $R/batch.jsonl --i
 $O compute-stage --config $R/config.json --cluster clipper --batch $R/batch.jsonl --index 0 --threads 8
 GSE=$(python3 -c "import json;print(json.load(open('$R/row.json'))['gse'])")
 OUTD=$R/out/$GSE/$GSM; ls $OUTD | head -40
-echo "{\"samples\": [{\"gsm\": \"$GSM\", \"state\": \"done\", \"out_dir\": \"$OUTD\"}]}" > $R/root/handoff/$GSE.json
+echo "{\"private\": {\"root\": \"$R/private/$GSE\"}, \"samples\": [{\"gsm\": \"$GSM\", \"state\": \"done\", \"out_dir\": \"$OUTD\"}]}" > $R/root/handoff/$GSE.json
 REPO=$J/s1repo
 echo "== producer"
-in_runtime python3 $CODE/s1_producer.py $GSE $R/root/handoff/$GSE.json $R/work --catalog $W/data/atlas-rerun/samples.parquet --repo $REPO --python python3 --scratch $SCR
+in_runtime python3 $CODE/s1_producer.py $GSE $R/root/handoff/$GSE.json $R/work --catalog $W/data/atlas-rerun/samples.parquet --repo $REPO --python python3 --scratch $SCR \
+  --af $W/data/annotate/1kgp_superpop_af.parquet
 find $R/work -type f | xargs ls -l
+# the Beta manifest carries the per-cell labels: the cells-table columns plus an s1/a sidecar per sample, and no private file
+in_runtime python3 - "$R/work" "$GSE" <<'PY'
+import json, os, sys
+work, gse = sys.argv[1], sys.argv[2]
+m = json.load(open(os.path.join(work, gse + ".manifest.json")))
+assert m.get("transcode", {}).get("labels") == "cells-table+sidecar/1", m.get("transcode")
+for s in m["samples"]:
+    ann = s.get("annotations") or {}
+    assert ann, "no annotations for %s" % s["gsm"]
+    for key in ann.values():
+        assert os.path.isfile(os.path.join(work, key)), key
+    print(s["gsm"], "annotations", ann)
+bad = [os.path.relpath(os.path.join(d, f), work) for d, _, fs in os.walk(work) for f in fs
+       if "private" in os.path.join(d, f) or f.endswith(("_coverage.tsv", ".vcf", ".vcf.gz", ".zip"))]
+assert not bad, bad
+print("labels ok:", m["transcode"]["labels"], len(m["samples"]), "samples")
+PY
 find $R -name '*.bam' -o -name '*.1fq' | xargs -r rm -f
 echo done
