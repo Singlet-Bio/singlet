@@ -1087,9 +1087,12 @@ std::string deviceId(int device) {
 int deviceCount() { int n = 0; if (cudaGetDeviceCount(&n) != cudaSuccess) return 0; return n; }
 
 static int g_preCtxDevice = -1;   // the device whose context preLockInit made (reset to -1 by a device reset in mapDistinct's fail)
-int preLockDevice() {
+int preLockMode() {
     const char* pl = std::getenv("SINGLET_ENGINE_GPU_PRELOCK");
-    if (pl != nullptr && pl[0] == '0') return -1;
+    return (pl != nullptr && *pl) ? std::max(0, std::min(2, std::atoi(pl))) : 2;
+}
+int preLockDevice() {
+    if (preLockMode() != 1) return -1;
     if (const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE"); dv != nullptr && *dv) return std::atoi(dv);
     return deviceCount() == 1 ? 0 : -1;
 }

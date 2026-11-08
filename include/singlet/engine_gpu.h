@@ -292,9 +292,13 @@ struct Output {
 bool available(std::string* why = nullptr);
 int deviceCount();
 std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
-// Pre-lock setup (SINGLET_ENGINE_GPU_PRELOCK, default on): while the prefill waits for its slot, the context of a device known in advance
-// (SINGLET_ENGINE_GPU_DEVICE, as gpu-pool sets it, or the only device) is made and the reads are page-locked, so the slot's hold keeps only
-// the DMA. preLockDevice: that device or -1. preLockInit: the context (mapDistinct then skips its cudaInitDevice on that device).
+// Page-locked reads (SINGLET_ENGINE_GPU_PRELOCK): the prefill page-locks its reads so their upload is one DMA instead of the bounce-buffer copy.
+// 2 (the default): right after the slot is taken, with the context made then (the hold gains the registration, about 0.3 s for 6 GB, and loses
+// the staged copy). 1: before the slot, on a device known in advance (SINGLET_ENGINE_GPU_DEVICE, as gpu-pool sets it, or the only device), so
+// the context and the registration leave the hold; under a pool every waiting sample then keeps a context on the device, and 12 waiting
+// samples per GPU ran it out of memory (5 retries in 48 runs, 7 % less throughput). 0: off. preLockMode: that number. preLockDevice: with
+// mode 1, the device known in advance, else -1. preLockInit: the context (mapDistinct then skips its cudaInitDevice on that device).
+int preLockMode();
 int preLockDevice();
 bool preLockInit(int device);
 bool hostRegister(void* p, size_t n);   // cudaHostRegister; false (and nothing registered) on failure

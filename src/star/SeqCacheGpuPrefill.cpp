@@ -1482,25 +1482,28 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     time_t tRead = time(nullptr);
     // one sample at a time per GPU (several samples in flight per node): singlet_engine_gpu::lockDevice
-    // pre-lock (engine_gpu.h preLockDevice): with the device known in advance, its context and the page-locked reads are made before the
-    // slot is taken, so the hold keeps only the DMA (the context's init and the bounce-buffer copy leave it). Unregistered after the hold.
-    bool preCtx = false, regSeq = false, regOff = false;
-    double preS = 0;
-    if (const int preDev = singlet_engine_gpu::preLockDevice(); preDev >= 0 && !in.seq.empty() && in.off.size() > 1) {
+    // page-locked reads (engine_gpu.h preLockMode): the context and the registered reads make the upload one DMA instead of the bounce-buffer
+    // copy. Mode 1 does it before the slot is taken (device known in advance), mode 2 (the default) right after. Unregistered after the hold.
+    bool regSeq = false, regOff = false;
+    auto pinReads = [&](int dev, const char* when) {
+        if (dev < 0 || in.seq.empty() || in.off.size() <= 1) return;
         const auto tp = std::chrono::steady_clock::now();
-        preCtx = singlet_engine_gpu::preLockInit(preDev);
-        if (preCtx) {
+        const bool ctx = singlet_engine_gpu::preLockInit(dev);
+        if (ctx) {
             regSeq = singlet_engine_gpu::hostRegister(in.seq.data(), in.seq.size());
             regOff = regSeq && singlet_engine_gpu::hostRegister(in.off.data(), in.off.size() * sizeof(in.off[0]));
             if (regSeq && !regOff) { singlet_engine_gpu::hostUnregister(in.seq.data()); regSeq = false; }
         }
-        preS = std::chrono::duration<double>(std::chrono::steady_clock::now() - tp).count();
-        P.inOut->logMain << "ENGINE_GPU: pre-lock: device " << preDev << " context " << (preCtx ? "made" : "NOT made") << ", reads "
-                         << (regOff ? "page-locked" : "not page-locked") << " (" << in.seq.size() + in.off.size() * sizeof(in.off[0]) << " bytes) in " << preS << " s\n";
-    }
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - tp).count();
+        P.inOut->logMain << "ENGINE_GPU: pre-lock (" << when << "): device " << dev << " context " << (ctx ? "made" : "NOT made") << ", reads "
+                         << (regOff ? "page-locked" : "not page-locked") << " (" << in.seq.size() + in.off.size() * sizeof(in.off[0]) << " bytes) in " << s << " s\n";
+    };
+    const int plMode = singlet_engine_gpu::preLockMode();
+    if (plMode == 1) pinReads(singlet_engine_gpu::preLockDevice(), "before the slot");
     time_t tWait = time(nullptr);
     int lockFd = -1;
     int device = singlet_engine_gpu::lockDevice(&lockFd, /*longHold=*/true);
+    if (plMode == 2) pinReads(device, "in the slot");
     time_t tLock = time(nullptr);
     singlet_tail::mark("prefill: device %d locked", device);   // E20: the start stage's end (bench/fable/lockclip/e20_start.py)
     int hostThreads = (int) P.runThreadN;
