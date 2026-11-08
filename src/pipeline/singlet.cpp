@@ -60,6 +60,7 @@
 #include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
+#include "singlet/pileup/chimeric_table.h"
 #include "singlet/pileup/species_detect.h"
 #include "singlet/pileup/nonhost/min_sketch.h"
 #include "singlet/pileup/nonhost/host_kmer_filter.h"
@@ -3290,6 +3291,8 @@ static int singlet_main(int argc, char* argv[]) {
     std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
     if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
+    bool chimeric = false;                  // --chimeric: second STAR pass in chimeric mode on the reads the main pass left unmapped -> chimeric_junctions.tsv.gz (the main pass is not changed)
+    std::string fusion_catalog_path;        // --fusion-catalog: output of scripts/build_fusion_catalog.py
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
@@ -3479,6 +3482,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
         else if (arg == "--memory-tier" && i+1 < argc) memory_tier_cfg = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
+        else if (arg == "--chimeric") chimeric = true;
+        else if (arg == "--fusion-catalog" && i+1 < argc) fusion_catalog_path = argv[++i];
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -8180,7 +8185,7 @@ static int singlet_main(int argc, char* argv[]) {
             // NONHOST-UNMAPPED-CAPTURE: write unmapped reads to FASTQ when any nonhost index is provided.
             // STAR writes: ${out_prefix}star_Unmapped.out.mate1 (cDNA, R2) and .mate2 (barcode, R1).
             // NonHostScreener runs on mate1 (cDNA) after STAR+pileup complete.
-            if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty()) {
+            if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty() || chimeric) {
                 args.push_back("--outReadsUnmapped"); args.push_back("Fastx");
             }
 
@@ -8506,6 +8511,10 @@ static int singlet_main(int argc, char* argv[]) {
             }
 #endif
 
+            if (chimeric) {   // the second (chimeric) pass maps the unmapped reads with the same index and barcode settings
+                std::ofstream af(out_prefix + "/star_args.txt");
+                for (size_t ai = 1; ai + 1 < args.size(); ++ai) af << args[ai] << "\n";
+            }
             // Call bundled STAR directly — no exec, no external binary needed.
             singlet::set_thread_name("star-main");   // STAR's child: its threads inherit it or rename (star-map, star-prefill)
             int rc = star_main_impl(
@@ -9524,6 +9533,81 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+
+    // ── chimeric / fusion junction table (opt-in): second STAR pass on the reads the main pass left unmapped ──
+    if (chimeric) {
+        const std::string unm1 = out_prefix + "/star_Unmapped.out.mate1", unm2 = out_prefix + "/star_Unmapped.out.mate2";
+        std::vector<std::string> base_args;
+        {
+            std::ifstream af(out_prefix + "/star_args.txt");
+            for (std::string l; std::getline(af, l);) base_args.push_back(l);
+        }
+        bool solo_fastq = false;
+        for (size_t k = 0; k + 1 < base_args.size(); ++k)
+            if (base_args[k] == "--soloType" && (base_args[k + 1] == "CB_UMI_Simple" || base_args[k + 1] == "CB_UMI_Complex")) solo_fastq = true;
+        if (base_args.empty() || !solo_fastq || !std::filesystem::exists(unm1) || !std::filesystem::exists(unm2)) {
+            std::cerr << "[singlet] chimeric: skipped (needs a FASTQ barcode run with unmapped reads written)\n";
+        } else {
+            StopWatch chim_sw;
+            static const std::set<std::string> drop = {
+                "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
+                "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
+                "--readFilesIn", "--readFilesCommand", "--readFilesType", "--soloFeatures", "--soloOutFileNames", "--soloMultiMappers"};
+            std::vector<std::string> pa;
+            bool skipping = false;
+            for (const auto& s : base_args) {
+                if (s.rfind("--", 0) == 0) skipping = drop.count(s) > 0;
+                if (!skipping) pa.push_back(s);
+            }
+            const std::string prefix = out_prefix + "/chim_";
+            for (const char* s : {"--readFilesIn"}) pa.push_back(s);
+            pa.push_back(unm1); pa.push_back(unm2);
+            for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
+            pa.push_back(prefix);
+            for (const char* s : {"--chimSegmentMin", "15", "--chimJunctionOverhangMin", "15", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1",
+                                  "--chimMultimapNmax", "10", "--chimMultimapScoreRange", "3", "--chimScoreJunctionNonGTAG", "-4",
+                                  "--chimNonchimScoreDropMin", "10"})
+                pa.push_back(s);
+            std::vector<char*> pv;
+            pv.push_back(const_cast<char*>("STAR"));
+            for (auto& s : pa) pv.push_back(const_cast<char*>(s.c_str()));
+            pv.push_back(nullptr);
+            pid_t pp = fork();
+            if (pp == 0) {
+                int dn = open("/dev/null", O_WRONLY);
+                if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
+                unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF"); unsetenv("SINGLET_GPU_PILEUP");   // the second pass is a CPU STAR run
+                _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
+            }
+            int ws = 0;
+            const bool ran = pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+            std::error_code ec;
+            std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
+            std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
+            if (!ran) {
+                std::cerr << "[singlet] chimeric: the second STAR pass failed\n";
+            } else {
+                singlet::chimeric::Config cc;
+                cc.junction_path = prefix + "Chimeric.out.junction";
+                cc.gtf_path = config.exon_gtf_path;
+                cc.catalog_path = fusion_catalog_path;
+                cc.out_path = out_prefix + "/chimeric_junctions.tsv.gz";
+                const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+                std::cerr << "[singlet] chimeric: second pass " << chim_sw.elapsed_s() << " s; " << cs.lines << " junction lines, " << cs.kept_lines << " kept, "
+                          << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous; " << cs.rows
+                          << " rows in " << cs.cells << " cells, " << cs.annotated << " in the catalogue" << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
+            }
+            // the second pass's own files: logs carry timings and paths (they differ between runs), the junction file is the table's input
+            const char* keep = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");
+            for (const char* f : {"Log.out", "Log.final.out", "Log.progress.out", "Log.std.out", "SJ.out.tab", "Chimeric.out.junction"}) {
+                if (keep && *keep == '1' && std::string(f) == "Chimeric.out.junction") continue;
+                std::filesystem::remove(prefix + f, ec);
+            }
+            std::filesystem::remove_all(prefix + "_STARtmp", ec);
+        }
+        std::error_code ec2;
+        std::filesystem::remove(out_prefix + "/star_args.txt", ec2);
+    }
 
     // ── T4: CITE-seq ADT/HTO processing ──────────────────────────────────────
     // After GEX export, do a second pass through the .1fq to match ADT tags.
