@@ -34,8 +34,9 @@ F=$D/10x; mkdir -p $F; ln -sfn $R1 $F/${NAME}_S1_L001_R1_001.fastq.gz; ln -sfn $
 if [ "$L1" -ge 28 ]; then CBWL=$WL/3M-february-2018.txt; UMIL=12; else CBWL=$WL/737K-august-2016.txt; UMIL=10; fi
 echo "R1 length $L1 -> whitelist $(basename $CBWL), UMI $UMIL"
 
-# engine
-( if [ ! -x $BIN/singlet-gpu ]; then   # build the branch tip first (BIN = $J/bin/<name>, see build_arch.sbatch)
+# engine (SKIP_ENGINE=1: the run happens elsewhere)
+( [ "${SKIP_ENGINE:-0}" = 1 ] && exit 0
+  if [ ! -x $BIN/singlet-gpu ]; then   # build the branch tip first (BIN = $J/bin/<name>, see build_arch.sbatch)
     SLURM_JOB_ID=${SLURM_JOB_ID}b SLURM_CPUS_PER_TASK=$((N/2)) BR=${BR:-feat/te-counts} NAME=$(basename $BIN) bash $J/build_arch.sbatch || exit 1
   fi
   SLURM_JOB_ID=${SLURM_JOB_ID}e SLURM_CPUS_PER_TASK=$((N/2)) BIN=$BIN TAG=te SAMPLE=$NAME FQDIR=$F GENOME=$GENOME bash $J/run_engine.sbatch
@@ -61,12 +62,14 @@ comparators() {
       sub(/\?$/,"",f); sub(/\?$/,"",c); st=$4-1;
       print $1,st,$5,s,0,$7 > "'$SCR'/scte.bed"; print $1,st,$5,$1"|"st"|"$5"|"s":"f":"c"|0|"$7,0,$7 > "'$SCR'/solote.bed"}'
   sort -k1,1 -k2,2n $SCR/solote.bed > $O/solote_te.bed
-  ( cd $SCR && mkdir -p scte && cd scte
+  ( [ -s $O/scte.h5ad ] && exit 0   # finished earlier
+    cd $SCR && mkdir -p scte && cd scte
     [ -s $O/scte_idx.exclusive.idx ] || { scTE_build -te $SCR/scte.bed -gene $G/genes/genes.gtf -o $O/scte_idx > $O/scte_build.log 2>&1; }
     /usr/bin/time -v -o $O/scte_time.txt scTE -i $BAM -o $O/scte -x $O/scte_idx.exclusive.idx --hdf5 True -CB CB -UMI UB -p $((C/2)) \
       --min_genes 100 --expect-cells 20000 > $O/scte.log 2>&1 ) &
   local P1=$!
-  ( /usr/bin/time -v -o $O/solote_time.txt python $T/SoloTE/SoloTE_pipeline.py --threads $((C/2)) --bam $BAM --teannotation $O/solote_te.bed \
+  ( ls $O/solote/*/matrix.mtx* >/dev/null 2>&1 && exit 0   # finished earlier
+    /usr/bin/time -v -o $O/solote_time.txt python $T/SoloTE/SoloTE_pipeline.py --threads $((C/2)) --bam $BAM --teannotation $O/solote_te.bed \
       --outputprefix $NAME --outputdir $O/solote > $O/solote.log 2>&1 ) &
   local P2=$!
   wait $P1; local r1=$?; wait $P2; local r2=$?; echo "scTE exit $r1, SoloTE exit $r2"; return $((r1 + r2))
