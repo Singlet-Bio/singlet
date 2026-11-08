@@ -41,7 +41,7 @@ te() {   # NAME threads
     $PY -I $B/te/te_eval.py twoc --engine $E --scte $O/scte.h5ad --solote $O/solote --solo-gene $O/starsolo/Solo.out/Gene/filtered --out $J/results/b7_mesc.json
   fi
 }
-( te a375_10x 8 ) > $L/te-a375.log 2>&1 & PA=$!
+( te a375_10x 12 ) > $L/te-a375.log 2>&1 & PA=$!
 ( te mesc_2c 14 ) > $L/te-mesc.log 2>&1 & PM=$!
 
 # ---------------- B6 held-out
@@ -52,12 +52,15 @@ te() {   # NAME threads
   fq() { local r=$1 o=$2; [ -f $o/$r.DONE ] && return 0
     fasterq-dump --split-files --include-technical -e 6 -t /tmp/$USER-fq-$SLURM_JOB_ID -O $o $r || return 1
     for f in $o/${r}_*.fastq; do gzip -1 $f; done; touch $o/$r.DONE; }
-  lane=0; for r in SRR38330751 SRR38330752; do lane=$((lane+1)); fq $r $D || { echo "fetch $r failed"; exit 1; }
-    ln -sfn ../${r}_1.fastq.gz $D/10x/${S}_S1_L00${lane}_R1_001.fastq.gz; ln -sfn ../${r}_2.fastq.gz $D/10x/${S}_S1_L00${lane}_R2_001.fastq.gz; done
-  for r in SRR38330749 SRR38330750; do fq $r $D/hto || { echo "fetch $r failed"; exit 1; }; done
+  mates() { local d=$1 r=$2 best=0 l; M1=; M2=   # the barcode read is 28 bases; the cDNA or feature read is the longest other file
+    for f in $d/${r}_*.fastq.gz; do l=$(zcat $f | head -2 | tail -1 | awk '{print length($0)}'); echo "$(basename $f) $l"
+      if [ "$l" = 28 ]; then M1=$f; elif [ "$l" -gt "$best" ]; then best=$l; M2=$f; fi; done
+    [ -n "$M1" ] && [ -n "$M2" ] || { echo "mates of $r not found"; return 1; }; }
+  lane=0; for r in SRR38330751 SRR38330752; do lane=$((lane+1)); fq $r $D || { echo "fetch $r failed"; exit 1; }; mates $D $r || exit 1
+    ln -sfn $M1 $D/10x/${S}_S1_L00${lane}_R1_001.fastq.gz; ln -sfn $M2 $D/10x/${S}_S1_L00${lane}_R2_001.fastq.gz; done
+  H1=; H2=; for r in SRR38330749 SRR38330750; do fq $r $D/hto || { echo "fetch $r failed"; exit 1; }; mates $D/hto $r || exit 1; H1=${H1:+$H1,}$M1; H2=${H2:+$H2,}$M2; done
   [ -s $D/pacbio.csv.gz ] || curl -sSfL -o $D/pacbio.csv.gz https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9707nnn/GSM9707175/suppl/GSM9707175_Leukemic_cell_lines_long_read_count_table.csv.gz
-  for f in $D/*_1.fastq.gz $D/*_2.fastq.gz $D/hto/*_1.fastq.gz $D/hto/*_2.fastq.gz; do echo "$(basename $f) $(zcat $f | head -2 | tail -1 | awk '{print length($0)}')"; done
-  $PY -I $B/fusion/hto_labels.py --r1 $(ls $D/hto/*_1.fastq.gz | paste -sd,) --r2 $(ls $D/hto/*_2.fastq.gz | paste -sd,) \
+  $PY -I $B/fusion/hto_labels.py --r1 $H1 --r2 $H2 \
     --whitelist $W/pipeline-benchmark/whitelists/3M-february-2018.txt --pacbio $D/pacbio.csv.gz --out $F/labels.tsv --summary $J/results/b6_holdout_labels.json
   rc=$?; [ $rc = 0 ] || { echo "labels exit $rc: stop before any caller"; exit 1; }
   # the frozen engine configuration, once
