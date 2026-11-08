@@ -14,7 +14,8 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_pr
 T1K=$REF/hla/t1k; BIN=${BIN:?singlet binary with hla-prefilter}; D=$W/jobs/d101/geuv; T=${SLURM_CPUS_PER_TASK:-8}
 read -r S RUN U1 U2 POP <<< "$(awk -v n=$SLURM_ARRAY_TASK_ID 'NR==n' $D/list.tsv)"
 [ -n "${S:-}" ] || exit 0
-O=$D/res/$S; [ -s $O/singlet_genotype.tsv ] && [ -s $O/t1k_genotype.tsv ] && { echo "done $S"; exit 0; }; mkdir -p $O
+KF=$W/jobs/d101/hlaprior/hlaidx_rna_seq.K2.fa   # the frequency-prior index (alleles recorded in >= 2 cells), see hla_prior_test.sh
+O=$D/res/$S; [ -s $O/singlet_genotype.tsv ] && [ -s $O/t1k_genotype.tsv ] && { [ ! -s $KF ] || [ -s $O/singlet_k2_genotype.tsv ]; } && { echo "done $S"; exit 0; }; mkdir -p $O; chmod 700 $O
 SCR=/tmp/$USER-geuv-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 export PATH=$ENV/bin:$PATH LD_LIBRARY_PATH=$ENV/lib
 # EBI drops long transfers mid-file, so resume (-C -) until the file is complete and passes gzip -t.
@@ -34,4 +35,10 @@ cp $SCR/t1k/t1k_genotype.tsv $O/t1k_genotype.tsv && cp $SCR/sg/singlet_genotype.
 printf '{"sample": "%s", "run": "%s", "population": "%s", "t1k_s": %s, "prefilter_s": %s, "singlet_t1k_s": %s, "t1k_candidates": %s, "singlet_candidates": %s, "prefilter": %s}\n' \
   $S $RUN $POP $(awk "BEGIN{print $t1-$t0}") $(awk "BEGIN{print $t2-$t1}") $(awk "BEGIN{print $t3-$t2}") \
   $(( $(wc -l < $SCR/t1k/t1k_candidate_1.fq) / 4 )) $(( $(wc -l < $SCR/sg/singlet_candidate_1.fq) / 4 )) "$(cat $O/prefilter.json)" > $O/counts.json
+# Same prefiltered pairs on the frequency-prior index; the pairs are kept (owner-only, a few MB) so later index changes need no download.
+if [ -s $KF ]; then
+  perl $T1K/bin/run-t1k -1 $SCR/pf_1.fq -2 $SCR/pf_2.fq --preset hla -f $KF -t $T -o k2 --od $SCR/k2 > $O/singlet_k2.log 2>&1
+  cp $SCR/k2/k2_genotype.tsv $O/singlet_k2_genotype.tsv || { echo "K2 T1K failed for $S"; tail -5 $O/singlet_k2.log; }
+fi
+gzip -1 -c $SCR/pf_1.fq > $O/pf_1.fq.gz; gzip -1 -c $SCR/pf_2.fq > $O/pf_2.fq.gz
 cat $O/counts.json; cmp -s $O/t1k_genotype.tsv $O/singlet_genotype.tsv && echo "GENOTYPE IDENTICAL" || { echo "GENOTYPE DIFFERS"; diff $O/t1k_genotype.tsv $O/singlet_genotype.tsv | head; }
