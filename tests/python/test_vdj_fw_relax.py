@@ -53,6 +53,7 @@ def test_mutated_phe_chain_is_assembled_and_productive():
     from singlet.adt import seq as S
     from singlet.vdj import assemble as A
 
+    sys.path.insert(0, os.path.dirname(__file__))   # tests/python is a package: run from the repo root, the sibling needs its directory
     import test_vdj_assemble as T
 
     segs = T.make_segments()
