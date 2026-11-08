@@ -21,7 +21,8 @@ IR=$W/src/singlet-agents/main/hpc/clipper/in_runtime.sh; [ -f $IR ] || IR=$(ls -
 # Sites (BED, 0-based half-open) and called cells; the BAM's CB form (with or without -1) decides the barcode list's form
 zcat $R/private/editing/editing_sites.tsv.gz | awk -F'\t' 'NR>1{split($1,a,":"); print a[1]"\t"a[2]-1"\t"a[2]}' | sort -k1,1 -k2,2n > $SCR/sites.bed
 BAM=$W/jobs/d101/bam/$SC.bam
-CB1=$(samtools view $BAM 2>/dev/null | grep -m1 -o 'CB:Z:[^[:space:]]*' | cut -c6-)
+# grep -m1 closes the pipe early; without the || true, pipefail turns samtools' SIGPIPE into exit 141
+CB1=$( { samtools view $BAM 2>/dev/null || true; } | grep -m1 -o 'CB:Z:[^[:space:]]*' | cut -c6- || true)
 awk -F'\t' 'NR>1{print $1}' $R/editing_cells.tsv | sed 's/-1$//' > $SCR/cells.txt
 case "$CB1" in *-1) sed -i 's/$/-1/' $SCR/cells.txt;; esac
 echo "donor $DONOR sc $SC bulk $BULK sites $(wc -l < $SCR/sites.bed) cells $(wc -l < $SCR/cells.txt) CB example $CB1"
