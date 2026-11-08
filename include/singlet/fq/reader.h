@@ -760,6 +760,54 @@ class Reader {
             return ptr;
         }
 
+        // Variable-length 2-bit packed: the lengths first (a walk over the varints and the packed bytes), then the column sized once and
+        // unpacked into place. The same reads, offsets and lengths as the read-by-read loop below (which resized the column per read),
+        // and the same handling of a corrupt length.
+        if (fixed_length == 0 && seq_enc_ == SeqEncoding::PACKED_2BIT) {
+            const size_t base = data.size(), l0 = lengths.size();
+            uint32_t nOk = 0;
+            uint64_t total = 0;
+            bool corrupt = false;
+            lengths.reserve(l0 + n_reads);
+            for (const uint8_t* q = ptr; nOk < n_reads; ++nOk) {
+                uint64_t vlen;
+                q += pack::decode_varint(q, vlen);
+                const uint16_t len = static_cast<uint16_t>(vlen);
+                const uint8_t has_n = *q++;
+                if (len > 1024) { corrupt = true; break; }   // the guard below
+                q += pack::packed_bytes(len);
+                if (has_n) q += pack::n_bitmap_bytes(len);
+                lengths.push_back(len);
+                total += len;
+            }
+            data.resize(base + total);
+            offsets.reserve(offsets.size() + n_reads);
+            uint8_t* const d0 = data.data();
+            size_t off = base;
+            for (uint32_t i = 0; i < nOk; ++i) {
+                uint64_t vlen;
+                ptr += pack::decode_varint(ptr, vlen);
+                const uint16_t len = lengths[l0 + i];
+                const uint8_t has_n = *ptr++;
+                offsets.push_back(static_cast<uint32_t>(off));
+                pack::unpack_2bit(ptr, len, d0 + off);
+                ptr += pack::packed_bytes(len);
+                if (has_n) {
+                    pack::apply_n_bitmap(ptr, len, d0 + off);
+                    ptr += pack::n_bitmap_bytes(len);
+                }
+                off += len;
+            }
+            if (corrupt) {
+                for (uint32_t j = nOk; j < n_reads; ++j) {
+                    offsets.push_back(static_cast<uint32_t>(data.size()));
+                    lengths.push_back(0);
+                }
+                return end;
+            }
+            return ptr;
+        }
+
         // General path: variable-length or byte-numeric
         for (uint32_t i = 0; i < n_reads; ++i) {
             uint16_t len = fixed_length;
