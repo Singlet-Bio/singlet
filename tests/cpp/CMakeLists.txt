@@ -257,6 +257,7 @@ add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
 add_pileup_test(test_read_source)   # read_source.h: shared .1fq decoder, STAR chunk source
 add_pileup_test(test_fastq_encoder_r1_101)
+add_pileup_test(test_encode_autodetect_whitelist)
 add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)

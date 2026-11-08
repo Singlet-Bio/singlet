@@ -750,30 +750,9 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
     ecfg.source_label = source_label;   // FASTQ / BAM inputs: the run they hold (empty for SRA = the accession or path)
-    // $SINGLET_WHITELIST_DIR when the user didn't pass --whitelist-dir (the engine, the stager and the .1fg2 reader read it too). Without it the
-    // protocol gate had no 10x whitelist to score against and rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
-    if (whitelist_dirs.empty()) {
-        if (const char* e = std::getenv("SINGLET_WHITELIST_DIR")) {
-            struct stat st;
-            if (*e && stat(e, &st) == 0 && S_ISDIR(st.st_mode)) whitelist_dirs.push_back(e);
-        }
-    }
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // --whitelist-dir, else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs; singlet encode uses the same order).
+    // Without a 10x whitelist the protocol gate rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
+    whitelist_dirs = singlet::fq::resolve_whitelist_dirs(whitelist_dirs);
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim  = no_trim;
@@ -1186,22 +1165,9 @@ static int cmd_encode(int argc, char* argv[]) {
     ecfg.block_size = block_size;
     ecfg.r2_maxlen = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // --whitelist-dir, else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists, as singlet download (protocol.h resolve_whitelist_dirs).
+    // Auto-detection stops with an error when none holds a 10x whitelist (GSE230239: a 101-nt 10x v3 R1 was encoded as split-seq).
+    whitelist_dirs = singlet::fq::resolve_whitelist_dirs(whitelist_dirs);
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim = no_trim;
@@ -1229,7 +1195,9 @@ static int cmd_encode(int argc, char* argv[]) {
     } else {
         std::cerr << "[singlet-encode] " << reads_r1 << " + " << reads_r2
                   << " → " << output_path << "\n";
-        auto stats = encoder.encode(reads_r1, reads_r2, ecfg);
+        singlet::fq::FastqEncoder::Stats stats;
+        try { stats = encoder.encode(reads_r1, reads_r2, ecfg); }
+        catch (const std::exception& e) { std::cerr << "\n[singlet-encode] ERROR: " << e.what() << "\n"; return 2; }
         std::cerr << "\n[singlet-encode] Done: " << stats.total_reads << " reads"
                   << ", " << stats.blocks_written << " blocks\n";
         std::cerr << "[singlet-encode] Protocol: " << stats.protocol_tag
