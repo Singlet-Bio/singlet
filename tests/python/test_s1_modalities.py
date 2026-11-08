@@ -391,3 +391,44 @@ def test_live_pilot_bytes(env):
     print("\nlive", g, "object", sm.bytes, out)
     assert out["counts"] == out["default"]
     assert out["spliced"] < out["counts"] and out["splice_junctions"] < sm.bytes
+
+
+# =================================================================================================================== ambient
+AMBIENT = "ambient_corrected_counts.1pz"
+
+
+@pytest.fixture(scope="module")
+def ambient_dir(tmp_path_factory):
+    root = tmp_path_factory.mktemp("storeamb")
+    try:
+        s = synth.Synth(str(root)).build(ambient=True)
+    except IndexError:  # pragma: no cover - packs not shipped
+        pytest.skip("vocabulary packs are not available")
+    return root, s
+
+
+def test_ambient_corrected_counts_load_only_on_request(ambient_dir, env, mmap_log):
+    """The default load is uncorrected counts and never reads the ambient-corrected matrix; the opt-in adds it as a layer."""
+    root, s = ambient_dir
+    assert client.normalize_modalities("ambient") == ("ambient_corrected",)
+    assert "ambient_corrected" not in client.DEFAULT_MODALITIES
+    st = client.open_study(GSE, base=pathlib.Path(root).as_uri())
+    sm = st.samples[G1]
+    assert "ambient_corrected" in st.modalities(G1)
+    ad = st.to_anndata([G1])
+    _check_ranges(sm, [(a, a + n) for a, n in mmap_log], {EXON, INTRON})
+    assert "ambient_corrected" not in _layers(ad)
+    mmap_log.clear()
+    t = s.truth[G1]
+    cols = _order(s.truth, G1)
+    opt = st.to_anndata([G1], modalities=["counts", "ambient_corrected"])
+    _check_ranges(sm, [(a, a + n) for a, n in mmap_log], {EXON, INTRON, AMBIENT})
+    assert _layers(opt) == ["ambient_corrected"]
+    assert _same(opt.layers["ambient_corrected"], t["ambient_g"][:, cols].T)
+    assert _same(opt.X, ad.X)  # X stays the uncorrected counts
+    path = str(pathlib.Path(root).joinpath(*t["key"].split("/")))
+    assert "ambient_corrected" not in _layers(client.load(path))
+    one = client.load(path, modalities="ambient")
+    assert _layers(one) == ["ambient_corrected"] and _same(one.layers["ambient_corrected"], t["ambient_g"][:, cols].T)
+    with pytest.raises(client.ModalityUnavailable):
+        st.to_anndata([G3], modalities="ambient_corrected")

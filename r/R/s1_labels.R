@@ -48,9 +48,12 @@
 #' 0.9. Sex agrees with GEO metadata for 153 of 156 called samples (98.1\%). Ancestry is continental (HANCESTRO), for human donors
 #' with coverage only (under 2\% of cells).
 #'
-#' \strong{Not in Research Alpha:} the release policy strips per-cell mitochondrial DNA (\code{mts_*}) and doublet
-#' (\code{qc_doublet_score}, \code{dbl_*}) columns from every published object. \code{include_unvalidated = TRUE} only matters
-#' for local pipeline outputs that still carry \code{qc_doublet_score}, which is unvalidated and otherwise left out.
+#' \strong{Hidden by default:} a default load returns uncorrected counts with their labels and QC. It leaves out
+#' \code{qc_doublet_score} (unvalidated) and the donor assignment's doublet calls (\code{don_best_doublet},
+#' \code{don_best_singlet}, \code{don_cell_status}); \code{don_donor_id} and \code{don_prob_max} stay.
+#' \code{include_unvalidated = TRUE} or \code{columns = } returns them. The ambient-corrected counts load only with
+#' \code{modalities = "ambient_corrected"}. The release policy strips per-cell mitochondrial DNA (\code{mts_*}) columns from
+#' every published object.
 #'
 #' @name singlet_labels
 #' @seealso \code{\link{load}}, \code{\link{singlet_cells}}
@@ -64,6 +67,10 @@ NULL
 .s1_label_renames <- c(cell_type_cl = "cell_type_deepest_ontology_term_id", cell_type_label = "cell_type_deepest",
                        cell_type_score = "cell_type_deepest_score")
 .s1_label_unvalidated <- c("qc_doublet_score")
+# call-layer outputs: the donor assignment's doublet calls. Stored, but a default load leaves them out (don_donor_id and
+# don_prob_max stay); include_unvalidated = TRUE or columns = returns them.
+.s1_label_call_layer <- c("don_best_doublet", "don_best_singlet", "don_cell_status")
+.s1_label_hidden <- c(.s1_label_unvalidated, .s1_label_call_layer)
 .s1_label_internal <- c("barcode", "cc_pos", "cc_listed", "cc_pvalue")
 
 .s1_cl_names <- local({
@@ -176,7 +183,7 @@ NULL
         want <- ifelse(columns %in% names(.s1_label_renames), .s1_label_renames[columns], columns)
         out <- out[intersect(names(out), want)]
     } else if (!isTRUE(include_unvalidated)) {
-        out <- out[setdiff(names(out), .s1_label_unvalidated)]
+        out <- out[setdiff(names(out), .s1_label_hidden)]
     }
     out[c(intersect(.s1_label_lead, names(out)), setdiff(names(out), .s1_label_lead))]
 }

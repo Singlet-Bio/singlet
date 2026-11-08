@@ -12,7 +12,7 @@ singlet_study_modalities(x, gsm = NULL)
 \item{gsm}{Optional sample accession: only that sample's modalities.}
 }
 \value{
-A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{splice_junctions},
+A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{ambient_corrected}, \code{splice_junctions},
   \code{psi}, \code{mt}, \code{vdj}, \code{atac}, \code{gene_activity}.
 }
 \description{
