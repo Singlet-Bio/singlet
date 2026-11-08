@@ -767,13 +767,15 @@ public:
         bam1_t* const b_own = b;
         std::unique_ptr<LookAhead> look;
         if (config_.stream_lookahead && config_.cb_from_cr && config_.cb_corrector) {
+            ei_ahead_ = has_gene_model_ && !gpu_covers_;
             look.reset(new LookAhead(*this, fp, hdr));
-            std::cerr << "[singlet-pileup] stream look-ahead: records decoded and CBs resolved on a reader thread\n";
+            std::cerr << "[singlet-pileup] stream look-ahead: records decoded and CBs resolved on a reader thread"
+                      << (ei_ahead_ ? ", exon and intron overlaps taken there too" : "") << "\n";
         }
         auto next_record = [&]() -> bool {
             if (!look) return sam_read1(fp, hdr, b) >= 0;
-            if (look->next(b, look_cur_)) return true;
-            look_cur_ = nullptr;
+            if (look->next(b, look_cur_, look_ei_)) return true;
+            look_cur_ = nullptr; look_ei_ = nullptr;
             return false;
         };
         while (next_record()) {
@@ -1025,10 +1027,27 @@ public:
                 PROF_START(exon_intron);
                 if (!gpu_covers_) {   // W11 "on": classification and everything that uses it comes from the GPU (gpu_pileup_apply)
                 PROF_START(ei_query);
-                // Extract aligned blocks from CIGAR
+                // Extract aligned blocks from CIGAR (or take the reader's walk and queries, LookRec::ei)
+                const LookRec* const ahead = (look_cur_ && look_cur_->ei) ? look_cur_ : nullptr;
                 aligned_blocks_.clear();
                 bool read_has_n = false;
-                {
+                if (ahead) {
+                    const auto* bb = look_ei_->blocks.data() + ahead->blk_off;
+                    aligned_blocks_.assign(bb, bb + ahead->blk_n);
+                    read_has_n = ahead->has_n != 0;
+                }
+                // Block k's exon (intron) overlaps, before the strand filter: the reader's, or the gene model's
+                auto block_exons = [&](size_t k, int32_t bs, int32_t be) {
+                    if (!ahead) { gene_model_.query_exons(tid, bs, be, block_overlaps_); return; }
+                    const BlockOvl& o = look_ei_->bov[ahead->blk_off + k];
+                    block_overlaps_.assign(look_ei_->ovl.data() + o.e_off, look_ei_->ovl.data() + o.e_off + o.e_n);
+                };
+                auto block_introns = [&](size_t k, int32_t bs, int32_t be) {
+                    if (!ahead) { gene_model_.query_introns(tid, bs, be, block_overlaps_); return; }
+                    const BlockOvl& o = look_ei_->bov[ahead->blk_off + k];
+                    block_overlaps_.assign(look_ei_->ovl.data() + o.i_off, look_ei_->ovl.data() + o.i_off + o.i_n);
+                };
+                if (!ahead) {
                     const uint32_t* cigar = bam_get_cigar(b);
                     int32_t rpos = b->core.pos;
                     for (int ci = 0; ci < b->core.n_cigar; ++ci) {
@@ -1063,8 +1082,8 @@ public:
                 bool had_strand_reject = false;
 
                 bool vote_sense = false, vote_anti = false;
-                for (const auto& [bstart, bend] : aligned_blocks_) {
-                    gene_model_.query_exons(tid, bstart, bend, block_overlaps_);
+                for (size_t bk = 0; bk < aligned_blocks_.size(); ++bk) {
+                    block_exons(bk, aligned_blocks_[bk].first, aligned_blocks_[bk].second);
                     strand_vote(block_overlaps_, read_reverse, vote_sense, vote_anti);
                     size_t n_before = exon_overlaps.size();
                     for (uint32_t idx : block_overlaps_) {
@@ -1128,8 +1147,8 @@ public:
                 uint32_t first_intron_idx = UINT32_MAX;
                 if (config_.count_introns) {
                     intron_overlaps.clear();
-                    for (const auto& [bstart, bend] : aligned_blocks_) {
-                        gene_model_.query_introns(tid, bstart, bend, block_overlaps_);
+                    for (size_t bk = 0; bk < aligned_blocks_.size(); ++bk) {
+                        block_introns(bk, aligned_blocks_[bk].first, aligned_blocks_[bk].second);
                         for (uint32_t idx : block_overlaps_) {
                             if (config_.stranded) {
                                 uint32_t g = gene_model_.intron_to_gene(idx);
@@ -1292,7 +1311,7 @@ public:
 #ifdef SINGLET_PROFILE
         if (_loop_start) prof.t_loop = ProfileCounters::rdtsc() - _loop_start;
 #endif
-        look_cur_ = nullptr;
+        look_cur_ = nullptr; look_ei_ = nullptr;
         b = b_own;
         look.reset();   // stops and joins the reader (after a strand abort it may hold up to one more batch, unread)
 
@@ -3492,11 +3511,24 @@ private:
         return cb_buf_;
     }
     // stream_cb()'s work for one record, done ahead of the loop: its tally slot, its CB, and that CB's barcode index.
-    struct LookRec { int32_t bc; int8_t st_idx; int8_t ok; char cb[40]; };
+    // ei = 1: the reader also took the record's aligned blocks (blk_n of them from blk_off in LookEI::blocks) and every exon and
+    // intron interval that overlaps each block, before any strand filter (the filter stays in the loop, whose strand can change
+    // at the inline probe). The loop reads them instead of querying the gene model: the same function of the same record.
+    struct LookRec { int32_t bc; int8_t st_idx; int8_t ok; int8_t ei; int8_t has_n; uint16_t blk_n; uint32_t blk_off; char cb[40]; };
+    struct BlockOvl { uint32_t e_off, e_n, i_off, i_n; };   // per block: its exon and intron overlaps in LookEI::ovl
+    struct LookEI {
+        std::vector<std::pair<int32_t, int32_t>> blocks;
+        std::vector<BlockOvl> bov;   // parallel to blocks
+        std::vector<uint32_t> ovl;
+        std::vector<uint32_t> scratch;
+        void clear() { blocks.clear(); bov.clear(); ovl.clear(); }
+    };
     const LookRec* look_cur_ = nullptr;
-    void look_resolve(const bam1_t* b, LookRec& r) const {
+    const LookEI* look_ei_ = nullptr;   // the batch of look_cur_
+    bool ei_ahead_ = false;             // set before the reader starts: the exon/intron section runs on the CPU (gene model, no W11 "on")
+    void look_resolve(const bam1_t* b, LookRec& r, LookEI& ei) const {
         const CbCorrector* cc = config_.cb_corrector;
-        r.ok = 0; r.bc = -1;
+        r.ok = 0; r.bc = -1; r.ei = 0;
         const char* cr = inline_scan_cb_from_cr(b, false);
         if (!cr) { r.st_idx = 1; return; }
         if (static_cast<int>(std::strlen(cr)) != cc->length()) { r.st_idx = 3; return; }
@@ -3506,12 +3538,48 @@ private:
         r.cb[cc->length()] = '\0';
         r.ok = 1;
         r.bc = bc_index_.lookup(r.cb);
+        if (ei_ahead_ && r.bc >= 0 && !(b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FSUPPLEMENTARY))) look_ei(b, r, ei);
+    }
+    // The exon/intron section's CIGAR walk and gene-model queries for one primary record (see LookRec::ei).
+    void look_ei(const bam1_t* b, LookRec& r, LookEI& ei) const {
+        const int32_t tid = b->core.tid;
+        r.blk_off = static_cast<uint32_t>(ei.blocks.size());
+        r.has_n = 0;
+        const uint32_t* cigar = bam_get_cigar(b);
+        int32_t rpos = b->core.pos;
+        for (int ci = 0; ci < b->core.n_cigar; ++ci) {
+            const int op = bam_cigar_op(cigar[ci]);
+            const int len = bam_cigar_oplen(cigar[ci]);
+            switch (op) {
+                case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF:
+                    ei.blocks.push_back({rpos, rpos + len}); rpos += len; break;
+                case BAM_CREF_SKIP: r.has_n = 1; rpos += len; break;
+                case BAM_CDEL: rpos += len; break;
+                default: break;
+            }
+        }
+        const size_t nb = ei.blocks.size() - r.blk_off;
+        if (nb > 0xFFFF) { ei.blocks.resize(r.blk_off); return; }   // the loop queries such a record itself
+        r.blk_n = static_cast<uint16_t>(nb);
+        for (size_t k = r.blk_off; k < ei.blocks.size(); ++k) {
+            BlockOvl o{};
+            gene_model_.query_exons(tid, ei.blocks[k].first, ei.blocks[k].second, ei.scratch);
+            o.e_off = static_cast<uint32_t>(ei.ovl.size()); o.e_n = static_cast<uint32_t>(ei.scratch.size());
+            ei.ovl.insert(ei.ovl.end(), ei.scratch.begin(), ei.scratch.end());
+            if (config_.count_introns) {
+                gene_model_.query_introns(tid, ei.blocks[k].first, ei.blocks[k].second, ei.scratch);
+                o.i_off = static_cast<uint32_t>(ei.ovl.size()); o.i_n = static_cast<uint32_t>(ei.scratch.size());
+                ei.ovl.insert(ei.ovl.end(), ei.scratch.begin(), ei.scratch.end());
+            }
+            ei.bov.push_back(o);
+        }
+        r.ei = 1;
     }
     // The stream reader: decodes records into a ring of batches and resolves each one (look_resolve) on its own thread; next()
     // hands the loop the records in stream order. Stopped and joined by stop() or the destructor.
     struct LookAhead {
         static constexpr size_t kBatches = 8, kRecs = 2048;
-        struct Batch { std::vector<bam1_t*> rec; std::vector<LookRec> look; size_t n = 0; bool last = false; bool full = false; };
+        struct Batch { std::vector<bam1_t*> rec; std::vector<LookRec> look; LookEI ei; size_t n = 0; bool last = false; bool full = false; };
         const PileupEngine& eng; htsFile* fp; sam_hdr_t* hdr;
         Batch ring[kBatches];
         std::mutex mu; std::condition_variable cv_full, cv_free;
@@ -3537,10 +3605,10 @@ private:
                     cv_free.wait(lk, [&] { return !B.full || stop_; });
                     if (stop_) return;
                 }
-                B.n = 0; B.last = false;
+                B.n = 0; B.last = false; B.ei.clear();
                 while (B.n < kRecs) {
                     if (sam_read1(fp, hdr, B.rec[B.n]) < 0) { B.last = true; break; }
-                    eng.look_resolve(B.rec[B.n], B.look[B.n]);
+                    eng.look_resolve(B.rec[B.n], B.look[B.n], B.ei);
                     ++B.n;
                 }
                 { std::lock_guard<std::mutex> lk(mu); B.full = true; }
@@ -3549,9 +3617,9 @@ private:
             }
         }
         // The next record and its resolved CB; false at the end of the stream.
-        bool next(bam1_t*& b, const LookRec*& lr) {
+        bool next(bam1_t*& b, const LookRec*& lr, const LookEI*& ei) {
             for (;;) {
-                if (cur && pos < cur->n) { b = cur->rec[pos]; lr = &cur->look[pos]; ++pos; return true; }
+                if (cur && pos < cur->n) { b = cur->rec[pos]; lr = &cur->look[pos]; ei = &cur->ei; ++pos; return true; }
                 if (cur) {
                     const bool last = cur->last;
                     { std::lock_guard<std::mutex> lk(mu); cur->full = false; }
