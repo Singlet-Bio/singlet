@@ -180,6 +180,11 @@ ambient_root <- local({
     cache <- NULL
     function() {
         if (!is.null(cache)) return(cache)
+        env <- Sys.getenv("SINGLET_S1_AMBIENT_ROOT")  # python -P tests/python/_s1_synth.py /some/dir --ambient
+        if (nzchar(env) && file.exists(file.path(env, "truth_GSM9000001_ambient.mtx"))) {
+            cache <<- normalizePath(env, winslash = "/")
+            return(cache)
+        }
         py <- Sys.getenv("SINGLET_PYTHON", Sys.which("python"))
         top <- testthat::test_path("..", "..", "..")
         script <- normalizePath(file.path(top, "tests", "python", "_s1_synth.py"), mustWork = FALSE)
