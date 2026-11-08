@@ -27,9 +27,14 @@ echo "node=$(hostname) name=$NAME genome=$GENOME bin=$BIN cpus=$N scTE=$(cat $T/
 [ -x $ENV/bin/Rscript ] || MAMBA_ROOT_PREFIX=$W/tools/mm/root CONDA_PKGS_DIRS=$W/cache/conda_pkgs HOME=$W/cache/condahome \
   $W/tools/mm/bin/micromamba install -y -p $ENV -c conda-forge --strict-channel-priority r-base > $O/rbase.log 2>&1   # SoloTE's matrix step
 # the barcode read is the short one (ENA file order is not guaranteed)
-# swap only when the first file is the longer one: some runs (E-MTAB-8869) deposit a 101 bp barcode read, as long as the cDNA read
+# swap when the first file is clearly longer; for two long reads, decide by poly-T (see below)
 L1=$(zcat $R1 | head -2 | tail -1 | awk '{print length($0)}'); L2=$(zcat $R2 | head -2 | tail -1 | awk '{print length($0)}')
-if [ "$L1" -gt "$L2" ]; then t=$R1; R1=$R2; R2=$t; L1=$L2; fi
+# when both reads are long (E-MTAB-8869: 100 and 101 bp, varying per read) the barcode read is the one with poly-T after base 28
+polyt() { zcat $1 | head -8000 | awk 'NR%4==2{s=substr($0,29,30); n=gsub(/T/,"",s); if(n>=20)c++; t++} END{print int(1000*c/t)}'; }
+if [ "$L1" -gt $((L2 + 20)) ]; then SWAP=1
+elif [ "$L2" -gt $((L1 + 20)) ]; then SWAP=0
+else P1=$(polyt $R1); P2=$(polyt $R2); echo "poly-T per mille: $(basename $R1) $P1, $(basename $R2) $P2"; [ "$P2" -gt "$P1" ] && SWAP=1 || SWAP=0; fi
+if [ $SWAP = 1 ]; then t=$R1; R1=$R2; R2=$t; L1=$L2; fi
 # 10x names for the engine
 F=$D/10x; mkdir -p $F; ln -sfn $R1 $F/${NAME}_S1_L001_R1_001.fastq.gz; ln -sfn $R2 $F/${NAME}_S1_L001_R2_001.fastq.gz
 if [ "$L1" -ge 28 ]; then CBWL=$WL/3M-february-2018.txt; UMIL=12; else CBWL=$WL/737K-august-2016.txt; UMIL=10; fi
