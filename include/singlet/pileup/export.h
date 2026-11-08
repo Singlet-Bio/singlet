@@ -30,6 +30,7 @@
 #include "pz_writer.h"
 #include "donor_demux.h"
 #include "genotype_export.h"
+#include "allsite_store.h"
 #include "mt_heteroplasmy.h"
 #include "mt_event_caller.h"
 #include "provenance.h"
@@ -1367,17 +1368,9 @@ inline ExportStats export_results(const PileupEngine& engine,
         write_threads.emplace_back([&]() { write_matrix("private/snp_ad", snp_ad_csc, engine.snp_names()); });
         write_threads.emplace_back([&]() { write_matrix("private/snp_dp", snp_dp_csc, engine.snp_names()); });
     }
-    // D-101: per-cell allele counts at every nuclear site with alternate-allele evidence (allsite.h), every barcode, private
-    if (engine.allsite_ready()) {
-        std::filesystem::create_directories(out_prefix + "/private/allsite");
-        write_threads.emplace_back([&]() {
-            const auto names = engine.allsite_names();
-            write_matrix("private/allsite/allele_ad", engine.allsite().ad, names);
-            write_matrix("private/allsite/allele_dp", engine.allsite().dp, names);
-            if (!allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names()))
-                record_failed_write("private/allsite/sites.tsv.gz");
-        });
-    } else if (engine.allsite_on()) {
+    // D-101: per-cell allele counts at every nuclear site with alternate-allele evidence (allsite.h), private. Written after demux, under the
+    // storage rule of allsite_store.h (called cells; one donor: the donor's variant sites only).
+    if (!engine.allsite_ready() && engine.allsite_on()) {
         std::cerr << "[allsite] WARNING: requested but not computed (see the [allsite] lines above; only the serial pass collects records)\n";
     }
     // D-52: the per-cell callable-SNP matrices of the called cells in the cellsnp-lite layout (vireo reads it), private.
@@ -1808,6 +1801,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     mt::MtDonorOutputStats g6_stats;
 
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
+    const bool demux_thread_ran = demux_thread.joinable();
     if (demux_thread.joinable()) {
         demux_thread.join();
         write_donor_assignments(out_prefix + "/donor/donor_assignments.tsv",
@@ -1883,6 +1877,26 @@ inline ExportStats export_results(const PileupEngine& engine,
         // Release SNP matrices — they were only needed for demux
         { auto _unused1 = std::move(snp_ad_csc); }
         { auto _unused2 = std::move(snp_dp_csc); }
+    }
+
+    // D-101: the all-site member under the storage rule (allsite_store.h): called cells; one donor, the donor's variant sites; private.
+    if (engine.allsite_ready()) {
+        std::filesystem::create_directories(out_prefix + "/private/allsite");
+        const auto plan = allsite::plan_store(engine.allsite().ad, engine.allsite().dp, cc_result.cell_indices,
+                                              demux_thread_ran ? demux_result.n_donors_k : 0);
+        auto ad = allsite::restrict_store(engine.allsite().ad, plan);
+        auto dp = allsite::restrict_store(engine.allsite().dp, plan);
+        const auto names = engine.allsite_names();
+        write_matrix("private/allsite/allele_ad", ad, names);
+        write_matrix("private/allsite/allele_dp", dp, names);
+        if (!allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names(), &plan.keep_row))
+            record_failed_write("private/allsite/sites.tsv.gz");
+        if (!allsite::write_store_json(out_prefix + "/private/allsite/store.json", plan, ad.data.size(), dp.data.size()))
+            record_failed_write("private/allsite/store.json");
+        std::cerr << "[allsite] stored " << plan.rule << ": " << plan.cells << " called cells, " << plan.sites_per_cell << " of " << plan.sites
+                  << " sites with per-cell entries; AD " << ad.data.size() << " of " << engine.allsite().ad.data.size() << ", DP " << dp.data.size()
+                  << " of " << engine.allsite().dp.data.size() << " entries\n";
+        result.failed_writes = failed_writes;
     }
 
     auto export_t1 = std::chrono::high_resolution_clock::now();

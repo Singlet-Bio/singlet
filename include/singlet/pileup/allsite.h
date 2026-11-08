@@ -270,21 +270,26 @@ inline std::string site_name(const Site& s, const std::vector<std::string>& tid_
     return tid_names[static_cast<size_t>(s.tid)] + ":" + std::to_string(s.pos + 1) + ":" + s.ref + ">" + s.alt;
 }
 
-// sites.tsv.gz: one line per row of the matrices (chrom, 1-based pos, ref, alt, ALT molecules and barcodes at discovery, summed DP and AD)
-inline bool write_sites_tsv(const std::string& path, const Result& r, const std::vector<std::string>& tid_names) {
+// sites.tsv.gz: one line per row of the matrices (chrom, 1-based pos, ref, alt, ALT molecules and barcodes at discovery, summed DP and AD
+// over every barcode, and with per_cell given, a last column: 1 when the stored matrices keep the row's per-cell entries; allsite_store.h)
+inline bool write_sites_tsv(const std::string& path, const Result& r, const std::vector<std::string>& tid_names,
+                            const std::vector<uint8_t>* per_cell = nullptr) {
     std::vector<uint64_t> dp(r.sites.size(), 0), ad(r.sites.size(), 0);
     for (size_t k = 0; k < r.dp.data.size(); ++k) dp[static_cast<size_t>(r.dp.indices[k])] += r.dp.data[k];
     for (size_t k = 0; k < r.ad.data.size(); ++k) ad[static_cast<size_t>(r.ad.indices[k])] += r.ad.data[k];
     const std::string tmp = path + ".tmp";
     gzFile f = gzopen(tmp.c_str(), "wb6");
     if (!f) return false;
-    std::string line = "chrom\tpos\tref\talt\talt_molecules\talt_barcodes\tdp\tad\n";
+    std::string line = per_cell ? "chrom\tpos\tref\talt\talt_molecules\talt_barcodes\tdp\tad\tper_cell\n"
+                                : "chrom\tpos\tref\talt\talt_molecules\talt_barcodes\tdp\tad\n";
     bool ok = gzwrite(f, line.data(), static_cast<unsigned>(line.size())) > 0;
     for (size_t i = 0; ok && i < r.sites.size(); ++i) {
         const Site& s = r.sites[i];
         line = tid_names[static_cast<size_t>(s.tid)]; line += '\t'; line += std::to_string(s.pos + 1); line += '\t'; line += s.ref; line += '\t'; line += s.alt;
         line += '\t'; line += std::to_string(s.alt_molecules); line += '\t'; line += std::to_string(s.alt_cells);
-        line += '\t'; line += std::to_string(dp[i]); line += '\t'; line += std::to_string(ad[i]); line += '\n';
+        line += '\t'; line += std::to_string(dp[i]); line += '\t'; line += std::to_string(ad[i]);
+        if (per_cell) { line += '\t'; line += (i < per_cell->size() && (*per_cell)[i]) ? '1' : '0'; }
+        line += '\n';
         ok = gzwrite(f, line.data(), static_cast<unsigned>(line.size())) > 0;
     }
     if (gzclose(f) != Z_OK) ok = false;
