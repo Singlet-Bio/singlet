@@ -16,7 +16,7 @@ set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PY=$W/envs/pbench/bin/python3
 export SINGLET_WHITELIST_DIR=$W/pipeline-benchmark/whitelists
 O=$W/jobs/protocol_b20/scale-$SLURM_JOB_ID; mkdir -p $O/logs; SCR=/tmp/$USER-b20s-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
-$PY $SRC/pick.py $W/data/corpus-beta/out $O/picks.tsv || exit 2
+$W/envs/bpub/bin/python3 $SRC/pick.py $W/data/corpus-beta/out $O/picks.tsv || exit 2
 export O SCR BINS
 one() {   # sample study assay run instrument urls odp
   local sample=$1 study=$2 assay=$3 run=$4 urls=$6 d=$SCR/$4 u f n i
