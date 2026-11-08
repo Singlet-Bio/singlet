@@ -84,6 +84,18 @@ def check(log_path, out_dir):
             "resolved": resolved}
 
 
+def worker_check(log_path, out_dir):
+    """check() for the drain workers, or None when $S9_NO_WL_CHECK is set (tests with a fake engine, as in common.require_whitelists)."""
+    if os.environ.get("S9_NO_WL_CHECK"):
+        return None
+    return check(log_path, out_dir)
+
+
+def detail(r):
+    """-> the ledger's failure detail for a failed check."""
+    return (r["why"] + (" | " + r["line"] if r.get("line") else ""))[:1500]
+
+
 def main(argv):
     if len(argv) != 3:
         sys.stderr.write(__doc__)

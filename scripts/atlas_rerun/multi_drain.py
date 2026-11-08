@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common as C  # noqa: E402
 import drain_worker as D  # noqa: E402
 import stagequeue as Q  # noqa: E402
+import whitelist_check as W  # noqa: E402
 
 HOL_WAIT_S = 1200        # an older sample that does not fit yet may be overtaken by newer ones for this long
 MEM_FRAC = 0.85
@@ -260,6 +261,11 @@ class Run(threading.Thread):
             sc = C.species_check(os.path.join(scr, "singlet.log"))
             if sc and sc["verdict"] == "DISAGREE":
                 log("[multi] WARNING %s: %s" % (gsm, sc["line"]))
+            wl = W.worker_check(os.path.join(scr, "singlet.log"), os.path.join(scr, "out"))   # second whitelist guard: never publish a 10x sample without its list
+            if wl is not None and not wl["ok"]:
+                log("[multi] FAILED %s: whitelist check: %s" % (gsm, W.detail(wl)))
+                self.result = settle_failure(a, root, gsm, claim, man, "whitelist_missing", W.detail(wl))
+                return
             up = D.publish(a, man, os.path.join(scr, "out"), self.cfg, self.ccfg, scr, claim)
             pub, _n, _priv = D.checksum_outputs(os.path.join(scr, "out"))
             if self.heart.lost or not os.path.isdir(claim):
@@ -270,7 +276,7 @@ class Run(threading.Thread):
             pairs = man.get("pairs", 0)
             C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine="gpu", compute_s=round(compute_s, 1),
                    wall_s=round(time.time() - self.t0, 1), pairs=pairs, staged_bytes=man.get("bytes"), out_public_bytes=pub, publish=up,
-                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, via="multi", concurrent=man.get("_n_running"))
+                   peak_rss_gb=peak, est_peak_gb=round(self.mem_est, 1), scratch_bytes=tmp_b, pileup_threads=pt, whitelist_check=wl, via="multi", concurrent=man.get("_n_running"))
             self.result = "done %.0fs %.3f Mpairs/s own, peak %s GB (est %.0f), scratch %.1f GB" % (
                 compute_s, pairs / 1e6 / max(compute_s, 1e-9), "%.1f" % peak if peak else "?", self.mem_est, tmp_b / 1e9)
         except Q.Preempted:

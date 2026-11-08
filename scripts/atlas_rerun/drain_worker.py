@@ -30,6 +30,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common as C  # noqa: E402
 import stagequeue as Q  # noqa: E402
+import whitelist_check as W  # noqa: E402
 
 
 def log(m):
@@ -217,6 +218,15 @@ def finish_phase(a, cfg, ccfg, job):
     root, gsm, claim, man, scr, heart = ccfg["root"], job.gsm, job.claim, job.man, job.scr, job.heart
     try:
         out_dir = os.path.join(scr, "out")
+        # second whitelist guard, read from this sample (common.require_whitelists is the first, at start): a 10x sample that ran without
+        # its whitelist took the sorted-BAM pileup and barcode auto-discovery, so it is failed in the ledger and never published
+        wl = W.worker_check(os.path.join(scr, "singlet.log"), out_dir)
+        if wl is not None and not wl["ok"]:
+            log("[drain] FAILED %s: whitelist check: %s" % (gsm, W.detail(wl)))
+            C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="whitelist_missing", detail=W.detail(wl))
+            if os.path.isdir(claim):
+                Q.release(a.stage, gsm, claim, failed=man.get("attempts", 1) >= Q.MAX_ATTEMPTS)
+            return "failed: whitelist check: %s" % wl["why"]
         side = None if getattr(a, "no_private_sidecar", False) else write_private_sidecar(a, ccfg, man, out_dir)
         up = publish(a, man, out_dir, cfg, ccfg, scr, claim)
         sc = C.species_check(os.path.join(scr, "singlet.log"))
@@ -229,7 +239,7 @@ def finish_phase(a, cfg, ccfg, job):
         Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
         C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(job.compute_s, 1),
                wall_s=round(time.time() - job.t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
-               publish=up, species_check=sc, private_sidecar=side, via="drain")
+               publish=up, species_check=sc, whitelist_check=wl, private_sidecar=side, via="drain")
         return "done (publish %.0fs after compute)" % (time.time() - job.t0 - job.compute_s)
     except Exception as e:  # noqa: BLE001
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e)[:1500])
