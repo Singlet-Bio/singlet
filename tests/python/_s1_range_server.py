@@ -47,6 +47,8 @@ def _handler(
     delay_s: float = 0.0,
 ):
     class H(BaseHTTPRequestHandler):
+        # every request is recorded before its response is sent: a client that returns on the headers (a 304, an empty body)
+        # must find its request in the log
         protocol_version = "HTTP/1.1"
 
         def log_message(self, *a):  # silence
@@ -58,17 +60,17 @@ def _handler(
             with rec.lock:
                 inject = rec.fail_next.pop(0) if rec.fail_next else None
             if inject:
+                rec.add("GET", path, None, inject, 0)
                 self.send_response(inject)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
-                rec.add("GET", path, None, inject, 0)
                 return
             fs = os.path.normpath(os.path.join(root, *path.lstrip("/").split("/")))
             if not fs.startswith(os.path.normpath(root)) or not os.path.isfile(fs):
+                rec.add("GET", path, None, 404, 0)
                 self.send_response(404)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
-                rec.add("GET", path, None, 404, 0)
                 return
             size = os.path.getsize(fs)
             st = os.stat(fs)
@@ -77,11 +79,11 @@ def _handler(
                 % hashlib.md5(("%d-%d" % (size, int(st.st_mtime * 1000))).encode()).hexdigest()
             )
             if self.headers.get("If-None-Match") == etag:
+                rec.add("GET", path, None, 304, 0)
                 self.send_response(304)
                 self.send_header("ETag", etag)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
-                rec.add("GET", path, None, 304, 0)
                 return
             rng = self.headers.get("Range")
             m = _RANGE.match(rng) if rng and not ignore_range else None
@@ -93,14 +95,15 @@ def _handler(
                     b = int(m.group(2)) if m.group(2) else size - 1
                     b = min(b, size - 1)
                     if a >= size or a > b:
+                        rec.add("GET", path, (a, b), 416, 0)
                         self.send_response(416)
                         self.send_header("Content-Range", "bytes */%d" % size)
                         self.send_header("Content-Length", "0")
                         self.end_headers()
-                        rec.add("GET", path, (a, b), 416, 0)
                         return
                     fh.seek(a)
                     body = fh.read(b - a + 1)
+                    rec.add("GET", path, (a, b), range_status, len(body))
                     self.send_response(range_status)
                     tot = total_override if total_override is not None else size
                     self.send_header("Content-Range", "bytes %d-%d/%d" % (a, b, tot))
@@ -112,15 +115,14 @@ def _handler(
                     )
                     self.end_headers()
                     self.wfile.write(body)
-                    rec.add("GET", path, (a, b), range_status, len(body))
                 else:
                     body = fh.read()
+                    rec.add("GET", path, None, 200, len(body))
                     self.send_response(200)
                     self.send_header("ETag", etag)
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
-                    rec.add("GET", path, None, 200, len(body))
 
     return H
 
