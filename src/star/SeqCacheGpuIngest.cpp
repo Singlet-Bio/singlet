@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <new>
 #include <string>
 #include <thread>
 #include <vector>
@@ -43,7 +44,7 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
     if (!(fz || pl.on) || !pl.runs) { why = "no head-scan plan"; return false; }
     const singlet::fq::RunSet& runs = *pl.runs;
     const uint32_t nB = pl.nBlocks;
-    if (fz ? (runs.block_count() != nB || fz->heads->size() != (size_t) nB || fz->r2Fixed == 0)
+    if (fz ? (runs.block_count() != nB || fz->heads->size() != (size_t) nB)
            : (runs.block_count() != nB || pl.first.size() != (size_t) nB + 1 || pl.baseAt.size() != (size_t) nB + 1 || pl.nameAt.size() < nB)) {
         why = "the head scan's plan does not match the .1fq"; return false;
     }
@@ -56,11 +57,22 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
     if (fz) {
         out.first.assign((size_t) nB + 1, 0); out.baseAt.assign((size_t) nB + 1, 0); out.qualAt.assign((size_t) nB + 1, 0);
         out.nameAt.assign((size_t) nB + 1, 0);
+        // the bound on a block's cDNA bases: the header's read length (trimming only shortens reads), else four per byte of its decompressed
+        // payload (2-bit codes), from the ZSTD frame header
         try {
-            for (uint32_t b = 0; b < nB; b++) { out.nameAt[b] = runs.block_read_offset(b); N += runs.block_reads(b); }
+            for (uint32_t b = 0; b < nB; b++) {
+                out.nameAt[b] = runs.block_read_offset(b);
+                const uint64_t nr = runs.block_reads(b);
+                N += nr;
+                if (fz->r2Fixed) B += nr * fz->r2Fixed;
+                else {
+                    const uint64_t raw = runs.block_raw_size(b);
+                    if (raw == 0) { why = "block " + std::to_string(b) + " records no decompressed size"; return false; }
+                    B += 4 * raw;
+                }
+            }
         } catch (const std::exception& e) { why = e.what(); return false; }
         out.nameAt[nB] = N;
-        B = N * fz->r2Fixed;
         Q = B / 4 + nB;
     } else {
         N = pl.reads(); B = pl.bases();
@@ -70,12 +82,14 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
         Q = out.qualAt[nB];
     }
     out.n = N;
-    out.seq.resize(B);
-    out.off.resize(N + 1);
-    out.off[0] = 0;
-    out.qual.resize(std::max<uint64_t>(1, Q));
     out.r1L = pl.r1L; out.r1w = (pl.r1L + 20) / 21;
-    out.r1.resize(std::max<uint64_t>(1, N * out.r1w));
+    try {   // the fused pass's reservations are bounds: a refusal falls back to the two passes
+        out.seq.resize(B);
+        out.off.resize(N + 1);
+        out.qual.resize(std::max<uint64_t>(1, Q));
+        out.r1.resize(std::max<uint64_t>(1, N * out.r1w));
+    } catch (const std::bad_alloc&) { out.release(); why = "the packed reads' arrays could not be reserved"; return false; }
+    out.off[0] = 0;
     const std::vector<uint64_t>& F = fz ? out.first : pl.first;
     const std::vector<uint64_t>& BA = fz ? out.baseAt : pl.baseAt;
     // fused: the counts per block as they arrive, and the frontier below which every block's offsets are known

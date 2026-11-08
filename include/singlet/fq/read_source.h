@@ -170,6 +170,19 @@ class RunSet {
         blk.clear();
         r.decode_payload(sc.raw.data(), raw_size, bh, blk);
     }
+    // the decompressed payload size of block g from its ZSTD frame header (0: not recorded there, or another codec); no decompression
+    uint64_t block_raw_size(uint32_t g) const {
+        size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
+                                       first_block_.begin()) - 1;
+        const Reader& r = *readers_[f];
+        if (static_cast<Codec>(r.header().codec) != Codec::ZSTD) return 0;
+        const uint32_t bi = g - first_block_[f];
+        uint8_t fh[32];
+        const size_t n = std::min<size_t>(sizeof fh, r.block_comp_size(bi));
+        if (::pread(r.file_descriptor(), fh, n, static_cast<off_t>(r.block_offset(bi) + sizeof(BlockHeader))) != static_cast<ssize_t>(n)) return 0;
+        const unsigned long long c = ZSTD_getFrameContentSize(fh, n);
+        return (c == ZSTD_CONTENTSIZE_UNKNOWN || c == ZSTD_CONTENTSIZE_ERROR) ? 0 : static_cast<uint64_t>(c);
+    }
     // the reads stored in block g, from its header alone
     uint32_t block_reads(uint32_t g) const {
         size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
