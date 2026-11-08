@@ -350,3 +350,10 @@ or lower pairing turns it off.
 Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95% interval, with
 the wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's.
 
+
+**Aborted first attempt (2026-11-08).** The first job (Slurm 804607, state FAILED) downloaded the library, found one BCR FASTQ
+folder and chose `737K-august-2016` (all of Cell Ranger's cell barcodes are on it). Singlet then stopped after five seconds on its
+first read with `gzip.BadGzipFile`: the dataset's tarball stores its FASTQs as plain text under `.fastq.gz` names. TRUST4 received the
+same unreadable input. Neither tool produced any output, so no result was produced or seen. The rerun compresses the same reads with
+gzip into a new folder and is otherwise identical: same commit, settings, whitelist, rules and comparator. It counts as this
+addendum's one run.
