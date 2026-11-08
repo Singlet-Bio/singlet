@@ -424,3 +424,29 @@ sorted rows, and both paths send the same reads into the second pass (`results/c
 
 The soft-clip route adds 3% to 18% to the second pass's reads. The wall-time column covers the whole chimeric pass, unmapped
 and soft-clip reads together, which runs as a CPU STAR job after the GPU main pass.
+
+## B6 ranking without the prior: Arriba's cascade (D-109, declared before scoring)
+
+Owner decision D-109 asks for parity by porting the competitor's code. Arriba 2.5.1 is MIT licensed, so its filter cascade and
+its confidence scoring are ported into the engine's chimeric caller (`fusion/arriba_cascade.py` here, `chimeric_table.h` on
+Singlet-Bio/singlet branch `feat/arriba-cascade`). The new ranking must not use the Mitelman prior. This section is committed
+before either dev mix is scored with it. The committed rule 6de5821a and the scores of 3f35b10a stay unchanged.
+
+**Input.** The frozen configuration's raw STAR junction file (chimproto-68d44117, soft-clip at 15 bases, Arriba's chimeric
+settings) for each mix. Only reads whose raw barcode matches a labelled cell, exactly or as the single one-mismatch neighbour,
+enter the cascade, which is the same cell set the existing variants use. All junction types enter, since Arriba applies no
+motif filter, and the 149-pair recurrent list is not used. Arriba's own GRCh38 v2.5.1 blacklist is applied by the ported
+`filter_blacklisted_ranges`, keywords included.
+
+**Variant `arriba`.** Arriba's passing calls (high, medium and low confidence) are ranked as Arriba sorts its output
+(`sort_fusions_by_support` in `output_fusions.cpp`): confidence first, then supporting reads, then e-value, lower first. Here a
+supporting read is a molecule, because duplicates are removed by barcode, UMI and breakpoint. Each unordered gene pair takes the
+rank of its best breakpoint. Pairs with the same confidence, support and e-value are counted together, as in the existing
+curves. Pairs the cascade discards are absent from the ranked list, and their filter is reported. No term uses Mitelman or any
+other fusion catalogue, and Arriba's known-fusions file is not loaded either.
+
+**Reported.** For both mixes: truth ranks, clause 1 against STAR-Fusion and Arriba, and clause 2, for the `arriba` variant
+alone, next to the `combined` score with and without `--leave-truth-out` and next to `breakpoint`. Clause 2 does not depend on
+the ranking and is restated from the same run. Each ported filter's effect is reported as reads or calls removed per filter on
+each mix, in the order of Arriba's own log. Inputs Arriba needs that this data lacks are substituted, and each substitution is
+listed with the results.
