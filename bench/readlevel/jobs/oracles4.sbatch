@@ -50,7 +50,8 @@ te() {   # NAME threads
   S=ku812_hmc; D=$W/data/readlevel/holdout/$S; F=$J/fusion/$S; mkdir -p $D/10x $D/hto $F
   export PATH=$W/envs/sratools/bin:$PATH
   fq() { local r=$1 o=$2; [ -f $o/$r.DONE ] && return 0
-    fasterq-dump --split-files --include-technical -e 6 -t /tmp/$USER-fq-$SLURM_JOB_ID -O $o $r || return 1
+    rm -f $o/${r}_*.fastq $o/${r}_*.fastq.gz   # a fetch cut off by the end of an earlier job (hofetch in 804425) starts again
+    fasterq-dump -f --split-files --include-technical -e 6 -t /tmp/$USER-fq-$SLURM_JOB_ID -O $o $r || return 1
     for f in $o/${r}_*.fastq; do gzip -1 $f; done; touch $o/$r.DONE; }
   mates() { local d=$1 r=$2 best=0 l; M1=; M2=   # the barcode read is 28 bases; the cDNA or feature read is the longest other file
     for f in $d/${r}_*.fastq.gz; do l=$(zcat $f | head -2 | tail -1 | awk '{print length($0)}'); echo "$(basename $f) $l"
