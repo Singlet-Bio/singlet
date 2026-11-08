@@ -2901,6 +2901,7 @@ static void usage(const char* prog) {
         << "  --snps FILE            VCF of SNP positions\n"
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
+        << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
         << "Output:\n"
         << "  --out-prefix DIR       Output directory [./singlet_out]\n"
@@ -3364,6 +3365,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--bam-file" && i+1 < argc) bam_file = argv[++i];
         else if (arg == "--min-mapq" && i+1 < argc) config.min_mapq = std::atoi(argv[++i]);
         else if (arg == "--min-baseq" && i+1 < argc) config.min_baseq = std::atoi(argv[++i]);
+        else if (arg == "--editing-min-baseq" && i+1 < argc) config.editing_min_baseq = std::atoi(argv[++i]);
         else if (arg == "--no-introns") config.count_introns = false;
         else if (arg == "--no-sj") config.count_sj = false;
         else if (arg == "--sj-all-alignments") config.sj_unique_only = false;   // old junction policy: primary alignments of multi-mapped reads count

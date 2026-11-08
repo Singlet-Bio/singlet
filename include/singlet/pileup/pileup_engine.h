@@ -124,6 +124,10 @@ struct PileupConfig {
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
     int min_mapq = 20;              // Minimum mapping quality
     int min_baseq = 10;             // Minimum base quality for the SNP pileup (and the D-101 editing sites in it)
+    // D-101/D-109: minimum base quality at the editing sites only (REDItools2's -bq rule; -1 = min_baseq). The SNP panel keeps
+    // min_baseq. A value other than min_baseq turns the W11 GPU pileup off: its quality mask carries one threshold.
+    int editing_min_baseq = -1;
+    int edit_baseq() const { return editing_min_baseq < 0 ? min_baseq : editing_min_baseq; }
     bool count_introns = true;      // Count intronic reads
     bool count_sj = true;           // Extract splice junctions
     // Junction molecules come from uniquely mapped alignments only (NH == 1), as STARsolo's SJ feature does. The primary alignment of a
@@ -447,6 +451,7 @@ static inline const char* inline_scan_cb_from_cr(const bam1_t* b, bool reject_n 
 class PileupEngine {
 public:
     explicit PileupEngine(const PileupConfig& config) : config_(config) {
+        edit_baseq_ = config_.edit_baseq();
         if (const char* r = std::getenv("SINGLET_INTRON_RULES"))
             config_.intron_rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (const char* d = std::getenv("SINGLET_MOLECULE_DUMP")) molecule_dump_ = d;
@@ -738,7 +743,9 @@ public:
 
         gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
 #ifdef SINGLET_HAVE_ENGINE_GPU
-        if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
+        if (gpupileup::enabled() && config_.edit_baseq() != config_.min_baseq && edit_snp_start_ != UINT32_MAX)
+            std::cerr << "[gpu_pileup] off: editing_min_baseq " << config_.edit_baseq() << " differs from min_baseq " << config_.min_baseq << "\n";
+        else if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
         gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
         e16_early_start();   // E16 (level 5): the hand-off pass's device part as soon as STAR's prefill completed the shared region
 #endif
@@ -3296,6 +3303,7 @@ private:
     uint32_t n_snps_loaded_ = 0;
     uint32_t aim_snp_start_ = UINT32_MAX;   // N13: first AIM index in snp matrices
     uint32_t edit_snp_start_ = UINT32_MAX;  // D-101: first editing-site index in snp matrices
+    int edit_baseq_ = 10;                    // config_.edit_baseq(), cached for the pileup loops
     struct EditSite { int32_t pos0; uint16_t chrom; char ref, alt; };   // 8 bytes: 15.7 M human sites in 126 MB
     std::vector<EditSite> edit_sites_;       // D-101: panel row i = SNP index edit_snp_start_ + i (names made on demand: edit_name)
     std::vector<std::string> edit_chroms_;
@@ -4021,7 +4029,7 @@ private:
                             [](const ChrSNP& s, int32_t p) { return s.pos < p; });
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
-                            if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
+                            if (qual[0] != 0xff && qual[query_pos + offset] < (it->index >= edit_snp_start_ ? edit_baseq_ : config_.min_baseq))
                                 continue;
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
@@ -4713,7 +4721,7 @@ private:
                             [](const ChrSNP& s, int32_t p) { return s.pos < p; });
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
-                            if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
+                            if (qual[0] != 0xff && qual[query_pos + offset] < (it->index >= edit_snp_start_ ? edit_baseq_ : config_.min_baseq))
                                 continue;
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
