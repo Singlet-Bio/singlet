@@ -48,6 +48,7 @@
 #include "ancestry.h"
 #include "crispr_guide.h"
 #include "gene_model.h"
+#include "tx_compat.h"
 #include "interval_tree.h"
 #include "mt_heteroplasmy.h"
 #include "em_rescue.h"
@@ -199,6 +200,12 @@ constexpr uint32_t kExonPrecedence  = 4096;
 // 115 of 116 bases identical to chrM:627-742) 146,507 molecules with no long-read support. Joint references (<genome>___chrM) have no
 // plain chrM contig, and the rule leaves them unchanged.
 constexpr uint32_t kChrMPrecedence  = 8192;
+// An alignment whose exon overlaps name two or more same-strand genes goes to the one gene with a transcript model concordant with it, as
+// STARsolo Gene decides (Transcriptome::classifyAlign / alignToTranscript, singlet_tx in tx_compat.h): the transcript contains the alignment,
+// every aligned segment lies inside one exon, and every junction joins consecutive exons of that transcript exactly. The read keeps only that
+// gene's exon overlaps and is then judged as any other read; with no such gene, or more than one, it stays gene-ambiguous. Readthrough and
+// overlapping lncRNA models made Visium's Rpl24 (under Gm28037) and Nme2 (under Nme1nme2) near zero: their unique sense reads were dropped.
+constexpr uint32_t kTxCompat        = 16384;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
@@ -1088,6 +1095,8 @@ public:
                     apply_strand_probe({stats.strand_sense, stats.strand_antisense},
                                        "first nuclear exonic reads");
                 }
+
+                tx_resolve(b, exon_overlaps);   // intron_rule::kTxCompat
 
                 // Determine exon gene (any-overlap, single-gene requirement)
                 uint32_t exon_gene = UINT32_MAX;
@@ -2095,6 +2104,10 @@ public:
         in.geneIsMt.assign(gene_model_.n_genes(), 0);
         for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
         in.tidSpecies = tid_species_;   // kExonPrecedence within one species (empty: single-genome reference)
+        if ((config_.intron_rules & intron_rule::kTxCompat) && gene_model_.tx_gene_off_view().size() == static_cast<size_t>(gene_model_.n_genes()) + 1) {
+            in.txGeneOff = gene_model_.tx_gene_off_view(); in.txExonOff = gene_model_.tx_exon_off_view();
+            in.txExonStart = gene_model_.tx_exon_start_view(); in.txExonEnd = gene_model_.tx_exon_end_view();
+        }
         if (config_.intron_rules & intron_rule::kFlank) {   // refine_read's intronic-base count: gene bodies and their merged exons
             const auto& genes = gene_model_.genes();
             in.geneStart.reserve(genes.size()); in.geneEnd.reserve(genes.size()); in.geneExonOff.assign(1, 0);
@@ -3595,6 +3608,7 @@ private:
             }
         }
 
+        tx_resolve(b, mm_overlaps_);   // intron_rule::kTxCompat
         const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
         if (mm_overlaps_.empty()) {
             if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
@@ -4425,6 +4439,7 @@ private:
             }
         }
 
+        tx_resolve(b, wc.mm_overlaps);   // intron_rule::kTxCompat
         const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
         if (wc.mm_overlaps.empty()) {
             if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
@@ -4599,6 +4614,35 @@ private:
     };
     // intron_rule::kChrMPrecedence over the verdict of the other rules: a multimapper with an alignment on chrM keeps a chrM gene's count,
     // goes to the chrM gene it touches (kMtPrefer's alignment), or is dropped; it is never counted for, or rescued (G-EM) into, a nuclear gene
+    // intron_rule::kTxCompat: exon overlaps (strand-filtered, query order) in two or more genes keep only the one gene with a concordant
+    // transcript (singlet_tx::pick); otherwise they are left as they are. The GPU's k_annotate decides the same way.
+    void tx_resolve(const bam1_t* b, std::vector<uint32_t>& overlaps) const {
+        if (!(config_.intron_rules & intron_rule::kTxCompat) || overlaps.size() < 2) return;
+        const auto& gtoff = gene_model_.tx_gene_off_view();
+        if (gtoff.size() != static_cast<size_t>(gene_model_.n_genes()) + 1) return;
+        uint32_t cand[singlet_tx::kMaxCandidates]; int nc = 0;
+        for (uint32_t idx : overlaps) {
+            const uint32_t g = gene_model_.exon_to_gene(idx);
+            if (g == UINT32_MAX) return;
+            bool seen = false;
+            for (int c = 0; c < nc; ++c) if (cand[c] == g) { seen = true; break; }
+            if (seen) continue;
+            if (nc == singlet_tx::kMaxCandidates) return;
+            cand[nc++] = g;
+        }
+        if (nc < 2) return;
+        const uint32_t* cig = bam_get_cigar(b);
+        int32_t ss[singlet_tx::kMaxSegments], se[singlet_tx::kMaxSegments];
+        const int ns = singlet_tx::segments(static_cast<int>(b->core.n_cigar), static_cast<int32_t>(b->core.pos),
+            [&](int i, int& op, int32_t& len) { op = bam_cigar_op(cig[i]); len = static_cast<int32_t>(bam_cigar_oplen(cig[i])); }, ss, se);
+        if (ns <= 0) return;
+        uint32_t w = UINT32_MAX;
+        if (singlet_tx::pick(cand, nc, gtoff.data(), gene_model_.tx_exon_off_view().data(), gene_model_.tx_exon_start_view().data(),
+                             gene_model_.tx_exon_end_view().data(), gene_model_.n_genes(), ss, se, ns, w) != 1) return;
+        size_t k = 0;
+        for (uint32_t idx : overlaps) if (gene_model_.exon_to_gene(idx) == w) overlaps[k++] = idx;
+        overlaps.resize(k);
+    }
     template <class E>
     MmVerdict mm_verdict(const E& e) const {
         MmVerdict v = mm_verdict_rules(e);
@@ -5310,6 +5354,7 @@ private:
             if (wc.exon_overlaps.empty() && had_strand_reject) wc.stats.wrong_strand++;
             if (vote_sense != vote_anti && !mito_tid_[tid] && !(b->core.flag & BAM_FSECONDARY))
                 (vote_sense ? wc.stats.strand_sense : wc.stats.strand_antisense)++;
+            tx_resolve(b, wc.exon_overlaps);   // intron_rule::kTxCompat
 
             uint32_t exon_gene = UINT32_MAX;
             uint32_t first_exon_idx = UINT32_MAX;

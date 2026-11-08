@@ -23,6 +23,7 @@
 #include "../m6/m6.cu"
 #undef main
 #include "pileup_rec.h"
+#include "../../../../include/singlet/pileup/tx_compat.h"
 #include <fstream>
 #include <sstream>
 #include <functional>
@@ -81,9 +82,10 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192 are implemented; qw: mask words per read (P3-ENG-14)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192, 16384 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
+struct DTx { const uint32_t *gtoff, *xoff; const int32_t *es, *ee; uint32_t ng; };   // kTxCompat: transcript models (PileupInput::txGeneOff ..; ng = 0: not uploaded)
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
 // multi: bit 0 = multi-gene (as the engine's multi_gene / primary_multigene / gene_full_multi), bit 1 = the alignment has a same-strand exon
 // overlap (an exonic alignment, intron_rule::kExonPrecedence; the engine's GeneHit::exonic, or a primary's non-empty exon_overlaps)
@@ -139,6 +141,20 @@ struct IntronCb {
         if (exon_gene != MAXU && g != exon_gene) other = true;   // classify_read's other_gene_intron
         if (g != MAXU) { if (g0b == MAXU) g0b = g; else if (g != g0b) bmulti = true; } }   // gene_full_multi (kGeneFullSet), seeded with the exon gene
     bool other = false; uint32_t g0b = MAXU; bool bmulti = false; };
+// kTxCompat (the engine's tx_resolve): the distinct accepted exon genes in query order (over: more than kMaxCandidates), and the first
+// accepted exon of the winning gene
+struct TxCandCb {
+    const StrandPar* S; const uint32_t* e2g; uint32_t ne; uint32_t c[singlet_tx::kMaxCandidates]; int n = 0; bool over = false;
+    __device__ void operator()(uint32_t idx) {
+        uint32_t g = idx < ne ? e2g[idx] : MAXU; if (wrong_strand(*S, g)) return;
+        if (g == MAXU) { over = true; return; }
+        for (int k = 0; k < n; k++) if (c[k] == g) return;
+        if (n == singlet_tx::kMaxCandidates) { over = true; return; }
+        c[n++] = g; } };
+struct TxFirstCb {
+    const StrandPar* S; const uint32_t* e2g; uint32_t ne; uint32_t w; uint32_t idx = MAXU;
+    __device__ void operator()(uint32_t i) {
+        if (idx != MAXU) return; uint32_t g = i < ne ? e2g[i] : MAXU; if (g == w && !wrong_strand(*S, g)) idx = i; } };
 // intron_rule::kGeneFullSet on a secondary (the engine's gene_full_extend): same-strand intron genes extend the exon hit to the gene-body set
 struct BodyCb {
     const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t g0; bool multi;
@@ -147,7 +163,7 @@ struct BodyCb {
         if (g0 == MAXU) g0 = g; else if (g != g0) multi = true; } };
 
 __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out,
-                           DGene GM = DGene{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0}) {
+                           DGene GM = DGene{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0}, DTx TX = DTx{nullptr, nullptr, nullptr, nullptr, 0}) {
     int a = blockIdx.x * blockDim.x + threadIdx.x; if (a >= nA) return;
     AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0}; bool had_reject = false, hasn = false;
     ExonCb ec{&SP, e2g, ne, false, true, MAXU, MAXU};
@@ -160,6 +176,31 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
             if (ec.blk_raw > 0 && ec.blk_ok == 0) had_reject = true;   // a block whose exons were all on the wrong strand
         }
         else if (op == 2 || op == 3) { rpos += len; if (op == 3) hasn = true; }
+    }
+    if ((P.rules & 16384) && TX.ng && ec.any && !ec.same) {
+        // kTxCompat (the engine's tx_resolve): the accepted exon genes in query order; exactly one with a concordant transcript keeps the read
+        TxCandCb tc{&SP, e2g, ne};
+        rpos = x.pos;
+        for (int i = 0; i < x.n_ops; i++) {
+            uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+            if (op == 0 || op == 7 || op == 8) { tree_query(EX, x.tid, rpos, rpos + len, tc); rpos += len; }
+            else if (op == 2 || op == 3) rpos += len;
+        }
+        if (!tc.over && tc.n >= 2) {
+            int32_t ss[singlet_tx::kMaxSegments], se[singlet_tx::kMaxSegments];
+            const int ns = singlet_tx::segments(x.n_ops, x.pos, [&](int i, int& op, int32_t& len) { op = (int)(o[i] & 15); len = (int32_t)(o[i] >> 4); }, ss, se);
+            uint32_t w = MAXU;
+            if (ns > 0 && singlet_tx::pick(tc.c, tc.n, TX.gtoff, TX.xoff, TX.es, TX.ee, TX.ng, ss, se, ns, w) == 1) {
+                TxFirstCb tf{&SP, e2g, ne, w};
+                rpos = x.pos;
+                for (int i = 0; i < x.n_ops; i++) {
+                    uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+                    if (op == 0 || op == 7 || op == 8) { tree_query(EX, x.tid, rpos, rpos + len, tf); rpos += len; }
+                    else if (op == 2 || op == 3) rpos += len;
+                }
+                ec.same = true; ec.first_gene = w; ec.first_idx = tf.idx; ec.second_gene = MAXU;
+            }
+        }
     }
     AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0};
     r.exg = (ec.any && ec.same) ? ec.first_gene : MAXU;   // the engine's determine_exon_gene (single gene; multi-gene -> none)
@@ -640,6 +681,7 @@ struct Inputs {
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
     uint8_t* tsp = nullptr; uint32_t ntsp = 0;   // per tid: genome bit of a joint reference (PileupInput::tidSpecies); ntsp = 0: one genome
     DGene GM{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0};   // kFlank (ng = 0: not uploaded)
+    DTx TX{nullptr, nullptr, nullptr, nullptr, 0};                       // kTxCompat (ng = 0: not uploaded)
 };
 struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
@@ -851,7 +893,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     { const char* e = getenv("SINGLET_GPU_PILEUP_E23"); g_e23 = !(e && *e == '0'); g_cr_replay = g_e23; }
     // 1 annotate
     AA* aa = A.alloc<AA>(std::max(nA, 1));
-    k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM); T.mark("1.annotate");
+    k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM, in.TX); T.mark("1.annotate");
     // 2 signature level
     GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.tsp, in.ntsp, in.dp, gr);
     uint32_t *c_sj = A.alloc<uint32_t>(nS), *c_snp = A.alloc<uint32_t>(nS), *c_mt = A.alloc<uint32_t>(nS), *c_ind = A.alloc<uint32_t>(nS);
