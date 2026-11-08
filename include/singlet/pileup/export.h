@@ -1383,7 +1383,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     // D-101: per-cell allele counts at every nuclear site with alternate-allele evidence (allsite.h), private. Written after demux, under the
     // storage rule of allsite_store.h (called cells; one donor: the donor's variant sites only).
     if (!engine.allsite_ready() && engine.allsite_on()) {
-        std::cerr << "[allsite] WARNING: requested but not computed (see the [allsite] lines above; only the serial pass collects records)\n";
+        std::cerr << "[allsite] WARNING: requested but not computed (see the [allsite] lines above)\n";
     }
     // D-52: the per-cell callable-SNP matrices of the called cells in the cellsnp-lite layout (vireo reads it), private.
     if (!pileup_cfg.snp_path.empty() && !cc_result.cell_indices.empty() && snp_dp_csc.ncols > 0) {
