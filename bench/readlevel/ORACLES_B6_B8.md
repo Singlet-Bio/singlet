@@ -618,3 +618,10 @@ multimapper limit for TE counting is the next experiment; it changes the aligner
 a 30-cell pseudobulk. The engine's barcodes do not look like 3M-february-2018 barcodes, so the comparators likely need another
 whitelist (the engine's detected one). The committed rule is unchanged; the comparator run needs the matching whitelist before
 the A375 clause can be read.
+
+## B6 closed (D-111)
+
+Under owner rule D-111, B6 is closed at parity with Arriba on the held-out run. The Arriba-cascade port stops where it stands:
+branch feat/arriba-cascade (fbeaa915) stays unmerged, and its dev scores above are kept as a record. One observation is left
+for later. The engine's fusion ranking depends on the Mitelman prior: without it, the held-out truth ranks 579th on breakpoint
+features and 610th with the leave-truth-out prior.
