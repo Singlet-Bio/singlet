@@ -287,6 +287,20 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
         lowOf[v] = 0;
         for (int j = 0; j < 4; j++) if (lowQ[(v >> (2 * j)) & 3]) lowOf[v] |= (uint8_t) (1u << j);
     }
+    // two quality bytes (eight codes) at a time: the eight bits; no low code at all (a 'F'-only file): no quality words to fill
+    const bool anyLow = lowQ[0] || lowQ[1] || lowQ[2] || lowQ[3];
+    std::vector<uint8_t> lowOf16(lowTable ? 65536 : 0);
+    for (size_t v = 0; v < lowOf16.size(); v++) lowOf16[v] = (uint8_t) (lowOf[v & 255] | lowOf[v >> 8] << 4);
+    // the CB and UMI spans straight from the barcode read's words (same 3-bit codes, 21 per word) when they lie inside the read
+    const bool cbFast = cbS0 + cbL <= L1, umiFast = umiS0 + umiL <= L1;
+    auto span = [&](const uint64_t* rw, uint64_t s0, uint64_t len) {
+        const uint64_t w0 = s0 / 21, o0 = s0 % 21, n0 = 21 - o0;
+        uint64_t v = rw[w0] >> (3 * o0);
+        if (len > n0) v |= rw[w0 + 1] << (3 * n0);
+        return v & ((1ull << (3 * len)) - 1);
+    };
+    uint64_t umiN = 0, umiOne = 0;   // per UMI base: the N bit (code 4) and the low bit, for the R11 test below
+    for (uint64_t j = 0; j < umiL; j++) { umiN |= 4ull << (3 * j); umiOne |= 1ull << (3 * j); }
     const bool r11On = cfg.wl != nullptr && cfg.nWL > 0 && !layoutBad;
     std::vector<uint64_t> dense(r11On ? cfg.nWL : 0, 0);
     const int T = std::max(1, std::min<int>(cfg.threads, (int) std::max<uint64_t>(1, N / 4096)));
@@ -307,7 +321,8 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
         for (uint64_t r = r0; r < rE; r++) {
             if (layoutBad) break;
             while (r >= out.first[b + 1]) b++;
-            const uint64_t cr = pack(r, cbS0, cbL), ur = pack(r, umiS0, umiL);
+            const uint64_t* rw = out.r1.data() + r * out.r1w;
+            const uint64_t cr = cbFast ? span(rw, cbS0, cbL) : pack(r, cbS0, cbL), ur = umiFast ? span(rw, umiS0, umiL) : pack(r, umiS0, umiL);
             if (out.nw) {
                 uint64_t* w = out.aux.data() + r * stride;
                 w[0] = cr; w[1] = ur;
@@ -315,13 +330,23 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
                 for (uint32_t x = 0; x < nw; x++) q[x] = 0;
                 const uint64_t s0 = out.off[r], L = out.off[r + 1] - s0;
                 if (L > 64 * (uint64_t) nw) { acc[t].tooLong = true; continue; }
-                if (lowTable) {
+                if (!anyLow) {
+                } else if (lowTable) {
                     // the read's bases k0 .. k0 + L of its block: single bases up to a byte boundary, then a byte (four codes) at a time
                     const uint64_t k0 = s0 - out.baseAt[b];
                     const uint8_t* qb = out.qual.data() + out.qualAt[b];
                     uint64_t j = 0;
                     for (; j < L && ((k0 + j) & 3) != 0; j++)
                         if (lowQ[out.qcode(b, s0 + j)]) q[j >> 6] |= 1ull << (j & 63);
+                    for (; j + 32 <= L; j += 32) {   // eight bytes, 32 codes: a 32-bit mask
+                        const uint8_t* p = qb + ((k0 + j) >> 2);
+                        const uint64_t mk = (uint64_t) lowOf16[p[0] | p[1] << 8] | (uint64_t) lowOf16[p[2] | p[3] << 8] << 8
+                                          | (uint64_t) lowOf16[p[4] | p[5] << 8] << 16 | (uint64_t) lowOf16[p[6] | p[7] << 8] << 24;
+                        if (!mk) continue;
+                        const unsigned o = (unsigned) (j & 63);
+                        q[j >> 6] |= mk << o;
+                        if (o > 32) q[(j >> 6) + 1] |= mk >> (64 - o);
+                    }
                     for (; j + 4 <= L; j += 4) {
                         const uint64_t mk = lowOf[qb[(k0 + j) >> 2]];
                         if (!mk) continue;
@@ -339,13 +364,8 @@ bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
             // R11 (hostloop_gpu.cu k_r11 on the same keys): a UMI without N that is not a homopolymer, an N-free CB exact in the whitelist.
             // The .1fq is barcode-sorted, so consecutive reads mostly share their CB: one whitelist lookup per run of equal keys.
             if (r11On) {
-                bool ok = true, homo = true;
-                const uint64_t u0 = ur & 7;
-                for (uint64_t j = 0; j < umiL; j++) {
-                    const uint64_t c = (ur >> (3 * j)) & 7;
-                    if (c > 3) { ok = false; break; }
-                    homo = homo && c == u0;
-                }
+                // no N (bit 2 of every code clear) and not one code repeated umiL times
+                const bool ok = (ur & umiN) == 0, homo = ur == (ur & 7) * umiOne;
                 if (ok && !homo) {
                     if (cr != lastCr) {
                         flush();
