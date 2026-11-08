@@ -234,9 +234,13 @@ public:
     /// scTE contig filter, ported from scTE bin/scTE_build (chr_list, readGtf, genomeIndex): genes count on contigs 1-49, X, Y and M
     /// (with or without "chr"). A TE is kept when its contig without "chr" is one of those, or when the name holds no "chr" at all
     /// (scTE appends the TE file's contig names to chr_list but tests them with "chr" removed, so "chrUn_..." contigs drop out).
-    static bool scte_main_contig(const std::string& chrom) {
+    static std::string scte_bare(const std::string& chrom) {   // scTE compares contigs with "chr" removed (str.replace('chr', ''))
         std::string c = chrom;
         for (size_t p; (p = c.find("chr")) != std::string::npos;) c.erase(p, 3);
+        return c;
+    }
+    static bool scte_main_contig(const std::string& chrom) {
+        const std::string c = scte_bare(chrom);
         if (c == "X" || c == "Y" || c == "M") return true;
         if (c.empty() || c.size() > 2) return false;
         for (char ch : c) if (ch < '0' || ch > '9') return false;
@@ -250,6 +254,8 @@ public:
     ///     (readGtf's 'clean' set), on a main contig (scte_main_contig);
     ///   - cleanexon: per gene_name, the union of each exon's bases range(start, end) (1-based, end excluded), cut into runs [Es, Ee];
     ///   - a TE (BED start s0, end e) drops out when s0 < Ee and e > Es for any run (scTE's test, kept to the base).
+    /// Contigs are matched with "chr" removed on both sides, as scTE does, so an Ensembl-named gene GTF ("1") masks a UCSC-named TE
+    /// GTF ("chr1").
     /// Deviation: scTE keeps one contig per gene_name (its last exon's); the runs here keep each exon's own contig. Call before
     /// resolve_chroms. `nointron` ports scTE's 'nointron' mode: each gene's run is its whole span (min start to max end over all of its
     /// exon and UTR lines, every gene type: readGtf's 'raw' set), so TEs in introns drop out too.
@@ -284,7 +290,7 @@ public:
             const size_t g0 = gp + 11, g1 = line.find('"', g0);
             if (g1 == std::string::npos) continue;
             const long l = std::strtol(line.c_str() + c[2] + 1, nullptr, 10), r = std::strtol(line.c_str() + c[3] + 1, nullptr, 10);
-            genes[chrom][line.substr(g0, g1 - g0)].push_back({l, r});
+            genes[scte_bare(chrom)][line.substr(g0, g1 - g0)].push_back({l, r});   // "1" and "chr1" meet, as in scTE
         }
         gzclose(f);
         // cleanexon runs per contig: closed [Es, Ee] stored as Interval{Es, Ee}; scTE's test s0 < Ee && e > Es is then the standard
@@ -317,7 +323,7 @@ public:
         std::vector<uint32_t> hits;
         for (auto& kv : chrom_intervals_) {
             const bool keep_contig = scte_main_contig(kv.first) || kv.first.find("chr") == std::string::npos;
-            auto it = runs.find(kv.first);
+            auto it = runs.find(scte_bare(kv.first));
             IntervalTree tr;
             if (it != runs.end()) tr.build(it->second);
             for (const auto& iv : kv.second) {

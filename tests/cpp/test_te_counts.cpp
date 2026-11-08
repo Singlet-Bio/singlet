@@ -57,6 +57,7 @@ static std::string write_te_gtf2() {
     line("chrUn_KI270302v1", 1, 50, "T5", "l5");  // contig scTE drops -> masked
     line("KI270728.1", 1, 50, "T6", "l6");   // contig without "chr" -> kept
     line("chr2", 101, 200, "T7", "l7");      // gene line without gene_name, and a gene on a non-main contig -> kept
+    line("chr3", 101, 200, "T8", "l8");      // gene GTF names the contig "3" -> masked (scTE matches without "chr")
     gzclose(f);
     return p;
 }
@@ -78,6 +79,7 @@ static std::string write_gene_gtf() {
     line("chr1", "exon", 1250, 1260, "gene_id \"G2\"; gene_name \"NC1\"; gene_type \"lncRNA\";");
     line("chr1", "exon", 5050, 5060, "gene_id \"G3\"; gene_name \"LI1\"; gene_type \"lincRNA\";");
     line("chr2", "exon", 120, 180, "gene_id \"G4\"; gene_type \"protein_coding\";");
+    line("3", "exon", 150, 160, "gene_id \"G6\"; gene_name \"PC3\"; gene_type \"protein_coding\";");   // Ensembl contig name
     line("chr2_alt", "exon", 120, 180, "gene_id \"G5\"; gene_name \"ALT\"; gene_type \"protein_coding\";");
     gzclose(f);
     return p;
@@ -140,7 +142,7 @@ int main() {
     const std::string tg = write_te_gtf2(), gg = write_gene_gtf();
     {
         TeModel x;
-        CHECK(x.load_gtf(tg) && x.n_loci() == 8, "load index-test GTF");
+        CHECK(x.load_gtf(tg) && x.n_loci() == 9, "load index-test GTF");
         CHECK(x.mask_scte_exclusive("/nonexistent.gtf") == -1, "unreadable gene GTF");
         const long n = x.mask_scte_exclusive(gg);
         CHECK(x.scte_masked(0), "TE on a protein_coding exon masked");
@@ -151,7 +153,8 @@ int main() {
         CHECK(x.scte_masked(5), "chrUn contig masked");
         CHECK(!x.scte_masked(6), "contig without chr kept");
         CHECK(!x.scte_masked(7), "no gene_name and non-main gene contigs ignored");
-        CHECK(n == 4, "4 loci masked");
+        CHECK(x.scte_masked(8), "Ensembl-named gene contig masks the chr-named TE");
+        CHECK(n == 5, "5 loci masked");
         // nointron: NC1's span 1100-1260 now covers T1
         TeModel y;
         y.load_gtf(tg);
