@@ -450,3 +450,37 @@ alone, next to the `combined` score with and without `--leave-truth-out` and nex
 the ranking and is restated from the same run. Each ported filter's effect is reported as reads or calls removed per filter on
 each mix, in the order of Arriba's own log. Inputs Arriba needs that this data lacks are substituted, and each substitution is
 listed with the results.
+
+## B7: scTE and SoloTE against the engine's TE counter (D-109)
+
+Owner decision D-109 asks for parity by porting the competitor's code. scTE (JiekaiLab/scTE at 566f6ab3) is MIT licensed, so
+its counting rule is ported with credit in NOTICE. SoloTE (bvaldebenitom/SoloTE at 49a1d2b5) is GPL-3: it was read to learn
+the method, and its rule is rewritten from the method alone, with no code or code structure carried over. Both live on
+Singlet-Bio/singlet branch `feat/te-port` (gpu/frontier with feat/te-counts merged) as two new values of `--te-rule`. The
+default rule and the committed B7 rule 6de5821a are unchanged. The engine column below is the feat/te-counts counter scored so far.
+
+| | scTE (exclusive mode, the default) | SoloTE (method) | Engine (feat/te-counts) | Gap |
+|---|---|---|---|---|
+| Index | Genes are the merged exon and UTR bases of each gene_name. TE loci overlapping an exon of a protein-coding or lincRNA gene are dropped from the index at build time. Only contigs 1-49, X, Y and M count | Every TE locus in the BED, no gene filter | Every TE locus in the GTF | Index-time removal of TEs on coding exons |
+| Read to TE | A fixed 101-base window from the read's leftmost position, CIGAR ignored, counts once for every overlapping feature, genes and TEs alike | Aligned blocks; one count for every TE locus overlapped by at least one base | Aligned blocks; one subfamily, the one covering most bases; ties dropped | Every-overlap assignment and its tie handling |
+| Multimappers | The single STARsolo primary, wherever it lands, MAPQ ignored | The primary; MAPQ 255 counts at the locus, anything else at the subfamily | The primary; NH 1 counts at the locus, NH above 1 at the subfamily | None |
+| Intronic reads | Counted for an overlapping TE (the nointron mode drops TEs inside gene spans) | Counted, since STARsolo assigns no gene to them | Counted unless a block touches any exon | None for wholly intronic reads |
+| TEs overlapping exons | Locus removed when the exon belongs to a coding or lincRNA gene; reads on TEs inside other genes' exons count for both | A read stays with the gene only when STARsolo assigns it one gene (unique, transcript-compatible, sense); antisense, partly intronic and multi-mapped reads count for the TE | Any block touching any exon, either strand, any gene type, sends the read to the gene | Narrower exclusion in both tools |
+| Cells and UMIs | One read per (barcode, UMI) across the whole BAM, the leftmost; cells by a minimum gene count and an expected-cell cap | Distinct UMIs per (feature, barcode), every STARsolo-corrected barcode | Distinct (cell, feature, UMI), the engine's cell calls | Genome-wide leftmost-read molecule |
+
+**Ported from scTE** (`te_counts.h`, each function commented with its source): `TeModel::mask_scte_exclusive` and
+`scte_main_contig` (bin/scTE_build `genomeIndex`, `readGtf`, `cleanexon`; scTE/annotation.py `annoGtf`, including the nointron
+mode and scTE's exact boundary test), `TeModel::overlaps_all` with the scte branch of `TeModel::records` (scTE/base.py `align`)
+and `scte_leftmost_per_molecule` (the first-read-per-barcode-and-UMI step of scTE/base.py `Bam2bed`). Two pieces are left out
+on purpose. The fixed 101-base window replaces the aligned blocks only as an approximation, so the port keeps the blocks. scTE's
+cell filter is not ported either, because B7 scores every tool on the engine's called cells.
+
+**Reimplemented from the SoloTE method** (Rodriguez-Quiroz and Valdebenito-Maturana, Communications Biology 2022): reads that
+the gene counter would give to exactly one gene stay with it (`te_gene_assigned`: unique, every aligned block inside an exon of
+that gene on the sense strand); every other read counts for every TE locus it overlaps by at least one base, at the locus when
+unique and at the subfamily when multi-mapped. SoloTE also writes family and class matrices; the engine's subfamily row names
+already carry `subfamily:family:class`, so those sums need no new output. SoloTE's dual mode, which counts gene-assigned reads
+for TEs as well, is what the scte rule does for reads on TEs outside coding exons.
+
+`SINGLET_TE_ALL_RULES=1` writes `te_counts.scte.1pz` and `te_counts.solote.1pz` beside `te_counts.1pz`, so one engine run
+scores all three rules against the committed rule.
