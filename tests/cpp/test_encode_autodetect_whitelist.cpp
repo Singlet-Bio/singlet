@@ -7,6 +7,7 @@
 //  2. with the whitelists, a 101-nt v3-layout R1 is 10x-3p-v3 at HIGH confidence and R1 is cut to 28
 //  3. an explicit --protocol needs no whitelist
 //  4. resolve_whitelist_dirs: --whitelist-dir first, then $SINGLET_WHITELIST_DIR
+//  5. singlet run: a 10x 3'/5' chemistry without its whitelist stops (unless --barcode-discovery); Visium keeps discovery
 
 #include <cstdio>
 #include <cstdlib>
@@ -114,6 +115,24 @@ int main() {
         CHECK(resolve_whitelist_dirs({}) == std::vector<std::string>{wl}, "$SINGLET_WHITELIST_DIR is used when no --whitelist-dir is given");
         CHECK(autodetect_whitelists_present(resolve_whitelist_dirs({})), "the environment's directory holds the 10x whitelists");
         unsetenv("SINGLET_WHITELIST_DIR");
+    }
+    {   // 5. singlet run's whitelist rule
+        for (const char* t : {"10x-3p-v1", "10x-3p-v2", "10x-3p-v3", "10x-3p-v4", "10x-5p-v2", "10x-5p-v3", "10x-5p-v4"})
+            CHECK(whitelist_required(t), std::string(t) + " needs its whitelist");
+        for (const char* t : {"10x-visium", "split-seq", "dropseq"})
+            CHECK(!whitelist_required(t), std::string(t) + " keeps barcode discovery");
+        CHECK(find_whitelist_file("3M-february-2018.txt", {"/nonexistent-singlet-wl", wl}) == wl + "/3M-february-2018.txt",
+              "the whitelist is found in the first directory that holds it");
+        CHECK(find_whitelist_file("737K-april-2014.txt", {wl}).empty(), "a whitelist missing from every directory is not found");
+        setenv("SINGLET_WHITELIST_DIR", wl.c_str(), 1);
+        CHECK(find_whitelist_file("3M-february-2018.txt", resolve_whitelist_dirs({"/nonexistent-singlet-wl"})).empty(),
+              "--whitelist-dir is the only place looked when given");
+        CHECK(!find_whitelist_file("3M-february-2018.txt", resolve_whitelist_dirs({})).empty(), "without it, $SINGLET_WHITELIST_DIR is");
+        unsetenv("SINGLET_WHITELIST_DIR");
+        const std::string e = run_no_whitelist_error("10x-3p-v1", "737K-april-2014.txt", {wl});
+        CHECK(e.find("737K-april-2014.txt") != std::string::npos && e.find("--barcode-discovery") != std::string::npos &&
+              e.find("$SINGLET_WHITELIST_DIR") != std::string::npos && e.find(wl) != std::string::npos,
+              "the run error names the file, the places searched and --barcode-discovery");
     }
     for (const auto& f : {p1, p2}) std::remove(f.c_str());
     for (const char* f : {"/3M-february-2018.txt", "/737K-august-2016.txt"}) std::remove((wl + f).c_str());

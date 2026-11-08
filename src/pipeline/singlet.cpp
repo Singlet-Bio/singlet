@@ -2869,6 +2869,8 @@ static void usage(const char* prog) {
         << "  --ref-base DIR         Reference root dir for auto-detection (overrides\n"
         << "                         SINGLET_REF_BASE env var)\n"
         << "  --whitelist FILE       Barcode whitelist (for barcode correction)\n"
+        << "  --whitelist-dir DIR    Where the protocol's whitelist is looked up first (then $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists)\n"
+        << "  --barcode-discovery    Discover barcodes when a 10x 3'/5' whitelist is not found (otherwise the run stops)\n"
         << "  --barcodes FILE        Filtered barcode list\n\n"
         << "Feature layers (at least one required):\n"
         << "  --exons FILE           GTF for gene model\n"
@@ -3246,6 +3248,8 @@ static int singlet_main(int argc, char* argv[]) {
     std::string genome_dir, reads_r2, reads_r1;
     std::string ref_base;
     std::string barcode_file, whitelist_file;
+    std::vector<std::string> run_whitelist_dirs;   // --whitelist-dir (repeatable), resolved with resolve_whitelist_dirs
+    bool barcode_discovery = false;                // --barcode-discovery: a 10x 3'/5' run without its whitelist discovers barcodes
     std::string out_prefix = "./singlet_out";
     std::string output_format = "1pz";
     std::string genome_load = "NoSharedMemory";
@@ -3335,6 +3339,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--reads" && i+2 < argc) { reads_r2 = argv[++i]; reads_r1 = argv[++i]; }
         else if (arg == "--barcodes" && i+1 < argc) { barcode_file = argv[++i]; user_provided_barcodes = true; }
         else if (arg == "--whitelist" && i+1 < argc) whitelist_file = argv[++i];
+        else if (arg == "--whitelist-dir" && i+1 < argc) run_whitelist_dirs.push_back(argv[++i]);
+        else if (arg == "--barcode-discovery") barcode_discovery = true;
         else if (arg == "--exons" && i+1 < argc) config.exon_gtf_path = argv[++i];
         else if (arg == "--snps" && i+1 < argc) { config.snp_path = argv[++i]; snp_panel_source = "user"; }
         else if (arg == "--no-snps") no_default_snps = true;
@@ -3759,17 +3765,17 @@ static int singlet_main(int argc, char* argv[]) {
                 // $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs, the order of singlet
                 // download and encode). The run path read only the install directory, so a binary outside an install tree fell back
                 // to barcode auto-discovery even with the variable set (Kang 10x v1: 285,088 discovered barcodes on one run, 21,727 on another).
+                const auto wl_dirs = singlet::fq::resolve_whitelist_dirs(run_whitelist_dirs);
+                const std::string candidate = singlet::fq::find_whitelist_file(wl_name, wl_dirs);
                 bool resolved = false;
-                for (const auto& dir : singlet::fq::resolve_whitelist_dirs({})) {
-                    const std::string candidate = dir + "/" + wl_name;
-                    struct stat wl_stat;
-                    if (stat(candidate.c_str(), &wl_stat) == 0) {
-                        whitelist_file = candidate;
-                        whitelist_auto_resolved = true;
-                        resolved = true;
-                        std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag << " → " << candidate << "\n";
-                        break;
-                    }
+                if (!candidate.empty()) {
+                    whitelist_file = candidate;
+                    whitelist_auto_resolved = true;
+                    resolved = true;
+                    std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag << " → " << candidate << "\n";
+                } else if (singlet::fq::whitelist_required(proto_tag) && !barcode_discovery) {
+                    std::cerr << "ERROR: " << singlet::fq::run_no_whitelist_error(proto_tag, wl_name, wl_dirs) << "\n";
+                    return 1;
                 }
                 if (!resolved) {
                     // not in $SINGLET_WHITELIST_DIR nor <binary dir>/../whitelists

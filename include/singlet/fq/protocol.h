@@ -1161,6 +1161,31 @@ inline std::string autodetect_no_whitelist_error(const std::vector<std::string>&
            "). Point one of them at the whitelist directory, or name the chemistry with --protocol.";
 }
 
+// singlet run: the 10x 3' and 5' chemistries (every version) correct barcodes against their whitelist. Without it the run stops,
+// unless --barcode-discovery asks for discovery; whitelist-free protocols (Visium and the rest) keep discovery.
+inline bool whitelist_required(const std::string& tag) {
+    return tag.rfind("10x-3p-", 0) == 0 || tag.rfind("10x-5p-", 0) == 0;
+}
+
+// The first <dir>/<file> that exists, in the order of the dirs (resolve_whitelist_dirs), else "".
+inline std::string find_whitelist_file(const std::string& file, const std::vector<std::string>& dirs) {
+    if (file.empty()) return "";
+    for (const auto& d : dirs) {
+        const std::string p = d + "/" + file;
+        struct stat st;
+        if (stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode)) return p;
+    }
+    return "";
+}
+
+inline std::string run_no_whitelist_error(const std::string& tag, const std::string& file, const std::vector<std::string>& dirs) {
+    std::string searched;
+    for (const auto& d : dirs) searched += (searched.empty() ? "" : ", ") + d;
+    return tag + " corrects barcodes against " + file + ", which was not found. Looked in --whitelist-dir, then $SINGLET_WHITELIST_DIR, "
+           "then <binary dir>/../whitelists (searched: " + (searched.empty() ? std::string("no existing directory") : searched) +
+           "). Point one of them at the whitelist directory, pass --whitelist FILE, or ask for barcode discovery with --barcode-discovery.";
+}
+
 inline std::string protocol_wl_floor_error(const ProtocolCandidate& d) {
     if (d.confidence == Confidence::FORCE || d.confidence == Confidence::MANUAL) return "";
     const CandidateSpec* spec = find_protocol_spec(d.tag);
