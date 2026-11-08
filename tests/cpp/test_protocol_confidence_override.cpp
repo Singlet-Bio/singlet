@@ -100,8 +100,14 @@ int main() {
     {
         auto d = decide_protocol_call(pre("10x-3p-v3", Confidence::HIGH, "10x-3p-v2", passed("10x-3p-v3", 0.9), passed("10x-3p-v2", 0.5)));
         CHECK(d.source == "detector" && d.tag == "10x-3p-v3", "HIGH confidence: the detector wins over a disagreeing GEO chemistry");
-        d = decide_protocol_call(pre("10x-3p-v3", Confidence::MEDIUM, "10x-3p-v2", failed("10x-3p-v3", "x"), passed("10x-3p-v2", 0.6)));
-        CHECK(d.source == "detector" && d.tag == "10x-3p-v3", "MEDIUM confidence: the detector wins even when only GEO's call passes");
+        d = decide_protocol_call(pre("10x-3p-v3", Confidence::MEDIUM, "10x-3p-v2",
+                                     ProtocolCallTest{"10x-3p-v3", 0.8, 2000, "5p", false, "strand check: the cDNA read looks 5'"},
+                                     passed("10x-3p-v2", 0.6)));
+        CHECK(d.source == "detector" && d.tag == "10x-3p-v3",
+              "MEDIUM confidence above the floor: the detector wins even when only GEO's call passes");
+        d = decide_protocol_call(pre("10x-3p-v1", Confidence::MEDIUM, "indrop", failed("10x-3p-v1", "0.1% of barcode reads"),
+                                     failed("indrop", "indrop has no barcode whitelist to test against")));
+        CHECK(d.source == "excluded", "MEDIUM call below its own whitelist floor counts as low confidence: tested against GEO, excluded");
         d = decide_protocol_call(pre("10x-3p-v3", Confidence::LOW, "10x_3p_v2", failed("10x-3p-v3", "2% of barcode reads"), passed("10x-3p-v2", 0.6)));
         CHECK(d.source == "geo" && d.tag == "10x-3p-v2", "LOW confidence, only GEO passes: GEO's chemistry (alias resolved)");
         d = decide_protocol_call(pre("10x-3p-v3", Confidence::LOW, "10x-3p-v2", passed("10x-3p-v3", 0.7), failed("10x-3p-v2", "3%")));
@@ -137,8 +143,10 @@ int main() {
         CHECK(d.source == "geo" && d.tag == "10x-3p-v2" && d.geo_test.wl_rate > 0.9 && d.detector_test.wl_rate < 0.1,
               "v2 reads, LOW v3 call, GEO v2: GEO's call passes the floor, the detector's fails");
         d = resolve_protocol_call("10x-3p-v3", Confidence::HIGH, "10x_3p_v2", spots, dirs);
-        CHECK(d.source == "detector", "the same reads with a HIGH v3 call: the detector stands (evidence still recorded)");
-        CHECK(d.geo_test.wl_rate > 0.9, "...and GEO's whitelist rate is recorded for the record");
+        CHECK(d.source == "geo", "the same reads with a HIGH v3 call below its own floor: not confident, GEO's v2 passes");
+        d = resolve_protocol_call("10x-3p-v2", Confidence::HIGH, "10x-3p-v3", spots, dirs);
+        CHECK(d.source == "detector" && d.geo_test.wl_rate >= 0 && d.geo_test.wl_rate < 0.1,
+              "a HIGH v2 call that passes stands against GEO v3, and GEO's whitelist rate is recorded");
     }
     {
         auto five = make_spots(L3, 12, "5p", 12);    // 5' reads on the shared 3M list
@@ -192,6 +200,10 @@ int main() {
         det = detect_protocol(v3, 28, 90, dirs);
         CHECK(det.tag == "10x-3p-v3", "3' v3 reads stay 10x-3p-v3 with the GEM-X lists installed (got " + det.tag + ")");
         CHECK(fetched_whitelist_missing_error("10x-3p-v4", dirs).empty(), "with the list present a GEM-X call proceeds");
+        auto junk = make_spots({}, 12, "3p", 21);
+        det = detect_protocol(junk, 28, 90, dirs);
+        CHECK(det.tag != "10x-3p-v4" && det.tag != "10x-5p-v4",
+              "reads of no listed chemistry: the larger GEM-X list does not win the near-zero tie (got " + det.tag + ")");
         auto d = resolve_protocol_call("10x-3p-v3", Confidence::LOW, "10x-3p-v4", v4, dirs);
         CHECK(d.source == "geo" && d.tag == "10x-3p-v4", "LOW v3 call on GEM-X reads, GEO v4, list installed: GEO's GEM-X call passes");
     }

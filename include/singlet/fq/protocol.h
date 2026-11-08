@@ -1066,9 +1066,11 @@ ProtocolCandidate detect_protocol(
         // to be the same file as the v3 whitelist, match rates are identical.  Standard
         // 3p/5p libraries vastly outnumber multiome, so the lower protocol_id (earlier,
         // more common protocol) should win the tie.
+        // The larger list wins a tie only on real hits: at near-zero rates (reads of no listed chemistry) a larger list is just
+        // more chance matches, and the 7.4 M GEM-X 3' list would take every such tie from 10x-3p-v3.
         bool tie_break_wins = has_wl && best_wl_size > 0 &&
                               score >= best.score - 0.05 &&
-                              (curr_wl_size > best_wl_size ||
+                              ((curr_wl_size > best_wl_size && rate >= kProtocolWlRateFloor) ||
                                (curr_wl_size == best_wl_size &&
                                 cand->protocol_id < best.protocol_id));
 
@@ -1365,8 +1367,11 @@ ProtocolCallTest test_protocol_call(const std::string& tag, const std::vector<Sp
 // The policy on two tested calls (pure; unit-tested on its own). An empty detector_tag means detection made no call.
 inline ProtocolDecision decide_protocol_call(ProtocolDecision d) {
     auto take = [&](const char* src, const std::string& tag) { d.source = src; d.tag = tag; d.exclusion_reason.clear(); return d; };
+    // A call whose own whitelist rate was measured below kProtocolWlRateFloor is not confident, whatever its score: the floor says
+    // the reads are not that chemistry (as FastqEncoder's protocol_wl_floor_error does for auto-detection).
+    const bool floor_failed = d.detector_test.wl_rate >= 0.0 && d.detector_test.wl_rate < kProtocolWlRateFloor;
     if (d.geo_raw.empty() || d.geo_tag.empty() || d.geo_tag == d.detector_tag ||
-        d.detector_confidence >= Confidence::MEDIUM)
+        (d.detector_confidence >= Confidence::MEDIUM && !floor_failed))
         return take("detector", d.detector_tag);
     const bool dp = d.detector_test.pass, gp = d.geo_test.pass;
     if (dp && !gp) return take("detector", d.detector_tag);
