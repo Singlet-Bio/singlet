@@ -46,7 +46,70 @@ and the top-level `donor_assignments.tsv` (no longer a header-only stub).
 | `splice_psi.mtx.gz`, `splice_psi_{features,barcodes}.tsv.gz` | | gzip files now carry `.gz` | |
 | `barnyard_classification.tsv` | table | called cells only (covered every barcode: 69k "doublets" on hgmm1k) | |
 | `nonhost/nonhost_per_cell.*` | table | written on a fresh output directory; only EM-confirmed species are counted per cell | `nonhost_summary.json` adds `per_cell_species` and `missing_reference_fasta` |
-| `nonhost/nonhost_confirmed_reads.bin` | binary (`SNCR` v1, `include/singlet/pileup/nonhost/nonhost_confirmed_reads.h`) | the cDNA reads (2-bit) with cell barcode, UMI and species id of EM-confirmed non-host species only; written only when `em_species_count > 0` and the host Bloom filter is loaded, and never a read with a host k-mer; absent on uninfected samples | the one place sequenced reads are kept |
+| `nonhost/nonhost_confirmed_reads.bin` | binary (`SNCR` v2: species keys carry bit 31 for microbial species, D-100; `include/singlet/pileup/nonhost/nonhost_confirmed_reads.h`) | the cDNA reads (2-bit) with cell barcode, UMI and species id of EM-confirmed non-host species only; written only when `em_species_count > 0` and the host Bloom filter is loaded, and never a read with a host k-mer; absent on uninfected samples | the one place sequenced reads are kept |
+| `multimap_counts` (`.1pz` or `.mtx.gz` + features/barcodes) | matrix gene sets x barcodes | molecules whose reads fit two genes, per gene set and cell; the gene counts never include them | see "Multi-mapping record" below; `multimap_record.h` |
+
+## Reads-per-UMI (Beta freeze)
+
+Reads are deleted after the Beta campaign, so the number of reads behind each molecule is kept with the counts. The engine writes
+three members whenever UMI collapse and a gene model are on (`--no-reads-matrix` turns them off). CPU and GPU outputs are byte
+identical (frontier gate 803937, pbmc1k_v3).
+
+| Output | Kind | What | In the `.s1` |
+|---|---|---|---|
+| `exon_reads.1pz`, `intron_reads.1pz` | matrix, same rows, columns and nonzeros as `exon_counts` / `intron_counts` | reads merged into each counted entry (uint32) | as `exon_reads_delta.bin` / `intron_reads_delta.bin`: reads minus UMIs on the called cells' nonzeros (`singlet.s1.readsvals.reads_matrix` rebuilds the matrix); the full matrices stay in the run directory |
+| `reads_per_umi_hist.tsv.gz` | table, one row per barcode | molecules with 1 to 15 reads and with 16 or more (`n1` .. `n15`, `n16plus`), over every molecule the counts emit (exon and intron) | member `reads_per_umi_hist`, called cells only (`bundle._reads_member`, `scripts/s1_campaign.py` `MODALITY_MEMBERS`) |
+
+Validation against Cell Ranger 3.0's `molecule_info.h5` read counts on pbmc1k_v3, over the 1,217 cells both callers keep
+(`bench/readlevel/rpu_vs_molinfo.py`, `bench/readlevel/README.md`):
+
+| Metric | Engine | Cell Ranger |
+|---|---|---|
+| Median of the per-cell mean reads per UMI | 3.59 | 3.65 |
+| Molecules with one read | 21.6% | 20.9% |
+| Sequencing saturation over these cells | 71.6% | 72.2% |
+| Per-cell mean reads per UMI, Pearson / Spearman | 0.967 / 0.961 | |
+| Pooled histogram, total variation distance | 0.014 | |
+
+The engine counts 1.48 times as many molecules per cell because its histogram includes intronic molecules, which Cell Ranger
+3.0 leaves out.
+
+
+## Multi-mapping record
+
+The gene count matrices count a molecule only when its reads are assigned to one gene. STARsolo's Unique counts make the same choice, so
+reads that fit two genes go uncounted: multimappers whose alignments touch two genes, uniquely mapped reads on the shared exon of two
+overlapping genes, and reads on one gene's exon inside another gene's intron (STARsolo GeneFull's gene-body set, the engine's default
+`kGeneFullSet` intron rule). Gene families with near-identical paralogs lose most of their molecules this way. `multimap_counts` keeps those reads as
+molecules so that a user can add them back when the data are pulled, or leave them out. The stored gene counts do not change.
+
+Each row is a gene set, named `<gene_id>_<gene_name>|<gene_id>_<gene_name>` for two genes. Columns are the sample's barcodes, as in every
+other count matrix, and values are molecule counts. Molecules are built the way STARsolo builds them in `collapseUMIperCB`: reads are
+grouped by cell and exact UMI, and the molecule keeps the genes present in every one of its reads. A UMI whose reads share one gene becomes
+a single-gene row (`<gene_id>_<gene_name>`), and a UMI whose reads share no gene is dropped. Reads with three or more candidate genes are
+left out, as are multimappers with a secondary alignment that itself spans two genes, which keeps the record small. A multimapper is
+judged on the gene set the counts use: under the default `kExonPrecedence` rule, its exonic alignments when it has any. A read that rule
+counts for one gene (a retrocopy in another gene's intron, for example) is in the gene counts and never in the record. A UMI that also
+has a read in the gene counts is left out as well, because STARsolo pools all of a UMI's reads and one uniquely assigned read makes the
+whole UMI a unique molecule. No molecule is counted twice; the run log reports reads, molecules, gene sets, dropped UMIs and UMIs already
+in the gene counts on its `[multimap]` line.
+
+The CPU pileup collects the reads in its multimapper buffer and on unique two-gene primaries. The GPU pileup returns the same reads from
+`k_resolve` and the exact (cell, UMI) keys of its gene store, and one host function (`multimap::build`) turns either into the matrix, so
+the two engines write identical bytes.
+
+Retrieval distributes the molecules over their genes in `singlet.multimap.distribute`, a port of STARsolo's `--soloMultiMappers`:
+
+```python
+b.raw_counts(gsm)                                   # unique reads only (default)
+b.raw_counts(gsm, include_multimappers=True)        # + multimappers by EM
+b.raw_counts(gsm, include_multimappers=True, multimappers="Uniform")
+```
+
+EM uses the cell's unique counts as the prior, with STARsolo's constants, so a molecule shared by a highly and a lowly expressed gene goes
+mostly to the first. Uniform splits each molecule evenly. With multimappers included, `X` becomes float, the added part is in
+`layers["multimapped"]` and `uns["multimappers"]` names the method. Samples processed before the record existed keep their unique counts and
+raise a warning.
 
 ## Pipeline defaults that changed
 

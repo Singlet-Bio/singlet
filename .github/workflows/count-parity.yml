@@ -1,0 +1,32 @@
+name: STARsolo count gate
+
+# Every change to the files that decide the gene count matrices (bench/count_parity/counting_sources.txt) must carry a passing
+# STARsolo gate record: bench/count_parity/gate.sbatch runs the built engine on real barnyard and CITE-seq data on Clipper and
+# scores each counting axis against STARsolo 2.7.11b with paired bootstrap CIs. This check fails when the record for the
+# current sources is missing or any axis is worse than STARsolo beyond its CI (bench/count_parity/README.md).
+
+on:
+  push:
+    branches: [main, 'gpu/frontier', 'prod/**']
+    paths:
+      - 'include/singlet/pileup/**'
+      - 'src/engine_gpu/gpu_pileup/**'
+      - 'bench/count_parity/**'
+      - '.github/workflows/count-parity.yml'
+  pull_request:
+    paths:
+      - 'include/singlet/pileup/**'
+      - 'src/engine_gpu/gpu_pileup/**'
+      - 'bench/count_parity/**'
+      - '.github/workflows/count-parity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  starsolo-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Gate record for the counting sources
+        run: python3 bench/count_parity/gate_check.py check

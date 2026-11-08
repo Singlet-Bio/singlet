@@ -3,6 +3,7 @@
 
 #include "ReadAlignChunk.h"
 #include <pthread.h>
+#include "singlet/thread_name.h"   //singlet: per-thread CPU by role (thread names change no output)
 
 #define MAX_chunkOutBAMposition 100000
 
@@ -19,6 +20,7 @@ public:
     ThreadControl();
 
     static void* threadRAprocessChunks(void *RAchunk) {
+        singlet::set_thread_name("star-map");
         ( (ReadAlignChunk*) RAchunk )->processChunks();
         pthread_exit(0);
         return NULL;

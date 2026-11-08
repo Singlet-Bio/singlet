@@ -1,0 +1,31 @@
+node=g004.clipper.gvsu.edu bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/df7d680e/singlet-gpu commit=df7d680e11b617f89949ca87fd5fd77f2e7c18dd srr=SRR24098804 2026-11-06T17:39:44-05:00
+sra file /tmp/debruinz-ir-id-803280/SRR24098804/SRR24098804.sra 1211301413 bytes
+sra: exit 0 wall 0:32.29 maxrss_kb 1360116 size 886163424 sha256 1b12ec5174291c58
+  sra | [1fq-encode] Protocol: 10x-3p-v3 (confidence: 3)
+  sra | [1fq-encode] Total spots: 32192711
+  sra | [singlet-download] Done: 32192711 reads, 65 blocks
+  sra | [singlet-download] Protocol: 10x-3p-v3 (confidence: 3)
+  sra | [1fq-profile]   Protocol:     1.543s ( 5.0%)
+total 12677116
+-rw-r--r-- 1 debruinz domain users 4462535128 Nov  6 17:41 SRR24098804_1.fastq
+-rw-r--r-- 1 debruinz domain users 8518816714 Nov  6 17:41 SRR24098804_2.fastq
+SRR24098804_1.fastq:  100000 28
+SRR24098804_2.fastq:  100000 91
+fqall: exit 0 wall 0:55.60 maxrss_kb 925076 size 886163424 sha256 1b12ec5174291c58
+  fqall | [singlet-download] input spec: fastq:/tmp/debruinz-ir-id-803280/fq/SRR24098804_1.fastq|/tmp/debruinz-ir-id-803280/fq/SRR24098804_2.fastq
+  fqall | [1fq-encode] Protocol: 10x-3p-v3 (confidence: 3)
+  fqall | [1fq-encode] Total spots: 32192711
+  fqall | [singlet-download] Done: 32192711 reads, 65 blocks
+  fqall | [singlet-download] Protocol: 10x-3p-v3 (confidence: 3)
+  fqall | [1fq-profile]   Protocol:     1.520s ( 3.2%)
+fqgz: barcode SRR24098804_1.fastq, cDNA SRR24098804_2.fastq
+fqgz: exit 0 wall 1:02.20 maxrss_kb 924712 size 886163424 sha256 1b12ec5174291c58
+  fqgz | [singlet-download] input spec: fastq:/tmp/debruinz-ir-id-803280/fq/SRR24098804_1.fastq.gz|/tmp/debruinz-ir-id-803280/fq/SRR24098804_2.fastq.gz
+  fqgz | [1fq-encode] Protocol: 10x-3p-v3 (confidence: 3)
+  fqgz | [1fq-encode] Total spots: 32192711
+  fqgz | [singlet-download] Done: 32192711 reads, 65 blocks
+  fqgz | [singlet-download] Protocol: 10x-3p-v3 (confidence: 3)
+  fqgz | [1fq-profile]   Protocol:     1.740s ( 3.4%)
+VERDICT fqall vs sra: IDENTICAL (byte for byte)
+VERDICT fqgz vs sra: IDENTICAL (byte for byte)
+done 2026-11-06T17:45:24-05:00

@@ -1,0 +1,101 @@
+corpus_row	dataset_id	protocol	singlet_route	singlet_route_note
+1	hgmm1k_v3	10x 3p v3	yes	10x-3p-v3; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several)
+2	hgmm1k_v2	10x 3p v2	yes	10x-3p-v2; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several)
+3	hgmm10k_v3	10x 3p v3	yes	10x-3p-v3; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several)
+4	macosko2015_dropseq_mix	Drop-seq	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+5	gierahn2017_seqwell_mix	Seq-Well	yes	seqwell; forced --protocol seqwell trims an over-long R1 to BC 12 + UMI 8 (same path as Mereu Drop-seq)
+6	zheng2017_gemcode_mix	10x 3p v1	yes	10x-3p-v1; GemCode tar (read-RA interleaved, read-I1 = 14-nt barcode) staged by singlet download <url>; tested on pbmc3k
+7	rosenberg2018_splitseq_mix	SPLiT-seq	yes	protocol splitseq in known_protocols() and reads come from an SRA run
+8	cao2017_sci_mix	sci-RNA-seq	no	sci-RNA-seq v1: cell identity spans one SRA run per PCR well plus an 18-nt R1 (UMI + RT barcode); needs a multi-run barcode prefix, not built
+9	stoeckius2018_hashing	10x 3p v2	yes	protocol 10x-3p-v2 in known_protocols() and reads come from an SRA run
+10	howitt2023_bal1	10x 3p, HTO	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+11	howitt2023_cl	10x 3p, HTO	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+12	tenx_cellplex_pbmc10k	10x 3p v3, CMO	yes	10x-3p-v3 GEX library; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several); CMO reads not counted
+13	xili_hek_hmec_multi	10x 3p, MULTI-seq	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+14	xili_nuc_multi	10x 3p nuclei, MULTI-seq	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+15	kang2018_b1_a	10x 3p v1	yes	10x-3p-v1; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY; tested on Kang batch 2 stim
+16	kang2018_b1_b	10x 3p v1	yes	10x-3p-v1; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY; tested on Kang batch 2 stim
+17	kang2018_b1_c	10x 3p v1	yes	10x-3p-v1; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY; tested on Kang batch 2 stim
+18	kang2018_ctrl	10x 3p v1	yes	10x-3p-v1; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY; tested on Kang batch 2 stim
+19	osorio2019_lcl_mix	10x 3p v2	yes	protocol 10x-3p-v2 in known_protocols() and reads come from an SRA run
+20	lcl_gse230239_HG01277	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+21	lcl_gse230239_HG00362	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+22	neavin2023_village	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+23	mcfarland2020_mixseq	10x 3p	no	no raw reads in a public archive (Figshare holds UMI matrices only)
+24	frozen_pbmc_bc_v1	10x 3p v1	yes	10x-3p-v1; GemCode tar staged by singlet download <url>; tested on pbmc3k
+25	pilot_GSM5682562	10x 5p, HTO	yes	SRA run with both reads; already staged and run through the CPU and GPU engine in the S15 pilot directory
+26	pilot_GSM9038586	10x 3p	yes	SRA run with both reads; already staged and run through the CPU and GPU engine in the S15 pilot directory
+27	pilot_GSM4987144	10x 5p v1	yes	SRA run with both reads; already staged and run through the CPU and GPU engine in the S15 pilot directory
+28	pilot_GSM4987148	10x 3p v3	yes	SRA run with both reads; already staged and run through the CPU and GPU engine in the S15 pilot directory
+29	pilot_GSM5171610	10x 5p	yes	SRA run with both reads; already staged and run through the CPU and GPU engine in the S15 pilot directory
+30	pilot_GSM8085472	10x 5p, HTO	yes	SRA run with both reads; already staged and run through the CPU and GPU engine in the S15 pilot directory
+31	lr_pbmc_E_pbmc1	10x 3p + PacBio + ONT	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+32	lr_pbmc_E_pbmc2	10x 3p + PacBio	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+33	lr_musc	10x 3p + ONT	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+34	lr_LB	10x 3p + Kinnex + ONT	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+35	lr_mix1k	10x 3p + long reads	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+36	lr_mix10k_3	10x 3p + long reads	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+37	lr_mix10k_5	10x 5p + long reads	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+38	lr_wtc11_r1	10x 3p + long reads	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+39	lr_wtc11_r2	10x 3p + long reads	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+40	lr_chm13	10x 3p + long reads	yes	short-read 10x library stages through the SRA or FASTQ path; the long reads are comparison truth, not engine input
+41	lebrigand2020_scnaumi	10x 3p + ONT	yes	10x-3p-v2; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY (Illumina run SRR9008424 is BAM-only on ENA)
+42	tian2019_sc_10x_5cl	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+43	tian2019_celseq2_5cl_p1	CEL-Seq2	yes	celseq2-u6b8 (new, forced): singlet download <run> --protocol celseq2-u6b8; R1 32 nt trimmed to UMI 6 + BC 8; tested on SRR8606533
+44	tian2019_rnamix_celseq2	CEL-Seq2	yes	celseq2-u6b8 (new, forced), same sc_mixology layout as row 43; tested on SRR8606533
+45	mereu2020_icell8	ICELL8	yes	icell8 (new, forced): --protocol icell8; BC 11 + UMI 14; tested on SRR9621748
+46	mereu2020_dropseq	Drop-seq	yes	dropseq, forced: --protocol dropseq trims the 76-nt R1 to BC 12 + UMI 8 (auto mode refuses non-10x); tested on SRR9621743
+47	mereu2020_indrop	inDrops	no	inDrop: Mereu deposited one run (the corpus row), so no development library to check the layout on
+48	mereu2020_scrbseq	SCRB-seq	yes	scrbseq (new, forced): --protocol scrbseq; BC 6 + UMI 10; tested on SRR9621767
+49	mereu2020_celseq2	CEL-Seq2	yes	celseq2-u6b8 (new, forced): --protocol celseq2-u6b8; R1 30 nt trimmed to UMI 6 + BC 8; tested on SRR9621729
+50	pbmc10k_cite_v3	10x 3p v3	yes	10x-3p-v3 GEX library; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several); ADT reads not counted
+51	zheng2017_sorted_b	10x 3p v1	yes	10x-3p-v1; GemCode tar staged by singlet download <url>; tested on pbmc3k
+52	zheng2017_sorted_cd14	10x 3p v1	yes	10x-3p-v1; GemCode tar staged by singlet download <url>; tested on pbmc3k
+53	zheng2017_sorted_nk	10x 3p v1	yes	10x-3p-v1; GemCode tar staged by singlet download <url>; tested on pbmc3k
+54	tabula_muris_kidney_facs	Smart-seq2	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+55	qiu2020_scnt_neu	scNT-seq (10x)	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+56	mereu2020_singlenuclei	snRNA-seq (Mereu nuclei protocol)	yes	10x Chromium nuclei, 26-nt R1; auto-detected 10x-3p-v2 on SRR9621777
+57	pbmc_multiome10k	10x multiome RNA, nuclei	yes	10x-arc-gex; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several) (GEX library only, ATAC files left out)
+58	lake2018_brain_nuclei	snDrop-seq nuclei	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+59	ravindra2021_mock	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+60	ravindra2021_dpi1	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+61	ravindra2021_dpi2	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+62	russell2018_influenza	10x 3p v2	yes	10x-3p-v2; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY (runs SRR6373865-9 are BAM-only on ENA)
+63	avital2017_salmonella	CEL-Seq style dual host and pathogen	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+64	macosko2015_dropseq_ercc	Drop-seq	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+65	tenx_crispr_a375_10k	10x 3p v3, CRISPR	yes	10x-3p-v3 GEX library; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several); guide reads not counted
+66	norman2019_gem1	10x 3p v2, CRISPR	yes	protocol 10x-3p-v2 in known_protocols() and reads come from an SRA run
+67	replogle2022_k562_gg41	10x 3p v3, CRISPR	no	no raw accession confirmed for the GEO deposit
+68	pbmc5p_v1	10x 5p v1	yes	10x-5p-v2; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several)
+69	pbmc10k_5p_v2	10x 5p v2	yes	10x-5p-v2; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several)
+70	gse145370_tcr	10x 5p VDJ	yes	protocol 10x-5p-v3 in known_protocols() and reads come from an SRA run
+71	bcr_pbmc3_b	10x 5p BCR	yes	10x-5p; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several); the B-cell enriched library stages, assembly is a separate tool
+72	bcr_nextgem_pbmc3_b	10x 5p BCR	yes	10x-5p; 10x FASTQ tar from the URL (singlet download <url>; --fastq-sample picks the GEX library when the tar holds several); the B-cell enriched library stages, assembly is a separate tool
+73	bian2018_sctrio2_crc	scTrio-seq2	no	no protocol spec for 'scTrio-seq2'
+74	patel2014_gbm	Smart-seq (plate)	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+75	aynaud2020_ewing	Smart-seq style plate (full-length)	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+76	mereu2020_ddseq	ddSEQ	no	Mereu ddSEQ R1 (52 nt) has a variable-length phase block before BC1 and different linkers from the ddseq/surecell specs; needs an anchored extractor
+77	ludwig2019_mt_clones	Smart-seq2 plate	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+78	miller2022_maester	10x 3p + chrM enrichment	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+79	deng2014_f1_embryo	Smart-seq	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+80	hagemann2020_smartseq3_f1	Smart-seq3	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+81	panten2024_f1_testis	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+82	buettner2015_esc_cycle	Smart-seq (C1)	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+83	battich2020_sceu	scEU-seq (CEL-Seq2 based)	yes	protocol celseq2 in known_protocols() and reads come from an SRA run
+84	qiu2020_scnt	scNT-seq (10x)	yes	protocol dropseq in known_protocols() and reads come from an SRA run
+85	erhard2019_scslam	scSLAM-seq	no	plate-based per-cell FASTQ: no per-cell route in the engine (no barcode read)
+86	visium_mouse_brain_ant	Visium	no	input stages (10x-visium, FASTQ tar), but the spot barcode list and coordinates ship only with Space Ranger
+87	visium_cytassist_post_xenium_colon	Visium CytAssist FFPE	no	Visium CytAssist FFPE is probe-based; no probe-set spec
+88	visiumhd_crc_xenium	Visium HD	yes	protocol 10x-visium in known_protocols() and reads come from an SRA run
+89	slideseqv2_hippocampus	Slide-seqV2	no	no protocol spec for 'Slide-seqV2'
+90	ren2025_serial_sections	Visium HD, Stereo-seq	no	no raw accession
+91	dlpfc_maynard2021	Visium	no	input stages (10x-visium), but the spot barcode list and coordinates ship only with Space Ranger
+92	zf_microwell2022	Microwell-seq	yes	protocol microwell-seq in known_protocols() and reads come from an SRA run
+93	zf_daniocell	10x 3p v3	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+94	dm_fca2022	10x 3p (snRNA)	yes	10x-3p-v3 nuclei; Cell Ranger BAM (singlet download --bam <url>): barcode read rebuilt from CR/CY/UR/UY, one lane BAM per run (226 runs on ENA, BAM-only)
+95	dm_davie2018	10x 3p and Drop-seq	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+96	ce_taylor2021_cengen	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+97	ce_cao2017_sci	sci-RNA-seq	no	sci-RNA-seq3 spec exists, Cao 2017 is sci-RNA-seq v1 (R1 18 nt): different layout
+98	macaque_shami2020_testis	10x 3p	yes	protocol 10x-3p-v3 in known_protocols() and reads come from an SRA run
+99	pbmc5k_v4_d1	10x 3p v4	no	input stages (FASTQ tar), but the GEM-X v4 barcode list ships only with 10x software
+100	flex_pbmc_4plex	10x Flex (probe)	no	no protocol spec for '10x Flex (probe)'

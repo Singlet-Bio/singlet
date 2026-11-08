@@ -61,6 +61,8 @@ struct CandidateSpec {
     // Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap; see singlet.cpp "Beta aligner profile").
     // On only where it has been validated against the frozen ground-truth gate and the CR4 mapping-rate probe.
     bool cr4 = false;
+    // Reachable only by name (--protocol): auto-detection skips the spec, so adding one never changes the call on an existing library.
+    bool forced_only = false;
 };
 
 // Barcode reads shorter than a whitelist protocol's R1 by at most this many bases are still candidates for it (UMI trimmed), when at
@@ -201,6 +203,16 @@ inline const std::vector<CandidateSpec>& known_protocols() {
         // Bug fix: previously no CandidateSpec entry existed for cite-seq-gex, causing
         // protocol_id=0 and a heuristic CB=19/UMI=19 from R1=38bp SRA data.
         {"cite-seq-gex", 25, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false},
+
+        // ── Forced-only specs (--protocol <tag>; auto-detection skips them) ──
+        // CEL-Seq2 as run by Tian 2019 (sc_mixology) and Mereu 2020: R1 = UMI(6@0) + BC(8@6), followed by polyT or masked bases
+        // (R1 is 30-32 nt; the encoder trims it to 14). Measured on SRR8606533 and SRR9621729: positions 0-5 are random, 6-13 hold a
+        // few hundred barcodes. The older celseq2 spec (BC first, R1 12) stays for the libraries it already serves.
+        {"celseq2-u6b8", 26, 14, 6, 8, 0, 6, "", "", 0, false, "", {}, false, true},
+        // SCRB-seq (Mereu 2020): R1(16) = BC(6@0) + UMI(10@6). Measured on SRR9621767.
+        {"scrbseq", 27, 16, 0, 6, 6, 10, "", "", 0, false, "", {}, false, true},
+        // ICELL8 3' DE (Takara; Mereu 2020): R1(26) = BC(11@0) + UMI(14@11) + one base. Measured on SRR9621748.
+        {"icell8", 28, 25, 0, 11, 11, 14, "", "", 0, false, "", {}, false, true},
     };
     return specs;
 }
@@ -264,6 +276,10 @@ inline const CandidateSpec* find_protocol_spec(const std::string& tag) {
         // Seq-Well already normalizes correctly (seqwell == seqwell)
         // CITE-seq GEX shorthands
         {"citeseq",      "cite-seq-gex"},
+        {"celseq2tian",  "celseq2-u6b8"},
+        {"celseq2mereu", "celseq2-u6b8"},
+        {"scrb",         "scrbseq"},
+        {"icell83p",     "icell8"},
         {"citeseqgex",   "cite-seq-gex"},
         {"cite",         "cite-seq-gex"},
         // 10x Multiome shorthands (map to 10x-arc-gex)
@@ -538,6 +554,7 @@ ProtocolCandidate detect_protocol(
 
     std::vector<const CandidateSpec*> candidates;
     for (const auto& k : known) {
+        if (k.forced_only) continue;
         uint16_t expected = k.r1_len;
 
         if (barcode_read_len == 0 && bio_read_len > 0) {
@@ -1126,7 +1143,8 @@ inline bool is_3prime_protocol(const std::string& tag) {
            tag == "sci-rna-seq3" || tag == "bd-rhapsody" || tag == "splitseq" ||
            tag == "dnbelab-c4" || tag == "seqwell" || tag == "ddseq" ||
            tag == "quartzseq2" || tag == "microwell-seq" || tag == "surecell" ||
-           tag == "10x-arc-gex" || tag == "10x-visium" || tag == "cite-seq-gex";
+           tag == "10x-arc-gex" || tag == "10x-visium" || tag == "cite-seq-gex" ||
+           tag == "celseq2-u6b8" || tag == "scrbseq" || tag == "icell8";
     // strtseq is 5' (not in this list)
     // 10x-atac has no cDNA read — polyA trimming not applicable
 }
@@ -1275,7 +1293,8 @@ inline AssayType classify_assay(
             protocol_tag == "indrop" || protocol_tag == "dnbelab-c4" ||
             protocol_tag == "seqwell" || protocol_tag == "ddseq" ||
             protocol_tag == "quartzseq2" || protocol_tag == "microwell-seq" ||
-            protocol_tag == "surecell")
+            protocol_tag == "surecell" || protocol_tag == "celseq2-u6b8" ||
+            protocol_tag == "scrbseq" || protocol_tag == "icell8")
             return AssayType::SC_RNA_3PRIME;
 
         // 5' UMI-sc protocols
@@ -1364,7 +1383,8 @@ inline AssayType protocol_tag_to_assay_type(const std::string& tag) {
         tag == "sci-rna-seq3" || tag == "bd-rhapsody" || tag == "splitseq" ||
         tag == "indrop" || tag == "dnbelab-c4" || tag == "seqwell" ||
         tag == "ddseq" || tag == "quartzseq2" || tag == "microwell-seq" ||
-        tag == "surecell")
+        tag == "surecell" || tag == "celseq2-u6b8" || tag == "scrbseq" ||
+        tag == "icell8")
         return AssayType::SC_RNA_3PRIME;
     if (tag.find("5p") != std::string::npos || tag == "strtseq")
         return AssayType::SC_RNA_5PRIME;

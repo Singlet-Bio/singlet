@@ -15,7 +15,6 @@
 #include <set>
 #include <string>
 #include <vector>
-#include <algorithm>
 #include <unordered_set>
 
 #include "singlet/fq/protocol.h"
@@ -141,7 +140,10 @@ static void test_protocol_geometry_valid() {
         // Skip complex protocols (e.g. sci-RNA-seq3) where bc_offset+bc_len+umi_len
         // may exceed r1_len because the barcode structure includes linkers between segments.
         if (p.r1_len > 0 && p.linker.empty()) {
-            uint16_t need = p.bc_offset + p.bc_len + p.umi_len;
+            // UMI after the barcode: barcode end + UMI; UMI before it (celseq2-u6b8): the barcode end
+            const bool umi_first = p.umi_len > 0 && p.umi_offset + p.umi_len <= p.bc_offset;
+            uint16_t need = umi_first ? static_cast<uint16_t>(p.bc_offset + p.bc_len)
+                                      : static_cast<uint16_t>(p.bc_offset + p.bc_len + p.umi_len);
             if (need > p.r1_len + 4) {  // +4 for over-sequencing tolerance
                 std::fprintf(stderr, "    %s: bc+umi=%d > r1_len=%d\n",
                              p.tag.c_str(), need, p.r1_len);

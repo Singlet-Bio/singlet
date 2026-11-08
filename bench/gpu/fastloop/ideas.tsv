@@ -1,0 +1,10 @@
+# Idea registry of the fastloop harness: name<TAB>env switches (or -)<TAB>extra singlet arguments (or -)<TAB>stage it acts on<TAB>note<TAB>decision metric (or -)
+# tp_gc.sbatch reads columns 1-3 (FL_IDEAS). analyze.py prints column 4 beside each effect and decides on column 6 (default --metric, held).
+# Names here override tp_gc's own atoms.
+wshrink	SINGLET_BOLD_WSHRINK=1	-	lanes (lane B Work)	IDEAS item 8	-
+shidx	SINGLET_GPU_SHARED_INDEX=1	-	index upload	IDEAS item 4; VMM shared index, holder per device	-
+nhtries1	SINGLET_NONHOST_GPU_TRIES=1	-	non-host screen	IDEAS item 1 control: the retry off	-
+stepsauto	SINGLET_ENGINE_GPU_STEPS_B=auto	-	lanes (heavy-read split)	IDEAS item 6	-
+screen	SINGLET_DEMUX_SCREEN=1	-	demux (host)	IDEAS item 7	core
+trace	SINGLET_ENGINE_GPU_TRACE=1	-	all (diagnostic)	IDEAS item 2: the transfer ledger	-
+nhsrv	-	-	non-host index upload (XC)	XC card (a): resident non-host index, singlet gpu-nhsrv; tp_gc starts it per point	-

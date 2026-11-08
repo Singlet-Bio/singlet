@@ -1,0 +1,103 @@
+#!/bin/bash
+#SBATCH --job-name=gpu-pilot
+#SBATCH --account=debruinz
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:nvidia_h100_nvl:2
+#SBATCH --cpus-per-task=54
+#SBATCH --mem=700G
+#SBATCH --time=24:00:00
+#SBATCH --exclude=g050
+#SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
+# GPU pilot: holds one whole H100 node (2 GPUs, the 54 usable cores, 700 GB; Slurm refuses more) and runs job scripts from a queue directory, one per GPU or one on the whole
+# node, so timing runs share a fixed node and nothing waits in the Slurm queue between them. README.md beside this file explains the queue.
+# One-GPU pilot (a third H100 beside a two-GPU pilot, not exclusive; give it its own QUEUE): it runs g1 items only and leaves g2 items queued:
+#   sbatch --gres=gpu:nvidia_h100_nvl:1 --cpus-per-task=27 --mem=350G --export=ALL,QUEUE=$WORK/jobs/gpu-campaign/queue1 pilot.sbatch
+# The two-GPU pilot takes the whole node: sbatch --exclusive pilot.sbatch
+#
+#   QUEUE  queue root (default $WORK/jobs/gpu-campaign/queue): new/ holds the items, running/ and done/ are written here.
+#   IDLE_S exit after this many seconds with nothing running and nothing queued (default 1800).
+#
+# An item is an executable bash script in new/, named <order>-<name>.g1.sh (one GPU) or <order>-<name>.g2.sh (the whole node). Items start
+# in filename order. A g1 item takes the first free GPU; a g2 item starts when both GPUs are free, and g1 items behind it run on a free GPU
+# in the meantime (no head-of-line blocking; a g2 item can wait while g1 items keep arriving).
+# Each item runs as its own srun step (its own cgroup, so CPU and memory accounting stay per item) with these variables set:
+#   PILOT=1 PILOT_JOB PILOT_NODE PILOT_GPU (0, 1 or both) PILOT_SHARED (1 while the other GPU may be busy) RUNID=<job>-g<gpu>-<name>
+#   and for a g1 item PINDEV=0 CUDA_VISIBLE_DEVICES=0: the step's cgroup exposes only the GPU Slurm gave it, which CUDA numbers 0
+#   (CUDA_VISIBLE_DEVICES=1 there names no device, and every run fell back to the CPU: pilot 803591, item 11-fb-b).
+# An item may declare "# PILOT-MINUTES: <n>" (default 240); it is not started when less time than that is left in the allocation.
+# Touch $QUEUE/STOP to end the pilot after the running items finish.
+set -uo pipefail
+W=/mnt/projects/debruinz_project/debruinz/singlet
+Q=${QUEUE:-$W/jobs/gpu-campaign/queue}; IDLE_S=${IDLE_S:-1800}
+mkdir -p $Q/new $Q/running $Q/done
+NODE=$(hostname -s); T0=$(date +%s)
+END=$(( T0 + $(squeue -h -j $SLURM_JOB_ID -o %L | awk -F'[-:]' '{ if (NF==4) print ($1*86400+$2*3600+$3*60+$4); else if (NF==3) print ($1*3600+$2*60+$3); else print ($1*60+$2) }') ))
+NCPU=${SLURM_CPUS_PER_TASK:-54}; HALF=$(( NCPU / 2 ))
+MEMG=$(( ${SLURM_MEM_PER_NODE:-716800} / 1024 )); HALFMEM=$(( MEMG / 2 - 10 ))
+NG=$(nvidia-smi -L | wc -l); LANES="0 1"; [ $NG = 1 ] && { LANES=0; HALF=$NCPU; HALFMEM=$(( MEMG - 10 )); }
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+log() { echo "$(date -Is) $*" | tee -a $Q/pilot-$SLURM_JOB_ID.log; }
+log "pilot job=$SLURM_JOB_ID node=$NODE gpus=$NG cpus=$NCPU mem=${MEMG}G end=$(date -d @$END -Is) queue=$Q"
+nvidia-smi --query-gpu=index,pci.bus_id,name,memory.total --format=csv,noheader | sed 's/^/  gpu /' | tee -a $Q/pilot-$SLURM_JOB_ID.log
+[ -f $Q/pilot.tsv ] || printf 'item\tpilot_job\tnode\tgpu\tstart\tend\twall_s\texit\n' > $Q/pilot.tsv
+
+declare -A PID ITEM START     # per lane: 0, 1, both
+lane_busy() { [ -n "${PID[$1]:-}" ]; }
+reap() {
+  for l in 0 1 both; do
+    [ -n "${PID[$l]:-}" ] || continue
+    kill -0 ${PID[$l]} 2>/dev/null && continue
+    wait ${PID[$l]}; rc=$?; it=${ITEM[$l]}; t1=$(date +%s)
+    mv $Q/running/$it $Q/done/$it 2>/dev/null
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' $it $SLURM_JOB_ID $NODE $l "$(date -d @${START[$l]} -Is)" "$(date -d @$t1 -Is)" $((t1 - START[$l])) $rc >> $Q/pilot.tsv
+    log "done $it on gpu $l: exit $rc after $((t1 - START[$l])) s"
+    verdict $it $l $rc $((t1 - START[$l]))
+    unset "PID[$l]" "ITEM[$l]" "START[$l]"
+  done
+}
+verdict() {   # one line per finished item in $Q/verdicts.tsv: exit, wall, the seqstop decision, points failed, fallback runs, identity lines
+  local it=$1 lg=$Q/done/${1%.g?.sh}.log
+  [ -f $Q/verdicts.tsv ] || printf 'item\tpilot_job\tnode\tgpu\texit\twall_s\tseqstop\tpoints_failed\tfallback_runs\tidentity\n' > $Q/verdicts.tsv
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' $it $SLURM_JOB_ID $NODE $2 $3 $4 \
+    "$(grep -oP 'seqstop: stopped with \K\S+' $lg | tail -1)" "$(grep -c '^POINT FAILED' $lg)" \
+    "$(grep -oP '^POINT FAILED: \K[0-9]+' $lg | awk '{s+=$1} END {print s+0}')" "$(grep -oP 'identity: \K.*' $lg | tr '\n' ';')" >> $Q/verdicts.tsv
+}
+launch() {   # launch <lane> <item>
+  local l=$1 it=$2 name=${2%.g?.sh} mins c m g env
+  mins=$(grep -m1 -oP '^# PILOT-MINUTES:\s*\K[0-9]+' $Q/new/$it 2>/dev/null || echo 240)
+  if [ $(( $(date +%s) + mins * 60 )) -gt $END ]; then log "skip $it: needs $mins min, $(( (END - $(date +%s)) / 60 )) left"; return 1; fi
+  mv $Q/new/$it $Q/running/$it || return 2
+  if [ $l = both ]; then c=$NCPU; m=$((MEMG - 10)); g=2; env="PILOT_GPU=both PILOT_SHARED=0 RUNID=$SLURM_JOB_ID-gboth-$name"
+  else c=$HALF; m=$HALFMEM; g=1; env="PILOT_GPU=$l PILOT_SHARED=1 PINDEV=0 CUDA_VISIBLE_DEVICES=0 RUNID=$SLURM_JOB_ID-g$l-$name"; fi
+  { echo "pilot job=$SLURM_JOB_ID node=$NODE gpu=$l item=$it cpus=$c mem=${m}G start=$(date -Is)"
+    echo "env $env"; } > $Q/done/$name.log
+  srun --exact -N1 -n1 -c $c --mem=${m}G --gres=gpu:nvidia_h100_nvl:$g --job-name=$name \
+    env PILOT=1 PILOT_JOB=$SLURM_JOB_ID PILOT_NODE=$NODE $env bash $Q/running/$it >> $Q/done/$name.log 2>&1 &
+  PID[$l]=$!; ITEM[$l]=$it; START[$l]=$(date +%s)
+  log "start $it on gpu $l (pid ${PID[$l]}, $c cpus, ${m}G)"
+}
+
+idle_since=$(date +%s)
+while :; do
+  reap
+  if [ -f $Q/STOP ]; then
+    lane_busy 0 || lane_busy 1 || lane_busy both || { log "STOP: exiting"; break; }
+    sleep 20; continue
+  fi
+  items=$(ls $Q/new 2>/dev/null | grep -E '\.g[12]\.sh$' | sort); [ $NG = 1 ] && items=$(echo "$items" | grep '\.g1\.sh$')
+  if [ -n "$items" ]; then
+    idle_since=$(date +%s)
+    for next in $items; do   # in order; a g2 item that cannot start yet lets the g1 items behind it take a free GPU
+      lane_busy both && break
+      case $next in
+        *.g2.sh) if ! lane_busy 0 && ! lane_busy 1; then launch both $next; rc=$?; [ $rc = 1 ] && mv $Q/new/$next $Q/done/$next.skipped; break; fi ;;
+        *.g1.sh) for l in $LANES; do lane_busy $l && continue; launch $l $next; rc=$?; [ $rc = 1 ] && mv $Q/new/$next $Q/done/$next.skipped; break; done ;;
+      esac
+    done
+  elif lane_busy 0 || lane_busy 1 || lane_busy both; then
+    idle_since=$(date +%s)
+  elif [ $(( $(date +%s) - idle_since )) -ge $IDLE_S ]; then
+    log "queue empty for $IDLE_S s: exiting"; break
+  fi
+  sleep 20
+done

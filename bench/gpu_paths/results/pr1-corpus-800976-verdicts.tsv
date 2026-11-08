@@ -1,0 +1,17 @@
+id	kind	reads	overall	identity	path	invariants	fallback	fallback_disallowed	out_equiv	field_unexplained	level	ingest	mask_line	restarted	bam	cpu_exit	gpu_exit	cpu_wall_s	gpu_wall_s	cpu_maxrss_gb	gpu_maxrss_gb
+strand100	real	1000000	FAIL	IDENTICAL	FAIL	PASS	PASS	4	64/6/2	0	0 of 5	used	none	True	not written	0	0	57.0605	51.488	25.7	20.0
+strand150	real	1000000	FAIL	IDENTICAL	FAIL	PASS	PASS	10	61/6/2	0	0 of 5	not used	none	True	not written	0	0	69.0231	59.4812	26.1	20.0
+v5p150	real	1000000	FAIL	IDENTICAL	FAIL	PASS	FAIL	5	64/4/3	0	0 of 5	not used	none	False	not written	0	0	33.8629	27.7489	25.7	19.9
+mask2	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	64/5/4	0	5 of 5	used	6957 reads, 2 (not logged) words	False	not written	0	0	37.7321	24.9272	27.8	27.9
+mask3syn	synthetic	1000000	FAIL	IDENTICAL	FAIL	PASS	FAIL	5	64/6/3	0	0 of 5	not used	none	False	not written	0	0	110.526	77.8361	25.6	20.4
+mask2short	synthetic	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	64/5/4	0	5 of 5	used	1265 reads, 2 (not logged) words	False	not written	0	0	40.8617	28.2839	25.6	20.1
+q0	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	64/5/4	0	5 of 5	used	none	False	not written	0	0	39.562	25.0891	27.8	27.9
+q2	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	1	64/5/4	0	5 of 5	not used	6957 reads, 2 (not logged) words	False	not written	0	0	33.7219	24.801	27.8	28.1
+q4	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	64/5/4	0	5 of 5	used	6957 reads, 2 (not logged) words	False	not written	0	0	34.2844	25.1139	27.8	27.9
+v2hgmm	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	52/5/4	0	5 of 5	used	none	False	not written	0	0	55.4046	54.1388	55.5	55.5
+v3	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	64/5/4	0	5 of 5	used	none	False	not written	0	0	39.1709	28.9778	25.7	20.1
+adt	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	55/5/4	0	5 of 5	used	none	False	not written	0	0	47.372	31.1225	26.2	20.4
+donors	real	1000000	PASS	IDENTICAL	PASS	PASS	PASS	0	61/3/4	0	5 of 5	used	none	False	not written	0	0	27.547	20.903	25.4	19.3
+long_q4	real	1000000	FAIL	IDENTICAL	FAIL	PASS	FAIL	5	64/6/3	0	0 of 5	not used	none	False	not written	0	0	111.313	78.0211	25.6	20.4
+tiny	real	20000	PASS	IDENTICAL	PASS	PASS	PASS	0	64/5/4	0	5 of 5	used	none	False	not written	0	0	27.5929	22.5768	25.5	19.6
+near_empty	real	100	PASS	SAME FAILURE	PASS	PASS	PASS	0			none	not used	none	False	not written	2	2	2.58093	2.08503	16.4	16.4

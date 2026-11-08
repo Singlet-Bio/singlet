@@ -15,10 +15,12 @@
 //   Each connected component = one true molecule.
 
 #include <algorithm>     // std::sort, std::iota
+#include <atomic>
 #include <cstdint>
 #include <numeric>       // std::iota
 #include <cstdlib>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>       // std::pair
@@ -485,6 +487,23 @@ public:
         return mol_groups_.count((static_cast<uint64_t>(bc_idx) << 32) | gene_idx) != 0;
     }
 
+    // ── N7: Per-cell UMI statistics for sequencing saturation ────────────────
+    struct PerCellUmiStats {
+        uint64_t total_reads = 0;   ///< Raw read count (pre-dedup)
+        uint64_t unique_umis = 0;   ///< Deduplicated molecule count
+    };
+
+private:
+    struct MolEntry {
+        uint64_t packed;      ///< 2-bit packed UMI
+        uint32_t exon_idx;    ///< first exon a read of this UMI hit
+        uint32_t intron_idx;  ///< first intron a read of this UMI hit
+        uint32_t count;       ///< reads with this exact UMI
+        uint8_t  flags;       ///< OR of kRead* over those reads
+        uint8_t  diag;        ///< OR of kDiag* over those reads
+    };
+
+public:
     /// One collapsed molecule: the union of the evidence of every UMI merged into it.
     struct Molecule {
         uint64_t umi;         ///< 2-bit packed UMI of the component root
@@ -509,24 +528,92 @@ public:
     /// table). Same molecules in the same order. Afterwards the store holds no molecule groups, and the
     /// per-cell saturation statistics (per_cell_molecule_stats()) are kept, computed before the first group goes.
     /// Nothing may read the groups after this (gene_root(), has_group(), collapse_molecules()).
-    void consume_molecules(int umi_len, bool directional, std::vector<Molecule>& out) {
+    /// With threads > 1 the groups are listed once in the map's iteration order and cut into contiguous ranges that are
+    /// collapsed side by side; each range's molecules are appended in range order, so `out` is the serial result element
+    /// for element. The per-cell statistics are integer sums per barcode, added up over the ranges. The groups are freed
+    /// together afterwards, on this thread: freed from the workers, the main arena's lock made the collapse slower than serial.
+    void consume_molecules(int umi_len, bool directional, std::vector<Molecule>& out, int threads = 1) {
         if (mol_groups_.empty()) return;
-        mol_cell_stats_ = per_cell_molecule_stats(umi_len);
-        mol_stats_cached_ = true;
-        collapse_groups<true>(mol_groups_, umi_len, directional, out);
+        if (threads > 1 && mol_groups_.size() >= kParallelMinGroups) {
+            consume_molecules_parallel(umi_len, directional, out, threads);
+        } else {
+            mol_cell_stats_ = per_cell_molecule_stats(umi_len);
+            mol_stats_cached_ = true;
+            collapse_groups<true>(mol_groups_, umi_len, directional, out);
+        }
         std::unordered_map<uint64_t, std::vector<MolEntry>>().swap(mol_groups_);
         root_cache_.clear();
     }
 
 private:
-    template <bool Consume, class Map>
-    static void collapse_groups(Map& groups, int umi_len, bool directional, std::vector<Molecule>& out) {
+    static constexpr size_t kParallelMinGroups = 1u << 16;
+
+    // One (barcode, gene) group's per-cell statistics, as per_cell_molecule_stats() adds them.
+    static void add_group_stats(const std::vector<MolEntry>& entries, int umi_len, PerCellUmiStats& s,
+                                std::vector<std::pair<uint64_t, uint32_t>>& umi_counts) {
+        umi_counts.clear();
+        for (const auto& e : entries) {
+            s.total_reads += e.count;
+            umi_counts.push_back({e.packed, e.count});
+        }
+        std::sort(umi_counts.begin(), umi_counts.end(),
+            [](const auto& a, const auto& b) { return a.second > b.second; });
+        s.unique_umis += directional_dedup(umi_counts, umi_len);
+    }
+
+    void consume_molecules_parallel(int umi_len, bool directional, std::vector<Molecule>& out, int threads) {
+        std::vector<std::pair<uint64_t, const std::vector<MolEntry>*>> list;
+        list.reserve(mol_groups_.size());
+        for (const auto& kv : mol_groups_) list.push_back({kv.first, &kv.second});
+        const size_t n = list.size();
+        const size_t n_ranges = std::min<size_t>(n, static_cast<size_t>(threads) * 16);
+        std::vector<std::vector<Molecule>> parts(n_ranges);
+        const int nt = static_cast<int>(std::min<size_t>(static_cast<size_t>(threads), n_ranges));
+        std::vector<std::unordered_map<uint32_t, PerCellUmiStats>> cell(nt);
+        std::atomic<size_t> next{0};
+        auto worker = [&](int t) {
+            Collapser col;
+            std::vector<std::pair<uint64_t, uint32_t>> umi_counts;
+            for (size_t r; (r = next.fetch_add(1)) < n_ranges;) {
+                const size_t b = r * n / n_ranges, e = (r + 1) * n / n_ranges;
+                for (size_t i = b; i < e; ++i) {
+                    const std::vector<MolEntry>& entries = *list[i].second;
+                    add_group_stats(entries, umi_len, cell[t][static_cast<uint32_t>(list[i].first >> 32)], umi_counts);
+                    col(list[i].first, entries, umi_len, directional, parts[r]);
+                }
+            }
+        };
+        std::vector<std::thread> pool;
+        for (int t = 1; t < nt; ++t) pool.emplace_back(worker, t);
+        worker(0);
+        for (auto& th : pool) th.join();
+        std::vector<std::pair<uint64_t, const std::vector<MolEntry>*>>().swap(list);
+        size_t total = out.size();
+        for (const auto& p : parts) total += p.size();
+        out.reserve(total);
+        for (auto& p : parts) {
+            out.insert(out.end(), p.begin(), p.end());
+            std::vector<Molecule>().swap(p);
+        }
+        mol_cell_stats_.clear();
+        for (const auto& c : cell)
+            for (const auto& [bc, s] : c) {
+                auto& d = mol_cell_stats_[bc];
+                d.total_reads += s.total_reads;
+                d.unique_umis += s.unique_umis;
+            }
+        mol_stats_cached_ = true;
+    }
+
+    // Collapses one (barcode, gene) group and appends its molecules; holds the scratch buffers of one thread.
+    struct Collapser {
         std::vector<MolEntry> sorted;
         std::vector<int> parent;
         std::vector<uint64_t> pk;
         std::vector<uint32_t> ct;
         std::vector<Molecule> comp;
-        auto process = [&](uint64_t key, const std::vector<MolEntry>& entries) {
+        void operator()(uint64_t key, const std::vector<MolEntry>& entries, int umi_len, bool directional,
+                        std::vector<Molecule>& out) {
             const uint32_t bc = static_cast<uint32_t>(key >> 32);
             const uint32_t gene = static_cast<uint32_t>(key & 0xffffffffu);
 
@@ -569,14 +656,19 @@ private:
             }
             for (int i = 0; i < n; ++i)
                 if (find(i) == i) { comp[i].umi = sorted[i].packed; out.push_back(comp[i]); }
-        };
+        }
+    };
+
+    template <bool Consume, class Map>
+    static void collapse_groups(Map& groups, int umi_len, bool directional, std::vector<Molecule>& out) {
+        Collapser col;
         if constexpr (Consume) {
             for (auto it = groups.begin(); it != groups.end();) {
-                process(it->first, it->second);
+                col(it->first, it->second, umi_len, directional, out);
                 it = groups.erase(it);
             }
         } else {
-            for (const auto& [key, entries] : groups) process(key, entries);
+            for (const auto& [key, entries] : groups) col(key, entries, umi_len, directional, out);
         }
     }
 
@@ -664,29 +756,24 @@ public:
         return true;
     }
 
+    /// Appends (barcode << 32 | 2-bit packed UMI) for every exact UMI recorded here (the multimap record's counted-UMI keys;
+    /// a UMI of 16 bases or fewer packs into 32 bits). Unordered; the caller sorts.
+    void append_umi_keys(std::vector<uint64_t>& out) const {
+        for (const auto& [key, entries] : mol_groups_) {
+            const uint64_t bc = key >> 32;
+            for (const auto& e : entries) out.push_back((bc << 32) | (e.packed & 0xffffffffULL));
+        }
+    }
+
     size_t n_molecule_groups() const { return mol_groups_.size(); }
     bool   molecules_empty()   const { return mol_groups_.empty() && !mol_stats_cached_; }
     void   clear_molecules()         { mol_groups_.clear(); root_cache_.clear(); }
 
 private:
-    struct MolEntry {
-        uint64_t packed;      ///< 2-bit packed UMI
-        uint32_t exon_idx;    ///< first exon a read of this UMI hit
-        uint32_t intron_idx;  ///< first intron a read of this UMI hit
-        uint32_t count;       ///< reads with this exact UMI
-        uint8_t  flags;       ///< OR of kRead* over those reads
-        uint8_t  diag;        ///< OR of kDiag* over those reads
-    };
     std::unordered_map<uint64_t, std::vector<MolEntry>> mol_groups_;
     mutable std::unordered_map<uint64_t, std::vector<std::pair<uint64_t, uint64_t>>> root_cache_;  ///< gene_root()
 
 public:
-
-    // ── N7: Per-cell UMI statistics for sequencing saturation ────────────────
-    struct PerCellUmiStats {
-        uint64_t total_reads = 0;   ///< Raw read count (pre-dedup)
-        uint64_t unique_umis = 0;   ///< Deduplicated molecule count
-    };
 
     /// Compute per-cell total reads and unique UMI counts.
     /// Applies the same directional dedup as finalize() — no extra BAM pass needed.

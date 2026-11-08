@@ -218,6 +218,8 @@ def finish_phase(a, cfg, ccfg, job):
     try:
         out_dir = os.path.join(scr, "out")
         side = None if getattr(a, "no_private_sidecar", False) else write_private_sidecar(a, ccfg, man, out_dir)
+        import genotype_keep as GK   # D-52: every genotype output under $WORK/genotypes/ before the scratch goes
+        geno = GK.keep(out_dir, man.get("gse"), gsm, ccfg.get("genotype_dir"))
         up = publish(a, man, out_dir, cfg, ccfg, scr, claim)
         sc = C.species_check(os.path.join(scr, "singlet.log"))
         if sc and sc["verdict"] == "DISAGREE":
@@ -229,7 +231,7 @@ def finish_phase(a, cfg, ccfg, job):
         Q.finish(a.stage, gsm, claim)  # staged reads deleted only now: outputs are uploaded (or hooked) and checked
         C.emit(root, "done", gsm, attempt=man.get("attempts", 1), stage="compute", engine=a.engine, compute_s=round(job.compute_s, 1),
                wall_s=round(time.time() - job.t0, 1), pairs=man.get("pairs"), staged_bytes=man.get("bytes"), out_public_bytes=pub,
-               publish=up, species_check=sc, private_sidecar=side, via="drain")
+               publish=up, species_check=sc, private_sidecar=side, genotypes=geno, via="drain")
         return "done (publish %.0fs after compute)" % (time.time() - job.t0 - job.compute_s)
     except Exception as e:  # noqa: BLE001
         C.emit(root, "failed", gsm, attempt=man.get("attempts", 1), stage="compute", reason="exception", detail=repr(e)[:1500])

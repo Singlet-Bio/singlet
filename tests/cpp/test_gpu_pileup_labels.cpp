@@ -2,7 +2,11 @@
 // tests/cpp/test_gpu_pileup_labels.cpp
 //
 // The GPU pileup (SINGLET_GPU_PILEUP=on, src/engine_gpu/gpu_pileup) against the CPU pileup on a synthetic BAM, under the default intron
-// rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer) and under 389 (without kFlank). Compared: the exon / intron /
+// rules 397 (kUnique | kNoSplicedIntron | kFlank | kUmiGeneCR | kMtPrefer), under 389 (without kFlank), under 909 = 397 | 512 (kGeneFullSet) and
+// under 908 (kGeneFullSet without kUnique: a multimapper inside one gene body gives intronic evidence, as STARsolo GeneFull) and under
+// 1933 = 909 | 1024 (kUmiGeneVelo: a multi-gene UMI also loses its unspliced molecule, as STARsolo Velocyto) and under the default
+// 2957 = 909 | 2048 (kUmiGeneSpliced: a multi-gene UMI keeps only a spliced winner) and under the default 7053 = 2957 | 4096 (kExonPrecedence:
+// a multimapper with an exonic alignment is judged on its exonic alignments only). Compared: the exon / intron /
 // ambiguous accumulators (to_csc: indptr, indices, data), the molecule stats (spliced, unspliced, ambiguous, legacy_double, dropped) and the
 // per-barcode legacy_exon_extra. The fixture is test_molecule_labels.cpp's (G1 exon1 / intron / exon2, nested G2, G3; M1-M9) plus reads
 // for the alevin-fry USA labels (the CIGAR-N bit), kFlank (5 and 6 intronic bases), the kUnique / kNoSplicedIntron order and the legacy
@@ -92,6 +96,31 @@ bool write_inputs(const std::string& dir) {
     // multimapper counted through its secondary (R7; primary spliced and intergenic): no N bit, A
     f << sam_line("mur", 0, "chr2", 100, 3, "5M100N5M", 10, "TTGGTTGGTT", 2);
     f << sam_line("mur", 256, "chr1", 160, 3, "10M", 10, "TTGGTTGGTT", 2);
+    // intron_rule::kGeneFullSet (512). m6 (G2's exon inside G1's intron) is dropped. gfb: G3 exon primary, secondary in G1's intron only:
+    // gene-ambiguous. gfd: intergenic primary, G3 exon secondary (R7) and a third alignment in G1's intron: gene-ambiguous. Both count
+    // G3 without 512.
+    f << sam_line("gfb", 0, "chr2", 520, 3, "10M", 10, "CACACACACA", 2);
+    f << sam_line("gfb", 256, "chr1", 266, 3, "10M", 10, "CACACACACA", 2);
+    f << sam_line("gfd", 0, "chr2", 100, 3, "10M", 10, "GTGTCACACA", 3);
+    f << sam_line("gfd", 256, "chr2", 560, 3, "10M", 10, "GTGTCACACA", 3);
+    f << sam_line("gfd", 256, "chr1", 268, 3, "10M", 10, "GTGTCACACA", 3);
+    // intron_rule::kExonPrecedence (4096): xpi's primary lies in G1's intron only, its secondary in G3's exon: gene-ambiguous under every
+    // other rule set, G3 (through the secondary, R7) with 4096. gfb and gfd count G3 with 4096 as well.
+    f << sam_line("xpi", 0, "chr1", 266, 3, "10M", 10, "CTGACTGACT", 2);
+    f << sam_line("xpi", 256, "chr2", 570, 3, "10M", 10, "CTGACTGACT", 2);
+    // a multi-gene UMI: two intronic reads in G1 (unspliced, 2 reads) and one exonic read in G3 (1 read). kUmiGeneCR keeps G1's
+    // unspliced molecule and drops G3's; kUmiGeneVelo (1024) drops G1's as well
+    f << sam_line("mga", 0, "chr1", 268, 255, "10M", 10, "TGCATGCATG");
+    f << sam_line("mgb", 0, "chr1", 272, 255, "10M", 10, "TGCATGCATG");
+    f << sam_line("mgc", 0, "chr2", 510, 255, "10M", 10, "TGCATGCATG");
+    // kUmiGeneSpliced (2048): a multi-gene UMI whose winner is ambiguous (two G3 exon reads; one G1 exon read) loses the winner too;
+    // one whose winner is spliced (two G1 junction reads; one G3 exon read) keeps it
+    f << sam_line("mha", 0, "chr2", 530, 255, "10M", 10, "TCGATCGATC");
+    f << sam_line("mhb", 0, "chr2", 540, 255, "10M", 10, "TCGATCGATC");
+    f << sam_line("mhc", 0, "chr1", 110, 255, "10M", 10, "TCGATCGATC");
+    f << sam_line("msa", 0, "chr1", 196, 255, "5M100N5M", 10, "GATCGATCGA");
+    f << sam_line("msb", 0, "chr1", 196, 255, "5M100N5M", 10, "GATCGATCGA");
+    f << sam_line("msc", 0, "chr2", 580, 255, "10M", 10, "GATCGATCGA");
     f.close();
     const std::string cmd = "samtools sort -o " + dir + "/t.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/t.bam";
     return std::system(cmd.c_str()) == 0;
@@ -172,7 +201,7 @@ int main(int argc, char** argv) {
     self[n] = 0;
 
     std::map<uint32_t, std::map<std::string, std::string>> cpu_by_rules;
-    for (uint32_t rules : {397u, 389u}) {
+    for (uint32_t rules : {397u, 389u, 397u | 512u, 908u, 1933u, 2957u, 7053u}) {
         const std::string tag = "rules " + std::to_string(rules);
         std::cout << "\n=== " << tag << " ===\n";
         const std::string cpu = run_dump(dir, rules);
@@ -195,12 +224,42 @@ int main(int argc, char** argv) {
             CHECK(same, tag + ": " + k + " GPU == CPU");
             if (!same) std::cout << "    CPU: " << (C.count(k) ? C.at(k) : "<none>") << "\n    GPU: " << (G.count(k) ? G.at(k) : "<none>") << "\n";
         }
-        // the fixture exercises what it should (CPU side; the GPU equals it above)
+        // the fixture exercises what it should (CPU side; the GPU equals it above); 908 relabels m8 and counts muf (checked below)
+        if (!(rules & 1u)) continue;
         const std::string& m = C.at("molecules");
-        CHECK(field(m, "spliced") == 3, tag + ": 3 spliced molecules (m5, the junction + exon molecule, the spliced multimapper)");
+        CHECK(field(m, "spliced") == 4, tag + ": 4 spliced molecules (m5, the junction + exon molecule, the spliced multimapper, ms*)");
         CHECK(sum_list(C.at("legacy_exon_extra")) == 3, tag + ": legacy_exon_extra = 3 (m3, merged m7, junction + intron)");
         CHECK(sum_list(C.at("mixed_exon data")) == 3 && sum_list(C.at("mixed_intron data")) == 3,
               tag + ": mixed_exon / mixed_intron hold the same 3 molecules (the pre-USA split's exon + 3 / intron - 3)");
+    }
+    {   // kGeneFullSet drops exactly the three gene-ambiguous molecules (m6, gfb, gfd)
+        auto total = [&](const std::string& m) { return field(m, "spliced") + field(m, "unspliced") + field(m, "ambiguous"); };
+        CHECK(total(cpu_by_rules[397].at("molecules")) == total(cpu_by_rules[397u | 512u].at("molecules")) + 3, "kGeneFullSet: 3 molecules fewer than 397");
+    }
+    {   // without kUnique (908 vs 909): m8's intronic multimapper read makes it unspliced; muf (flank primary, intergenic secondary) counts
+        const auto& a = cpu_by_rules[397u | 512u].at("molecules"); const auto& b = cpu_by_rules[908].at("molecules");
+        CHECK(field(b, "unspliced") == field(a, "unspliced") + 1, "908: one more unspliced molecule than 909 (m8)");
+        CHECK(field(b, "spliced") + field(b, "unspliced") + field(b, "ambiguous") == field(a, "spliced") + field(a, "unspliced") + field(a, "ambiguous") + 1,
+              "908: one more molecule than 909 (muf)");
+    }
+    {   // kUmiGeneVelo (1933 vs 909): the multi-gene UMI's unspliced winner (mga + mgb) is dropped too
+        const auto& a = cpu_by_rules[397u | 512u].at("molecules"); const auto& b = cpu_by_rules[1933].at("molecules");
+        CHECK(field(a, "dropped") >= 1, "909: kUmiGeneCR drops the multi-gene UMI's G3 molecule");
+        CHECK(field(b, "unspliced") + 1 == field(a, "unspliced"), "1933: one unspliced molecule fewer than 909");
+        CHECK(field(b, "dropped") == field(a, "dropped") + 1, "1933: one more dropped molecule than 909");
+    }
+    {   // kUmiGeneSpliced (2957 vs 1933): the ambiguous winner (mha + mhb) goes as well; the spliced winner (msa + msb) stays
+        const auto& a = cpu_by_rules[1933].at("molecules"); const auto& b = cpu_by_rules[2957].at("molecules");
+        CHECK(field(b, "ambiguous") + 1 == field(a, "ambiguous"), "2957: one ambiguous molecule fewer than 1933");
+        CHECK(field(b, "spliced") == field(a, "spliced") && field(b, "unspliced") == field(a, "unspliced"), "2957: spliced and unspliced as 1933");
+        CHECK(field(b, "dropped") == field(a, "dropped") + 1, "2957: one more dropped molecule than 1933");
+    }
+    {   // kExonPrecedence (7053 vs 2957): gfb, gfd and xpi count for G3 (three exon-only molecules: ambiguous label); nothing else moves
+        auto total = [&](const std::string& m) { return field(m, "spliced") + field(m, "unspliced") + field(m, "ambiguous"); };
+        const auto& a = cpu_by_rules[2957].at("molecules"); const auto& b = cpu_by_rules[7053].at("molecules");
+        CHECK(total(b) == total(a) + 3, "7053: three molecules more than 2957 (gfb, gfd, xpi)");
+        CHECK(field(b, "ambiguous") == field(a, "ambiguous") + 3, "7053: the three are exon-only (ambiguous label)");
+        CHECK(field(b, "dropped") == field(a, "dropped"), "7053: kUmiGeneCR drops as 2957");
     }
     {   // kFlank moves exactly one molecule (f5) from the intron to the exon matrix; the 6-base read and the dropped multimapper do not move
         const auto& a = cpu_by_rules[397]; const auto& b = cpu_by_rules[389];

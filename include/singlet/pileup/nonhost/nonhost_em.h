@@ -32,10 +32,32 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <thread>
 #include <vector>
 
 namespace singlet {
 namespace nonhost {
+
+// ── Species keys ─────────────────────────────────────────────────────────────
+// The viral and microbial indices number their species independently, so one id can name a virus in one index and a
+// microbe in the other (about 1% of candidate rows in pbmc1k_v3). Inside the engine a species is keyed by index plus id:
+// a viral key is the viral id, a microbial key is the microbial id with bit 31 set. tag_microbial_keys() applies this to
+// the screen's output once, so the EM, the per-cell matrix and the confirmed reads count a virus and a microbe that share
+// an id as two species. Outputs write raw_species_id(key), the id in its own index, which is unchanged (D-100).
+constexpr uint32_t kMicrobialKeyBit = 0x80000000u;
+inline constexpr bool     is_microbial_key(uint32_t key) noexcept { return (key & kMicrobialKeyBit) != 0; }
+inline constexpr uint32_t raw_species_id(uint32_t key)   noexcept { return key & ~kMicrobialKeyBit; }
+inline constexpr uint32_t microbial_key(uint32_t sid)    noexcept { return sid | kMicrobialKeyBit; }
+
+// Sets bit 31 on every microbial hit id. Returns false (and changes nothing) if an id already uses bit 31.
+inline bool tag_microbial_keys(std::vector<NonHostScreener::MultiHit>& multi_hits) {
+    for (const auto& mh : multi_hits)
+        for (const auto& [sid, rate] : mh.microbial_hits)
+            if (is_microbial_key(sid)) return false;
+    for (auto& mh : multi_hits)
+        for (auto& h : mh.microbial_hits) h.first = microbial_key(h.first);
+    return true;
+}
 
 // ── Output type ──────────────────────────────────────────────────────────────
 
@@ -87,21 +109,43 @@ struct SpeciesAbundance {
 //
 // Reads with no hits in ANY kingdom (viral_hits and microbial_hits both empty) are excluded
 // from the EM and do not count toward N_nonhost.
-inline std::vector<SpeciesAbundance> em_deconvolve(
+// One EM fit (steps 1 to 4 below), which every report of the same reads shares: the iterations depend only on the reads, the
+// pre-filter, the iteration cap and the tolerance, never on the report thresholds (min_abundance, min_report_hr, min_abs_reads).
+// The E-step and the per-species statistics run on nthreads threads and are bit-identical to the serial loop at any count: each
+// pattern's denominator is its own sum in the pattern's species order, and each species adds its terms in pattern order through
+// an inverted list, which is the order the serial loop adds them in.
+struct EmFit {
+    std::vector<uint32_t> idx_to_species;   // ascending species ids (species index = rank)
+    std::vector<double>   theta;            // relative abundance per species index
+    std::vector<double>   hit_rate_sum, weight_sum;
+    double                N = 0.0;          // reads that entered the EM
+    int                   iterations = 0;
+};
+
+namespace em_detail {
+// fn(begin, end) over [0, n) in contiguous ranges: cuts (nthreads + 1 entries) or equal splits
+template <class Fn>
+inline void par_ranges(size_t n, int nthreads, const std::vector<size_t>* cuts, Fn&& fn) {
+    const int nt = std::max(1, nthreads);
+    if (nt == 1 || n < 2) { fn(size_t(0), n); return; }
+    std::vector<std::thread> ts;
+    ts.reserve(nt);
+    for (int t = 0; t < nt; ++t) {
+        const size_t b = cuts ? (*cuts)[t] : n * t / nt, e = cuts ? (*cuts)[t + 1] : n * (t + 1) / nt;
+        if (b < e) ts.emplace_back([&fn, b, e]() { fn(b, e); });
+    }
+    for (auto& th : ts) th.join();
+}
+}  // namespace em_detail
+
+inline EmFit em_fit(
         const std::vector<NonHostScreener::MultiHit>& multi_hits,
-        const std::unordered_map<uint32_t, NonHostCategory>& kingdom_map,
         int      max_iter         = 500,
         float    tolerance        = 1e-6f,
-        float    min_abundance    = 1e-4f,
         float    min_prefilter_hr = 0.05f,
-        float    min_report_hr    = 0.30f,
-        int*     out_iterations   = nullptr,
-        uint32_t min_abs_reads    = 0) {
-
-    if (multi_hits.empty()) {
-        if (out_iterations) *out_iterations = 0;
-        return {};
-    }
+        int      nthreads         = 1) {
+    EmFit fit;
+    if (multi_hits.empty()) return fit;
 
     // ── Step 1: Group the reads by their hit pattern ──────────────────────────
     // A read is the set of (species, hit_rate) it hits after the pre-filter, with
@@ -118,7 +162,8 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     for (const auto& mh : multi_hits) {
         if (mh.viral_hits.empty() && mh.microbial_hits.empty()) continue;
 
-        // If a species appears in both viral and microbial lists (edge case), take the maximum.
+        // A key in both lists takes the maximum rate. After tag_microbial_keys() the lists share no key, so this only
+        // matters for untagged input (the unit tests), where an id shared by both indices is one species.
         std::map<uint32_t, float> merged;
         for (const auto& [sid, rate] : mh.viral_hits)
             merged[sid] = std::max(merged[sid], rate);   // default-initialises to 0.0
@@ -138,7 +183,7 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     }
 
     // species index = rank of the species id
-    std::vector<uint32_t> idx_to_species;   // ascending species ids
+    std::vector<uint32_t>& idx_to_species = fit.idx_to_species;   // ascending species ids
     {
         std::set<uint32_t> ids;
         for (const auto& [pat, cnt] : pattern_count)
@@ -162,11 +207,8 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
 
     const uint32_t K = static_cast<uint32_t>(idx_to_species.size());
     const double   N = static_cast<double>(n_reads_total);   // number of nonhost reads
-
-    if (K == 0 || N <= 0.0) {
-        if (out_iterations) *out_iterations = 0;
-        return {};
-    }
+    if (K == 0 || N <= 0.0) return fit;
+    fit.N = N;
 
     // ── Precompute per-species prior hit-rate for Dirichlet regularization ───
     // prior_hr[k] = unweighted mean hit_rate for species k across all reads where
@@ -187,27 +229,60 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
             prior_hr[k] = (prior_count[k] > 0.0) ? prior_hr[k] / prior_count[k] : 0.0;
     }
 
+    // Inverted lists: per species index its (pattern, rate) terms in pattern order; species ranges cut by term count
+    const size_t G = groups.size();
+    std::vector<size_t> inv_off(K + 1, 0);
+    for (const auto& g : groups) for (const auto& kh : g.hits) ++inv_off[kh.first + 1];
+    for (uint32_t k = 0; k < K; ++k) inv_off[k + 1] += inv_off[k];
+    std::vector<std::pair<uint32_t, float>> inv(inv_off[K]);
+    {
+        std::vector<size_t> pos(inv_off.begin(), inv_off.end() - 1);
+        for (size_t gi = 0; gi < G; ++gi)
+            for (const auto& kh : groups[gi].hits) inv[pos[kh.first]++] = {static_cast<uint32_t>(gi), kh.second};
+    }
+    const int nt = (G >= 20000) ? std::max(1, nthreads) : 1;   // small inputs (the unit tests) stay serial
+    std::vector<size_t> kcut(nt + 1, K);
+    kcut[0] = 0;
+    {
+        uint32_t k = 0;
+        for (int t = 1; t < nt; ++t) {
+            const size_t want = inv_off[K] * t / nt;
+            while (k < K && inv_off[k] < want) ++k;
+            kcut[t] = k;
+        }
+    }
+    std::vector<double> denom(G);
+    auto compute_denoms = [&](const std::vector<double>& th) {
+        em_detail::par_ranges(G, nt, nullptr, [&](size_t b, size_t e) {
+            for (size_t gi = b; gi < e; ++gi) {
+                double d = 0.0;
+                for (const auto& kh : groups[gi].hits) d += th[kh.first] * static_cast<double>(kh.second);
+                denom[gi] = d;
+            }
+        });
+    };
+
     // ── Step 2: Initialise θ uniformly ──────────────────────────────────────
-    std::vector<double> theta(K, 1.0 / static_cast<double>(K));
+    std::vector<double>& theta = fit.theta;
+    theta.assign(K, 1.0 / static_cast<double>(K));
     std::vector<double> theta_new(K);
 
     // ── Step 3: EM iteration ─────────────────────────────────────────────────
     int iter = 0;
     for (; iter < max_iter; ++iter) {
-        std::fill(theta_new.begin(), theta_new.end(), 0.0);
-
-        // E-step: for each pattern accumulate weighted responsibilities (× multiplicity)
-        for (const auto& g : groups) {
-            // Denominator: Σ_j θ_j * h_ij
-            double denom = 0.0;
-            for (const auto& [k, h] : g.hits)
-                denom += theta[k] * static_cast<double>(h);
-            if (denom <= 0.0) continue;  // numerical safety
-
-            // Accumulate: θ_new[k] += count * θ_k * h_ik / denom
-            for (const auto& [k, h] : g.hits)
-                theta_new[k] += g.count * (theta[k] * static_cast<double>(h) / denom);
-        }
+        // E-step: θ_new[k] = Σ over patterns (in order) of count * θ_k * h_ik / denom; patterns with denom <= 0 are skipped
+        compute_denoms(theta);
+        em_detail::par_ranges(K, nt, &kcut, [&](size_t kb, size_t ke) {
+            for (size_t k = kb; k < ke; ++k) {
+                double acc = 0.0;
+                for (size_t q = inv_off[k]; q < inv_off[k + 1]; ++q) {
+                    const double d = denom[inv[q].first];
+                    if (d <= 0.0) continue;  // numerical safety
+                    acc += groups[inv[q].first].count * (theta[k] * static_cast<double>(inv[q].second) / d);
+                }
+                theta_new[k] = acc;
+            }
+        });
 
         // M-step: apply hit-rate-weighted Dirichlet regularization and normalise.
         // theta[k] = (E[k] + alpha * prior_hr[k]) / (N + alpha * Σ prior_hr)
@@ -235,28 +310,46 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
             break;
         }
     }
-    if (out_iterations) *out_iterations = iter;
+    fit.iterations = iter;
 
     // ── Step 4: Compute per-species stats ────────────────────────────────────
     // mean_hit_rate[k] = Σ_i (h_ik * w_ik) / Σ_i w_ik   (posterior-weighted mean)
-    std::vector<double> hit_rate_sum(K, 0.0);
-    std::vector<double> weight_sum  (K, 0.0);
-
-    for (const auto& g : groups) {
-        double denom = 0.0;
-        for (const auto& [k, h] : g.hits)
-            denom += theta[k] * static_cast<double>(h);
-        if (denom <= 0.0) continue;
-
-        for (const auto& [k, h] : g.hits) {
-            const double w = g.count * (theta[k] * static_cast<double>(h) / denom);
-            hit_rate_sum[k] += static_cast<double>(h) * w;
-            weight_sum[k]   += w;
+    fit.hit_rate_sum.assign(K, 0.0);
+    fit.weight_sum.assign(K, 0.0);
+    compute_denoms(theta);
+    em_detail::par_ranges(K, nt, &kcut, [&](size_t kb, size_t ke) {
+        for (size_t k = kb; k < ke; ++k) {
+            double hs = 0.0, ws = 0.0;
+            for (size_t q = inv_off[k]; q < inv_off[k + 1]; ++q) {
+                const double d = denom[inv[q].first];
+                if (d <= 0.0) continue;
+                const double h = static_cast<double>(inv[q].second);
+                const double w = groups[inv[q].first].count * (theta[k] * h / d);
+                hs += h * w;
+                ws += w;
+            }
+            fit.hit_rate_sum[k] = hs;
+            fit.weight_sum[k]   = ws;
         }
-    }
+    });
+    return fit;
+}
 
-    // ── Step 5: Build output, filter, and sort ───────────────────────────────
+// ── Step 5: the report of one fit: filter and sort ───────────────────────────
+inline std::vector<SpeciesAbundance> em_report(
+        const EmFit& fit,
+        const std::unordered_map<uint32_t, NonHostCategory>& kingdom_map,
+        float    min_abundance    = 1e-4f,
+        float    min_report_hr    = 0.30f,
+        uint32_t min_abs_reads    = 0) {
     std::vector<SpeciesAbundance> result;
+    const uint32_t K = static_cast<uint32_t>(fit.theta.size());
+    if (K == 0) return result;
+    const std::vector<double>& theta = fit.theta;
+    const std::vector<double>& hit_rate_sum = fit.hit_rate_sum;
+    const std::vector<double>& weight_sum = fit.weight_sum;
+    const std::vector<uint32_t>& idx_to_species = fit.idx_to_species;
+    const double N = fit.N;
     result.reserve(K);
 
     for (uint32_t k = 0; k < K; ++k) {
@@ -306,26 +399,42 @@ inline std::vector<SpeciesAbundance> em_deconvolve(
     return result;
 }
 
+inline std::vector<SpeciesAbundance> em_deconvolve(
+        const std::vector<NonHostScreener::MultiHit>& multi_hits,
+        const std::unordered_map<uint32_t, NonHostCategory>& kingdom_map,
+        int      max_iter         = 500,
+        float    tolerance        = 1e-6f,
+        float    min_abundance    = 1e-4f,
+        float    min_prefilter_hr = 0.05f,
+        float    min_report_hr    = 0.30f,
+        int*     out_iterations   = nullptr,
+        uint32_t min_abs_reads    = 0,
+        int      nthreads         = 1) {
+    const EmFit fit = em_fit(multi_hits, max_iter, tolerance, min_prefilter_hr, nthreads);
+    if (out_iterations) *out_iterations = fit.iterations;
+    return em_report(fit, kingdom_map, min_abundance, min_report_hr, min_abs_reads);
+}
+
 // ── Kingdom map builder ───────────────────────────────────────────────────────
 
-// Build a species_id → NonHostCategory map from a batch of MultiHit results.
-// All species_ids found in viral_hits → VIRAL.
-// species_ids in microbial_hits → FUNGAL if their id is in fungal_species, else BACTERIAL.
+// Build a species key → NonHostCategory map from a batch of MultiHit results.
+// Keys in viral_hits → VIRAL. Keys in microbial_hits only → FUNGAL if their raw id is in fungal_species, else BACTERIAL.
 // Call this before em_deconvolve() when no external map is available.
+//
+// With tagged input (tag_microbial_keys) viral and microbial keys are disjoint, so each key has one kingdom. With untagged
+// input an id shared by both indices is VIRAL whatever the read order (as species_name_lookup resolved the viral name first),
+// which keeps the map a function of the set of reads and not of their order.
 inline std::unordered_map<uint32_t, NonHostCategory> build_kingdom_map(
         const std::vector<NonHostScreener::MultiHit>& multi_hits,
         const std::unordered_set<uint32_t>& fungal_species = {}) {
     std::unordered_map<uint32_t, NonHostCategory> kmap;
-    for (const auto& mh : multi_hits) {
+    for (const auto& mh : multi_hits)
         for (const auto& [sid, rate] : mh.viral_hits)
-            kmap.emplace(sid, NonHostCategory::VIRAL);     // emplace: first insertion wins
-        for (const auto& [sid, rate] : mh.microbial_hits) {
-            NonHostCategory cat = fungal_species.count(sid)
-                                  ? NonHostCategory::FUNGAL
-                                  : NonHostCategory::BACTERIAL;
-            kmap.emplace(sid, cat);
-        }
-    }
+            kmap[sid] = NonHostCategory::VIRAL;
+    for (const auto& mh : multi_hits)
+        for (const auto& [sid, rate] : mh.microbial_hits)
+            kmap.emplace(sid, fungal_species.count(raw_species_id(sid)) ? NonHostCategory::FUNGAL
+                                                                        : NonHostCategory::BACTERIAL);   // never replaces VIRAL
     return kmap;
 }
 

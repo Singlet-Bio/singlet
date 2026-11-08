@@ -86,7 +86,10 @@ def score(calls, truth, hmap):
         fn = np.sum((calls != tag) & (truth_tag == tag))
         per.append(tp / (tp + 0.5 * (fp + fn)) if tp + fp + fn else np.nan)
     dbl = (truth == "Doublet").to_numpy()
-    return {"f": float(np.nanmean(per)), "dbl_singlet": float((dbl & np.isin(calls, list(hmap))).sum() / max(dbl.sum(), 1))}
+    called_dbl = calls == "Doublet"
+    dbl_f1 = 2.0 * (dbl & called_dbl).sum() / max(dbl.sum() + called_dbl.sum(), 1)
+    return {"f": float(np.nanmean(per)), "dbl_singlet": float((dbl & np.isin(calls, list(hmap))).sum() / max(dbl.sum(), 1)),
+            "dbl_f1": float(dbl_f1)}
 
 
 def to_names(call, tags):
@@ -227,8 +230,12 @@ def run_grid(data):
 
 
 def choose(df, datasets):
-    """Highest mean of F - (doublets called singlet) over the datasets: the two reported metrics, equally weighted."""
-    d = df[df.dataset.isin(datasets)].assign(j=lambda x: x.f - x.dbl_singlet)
+    """Highest mean over the datasets of (F + F1 of the Doublet class) / 2: singlet calls and doublet calls count equally.
+
+    The criterion of the first version, F minus the share of genetic doublets called singlets, rewarded doublet calls without
+    limit: with a per-tag mixture veto at posterior 0.5 it called 19 to 42% of the cells doublets where 8 to 18% are (Beta gap
+    table, 2026-11-06), 35% of the true singlets of the cell-line mix among them."""
+    d = df[df.dataset.isin(datasets)].assign(j=lambda x: (x.f + x.dbl_f1) / 2)
     return d.groupby("setting").j.mean().idxmax()
 
 
@@ -244,13 +251,13 @@ def lodo(df):
         m = choose(df, [x for x in ds if x != test])
         r = df[(df.dataset == test) & (df.setting == m)].iloc[0]
         held.append({"held_out": test, "chosen_on_others": m, "params": _params(r), "f": float(r.f),
-                     "dbl_singlet": float(r.dbl_singlet)})
+                     "dbl_singlet": float(r.dbl_singlet), "dbl_f1": float(r.dbl_f1)})
     final = choose(df, ds)
     r = df[df.setting == final].iloc[0]
-    return {"criterion": "max mean of (F - doublets called singlet) over the training datasets",
+    return {"criterion": "max mean of (F + F1 of the Doublet class) / 2 over the training datasets",
             "grid": {k: list(v) for k, v in GRID.items()}, "held_out": held, "shipped": final,
             "shipped_params": _params(r),
-            "shipped_in_sample": df[df.setting == final][["dataset", "f", "dbl_singlet"]].to_dict("records")}
+            "shipped_in_sample": df[df.setting == final][["dataset", "f", "dbl_singlet", "dbl_f1"]].to_dict("records")}
 
 
 def main():

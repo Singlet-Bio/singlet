@@ -93,6 +93,12 @@ def cmd_plan(a):
     runs = pd.concat([pd.read_parquet(p) for p in a.runs], ignore_index=True)
     runs = runs.drop_duplicates("run_accession").dropna(subset=["gsm"])
     runs = runs[runs.gsm.isin(set(u.gsm_id))]
+    # rows that cannot be 10x gene expression (ATAC/ChIP/bulk libraries, single-end reads, AB 5500xl / long-read instruments, listed unrecoverable GSMs) are not planned: no probe, no fetch
+    import plan_filter as PF
+    u, excluded = PF.apply(u, runs, PF.read_unrecoverable())
+    runs = runs[runs.gsm.isin(set(u.gsm_id))]
+    PF.write_excluded(os.path.join(os.path.dirname(os.path.abspath(a.out)), "plan_excluded.tsv"), excluded)
+    print("plan_excluded.tsv: %s" % PF.summary(excluded, len(u) + len(excluded)))
     runs["_k"] = runs.run_accession.map(accession_key)
     runs = runs.sort_values(["gsm", "_k"])
     per = runs.groupby("gsm").agg(runs=("run_accession", lambda x: ",".join(x)),

@@ -13,9 +13,10 @@
 // (order-free-rules R8).
 //
 // File (little endian):
-//   "SNCR" u8 version=1 u8 cb_len u8 umi_len u8 pad
+//   "SNCR" u8 version=2 u8 cb_len u8 umi_len u8 pad
 //   u32 n_species u32 n_reads u32 n_dropped_n u32 n_excluded_host
-//   n_species x u32 species_id (ascending)
+//   n_species x u32 species key (ascending): the id in its own index, with bit 31 set for a microbial species (nonhost_em.h,
+//               D-100), so a virus and a microbe that share an id stay apart. Version 1 wrote untagged ids.
 //   n_reads x { u16 species_index, u8 len, u64 cb (2 bits/base, first base in the high bits), u32 umi, ceil(len/4) bytes seq (first
 //               base in the high bits of byte 0) }
 // cb_len <= 32 and umi_len <= 16.
@@ -128,7 +129,7 @@ inline std::string pack_confirmed_reads(const std::vector<TaggedRead>& tagged,
 
     std::string o;
     o += "SNCR";
-    o.push_back(1); o.push_back(static_cast<char>(cb_len)); o.push_back(static_cast<char>(umi_len)); o.push_back(0);
+    o.push_back(2); o.push_back(static_cast<char>(cb_len)); o.push_back(static_cast<char>(umi_len)); o.push_back(0);
     detail::put<uint32_t>(o, st.n_species);
     detail::put<uint32_t>(o, st.n_reads);
     detail::put<uint32_t>(o, st.n_dropped_n);
@@ -154,7 +155,7 @@ struct UnpackedRead { uint32_t species_id; std::string cb, umi, seq; };
 // Reads a file written by pack_confirmed_reads; returns false when it is malformed.
 inline bool unpack_confirmed_reads(const std::string& buf, std::vector<UnpackedRead>& out) {
     out.clear();
-    if (buf.size() < 24 || std::memcmp(buf.data(), "SNCR", 4) != 0 || buf[4] != 1) return false;
+    if (buf.size() < 24 || std::memcmp(buf.data(), "SNCR", 4) != 0 || (buf[4] != 1 && buf[4] != 2)) return false;
     const int cb_len = static_cast<uint8_t>(buf[5]), umi_len = static_cast<uint8_t>(buf[6]);
     auto rd = [&](size_t off, int nb) { uint64_t v = 0; for (int i = 0; i < nb; ++i) v |= static_cast<uint64_t>(static_cast<uint8_t>(buf[off + i])) << (8 * i); return v; };
     const uint32_t ns = static_cast<uint32_t>(rd(8, 4)), nr = static_cast<uint32_t>(rd(12, 4));

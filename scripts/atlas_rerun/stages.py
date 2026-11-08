@@ -52,6 +52,7 @@ class Ctx:
         self.stage_root = ccfg.get("stage_root") or os.path.join(self.root, "stage")
         self.out_root = ccfg.get("out_root") or os.path.join(self.root, "out")
         self.private_root = ccfg.get("private_root") or os.path.join(self.root, "private")
+        self.genotype_dir = ccfg.get("genotype_dir")   # None -> genotype_keep.DEFAULT_DIR ($WORK/genotypes/beta)
         self.bin = ccfg.get("binary") or os.path.join(self.root, "bin", "singlet-" + cfg["binary"]["sha256"][:12])
         self.sha = cfg["binary"]["sha256"]
         self.ref_base = ccfg["ref_base"]
@@ -479,6 +480,8 @@ def collect_outputs(ctx, gse, gsm, out_tmp, sdir, log):
     os.makedirs(tmp)
     priv_src = os.path.join(out_tmp, "private")
     priv_dir = None
+    import genotype_keep as GK   # D-52: every genotype output under $WORK/genotypes/ as well
+    GK.keep(out_tmp, gse, gsm, getattr(ctx, "genotype_dir", None))
     # a withheld file (singlet._restricted.is_restricted_member: donor/, mt/ except mt_summary.tsv, ase_counts, snp_*, VCFs) outside private/
     # is private too: pack_gse filtering it from the public bundle is then a second safeguard, not the only one
     import private_sidecar as PS

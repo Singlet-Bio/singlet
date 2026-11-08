@@ -1,0 +1,34 @@
+label	process	range	count	summed_s	first_start_s	last_end_s
+pbmc1k_k4t7s2r2_trace	STAR	device lock: wait	1	22.882	40.46	63.342
+pbmc1k_k4t7s2r2_trace	STAR	device lock: held	1	28.882	63.342	92.224
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: setup	1	0.364	63.358	63.722
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: index	1	0.292	63.722	64.013
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: reads	1	3.798	64.013	67.811
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: dedup	1	1.529	67.811	69.34
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: map chunks	1	32.139	69.34	101.479
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: lanes of one chunk (GPU)	6	22.827	69.366	92.207
+pbmc1k_k4t7s2r2_trace	STAR	mapDistinct: host lane of one chunk	6	0.997	92.872	93.869
+pbmc1k_k4t7s2r2_trace	pipeline	device lock: wait	3	4.978	102.769	117.496
+pbmc1k_k4t7s2r2_trace	pipeline	device lock: held	3	10.784	105.614	122.269
+pbmc1k_k4t7s2r2_trace	pipeline	main: non-host screen	1	20.982	114.353	135.335
+pbmc1k_k4t7s2r2_trace	pipeline	nonhost: context + index	1	3.976	117.496	121.472
+pbmc1k_k4t7s2r2_trace	pipeline	nonhost: classify	1	0.797	121.472	122.269
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1: COO  CSC (parallel)	1	0.752	135.362	136.114
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.5: Cell QC metrics (compute only write deferred to Phase 1.8)	1	0.128	136.114	136.243
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.55: Sex calling (N14)	1	0.168	136.243	136.411
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.57: Cell cycle scoring (N19)	1	0.09	136.411	136.501
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.58: Per-cell read statistics (N20)	1	0.009	136.501	136.51
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.56: Ancestry classification (N13)	1	0.006	136.51	136.516
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.6: Sequencing saturation (N7, directional dedup path only)	1	0.113	136.516	136.629
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.65: Sequencing saturation curve (G-SATCURVE)	1	0.426	136.629	137.055
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.7: Cell calling (N5, EmptyDrops-style)	1	13.122	137.055	150.177
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.76: Doublet detection (N12)	1	1.38	150.177	151.557
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 1.8: Write unified cellqcmetrics.tsv	1	0.795	151.557	152.352
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 2: mt heteroplasmy (pipeline mode)	1	1.016	152.352	153.368
+pbmc1k_k4t7s2r2_trace	pipeline	export: Phase 3: Demux + parallel writes	1	45.791	153.368	199.159
+pbmc1k_k4t7s2r2_trace	pipeline	export: G-RRNA: rRNA contamination report	1	0.0	199.159	199.159
+pbmc1k_k4t7s2r2_trace	pipeline	export: N8: Provenance manifest	1	0.001	199.159	199.161
+pbmc1k_k4t7s2r2_trace	pipeline	export: Summary JSON	1	0.027	199.161	199.188
+pbmc1k_k4t7s2r2_trace	pipeline	export: MT reference genome extraction	1	0.0	199.188	199.188
+pbmc1k_k4t7s2r2_trace	pipeline	export: Standardization: write empty stubs for conditional outputs	1	0.0	199.188	199.188
+pbmc1k_k4t7s2r2_trace	pipeline	export: Post-export validation	1	0.071	199.188	199.259

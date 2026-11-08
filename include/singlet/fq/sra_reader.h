@@ -13,8 +13,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <stdexcept>
+
+#include "spot_source.h"   // FASTQ and BAM inputs read as spots ("fastq:" / "bam:" specs)
 
 // VDB C API headers (public domain, NCBI)
 #include <kfc/defs.h>    // rc_t = uint32_t
@@ -33,7 +36,16 @@ public:
     SraReader& operator=(const SraReader&) = delete;
 
     // Open an SRA file/accession and prepare cursor on SEQUENCE table
+    // A "fastq:" or "bam:" spec (spot_source.h) opens files instead of VDB; rows are numbered from 1 as in VDB.
     void open(const char* path) {
+        if (singlet::fq::SpotSource::is_spec(path)) {
+            src_ = std::make_unique<singlet::fq::SpotSource>();
+            src_->open(path);
+            first_row_ = 1;
+            row_count_ = src_->n_spots();
+            current_row_ = first_row_;
+            return;
+        }
         rc_t rc;
 
         rc = VDBManagerMakeRead(&mgr_, nullptr);
@@ -83,11 +95,15 @@ public:
 
     // Close all VDB handles
     void close() {
+        src_.reset();
         if (cursor_) { VCursorRelease(cursor_); cursor_ = nullptr; }
         if (tbl_)    { VTableRelease(tbl_);     tbl_ = nullptr; }
         if (db_)     { VDatabaseRelease(db_);   db_ = nullptr; }
         if (mgr_)    { VDBManagerRelease(mgr_); mgr_ = nullptr; }
     }
+
+    // False for file inputs: seeking back reopens the files, so callers read them in one serial pass.
+    bool random_access() const { return !src_; }
 
     int64_t total_spots() const { return static_cast<int64_t>(row_count_); }
     int64_t spots_read() const { return current_row_ - first_row_; }
@@ -121,6 +137,7 @@ public:
     // Returns false when all spots consumed (or row_limit_ reached).
     bool read_next_spot(RawSpot& spot) {
         if (done_range()) return false;
+        if (src_) return read_source_spot(spot);
 
         int64_t row = current_row_++;
         uint32_t elem_bits, boff, row_len;
@@ -155,6 +172,7 @@ public:
     // Caller must split read/qual at known offsets.
     bool read_next_spot_fast(RawSpot& spot) {
         if (done_range()) return false;
+        if (src_) return read_source_spot(spot);
 
         int64_t row = current_row_++;
         uint32_t elem_bits, boff, row_len;
@@ -185,6 +203,7 @@ public:
     // For single-end data, writes to r1_fp only.
     bool write_next_spot(FILE* r1_fp, FILE* r2_fp) {
         if (done()) return false;
+        if (src_) throw std::runtime_error("write_next_spot: not available for FASTQ / BAM inputs");
 
         int64_t row = current_row_++;
         uint32_t elem_bits, boff, row_len;
@@ -277,6 +296,21 @@ private:
         }
         fputc('\n', fp);
     }
+
+    // File input (FASTQ / BAM): the spot for the current row, seeking when the row is not the next one
+    bool read_source_spot(RawSpot& spot) {
+        const uint64_t idx = static_cast<uint64_t>(current_row_++ - first_row_);
+        if (src_->next_index() != idx) src_->seek(idx);
+        if (!src_->read()) return false;
+        spot.read = src_->seq();
+        spot.qual = src_->qual();
+        spot.seg_len = src_->seg_len();
+        spot.seg_start = src_->seg_start();
+        spot.n_segments = src_->n_segments();
+        spot.total_bases = src_->total_bases();
+        return true;
+    }
+    std::unique_ptr<singlet::fq::SpotSource> src_;
 
     // VDB handles
     const VDBManager* mgr_    = nullptr;
