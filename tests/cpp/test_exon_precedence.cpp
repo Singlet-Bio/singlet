@@ -330,6 +330,50 @@ void check_tx(const std::string& dir) {
     std::system(("rm -rf " + dir).c_str());
 }
 
+// intron_rule::kStarGene (32768), STARsolo Gene's gene set over a multimapper's alignments (STAR classifyAlign: only concordant
+// alignments add a gene). chr1 +: A (exon 101-200). chr2 +: Q (exon 1001-1050), a pseudogene-like copy. Multimappers, NH 2:
+//   m1 primary chr1 111 20M (concordant with A), secondary chr2 1041 20M (Q's exon, runs past its end)     31117: ambiguous  with 32768: A
+//   m2 primary chr2 1041 20M (not concordant), secondary chr1 121 20M (concordant with A)                31117: ambiguous  with 32768: A
+//   m3 primary chr1 191 20M (past A's exon end), secondary chr2 1041 20M: neither concordant              31117: ambiguous  with 32768: nothing
+std::string mm_line(const std::string& q, int flag, const char* chr, int pos, const std::string& umi) {
+    return q + "\t" + std::to_string(flag) + "\t" + chr + "\t" + std::to_string(pos) + "\t3\t20M\t*\t0\t0\t" + std::string(20, 'A') +
+           "\t*\tCB:Z:" + kBC + "\tUB:Z:" + umi + "\tNH:i:2\n";
+}
+
+void check_star(const std::string& dir) {
+    std::system(("mkdir -p " + dir).c_str());
+    {
+        std::ofstream g(dir + "/mini.gtf");
+        auto gl = [&](const char* chr, const char* feat, int s, int e, const char* gid, const char* tid) {
+            g << chr << "\t.\t" << feat << "\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << gid << "\"; gene_name \"" << gid
+              << "\"; transcript_id \"" << tid << "\";\n";
+        };
+        gl("chr1", "gene", 101, 200, "A", "A1"); gl("chr1", "exon", 101, 200, "A", "A1");
+        gl("chr2", "gene", 1001, 1050, "Q", "Q1"); gl("chr2", "exon", 1001, 1050, "Q", "Q1");
+        std::ofstream b(dir + "/barcodes.tsv");
+        b << kBC << "\n";
+        std::ofstream f(dir + "/t.sam");
+        f << kHeader << mm_line("m1", 0, "chr1", 111, "AAAAAAAAAA") << mm_line("m1", 256, "chr2", 1041, "AAAAAAAAAA")
+          << mm_line("m2", 0, "chr2", 1041, "CCCCCCCCCC") << mm_line("m2", 256, "chr1", 121, "CCCCCCCCCC")
+          << mm_line("m3", 0, "chr1", 191, "GGGGGGGGGG") << mm_line("m3", 256, "chr2", 1041, "GGGGGGGGGG");
+    }
+    if (std::system(("samtools sort -o " + dir + "/ts.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/ts.bam").c_str()) != 0) {
+        CHECK(false, "kStarGene BAM");
+        return;
+    }
+    for (bool on : {false, true}) {
+        const uint32_t rules = 31117u | (on ? singlet::intron_rule::kStarGene : 0u);
+        const std::string rt = "kStarGene rules " + std::to_string(rules);
+        const Result ref = run_case(dir, dir + "/ts.bam", rules, 0);
+        auto g = ref.by_gene;
+        CHECK(g["A"] == (on ? 2 : 0), rt + ": A gets m1 and m2 only with kStarGene");
+        CHECK(g["Q"] == 0, rt + ": Q gets nothing");
+        if (g["A"] != (on ? 2 : 0) || g["Q"] != 0) std::cout << "    " << ref.text() << "\n";
+        for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ts.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+    }
+    std::system(("rm -rf " + dir).c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -400,6 +444,8 @@ int main() {
     std::system(("rm -rf " + dir).c_str());
     std::cout << "\n=== transcript compatibility ===\n";
     check_tx(dir + "_tx");
+    std::cout << "\n=== STARsolo Gene set over a multimapper ===\n";
+    check_star(dir + "_star");
     std::cout << "\n=== joint reference ===\n";
     check_joint(dir + "_joint");
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";

@@ -214,6 +214,14 @@ constexpr uint32_t kChrMPrecedence  = 8192;
 // gene's exon overlaps and is then judged as any other read; with no such gene, or more than one, it stays gene-ambiguous. Readthrough and
 // overlapping lncRNA models made Visium's Rpl24 (under Gm28037) and Nme2 (under Nme1nme2) near zero: their unique sense reads were dropped.
 constexpr uint32_t kTxCompat        = 16384;
+// STARsolo Gene's gene set for multimappers, ported from STAR 2.7.11b (MIT; NOTICE): Transcriptome::classifyAlign adds a gene to the read's
+// set (annotFeatures[Gene].fSet) only for an alignment concordant with one of its transcripts (alignToTranscript == Concordant), and
+// SoloReadFeature::record counts the read when that set, over all its alignments, holds one gene. An alignment of a multimapper (NH > 1)
+// that overlaps exons on the read's strand but is concordant with no transcript of those genes therefore gives no gene: it neither makes the
+// read gene-ambiguous nor assigns it (Rps6, Rpl27a, Ppia: a partial alignment over a processed pseudogene's exon). It still marks the read
+// as touching chrM (kChrMPrecedence) and its genome. Unique reads keep their exon / intron labels (STARsolo Gene drops a non-concordant
+// unique read; Singlet counts it in the ambiguous layer). The GPU pileup marks such an alignment (AA.multi bit 2) and k_resolve skips it.
+constexpr uint32_t kStarGene        = 32768;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
@@ -1170,7 +1178,7 @@ public:
                                        "first nuclear exonic reads");
                 }
 
-                tx_resolve(b, exon_overlaps);   // intron_rule::kTxCompat
+                const bool star_skip = tx_resolve(b, exon_overlaps) && nh > 1;   // intron_rule::kTxCompat; kStarGene (the buffer below)
 
                 // Determine exon gene (any-overlap, single-gene requirement)
                 uint32_t exon_gene = UINT32_MAX;
@@ -1256,6 +1264,18 @@ public:
                     entry.nh = static_cast<uint8_t>(std::min(nh, 255));
                     entry.seen++;
                     entry.bc_idx = bc_idx;
+                    if (star_skip) {
+                        // intron_rule::kStarGene: concordant with no transcript of the genes it touches, the primary gives no gene
+                        // (STAR classifyAlign); it still marks the read's genome and chrM
+                        entry.sp_mask |= species_bit(tid);
+                        if (is_chrm(tid)) entry.mt_aln = true;
+                        if (umi_str && umi_len > 0) {
+                            int clen = std::min(umi_len, 15);
+                            std::memcpy(entry.umi, umi_str, clen);
+                            entry.umi[clen] = 0;
+                            entry.umi_len = static_cast<uint8_t>(umi_len);
+                        }
+                    } else {
                     // The primary's assignment wins over one a secondary provided
                     if (rf.gene != UINT32_MAX) {
                         entry.primary_assigned = true;
@@ -1299,6 +1319,7 @@ public:
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                     note_gene(entry, aln_gene);
+                    }   // !star_skip
 
                     // Check if all alignments seen
                     if (entry.seen >= entry.nh && entry.nh > 0) {
@@ -2215,7 +2236,7 @@ public:
         in.geneIsMt.assign(gene_model_.n_genes(), 0);
         for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
         in.tidSpecies = tid_species_;   // kExonPrecedence within one species (empty: single-genome reference)
-        if ((config_.intron_rules & intron_rule::kTxCompat) && gene_model_.tx_gene_off_view().size() == static_cast<size_t>(gene_model_.n_genes()) + 1) {
+        if ((config_.intron_rules & (intron_rule::kTxCompat | intron_rule::kStarGene)) && gene_model_.tx_gene_off_view().size() == static_cast<size_t>(gene_model_.n_genes()) + 1) {
             in.txGeneOff = gene_model_.tx_gene_off_view(); in.txExonOff = gene_model_.tx_exon_off_view();
             in.txExonStart = gene_model_.tx_exon_start_view(); in.txExonEnd = gene_model_.tx_exon_end_view();
         }
@@ -3902,7 +3923,7 @@ private:
             }
         }
 
-        tx_resolve(b, mm_overlaps_);   // intron_rule::kTxCompat
+        if (tx_resolve(b, mm_overlaps_) && body) return result;   // intron_rule::kTxCompat; kStarGene: a non-concordant secondary gives no gene
         const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
         if (mm_overlaps_.empty()) {
             if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
@@ -4830,7 +4851,7 @@ private:
             }
         }
 
-        tx_resolve(b, wc.mm_overlaps);   // intron_rule::kTxCompat
+        if (tx_resolve(b, wc.mm_overlaps) && body) return result;   // intron_rule::kTxCompat; kStarGene: a non-concordant secondary gives no gene
         const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
         if (wc.mm_overlaps.empty()) {
             if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
@@ -5086,32 +5107,38 @@ private:
     // goes to the chrM gene it touches (kMtPrefer's alignment), or is dropped; it is never counted for, or rescued (G-EM) into, a nuclear gene
     // intron_rule::kTxCompat: exon overlaps (strand-filtered, query order) in two or more genes keep only the one gene with a concordant
     // transcript (singlet_tx::pick); otherwise they are left as they are. The GPU's k_annotate decides the same way.
-    void tx_resolve(const bam1_t* b, std::vector<uint32_t>& overlaps) const {
-        if (!(config_.intron_rules & intron_rule::kTxCompat) || overlaps.size() < 2) return;
+    // Returns true under intron_rule::kStarGene when the overlaps name genes of which none has a transcript concordant with the alignment
+    // (STAR's classifyAlign adds no gene for it); the overlaps are then left unchanged and the caller decides.
+    bool tx_resolve(const bam1_t* b, std::vector<uint32_t>& overlaps) const {
+        const bool txc = (config_.intron_rules & intron_rule::kTxCompat) != 0, star = (config_.intron_rules & intron_rule::kStarGene) != 0;
+        if (!(txc || star) || overlaps.empty()) return false;
         const auto& gtoff = gene_model_.tx_gene_off_view();
-        if (gtoff.size() != static_cast<size_t>(gene_model_.n_genes()) + 1) return;
+        if (gtoff.size() != static_cast<size_t>(gene_model_.n_genes()) + 1) return false;
         uint32_t cand[singlet_tx::kMaxCandidates]; int nc = 0;
         for (uint32_t idx : overlaps) {
             const uint32_t g = gene_model_.exon_to_gene(idx);
-            if (g == UINT32_MAX) return;
+            if (g == UINT32_MAX) return false;
             bool seen = false;
             for (int c = 0; c < nc; ++c) if (cand[c] == g) { seen = true; break; }
             if (seen) continue;
-            if (nc == singlet_tx::kMaxCandidates) return;
+            if (nc == singlet_tx::kMaxCandidates) return false;
             cand[nc++] = g;
         }
-        if (nc < 2) return;
+        if (nc < 2 && !star) return false;
         const uint32_t* cig = bam_get_cigar(b);
         int32_t ss[singlet_tx::kMaxSegments], se[singlet_tx::kMaxSegments];
         const int ns = singlet_tx::segments(static_cast<int>(b->core.n_cigar), static_cast<int32_t>(b->core.pos),
             [&](int i, int& op, int32_t& len) { op = bam_cigar_op(cig[i]); len = static_cast<int32_t>(bam_cigar_oplen(cig[i])); }, ss, se);
-        if (ns <= 0) return;
+        if (ns <= 0) return false;
         uint32_t w = UINT32_MAX;
-        if (singlet_tx::pick(cand, nc, gtoff.data(), gene_model_.tx_exon_off_view().data(), gene_model_.tx_exon_start_view().data(),
-                             gene_model_.tx_exon_end_view().data(), gene_model_.n_genes(), ss, se, ns, w) != 1) return;
+        const int found = singlet_tx::pick(cand, nc, gtoff.data(), gene_model_.tx_exon_off_view().data(), gene_model_.tx_exon_start_view().data(),
+                                           gene_model_.tx_exon_end_view().data(), gene_model_.n_genes(), ss, se, ns, w);
+        if (found == 0) return star;
+        if (found != 1 || nc < 2 || !txc) return false;
         size_t k = 0;
         for (uint32_t idx : overlaps) if (gene_model_.exon_to_gene(idx) == w) overlaps[k++] = idx;
         overlaps.resize(k);
+        return false;
     }
     template <class E>
     MmVerdict mm_verdict(const E& e) const {
@@ -5853,7 +5880,7 @@ private:
             if (wc.exon_overlaps.empty() && had_strand_reject) wc.stats.wrong_strand++;
             if (vote_sense != vote_anti && !mito_tid_[tid] && !(b->core.flag & BAM_FSECONDARY))
                 (vote_sense ? wc.stats.strand_sense : wc.stats.strand_antisense)++;
-            tx_resolve(b, wc.exon_overlaps);   // intron_rule::kTxCompat
+            const bool star_skip = tx_resolve(b, wc.exon_overlaps) && nh > 1;   // intron_rule::kTxCompat; kStarGene (the buffer below)
 
             uint32_t exon_gene = UINT32_MAX;
             uint32_t first_exon_idx = UINT32_MAX;
@@ -5929,6 +5956,16 @@ private:
                 entry.nh = static_cast<uint8_t>(std::min(nh, 255));
                 entry.seen++;
                 entry.bc_idx = bc_idx;
+                if (star_skip) {   // intron_rule::kStarGene, as the serial loop
+                    entry.sp_mask |= species_bit(tid);
+                    if (is_chrm(tid)) entry.mt_aln = true;
+                        if (umi_str && umi_len > 0) {
+                            int clen = std::min(umi_len, 15);
+                            std::memcpy(entry.umi, umi_str, clen);
+                            entry.umi[clen] = 0;
+                            entry.umi_len = static_cast<uint8_t>(umi_len);
+                        }
+                } else {
                 if (rf.gene != UINT32_MAX) {
                     entry.primary_assigned = true;
                     entry.gene_idx = rf.gene;
@@ -5968,6 +6005,7 @@ private:
                 }
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                 note_gene(entry, aln_gene);
+                }   // !star_skip
 
                 if (entry.seen >= entry.nh && entry.nh > 0) {
                     resolve_mm_parallel(wc, entry);

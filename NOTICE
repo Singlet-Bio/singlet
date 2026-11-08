@@ -19,3 +19,12 @@ Nucleic Acids Research 2023, CC BY-ND 4.0.
 data/fusion/arriba/LICENSE: the chimeric table applies Arriba's blacklist (blacklist_hg38_GRCh38_v2.5.1.tsv.gz, fetched by
 scripts/fetch_arriba_blacklist.sh, not stored in git). Arriba and its database files are MIT-licensed, copyright Deutsches
 Krebsforschungszentrum and Sebastian Uhrig. Uhrig S et al., Genome Research 31:448-460 (2021), doi:10.1101/gr.257246.119.
+
+Third-party code
+----------------
+src/star/ is STAR 2.7.11b by Alexander Dobin (https://github.com/alexdobin/STAR), MIT license: src/star/LICENSE.STAR.
+The pileup's STARsolo Gene rules are ports of STAR's own logic and carry the same license and credit:
+include/singlet/pileup/tx_compat.h (intron rule 16384) ports alignToTranscript's concordance test from
+src/star/Transcriptome_classifyAlign.cpp, and intron rule 32768 (kStarGene, pileup_engine.h and the GPU pileup's
+k_annotate / k_resolve) ports Transcriptome::classifyAlign's per-read gene set with SoloReadFeature::record's
+one-gene rule (src/star/SoloReadFeature_record.cpp).

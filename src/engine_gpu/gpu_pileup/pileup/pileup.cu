@@ -82,13 +82,14 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192, 16384 are implemented; qw: mask words per read (P3-ENG-14)
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
 struct DTx { const uint32_t *gtoff, *xoff; const int32_t *es, *ee; uint32_t ng; };   // kTxCompat: transcript models (PileupInput::txGeneOff ..; ng = 0: not uploaded)
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
 // multi: bit 0 = multi-gene (as the engine's multi_gene / primary_multigene / gene_full_multi), bit 1 = the alignment has a same-strand exon
-// overlap (an exonic alignment, intron_rule::kExonPrecedence; the engine's GeneHit::exonic, or a primary's non-empty exon_overlaps)
+// overlap (an exonic alignment, intron_rule::kExonPrecedence; the engine's GeneHit::exonic, or a primary's non-empty exon_overlaps),
+// bit 2 = intron_rule::kStarGene: exon overlaps, but no transcript of their genes is concordant with the alignment (the engine's tx_resolve)
 struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank, pmore, ba, bb; };   // multimap record only: ba / bb = a gene-ambiguous primary's gene-body set (the engine's record_set), pmore = it has more than two genes   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
@@ -181,8 +182,10 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         else if (op == 2 || op == 3) { rpos += len; if (op == 3) hasn = true; }
     }
-    if ((P.rules & 16384) && TX.ng && ec.any && !ec.same) {
-        // kTxCompat (the engine's tx_resolve): the accepted exon genes in query order; exactly one with a concordant transcript keeps the read
+    bool nonconc = false;   // kStarGene
+    if ((P.rules & (16384 | 32768)) && TX.ng && ec.any && (!ec.same || (P.rules & 32768))) {
+        // kTxCompat (the engine's tx_resolve): the accepted exon genes in query order; exactly one with a concordant transcript keeps the read.
+        // kStarGene: none with a concordant transcript marks the alignment (multi bit 2)
         TxCandCb tc{&SP, e2g, ne};
         rpos = x.pos;
         for (int i = 0; i < x.n_ops; i++) {
@@ -190,11 +193,13 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
             if (op == 0 || op == 7 || op == 8) { tree_query(EX, x.tid, rpos, rpos + len, tc); rpos += len; }
             else if (op == 2 || op == 3) rpos += len;
         }
-        if (!tc.over && tc.n >= 2) {
+        if (!tc.over && tc.n >= ((P.rules & 32768) ? 1 : 2)) {
             int32_t ss[singlet_tx::kMaxSegments], se[singlet_tx::kMaxSegments];
             const int ns = singlet_tx::segments(x.n_ops, x.pos, [&](int i, int& op, int32_t& len) { op = (int)(o[i] & 15); len = (int32_t)(o[i] >> 4); }, ss, se);
             uint32_t w = MAXU;
-            if (ns > 0 && singlet_tx::pick(tc.c, tc.n, TX.gtoff, TX.xoff, TX.es, TX.ee, TX.ng, ss, se, ns, w) == 1) {
+            const int found = ns > 0 ? singlet_tx::pick(tc.c, tc.n, TX.gtoff, TX.xoff, TX.es, TX.ee, TX.ng, ss, se, ns, w) : -1;
+            if (found == 0 && (P.rules & 32768)) nonconc = true;
+            if (found == 1 && tc.n >= 2 && !ec.same && (P.rules & 16384)) {
                 TxFirstCb tf{&SP, e2g, ne, w};
                 rpos = x.pos;
                 for (int i = 0; i < x.n_ops; i++) {
@@ -222,6 +227,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
             else if (r.gene == MAXU) r.aln_gene = bc.g0;
         }
         if (ec.any) r.multi |= 2u;   // an exonic alignment (kExonPrecedence)
+        if (nonconc) r.multi |= 4u;  // kStarGene
         out[a] = r; return;
     }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
@@ -258,7 +264,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         r.flank = (in_body - in_exon <= 5) ? 1u : 0u;
     }
-    r.multi = (pm || bm ? 1u : 0u) | (ec.any ? 2u : 0u); r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
+    r.multi = (pm || bm ? 1u : 0u) | (ec.any ? 2u : 0u) | (nonconc ? 4u : 0u); r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
     if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
     if (pm || bm) {   // multimap record: the primary's gene-body set (exon genes; with kGeneFullSet also intron genes), as the engine's record_set
         uint32_t a = MAXU, b = MAXU; bool more = ec.more || ec.nog;
@@ -329,6 +335,10 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
                 { const int32_t t = A[sg.aln_off + k].tid; if (t >= 0 && (uint32_t)t < ntsp) spm |= tsp[t]; if (P.chrm_tid >= 0 && t == P.chrm_tid) mta = true; }
+                if ((P.rules & 32768) && (x.multi & 4u)) {   // kStarGene: the alignment gives no gene (the engine's star_skip / empty GeneHit)
+                    if ((A[sg.aln_off + k].flags & 2) && x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) aa[sg.aln_off + k].gene = MAXU;
+                    continue;
+                }
                 const bool multi = (x.multi & 1u) != 0, exo = (x.multi & 2u) != 0;
                 if (A[sg.aln_off + k].flags & 2) {
                     if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here

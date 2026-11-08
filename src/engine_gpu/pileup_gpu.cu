@@ -76,7 +76,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
     in.gmt = to_dev(A, pi.geneIsMt); in.ngmt = (uint32_t)pi.geneIsMt.size();
     if (!pi.tidSpecies.empty()) { in.tsp = to_dev(A, pi.tidSpecies); in.ntsp = (uint32_t)pi.tidSpecies.size(); }
-    if ((pi.intronRules & 16384) && !pi.txGeneOff.empty()) {   // kTxCompat: transcript models
+    if ((pi.intronRules & (16384 | 32768)) && !pi.txGeneOff.empty()) {   // kTxCompat / kStarGene: transcript models
         in.TX.gtoff = to_dev(A, pi.txGeneOff); in.TX.xoff = to_dev(A, pi.txExonOff); in.TX.es = to_dev(A, pi.txExonStart); in.TX.ee = to_dev(A, pi.txExonEnd);
         in.TX.ng = (uint32_t)pi.txGeneOff.size() - 1;
     }
