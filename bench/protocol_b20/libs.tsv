@@ -8,3 +8,6 @@ pilot_GSM9038586	pilot	10x 3'	^10x-3p-	-	-	SRR33927221
 pilot_GSM4987144	pilot	10x 5' v1	^10x-5p-	-	-	SRR13296299
 pilot_GSM5171610	pilot	10x 5'	^10x-5p-	-	-	SRR13960338
 pilot_GSM5682562	pilot	10x 5' (HTO)	^10x-5p-	-	-	SRR16868328
+bcr_pbmc3_b	bench	10x 5' v1 (BCR-enriched, 26x91)	^10x-5p-	data/vdjc/pbmc3_b/fastqs/vdj_v1_hs_pbmc3_b_26x91_fastqs/vdj_v1_hs_pbmc3_b_26x91_S1_L001_R1_001.fastq.gz	data/vdjc/pbmc3_b/fastqs/vdj_v1_hs_pbmc3_b_26x91_fastqs/vdj_v1_hs_pbmc3_b_26x91_S1_L001_R2_001.fastq.gz	-
+bcr_nextgem_pbmc3_b	bench	10x 5' v1.1 Next GEM (BCR-enriched, 26x91)	^10x-5p-	data/vdjc/ngpbmc3_b/fastqs/vdj_nextgem_hs_pbmc3_b_26x91_fastqs/vdj_nextgem_hs_pbmc3_b_26x91_S1_L001_R1_001.fastq.gz	data/vdjc/ngpbmc3_b/fastqs/vdj_nextgem_hs_pbmc3_b_26x91_fastqs/vdj_nextgem_hs_pbmc3_b_26x91_S1_L001_R2_001.fastq.gz	-
+pbmc10k_5p_v2_b	bench	10x 5' v2 (BCR-enriched)	^10x-5p-	data/vdjc/pbmc10k_b/fastqs/sc5p_v2_hs_PBMC_10k_b_fastqs/sc5p_v2_hs_PBMC_10k_b_S1_L001_R1_001.fastq.gz	data/vdjc/pbmc10k_b/fastqs/sc5p_v2_hs_PBMC_10k_b_fastqs/sc5p_v2_hs_PBMC_10k_b_S1_L001_R2_001.fastq.gz	-
