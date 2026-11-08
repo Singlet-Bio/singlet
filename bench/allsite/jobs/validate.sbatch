@@ -66,13 +66,16 @@ if [ "${PARCHECK:-0}" = 1 ]; then
   done | tee $R/parallel_check.txt
 fi
 BAM=$O/bam/possorted.bam; [ -f $BAM ] || { echo "no tagged BAM"; exit 3; }; [ -f $BAM.bai ] || samtools index -@ $T $BAM
-SUF=""; samtools view $BAM chr1 2>/dev/null | head -5000 | grep -q -E "CB:Z:[ACGTN]+-1" && SUF="-1"
+# the tagged BAM's CB carries Cell Ranger's "-1"; read it from one read (a pipe into head under pipefail reports SIGPIPE, which left SUF empty)
+SUF=$(set +o pipefail; samtools view $BAM chr1 2>/dev/null | head -2000 | grep -m1 -o -E "CB:Z:[ACGTN]+-1" | sed -n 's/.*-1$/-1/p' | head -1)
+echo "BAM CB suffix '$SUF'"
 awk -F"\t" -v s="$SUF" 'NR>1 && $2=="TRUE"{print $1 s}' $O/out/cell_calls.tsv > $O/barcodes.txt; echo "called cells $(wc -l < $O/barcodes.txt) suffix '$SUF'"
 ( printf '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'
   zcat $O/out/private/allsite/sites.tsv.gz | awk -F"\t" 'NR>1{print $1"\t"$2"\t.\t"$3"\t"$4"\t.\t.\t."}' ) > $O/allsite_sites.vcf
 rm -rf $O/cellsnp_sites
 /usr/bin/time -v -o $R/cellsnp_sites.time.txt apptainer exec $E/cellsnp-lite.sif cellsnp-lite -s $BAM -b $O/barcodes.txt -O $O/cellsnp_sites -R $O/allsite_sites.vcf \
   -p $T --minMAF 0 --minCOUNT 0 --cellTAG CB --UMItag UB > $O/cellsnp_sites.log 2>&1; echo "cellsnp sites exit $?"
+[ -f $O/cellsnp_sites/cellSNP.base.vcf ] && gzip -f $O/cellsnp_sites/cellSNP.base.vcf   # the scorers read cellSNP.base.vcf.gz
 $PY -I $SCR/bench/allsite/compare_cellsnp.py $O/out $O/cellsnp_sites $R/compare_cellsnp.json
 if [ -n "${TRUTH:-}" ]; then
   if [ ! -f $O/cellsnp_denovo/cellSNP.tag.AD.mtx ]; then
@@ -80,6 +83,7 @@ if [ -n "${TRUTH:-}" ]; then
     /usr/bin/time -v -o $R/cellsnp_denovo.time.txt apptainer exec $E/cellsnp-lite.sif cellsnp-lite -s $BAM -b $O/barcodes.txt -O $O/cellsnp_denovo \
       -p $T --minMAF 0.1 --minCOUNT 20 --cellTAG CB --UMItag UB --chrom $(seq -s, -f chr%g 1 22) > $O/cellsnp_denovo.log 2>&1; echo "cellsnp denovo exit $?"
   fi
+  [ -f $O/cellsnp_denovo/cellSNP.base.vcf ] && gzip -f $O/cellsnp_denovo/cellSNP.base.vcf
   $PY -I $SCR/bench/allsite/score_genotypes.py $TRUTH $W/data/1kgp_grch38 $O/out $O/cellsnp_denovo $R/genotypes.json $W/envs/pbench/bin/bcftools
 fi
 grep -h -E "Elapsed|Maximum res" $R/*.time.txt
