@@ -178,6 +178,12 @@ void ReadAlign::outputAlignments() {
             ReadAlign::writeSAM(nTr, trMult, trBest); //this will set mateMapped
         };
         PROF_ADD(PROF_outSAM, tOutSAM);
+
+        if (unmapType<0 && nTr==1 && P.singletSoftclipMin>0) {//singlet --chimeric soft-clip route (unique mappers, as on the hand-off path)
+            uint64 al=0;
+            for (uint64 ie=0; ie<trMult[0]->nExons; ie++) al+=trMult[0]->exons[ie][EX_L];
+            softclipRoute(al);
+        };
     };    
 
     if (unmapType>=0) {//unmapped reads
@@ -377,6 +383,31 @@ void ReadAlign::writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *tr
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReadAlign::softclipRoute(uint64 alignedBases)
+{//singlet --chimeric: a unique mapper whose alignment leaves >= singletSoftclipMin read bases unaligned is also written to Softclip.out,
+ //which only the chimeric second pass reads (Unmapped.out, and so the non-host screen, are unchanged)
+    if (P.singletSoftclipMin>0 && Lread>alignedBases && Lread-alignedBases>=(uint64)P.singletSoftclipMin)
+        outReadsSoftclip();
+};
+
+void ReadAlign::outReadsSoftclip()
+{
+    if (P.outReadsUnmapped!="Fastx" || !chunkOutSoftclipStream[0].is_open())
+        return;
+    for (uint im=0;im<P.readNends;im++) {
+        chunkOutSoftclipStream[im] << readNameMates[im] <<" "<<im<<":"<< readFilter <<": "<< readNameExtra[im] <<"
+";
+        chunkOutSoftclipStream[im] << Read0[im] <<"
+";
+        if (readFileType==2) {
+            chunkOutSoftclipStream[im] << "+
+";
+            chunkOutSoftclipStream[im] << Qual0[im] <<"
+";
+        };
+    };
+};
+
 void ReadAlign::outReadsUnmapped()
 {
     if (P.outReadsUnmapped=="Fastx" ) {//output to fasta/q files. Include unmapType==4, i.e. one-mate alignments of PE reads
@@ -499,6 +530,7 @@ void ReadAlign::outputHandoffSummary()
  //alignments), and the read is mapped (an unmapped sequence has no summary).
     const uint8 *p = handoffSum;
     uint16 n16, ng;
+    int64 handoffAlignedBases = -1; //unique mappers: the summary's mapped bases (STAR's Stats::mappedBases)
     memcpy(&n16, p, 2);
     const uint8 flags = p[2], ov = p[3];
     memcpy(&ng, p + 4, 2);
@@ -519,12 +551,14 @@ void ReadAlign::outputHandoffSummary()
         if (!e10Skip) statsRA.mappedReadsM++;
         unmapType = -2;
     } else if (e10Skip) {//E10: counted on the device
+        {uint32 b2; memcpy(&b2, p + 14, 4); handoffAlignedBases = b2;} //the summary's mapped bases (b[2]), for the soft-clip route
         p += 18 + SJ_MOTIF_SIZE + 1;
     } else {//unique mappers: Stats::transcriptStats
         statsRA.mappedReadsU++;
         uint16 a[3];
         uint32 b[3];
         memcpy(a, p, 6); memcpy(b, p + 6, 12);
+        handoffAlignedBases = b[2];
         const uint8 *c = p + 18;
         p += 18 + SJ_MOTIF_SIZE + 1;
         statsRA.mappedMismatchesN += a[0]; statsRA.mappedInsN += a[1]; statsRA.mappedDelN += a[2];
@@ -565,4 +599,5 @@ void ReadAlign::outputHandoffSummary()
     soloRead->record(nTr, trMult, iReadAll, readAnnot);
     if (soloDumpDir() != nullptr) soloDumpRead(nTr); //singlet E9 debug dump, off by default
     PROF_ADD(PROF_outSolo, tOutSolo);
+    if (nTr==1 && handoffAlignedBases>=0 && P.singletSoftclipMin>0) softclipRoute((uint64) handoffAlignedBases); //singlet --chimeric soft-clip route
 };

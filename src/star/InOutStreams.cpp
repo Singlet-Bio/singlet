@@ -39,6 +39,10 @@ InOutStreams::~InOutStreams() {
             outUnmappedReadsStream[ii].flush();
             outUnmappedReadsStream[ii].close();
         }
+        if (outSoftclipStream[ii].is_open()) {
+            outSoftclipStream[ii].flush();
+            outSoftclipStream[ii].close();
+        }
     };
 };
 

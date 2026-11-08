@@ -76,6 +76,7 @@ class ReadAlign {
         istream* readInStream[MAX_N_MATES];
         BAMoutput *outBAMcoord, *outBAMunsorted, *outBAMquant;//sorted by coordinate, unsorted, transcriptomic BAM structure
         fstream chunkOutChimSAM, *chunkOutChimJunction, chunkOutUnmappedReadsStream[MAX_N_MATES], chunkOutFilterBySJoutFiles[MAX_N_MATES];
+        fstream chunkOutSoftclipStream[MAX_N_MATES]; //singlet --chimeric: mapped reads with a long unaligned part, for the chimeric pass (Softclip.out.mate*)
         OutSJ *chunkOutSJ, *chunkOutSJ1;
 
         ostream* outSAMstream;
@@ -281,6 +282,8 @@ class ReadAlign {
         //output alignments functions
         void outFilterBySJout();
         void outReadsUnmapped();
+        void outReadsSoftclip(); //singlet --chimeric soft-clip route
+        void softclipRoute(uint64 alignedBases); //writes the read when Lread-alignedBases >= P.singletSoftclipMin
         void spliceGraphWriteSAM();
         void alignedAnnotation();
         void writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *trBestSAM);

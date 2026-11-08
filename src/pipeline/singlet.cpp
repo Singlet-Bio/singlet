@@ -3438,7 +3438,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
         else if (arg == "--memory-tier" && i+1 < argc) memory_tier_cfg = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
-        else if (arg == "--chimeric") chimeric = true;
+        else if (arg == "--chimeric") { chimeric = true; setenv("SINGLET_CHIM_SOFTCLIP_MIN", "15", 0); }   // soft-clip route on (15 bases) unless set; 0 turns it off
         else if (arg == "--fusion-catalog" && i+1 < argc) fusion_catalog_path = argv[++i];
         else if (arg == "--chimeric-blacklist" && i+1 < argc) chimeric_blacklist_path = argv[++i];
         else if (arg == "--chimeric-recurrent" && i+1 < argc) chimeric_recurrent_path = argv[++i];
@@ -9449,6 +9449,9 @@ static int singlet_main(int argc, char* argv[]) {
     // ── chimeric / fusion junction table (opt-in): second STAR pass on the reads the main pass left unmapped ──
     if (chimeric) {
         const std::string unm1 = out_prefix + "/star_Unmapped.out.mate1", unm2 = out_prefix + "/star_Unmapped.out.mate2";
+        const std::string sc1 = out_prefix + "/star_Softclip.out.mate1", sc2 = out_prefix + "/star_Softclip.out.mate2";
+        std::error_code sc_ec;
+        const bool softclip = std::filesystem::exists(sc1) && std::filesystem::exists(sc2) && std::filesystem::file_size(sc1, sc_ec) > 0;
         std::vector<std::string> base_args;
         {
             std::ifstream af(out_prefix + "/star_args.txt");
@@ -9462,8 +9465,11 @@ static int singlet_main(int argc, char* argv[]) {
         } else {
             StopWatch chim_sw;
             uint64_t chim_in = 0;   // reads going into the second pass (FASTQ records of the cDNA mate)
+            uint64_t chim_sc = 0;   // of which mapped reads routed by their unaligned part (Softclip.out)
             { std::ifstream uf(unm1); std::string l; while (std::getline(uf, l)) ++chim_in; chim_in /= 4; }
-            std::cerr << "[singlet] chimeric: " << chim_in << " reads into the second pass\n";
+            if (softclip) { std::ifstream uf(sc1); std::string l; while (std::getline(uf, l)) ++chim_sc; chim_sc /= 4; }
+            std::cerr << "[singlet] chimeric: " << chim_in + chim_sc << " reads into the second pass (" << chim_in << " unmapped, " << chim_sc
+                      << " mapped with >= " << (getenv("SINGLET_CHIM_SOFTCLIP_MIN") ? getenv("SINGLET_CHIM_SOFTCLIP_MIN") : "0") << " unaligned bases)\n";
             static const std::set<std::string> drop = {
                 "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
                 "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
@@ -9476,7 +9482,7 @@ static int singlet_main(int argc, char* argv[]) {
             }
             const std::string prefix = out_prefix + "/chim_";
             for (const char* s : {"--readFilesIn"}) pa.push_back(s);
-            pa.push_back(unm1); pa.push_back(unm2);
+            pa.push_back(softclip ? unm1 + "," + sc1 : unm1); pa.push_back(softclip ? unm2 + "," + sc2 : unm2);
             for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
             pa.push_back(prefix);
             // Arriba's published chimeric settings (Uhrig et al. 2021): short segments (10 bases), unaligned tails up to 30 points and
@@ -9494,12 +9500,14 @@ static int singlet_main(int argc, char* argv[]) {
                 int dn = open("/dev/null", O_WRONLY);
                 if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
                 unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF"); unsetenv("SINGLET_GPU_PILEUP");   // the second pass is a CPU STAR run
+                unsetenv("SINGLET_CHIM_SOFTCLIP_MIN");   // that writes no Softclip.out of its own
                 _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
             }
             int ws = 0;
             const bool ran = pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
             std::error_code ec;
             std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
+            std::filesystem::remove(sc1, ec); std::filesystem::remove(sc2, ec);
             std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
             if (!ran) {
                 std::cerr << "[singlet] chimeric: the second STAR pass failed\n";

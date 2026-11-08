@@ -304,6 +304,8 @@ void ReadAlignChunk::processChunks() {//read-map-write chunks
 
             for (uint ii=0;ii<P.readNends;ii++) {
                 chunkFstreamCat (RA->chunkOutUnmappedReadsStream[ii],P.inOut->outUnmappedReadsStream[ii], false, g_threadChunks.mutexOutUnmappedFastx);
+                if (P.singletSoftclipMin > 0)
+                    chunkFstreamCat (RA->chunkOutSoftclipStream[ii],P.inOut->outSoftclipStream[ii], false, g_threadChunks.mutexOutUnmappedFastx);
             };
 
             if (P.runThreadN>1)
