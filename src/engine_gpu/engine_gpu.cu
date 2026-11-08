@@ -1117,8 +1117,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     } catch (const std::exception& e) {
         why = std::string("an exception (") + e.what() + ")";
     }
-    out.log += "engine_gpu: " + why + "; the device is reset
-";
+    out.log += "engine_gpu: " + why + "; the device is reset\n";
     e9::soloKeepRelease(); out.e10.soloKept = false;
     g_d2h = nullptr;
     cudaDeviceReset(); g_bud.reset(0, 0);
