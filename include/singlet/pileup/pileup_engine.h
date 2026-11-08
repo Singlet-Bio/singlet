@@ -4589,13 +4589,21 @@ private:
         if (g == UINT32_MAX || g == e.body_a || g == e.body_b) return;
         if (e.body_a == UINT32_MAX) e.body_a = g; else if (e.body_b == UINT32_MAX) e.body_b = g; else e.body_more = true;
     }
+    // Whether a completed multimapper entry is judged on its exonic alignments (intron_rule::kExonPrecedence with an exonic alignment) or on
+    // all of them. kExonPrecedence decides only within one species: on a joint reference (barnyard) a read whose alignments span species stays
+    // judged on all of them, as at 2957 (a human rRNA read whose one exonic alignment is a mouse 18S pseudogene is not mouse). mm_verdict,
+    // record_mm and rec_pair share it, as the GPU's k_resolve shares its X.
+    template <class E>
+    bool judged_on_exonic(const E& e) const {
+        return (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen && (e.sp_mask & (e.sp_mask - 1)) == 0;
+    }
     // the record pair of a gene-ambiguous multimapper, exactly two genes: the genes its alignments touched (note_gene) and its primary's body
     // set; under intron_rule::kExonPrecedence (the gene set mm_verdict judges) the exonic alignments' genes and, when the primary is exonic,
     // its body set
     template <class E>
     bool rec_pair(const E& e, uint32_t& ga, uint32_t& gb) const {
         RecSet r;
-        if ((config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen) {
+        if (judged_on_exonic(e)) {
             if (e.ex_partial || (e.body_ex && e.body_more)) return false;
             r.add(e.ex_first); r.add(e.ex_second);
             if (e.body_ex) { r.add(e.body_a); r.add(e.body_b); }
@@ -4716,9 +4724,7 @@ private:
     template <class E>
     MmVerdict mm_verdict(const E& e) const {
         MmVerdict v;
-        // kExonPrecedence decides only within one species: on a joint reference (barnyard) a read whose alignments span species stays
-        // judged on all of them, as at 2957 (a human rRNA read whose one exonic alignment is a mouse 18S pseudogene is not mouse)
-        const bool ex = (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen && (e.sp_mask & (e.sp_mask - 1)) == 0;
+        const bool ex = judged_on_exonic(e);
         const bool ambiguous = ex ? e.ex_ambiguous : e.gene_ambiguous;
         // a read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a pseudogene) comes from the mitochondrial
         // genome (hundreds of copies per cell vs. one nuclear copy): count it for the chrM gene instead of dropping it as gene-ambiguous
@@ -4752,7 +4758,7 @@ private:
     template <class E>
     void record_mm(const E& e, const MmVerdict& v, std::vector<em_rescue::AmbigRead>& out) const {
         if (e.bc_idx < 0 || v.kind == MmVerdict::kCount || v.kind == MmVerdict::kMt) return;
-        const bool ex = (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen;
+        const bool ex = judged_on_exonic(e);   // the gene set mm_verdict judged
         if (!(ex ? e.ex_ambiguous : e.gene_ambiguous)) return;
         uint32_t ra, rb;
         if (!rec_pair(e, ra, rb)) return;
