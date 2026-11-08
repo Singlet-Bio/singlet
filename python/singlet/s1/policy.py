@@ -34,7 +34,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 #: generic layer names recorded in the manifest, in a fixed order
 OMITTED_LAYERS = (
-    "genotype",  # donor/* except donor_assignments.tsv, snp_*, *.vcf/.bcf, ase_counts.tsv, aligned reads (BAM/CRAM)
+    "genotype",  # private/*, donor/* except donor_assignments.tsv, snp_*, *.vcf/.bcf, ase_counts.tsv, aligned reads (BAM/CRAM)
     "mtdna_alleles",  # mt/* (mt_summary.tsv included: its per-cell mts_* columns), mt_heteroplasmy.1pz, mt_variants.tsv, *_mt_consensus*, *_mt_variants*
     "ancestry_call",  # ancestry_call.json (50-marker call; replaced by the validated per-cell label)
     "ambient",  # ambient_contamination.*, ambient_profile.tsv
@@ -85,6 +85,8 @@ def omitted_layer(rel: str) -> Optional[str]:
         return "splice_psi_legacy"
     if name == "sex_call.json":
         return "sex_call_legacy"
+    if rel.startswith("private/"):
+        return "genotype"  # everything the engine writes under private/ (allsite/allele_ad, allele_dp, sites.tsv.gz; D-101) is owner-only
     return None
 
 
