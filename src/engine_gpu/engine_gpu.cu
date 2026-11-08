@@ -1329,6 +1329,18 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         e10 = false; cudaGetLastError();
         dfree(dEnt); dfree(dQm); dfree(dAux); dEnt = nullptr; dQm = nullptr; dAux = nullptr;
     };
+    // with in.oomFatal an E10 turn-off for lack of device memory fails the call: fail at once, before the lanes, so the retry does not wait
+    // for work that is thrown away (item 88: about 30 s of device time per failed attempt)
+    auto e10OomNow = [&]() { return in.oomFatal && !e10Oom.empty(); };
+    auto e10OomWhy = [&]() { return "E10 ran out of device memory (" + e10Oom + "); the caller runs mapDistinct again"; };
+    // a kernel launch's own error (out of resources, or out of memory when the driver cannot grow the local memory the kernel needs) is
+    // reported only by cudaGetLastError: name the kernel here, before a later check reads the error as its own (item 88: "entries: out of memory")
+    auto launched = [&](const char* what) -> bool {
+        const cudaError_t le = cudaGetLastError();
+        if (le == cudaSuccess) return true;
+        err = std::string(what) + " launch: " + cudaGetErrorString(le);
+        return false;
+    };
     if (in.e10.on && !e10) out.e10.log += "engine_gpu: E10 not used (no shared region or no host decode)\n";
     if (e10 && !RC) {
         const double ta = now();
@@ -1338,6 +1350,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                         : cudaMemcpy(dAux, in.e10.aux.data(), in.e10.aux.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess) e10Off("aux upload");
         out.e10.msUpAux = (now() - ta) * 1e3;
         step("e10.aux.h2d");
+        if (e10OomNow()) return fail(e10OomWhy());
     }
     auto e10Entries = [&](const u64* cs, const u64* cl) {
         e10Done = true;
@@ -1402,6 +1415,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             const unsigned g4 = (unsigned) ((n + 127) / 128);
             if (nq == 30) k_cr4<30><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
             else k_cr4<0><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
+            if (!launched("CellRanger4 clip kernel")) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
             const double tk4 = now() - t4;
             out.cr4info.resize(n);
@@ -1443,9 +1457,11 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         g_bud.at = "clip";
         if (dmal(&dCs, n * 8) || dmal(&dCl, n * 8) || dmal(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
         k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
-        cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
+        if (!launched("clip kernel")) return fail(err);
+        if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()));   // E12: not the device (the index copy stream runs on)
         step("clip.kernel");
         if (e10) e10Entries(dCs, dCl);   // E10: the original reads and their clip
+        if (e10OomNow()) return fail(e10OomWhy());
         cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
         step("e10.entries");
         if (lean || split) { entToRegion(); step("e10.entries.d2h"); }
@@ -1456,7 +1472,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (cudaMemcpy(&tot, dOffC + n, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
         if (dmal(&dSeqC, tot + 8)) return fail("out of device memory (clipped reads)");
         k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC);
-        cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
+        if (!launched("clip gather kernel")) return fail(err);
+        if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip gather kernel: ") + cudaGetErrorString(cudaGetLastError()));   // E12: not the device
         step("clip.gather");
         hcs.resize(n); hoffC.resize(n + 1);
         if (g_d2h ? !(g_d2h->copy(hcs.data(), dCs, n * 8) && g_d2h->copy(hoffC.data(), dOffC, (n + 1) * 8))
@@ -1489,6 +1506,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (!split) { clipHostFill(); step("clip.host"); }
     }
     if (e10 && !e10Done && !RC) e10Entries(nullptr, nullptr);   // E10: no clipping
+    if (e10OomNow()) return fail(e10OomWhy());
     if ((lean || split) && !RC) entToRegion();
     memMark("reads+clip");
     // a read's (clipped) sequence on the host
@@ -1655,6 +1673,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (!entOff || (in.e10.wantMask && !qmOff)) e10Off("the shared region is full");
         else if (!al(cAux, RCN * strideAux * 8) || !al(cEnt, RCN * sizeof(e6::ReadEntry)) || (in.e10.wantMask && !al(cQm, RCN * qmBytes())))
             e10Off("out of device memory (read chunk)");
+        if (e10OomNow()) return fail(e10OomWhy());
     }
     bool r11On = e10 && in.e10.wl != nullptr && in.e10.nWL > 0;
     std::vector<uint32_t> r11t;
@@ -1686,18 +1705,20 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             const unsigned g4 = (unsigned) ((m + 127) / 128);
             if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(cSeq, cOff, m, c4, cP5, cP3, cInfo);
             else k_cr4<0><<<g4, 128>>>(cSeq, cOff, m, c4, cP5, cP3, cInfo);
+            if (!launched("CellRanger4 clip kernel")) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
             if (!d2h(out.cr4info.data() + r0, cInfo, m)) return fail("CellRanger4 clip: info copy");
         }
         if (in.clip.on) {
             ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t) in.clip.ad3.size(), in.clip.adMMp, cAd, cP5, cP3};
             k_clip<<<G, 256>>>(cSeq, cOff, m, c, cCs, cCl);
+            if (!launched("clip kernel")) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
         }
         if (e10) {   // E10: the original reads and their clip; i0 = r0 keeps the hook's sample of the whole-sample run
             float ms = 0; std::string w;
             if (!singlet_hostloop_gpu::entries(cSeq, (const uint64_t*) cOff, (const uint64_t*) cCs, (const uint64_t*) cCl, m, cAux, in.e10.nw, in.e10.hook,
-                                               cEnt, cQm, ms, w, r0)) e10Off("entries: " + w);
+                                               cEnt, cQm, ms, w, r0)) { e10Off("entries: " + w); if (e10OomNow()) return fail(e10OomWhy()); }
             else {
                 msEnt += ms;
                 singlet_engine_gpu::E2ERegion& RG = *in.e2e;
