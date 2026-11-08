@@ -208,3 +208,16 @@ the other missed cells (GTACTTTCATACTACG, GGTGTTAGTCCCTACT). The 15-base route c
 (6.78 M against 6.41 M on 1:1.5) and adds nothing over 20 bases. Two explanations remain open. The main pass may align the read
 with a shorter clip, or the engine may route it elsewhere before alignment. The comparators' copy of the 1:15 read carries
 barcode CCTTACGATCCCGAAA, one mismatch from the cell it was assigned to, which points at barcode correction for that read.
+
+### B6 circularity check: declared before scoring
+
+Mitelman lists all three truth fusions, so clause 1 passing with the prior can be read as circular. Two checks follow, written
+before the runs they describe, and neither changes the rule or the formula.
+
+1. **Breakpoint features alone.** The soft-clip prototype is reported on the `cells`, `agreement`, `splice` and `breakpoint`
+   scores at both comparators' false-positive counts. These numbers already appear in the results table above, since those
+   variants were scored at 3f35b10a.
+2. **Leave-truth-out prior.** The `known` and `combined` scores are recomputed with the three truth pairs removed from the
+   Mitelman set (`fusion_rank.py --leave-truth-out`), so the truth fusions get K = 0 while every other pair keeps its K. This
+   runs on the PR build and both soft-clip builds, and results go to `results/b6_*_rank_*_lto.json`. Whatever drop in recall it
+   shows is the share of the clause-1 pass that depends on the prior having seen the answer.

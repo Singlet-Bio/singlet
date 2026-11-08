@@ -139,6 +139,7 @@ def main():
     ap = argparse.ArgumentParser()
     for a in ("engine", "starfusion", "arriba", "readmap", "labels", "truth", "gtf", "mitelman", "out"):
         ap.add_argument("--" + a, required=True)
+    ap.add_argument("--leave-truth-out", action="store_true", help="drop the truth pairs from the Mitelman prior")
     x = ap.parse_args()
     truth_by_line = {}
     for part in x.truth.split(";"):
@@ -153,8 +154,10 @@ def main():
 
     bounds = load_exon_boundaries(x.gtf)
     known_pairs = load_mitelman(x.mitelman)
+    if x.leave_truth_out:
+        known_pairs -= truth
     feats = features(pair_rows(x.engine, cells), bounds, known_pairs)
-    res = {"truth": sorted(truth), "mitelman_pairs": len(known_pairs), "truth_in_mitelman": {p: p in known_pairs for p in sorted(truth)},
+    res = {"truth": sorted(truth), "leave_truth_out": x.leave_truth_out, "mitelman_pairs": len(known_pairs), "truth_in_mitelman": {p: p in known_pairs for p in sorted(truth)},
            "n_pairs": len(feats), "pairs_in_mitelman": sum(v["K"] for v in feats.values()),
            "truth_features": {p: feats.get(p) for p in sorted(truth)}, "comparators": comps, "variants": {}}
     for v in VARIANTS:
