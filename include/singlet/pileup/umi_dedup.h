@@ -756,6 +756,15 @@ public:
         return true;
     }
 
+    /// Appends (barcode << 32 | 2-bit packed UMI) for every exact UMI recorded here (the multimap record's counted-UMI keys;
+    /// a UMI of 16 bases or fewer packs into 32 bits). Unordered; the caller sorts.
+    void append_umi_keys(std::vector<uint64_t>& out) const {
+        for (const auto& [key, entries] : mol_groups_) {
+            const uint64_t bc = key >> 32;
+            for (const auto& e : entries) out.push_back((bc << 32) | (e.packed & 0xffffffffULL));
+        }
+    }
+
     size_t n_molecule_groups() const { return mol_groups_.size(); }
     bool   molecules_empty()   const { return mol_groups_.empty() && !mol_stats_cached_; }
     void   clear_molecules()         { mol_groups_.clear(); root_cache_.clear(); }

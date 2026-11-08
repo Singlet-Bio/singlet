@@ -71,7 +71,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     else A.init_managed(2 * totB);
     e16step("arena");
-    Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges;
+    Inputs in; in.nS = (int)nS; in.nA = (int)nA; in.nR = (int)nR; in.ncells = (int)par.n_barcodes; in.ulen = pi.umiLen; in.par = par; in.wantMerges = pi.wantGeneMerges; in.wantUmiKeys = pi.wantUmiKeys;
     in.dp = DPar{par.stranded, par.reverse_strand, par.count_introns, par.count_sj, par.count_mt, par.min_mapq, par.chrm_tid, pi.snpSkipN, pi.intronRules, pi.useQual, (int) singlet_qmask::words()};
     in.EX = upload_tree(A, an.ex); in.IN = upload_tree(A, an.in); in.e2g = to_dev(A, an.e2g); in.i2g = to_dev(A, an.i2g); in.gstr = to_dev(A, an.gstr);
     in.gmt = to_dev(A, pi.geneIsMt); in.ngmt = (uint32_t)pi.geneIsMt.size();
@@ -153,6 +153,29 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.alnGene.swap(o.aa_gene); po.alnStat.swap(o.aa_stat); po.alnExonGene.swap(o.aa_exg);
     for (auto& kv : T.acc) if (kv.first != "fetch") po.msGpu += kv.second;   // "fetch": the host copying a partition's results out
     { char b[160]; snprintf(b, sizeof b, "partition select %.1f ms (in the GPU time), host fetch between partitions %.1f ms; ", T.acc.count("part.select") ? T.acc["part.select"] : 0.0, T.acc.count("fetch") ? T.acc["fetch"] : 0.0); po.log += b; }
+    // multimap record: every barcoded read of a signature k_resolve marked (the CPU engine's AmbigRead per read), in read order. Host work
+    // after the device's release, on 8 threads (chunks of the read array, joined in chunk order), beside the tuple copies below.
+    std::thread mmth([&]() {
+        const auto R = pileupCat<ReadRec>(pi.preReads, pi.reads.data(), pi.reads.size());
+        const uint64_t n = R.size(), nsig = o.amb_sig.size();
+        constexpr int K = 8;
+        std::vector<std::vector<PileupAmbig>> part(K);
+        std::vector<std::thread> th;
+        for (int k = 0; k < K; k++)
+            th.emplace_back([&, k]() {
+                for (uint64_t r = n * k / K, e = n * (k + 1) / K; r < e; r++) {
+                    const ReadRec& x = R[r];
+                    if (x.bc < 0 || x.sig >= nsig) continue;
+                    const uint2 g = o.amb_sig[x.sig];
+                    if (g.x != MAXU) part[k].push_back(PileupAmbig{x.bc, g.x, g.y, x.umi3});
+                }
+            });
+        for (auto& t : th) t.join();
+        size_t tot = 0;
+        for (const auto& v : part) tot += v.size();
+        po.ambig.reserve(tot);
+        for (const auto& v : part) po.ambig.insert(po.ambig.end(), v.begin(), v.end());
+    });
     // E16 "copypar" (level 5): the eight tuple arrays copied on threads, beside the rest of this and the device's release (joined at the end)
     std::vector<std::thread> e16cp;
     if (singlet_tail::cut("copypar")) {
@@ -170,7 +193,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     if (pi.wantReads) { copyT3(o.exon_reads, po.exonReads); copyT3(o.intron_reads, po.intronReads); po.histCell.swap(o.hist_cell); po.hist.swap(o.hist); }
     copyT3(o.snp_ad, po.snpAd); copyT3(o.snp_dp, po.snpDp); copyT3(o.mt, po.mt); copyT3(o.mt_rev, po.mtRev);
     }
-    po.sjtab = o.sjtab; po.indels = o.indels;
+    po.sjtab = o.sjtab; po.indels = o.indels; po.umiKeys.swap(o.umi_keys);
     {   // R9 per gene: the merged gene-store UMIs, (cell, gene, umi) order
         std::sort(o.merges.begin(), o.merges.end(), [](const auto& x, const auto& y) { return std::tie(x.cell, x.gene, x.umi) < std::tie(y.cell, y.gene, y.umi); });
         po.geneMerges.resize(o.merges.size());
@@ -183,6 +206,9 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     for (auto& l : g_parts_log) po.log += l + "; ";
     e16step("outputs copied");
     if (!e16cp.empty()) { for (auto& t : e16cp) t.join(); e16step("tuple copies joined"); }
+    mmth.join();
+    std::vector<uint2>().swap(o.amb_sig);
+    e16step("multimap reads joined");
     po.msTotal = (now_s() - t0) * 1e3;
     po.log += "e16 steps (s): " + e16 + "; ";
     if (attempt > 0) po.log += "unified memory (the device arena was too small); ";

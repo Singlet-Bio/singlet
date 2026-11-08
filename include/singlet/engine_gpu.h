@@ -463,6 +463,7 @@ struct PileupInput {
     std::vector<int32_t> geneStart, geneEnd, exonStart, exonEnd;
     std::vector<uint32_t> geneExonOff, geneExons;
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
+    int wantUmiKeys = 0;      // return PileupOutput::umiKeys (the multimap record leaves out the UMIs the gene counts hold)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
@@ -488,8 +489,12 @@ template <class T> struct PileupCat {
 template <class T> PileupCat<T> pileupCat(const PileupInput::Pre& pre, const void* v, uint64_t vBytes) {
     return PileupCat<T>{(const T*) pre.p, pre.n / sizeof(T), (const T*) v, vBytes / sizeof(T)};
 }
+// multimap record (include/singlet/pileup/multimap_record.h): one read the engine collects as ambiguous (em_rescue::AmbigRead): barcode
+// column, its two genes (geneA < geneB) and its raw UMI (3 bits per character, A0 C1 G2 T3 N4, PileupInput's ReadRec::umi3)
+struct PileupAmbig { int32_t bc; uint32_t geneA, geneB; uint64_t umi3; };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
+    std::vector<PileupAmbig> ambig;   // the multimap record's reads, in read order
     // wantReads: reads per emitted molecule summed per (cell, row) (val = reads, uint32, same rows as exon / intron), and per cell with
     // molecules (histCell, ascending) its histBins-bin histogram of reads per molecule in hist: k reads -> bin k-1, last bin = histBins or more
     static constexpr int histBins = 16;
@@ -498,6 +503,7 @@ struct PileupOutput {
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
     std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
     std::vector<PileupGeneMerge> geneMerges;         // only when wantGeneMerges; sorted by (cell, gene, umi)
+    std::vector<uint64_t> umiKeys;                   // only when wantUmiKeys: every exact (cell << 32 | 2-bit UMI) of the gene store, sorted, distinct
     uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
     // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
     // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)

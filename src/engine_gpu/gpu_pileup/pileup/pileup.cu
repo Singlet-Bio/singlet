@@ -87,7 +87,7 @@ struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
 // multi: bit 0 = multi-gene (as the engine's multi_gene / primary_multigene / gene_full_multi), bit 1 = the alignment has a same-strand exon
 // overlap (an exonic alignment, intron_rule::kExonPrecedence; the engine's GeneHit::exonic, or a primary's non-empty exon_overlaps)
-struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
+struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank, pmore, ba, bb; };   // multimap record only: ba / bb = a gene-ambiguous primary's gene-body set (the engine's record_set), pmore = it has more than two genes   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
 struct IND { uint32_t pos, lenins; };
@@ -123,13 +123,16 @@ __device__ __forceinline__ bool wrong_strand(const StrandPar& S, uint32_t g) {
 struct ExonCb {
     const StrandPar* S; const uint32_t* e2g; uint32_t ne; bool any, same; uint32_t first_idx, first_gene;
     bool sense = false, anti = false; uint32_t blk_raw = 0, blk_ok = 0, second_gene = MAXU;   // second_gene: the first accepted gene other than first_gene   // engine's strand_vote (unfiltered overlaps) and block counts
+    bool more = false;   // multimap record: a third distinct accepted gene (the engine's third_exon_gene)
+    bool nog = false;    // multimap record: an accepted overlap of an exon without a gene (record_set: more)
     __device__ void operator()(uint32_t idx) {
         uint32_t g = idx < ne ? e2g[idx] : MAXU;
         { char gs = g < S->ng ? S->gstr[g] : '.'; if (gs != '.') { if (S->read_rev == (gs == '-')) sense = true; else anti = true; } }
         blk_raw++;
         if (wrong_strand(*S, g)) return;
         blk_ok++;
-        if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) { same = false; if (second_gene == MAXU && g != MAXU) second_gene = g; } } };
+        if (g == MAXU) nog = true;
+        if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) { same = false; if (second_gene == MAXU && g != MAXU) second_gene = g; else if (g != MAXU && g != second_gene) more = true; } } };
 struct IntronCb {
     const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t exon_gene; bool any, same; uint32_t first_idx, first_gene, match_idx;
     __device__ void operator()(uint32_t idx) {
@@ -137,8 +140,9 @@ struct IntronCb {
         if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) same = false;
         if (exon_gene != MAXU && g == exon_gene && match_idx == MAXU) match_idx = idx;
         if (exon_gene != MAXU && g != exon_gene) other = true;   // classify_read's other_gene_intron
-        if (g != MAXU) { if (g0b == MAXU) g0b = g; else if (g != g0b) bmulti = true; } }   // gene_full_multi (kGeneFullSet), seeded with the exon gene
-    bool other = false; uint32_t g0b = MAXU; bool bmulti = false; };
+        if (g != MAXU) { if (g0b == MAXU) g0b = g; else if (g != g0b) bmulti = true; }   // gene_full_multi (kGeneFullSet), seeded with the exon gene
+        if (g != MAXU && g != ia && g != ib) { if (ia == MAXU) ia = g; else if (ib == MAXU) ib = g; else imore = true; } }   // multimap record: the intron genes
+    bool other = false; uint32_t g0b = MAXU; bool bmulti = false; uint32_t ia = MAXU, ib = MAXU; bool imore = false; };
 // intron_rule::kGeneFullSet on a secondary (the engine's gene_full_extend): same-strand intron genes extend the exon hit to the gene-body set
 struct BodyCb {
     const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t g0; bool multi;
@@ -161,7 +165,7 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         else if (op == 2 || op == 3) { rpos += len; if (op == 3) hasn = true; }
     }
-    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0};
+    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0, 0, MAXU, MAXU};
     r.exg = (ec.any && ec.same) ? ec.first_gene : MAXU;   // the engine's determine_exon_gene (single gene; multi-gene -> none)
     if (!prim) {
         if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; }
@@ -215,6 +219,13 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
     }
     r.multi = (pm || bm ? 1u : 0u) | (ec.any ? 2u : 0u); r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
     if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
+    if (pm || bm) {   // multimap record: the primary's gene-body set (exon genes; with kGeneFullSet also intron genes), as the engine's record_set
+        uint32_t a = MAXU, b = MAXU; bool more = ec.more || ec.nog;
+        auto add = [&](uint32_t g) { if (g == MAXU || g == a || g == b) return; if (a == MAXU) a = g; else if (b == MAXU) b = g; else more = true; };
+        if (ec.any) { add(ec.first_gene); add(ec.second_gene); }
+        if ((P.rules & 512) && P.count_introns) { add(ic.ia); add(ic.ib); if (ic.imore) more = true; }
+        r.ba = a; r.bb = b; r.pmore = more ? 1u : 0u;
+    }
     // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
     // (no accepted exon overlap although a block had only wrong-strand exons), 8 cross_gene_intron (classify_read), 16 multigene
     r.stat = (ec.sense ? 1u : 0u) | (ec.anti ? 2u : 0u) | ((!ec.any && had_reject) ? 4u : 0u)
@@ -238,9 +249,11 @@ __device__ __forceinline__ void refine_primary(AA& x, const DPar& P) {
     if ((P.rules & 8) && x.flags == 6 && x.flank) { x.flags = 5; x.intron = MAXU; }
     if (x.hasn) x.flags |= 8u;
 }
-__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, DPar P, GRes* out) {
+// amb (multimap record, include/singlet/pileup/multimap_record.h): per signature the two genes of a read the engine collects as ambiguous
+// (em_rescue::AmbigRead: resolve_mm's gene-ambiguous multimapper, note_unique_multigene's unique two-gene primary), else MAXU
+__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, DPar P, GRes* out, uint2* ambo) {
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
-    SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0};
+    SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0}; uint2 ab = make_uint2(MAXU, MAXU);
     auto is_mt = [&](uint32_t g) { return g < ngmt && gmt[g] != 0; };
     if (sg.n_aln > 0) {
         if (sg.nh == 1) {
@@ -248,21 +261,27 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                 AA x = aa[sg.aln_off + k];
                 if (x.gene != MAXU && (x.flags & 2) && (P.rules & 4) && x.hasn) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }
                 refine_primary(x, P);
-                if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
+                if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; }
+                else if ((x.multi & 1u) && !x.pmore && x.bb != MAXU) ab = make_uint2(min(x.ba, x.bb), max(x.ba, x.bb));
+                break; }
         } else {
-            bool amb = false, pa = false, nuc = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
-            bool xs = false, xamb = false, xnuc = false, xpa = false, mexo = false; uint32_t xfg = MAXU, xsec = MAXU, xg = MAXU, xex = MAXU, xin = MAXU, xfl = 0;   // kExonPrecedence
+            bool amb = false, pa = false, nuc = false, part = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
+            bool xs = false, xamb = false, xnuc = false, xpa = false, mexo = false, xpart = false, pexo = false; uint32_t xfg = MAXU, xsec = MAXU, xg = MAXU, xex = MAXU, xin = MAXU, xfl = 0;   // kExonPrecedence
             // the genes the alignments touch, order-free (the engine's note_gene_set): first / second = the two smallest distinct genes, nuc = some non-chrM gene was touched
-            auto note_set = [&](uint32_t g, uint32_t& first, uint32_t& second, bool& am, bool& nu) {
+            // pt (multimap record): a third distinct gene, so {first, second} is not the read's gene set (MultiHitEntry::partial / ex_partial)
+            auto note_set = [&](uint32_t g, uint32_t& first, uint32_t& second, bool& am, bool& nu, bool& pt) {
                 if (g == MAXU) return;
                 if (!is_mt(g)) nu = true;
                 if (g == first || g == second) return;
                 if (first == MAXU) { first = g; return; }
                 am = true;
+                if (second != MAXU) pt = true;
                 if (g < first) { second = first; first = g; } else if (second == MAXU || g < second) second = g;
             };
-            auto note = [&](uint32_t g) { note_set(g, fg, sec, amb, nuc); };
-            auto notex = [&](uint32_t g) { note_set(g, xfg, xsec, xamb, xnuc); };
+            auto note = [&](uint32_t g) { note_set(g, fg, sec, amb, nuc, part); };
+            auto notex = [&](uint32_t g) { note_set(g, xfg, xsec, xamb, xnuc, xpart); };
+            uint32_t ra = MAXU, rb = MAXU; bool rmore = false;   // multimap record only: the primary's body set (MultiHitEntry::body_*); pexo = body_ex
+            auto rnote = [&](uint32_t g) { if (g == MAXU || g == ra || g == rb) return; if (ra == MAXU) ra = g; else if (rb == MAXU) rb = g; else rmore = true; };
             uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
@@ -276,11 +295,13 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                     }
                     if (multi) {
                         amb = true;
+                        if (x.pmore) { part = true; rmore = true; }   // rmore: MultiHitEntry::body_more
+                        rnote(x.ba); rnote(x.bb);
                         if (x.pg_a != MAXU) { note(x.pg_a); if (x.pg_b != MAXU) note(x.pg_b); }
                     }
                     note(x.aln_gene);
                     if (exo) {   // note_primary_exonic: exg == MAXU here means exons of several genes (pm)
-                        xs = true;
+                        xs = true; pexo = true;
                         if (x.exg == MAXU) { xamb = true; if (x.pg_a != MAXU) { notex(x.pg_a); if (x.pg_b != MAXU) notex(x.pg_b); } }
                         else {
                             if (multi) xamb = true;   // kGeneFullSet: the exon of one gene inside another gene's intron
@@ -289,7 +310,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                         }
                     }
                 } else {
-                    if (multi) amb = true;
+                    if (multi) { amb = true; part = true; }   // a multi-gene secondary: its genes are not noted (MultiHitEntry::partial)
                     else if ((P.rules & 512) && x.gene == MAXU && x.aln_gene != MAXU) note(x.aln_gene);   // kGeneFullSet: an intron-only secondary
                     else if (x.gene != MAXU) {
                         note(x.gene);
@@ -298,7 +319,7 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                     }
                     if (exo) {   // note_secondary_exonic
                         xs = true;
-                        if (multi) xamb = true;
+                        if (multi) { xamb = true; xpart = true; }   // ex_partial: its genes are not noted
                         else {
                             notex(x.gene);
                             if (x.gene != MAXU && !xpa && (xg == MAXU || x.exon < xex)) { xg = x.gene; xex = x.exon; xin = MAXU; xfl = 5; }
@@ -309,11 +330,22 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
             const bool X = (P.rules & 4096) && xs;   // mm_verdict: judged on the exonic alignments
             const bool am = X ? xamb : amb;
             if (am && mg != MAXU && (X ? (xnuc && mexo) : nuc)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
-            else if (X) { if (!xamb && xfg != MAXU && xg != MAXU) { r.gene = xg; r.exon = xex; r.intron = xin; r.flags = xfl ? xfl : 5; } }
-            else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
+            else if (X ? (!xamb && xfg != MAXU && xg != MAXU) : (!amb && fg != MAXU && gi != MAXU)) {
+                if (X) { r.gene = xg; r.exon = xex; r.intron = xin; r.flags = xfl ? xfl : 5; }
+                else { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
+            }
+            else if (X ? (xamb && !xpart && !(pexo && rmore)) : (amb && !part && !rmore)) {
+                // the record pair (the engine's record_mm / rec_pair): an uncounted gene-ambiguous read whose gene set is exactly two genes, the
+                // noted genes and the primary's body set; under kExonPrecedence the exonic alignments' genes and, for an exonic primary, its body set
+                uint32_t a = MAXU, b = MAXU; bool more = false;
+                const uint32_t g4[4] = {X ? xfg : fg, X ? xsec : sec, (!X || pexo) ? ra : MAXU, (!X || pexo) ? rb : MAXU};
+                for (int i = 0; i < 4; i++) { const uint32_t g = g4[i]; if (g == MAXU || g == a || g == b) continue; if (a == MAXU) a = g; else if (b == MAXU) b = g; else more = true; }
+                if (!more && b != MAXU) ab = make_uint2(min(a, b), max(a, b));
+            }
         }
     }
     out[s] = r;
+    ambo[s] = ab;
 }
 
 __device__ __forceinline__ uint8_t comp16(uint8_t c) { return ((c & 1) << 3) | ((c & 2) << 1) | ((c & 4) >> 1) | ((c & 8) >> 3); }
@@ -626,7 +658,7 @@ static uint32_t* sort_hilo(Arena& A, const uint64_t* hi, const uint32_t* lo, int
 
 // ------------------------------------------------------------------------------------------------------------------------
 struct Inputs {
-    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0; Par par; DPar dp;
+    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0, wantUmiKeys = 0; Par par; DPar dp;
     SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: low-quality mask per read, dp.qw words (dp.use_q)
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
@@ -635,6 +667,7 @@ struct Inputs {
 struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
     std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
+    std::vector<uint64_t> umi_keys;   // Inputs::wantUmiKeys: (cell << 32 | 2-bit UMI) of every gene store entry, sorted, distinct
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     std::vector<T3> exon_reads, intron_reads;   // g_want_reads: reads per molecule summed per (cell, feature), same rows as exon / intron
     std::vector<T3> mixed_exon, mixed_intron;   // g_want_mixed: unspliced molecules with an exon-only read, per (cell, exon) / (cell, intron)
@@ -644,6 +677,7 @@ struct Outputs {
     unsigned long long hits[4] = {0, 0, 0, 0};      // exon_hits, intron_hits, UMI reads recorded, chrM/NUMT multimappers rescued (when g_cell_stats)
     std::vector<uint32_t> aa_gene, aa_exg; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
+    std::vector<uint2> amb_sig;          // per signature: k_resolve's multimap record genes (MAXU: none)
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
 
@@ -844,7 +878,10 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     AA* aa = A.alloc<AA>(std::max(nA, 1));
     k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM); T.mark("1.annotate");
     // 2 signature level
-    GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.dp, gr);
+    GRes* gr = A.alloc<GRes>(nS); uint2* ambs = A.alloc<uint2>(std::max(nS, 1));
+    k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.dp, gr, ambs);
+    out->amb_sig.resize(nS);   // multimap record: the reads' side is built on the host (pileupRun)
+    if (nS) CK(cudaMemcpy(out->amb_sig.data(), ambs, (size_t) nS * sizeof(uint2), cudaMemcpyDeviceToHost));
     uint32_t *c_sj = A.alloc<uint32_t>(nS), *c_snp = A.alloc<uint32_t>(nS), *c_mt = A.alloc<uint32_t>(nS), *c_ind = A.alloc<uint32_t>(nS);
     k_lists<false><<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, in.ops, in.seq, in.SN, in.dp, c_sj, c_snp, c_mt, c_ind, nullptr, nullptr, nullptr, nullptr);
     uint32_t *o_sj = scan_u32(A, c_sj, nS), *o_snp = scan_u32(A, c_snp, nS), *o_mt = scan_u32(A, c_mt, nS), *o_ind = scan_u32(A, c_ind, nS);
@@ -965,6 +1002,17 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 const uint64_t um = (1ull << gst.ub) - 1, gm = (1ull << gst.gb) - 1;
                 for (int i = 0; i < nm; i++) out->merges.push_back({(uint32_t)(ha[i] >> (gst.gb + gst.ub)), (uint32_t)((ha[i] >> gst.ub) & gm), ha[i] & um, hb2[i] & um});
             }
+        }
+        if (out && in.wantUmiKeys && gst.m > 0) {   // the multimap record's counted-UMI keys (multimap::build; PileupEngine::counted_umis)
+            std::vector<uint64_t> hk(gst.m); CK(cudaMemcpy(hk.data(), gst.uk, (size_t)gst.m * 8, cudaMemcpyDeviceToHost));
+            const int sh = gst.gb + gst.ub; const uint64_t um = ((1ull << gst.ub) - 1) & 0xffffffffull;
+            auto& K = out->umi_keys; const size_t base = K.size(); K.reserve(base + (size_t)gst.m);
+            for (int i = 0; i < gst.m;) {   // the store is in (cell, gene, UMI) order: per cell, its UMIs over every gene, sorted and distinct
+                const uint64_t cell = hk[i] >> sh; const size_t s = K.size(); int j = i;
+                for (; j < gst.m && (hk[j] >> sh) == cell; j++) K.push_back((cell << 32) | (hk[j] & um));
+                std::sort(K.begin() + s, K.end()); K.erase(std::unique(K.begin() + s, K.end()), K.end()); i = j;
+            }
+            if (base > 0) std::inplace_merge(K.begin(), K.begin() + base, K.end());   // the partitions hold disjoint cells
         }
         const size_t s5 = A.mark();
         uint64_t* sj_u = nullptr; uint32_t* sj_n = nullptr; int n_sju = red_junction(A, T, in, Rp, nRp, r_sj, o_sj, c_sj, l_jid, n_sjt, jb, cb, &sj_u, &sj_n, gr, gsp);

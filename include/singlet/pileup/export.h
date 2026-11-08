@@ -58,6 +58,7 @@
 #include "multiome_router.h"
 #include "atomic_io.h"
 #include "validate_output.h"
+#include "multimap_record.h"
 #include "mt_reference.h"
 #include "sj_features.h"
 #include "star_cell_read_stats.h"
@@ -1642,6 +1643,17 @@ inline ExportStats export_results(const PileupEngine& engine,
                 write_matrix("ambiguous_counts", amb_csc, names);
             });
         }
+        // The multi-mapping record (multimap_record.h): molecules whose reads are compatible with two genes, as gene-set
+        // classes x barcodes. The gene counts above never include them; retrieval adds them (EM or Uniform) only on request.
+        if (engine.gene_model().n_genes() > 0)
+            write_threads.emplace_back([&]() {
+                const auto mm = multimap::build(engine.ambig_reads(), static_cast<uint32_t>(barcodes.size()), engine.gene_ids(),
+                                                engine.gene_names(), &engine.counted_umis());
+                write_matrix("multimap_counts", mm, mm.names);
+                std::cerr << "[multimap] " << mm.reads << " two-gene reads, " << mm.molecules << " molecules in " << mm.nrows
+                          << " gene sets (" << mm.dropped_umis << " UMIs whose reads share no gene, " << mm.counted_umis
+                          << " UMIs already in the gene counts)\n";
+            });
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             SINGLET_TIMED(write_threads, [&]() { write_matrix("sj_counts", sj_csc, engine.sj_names()); });
         // Poly(A) site usage (polya_sites.h): sites x barcodes molecules + per-site table with internal-priming flag.
