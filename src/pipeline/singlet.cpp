@@ -3987,7 +3987,7 @@ static int singlet_main(int argc, char* argv[]) {
             if (is_visium_mode)
                 std::cerr << "[singlet] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             // Visium: the spot list (visium-v1.txt, rebuilt from 10x public datasets) is the whitelist when installed,
-            // so STAR corrects spot barcodes. Protocol detection is unchanged: it cannot tell Visium from 3' v3.
+            // so STAR corrects spot barcodes. Detection tells Visium from 3' v3 by the same list.
             if (is_visium_mode && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
                 char exe_buf[PATH_MAX];
                 ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
@@ -9313,6 +9313,23 @@ static int singlet_main(int argc, char* argv[]) {
     export_cfg.n_donors = n_donors;
     export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
     export_cfg.genome_dir = genome_dir;
+
+    // The counted strand decides 3' against 5' for the 10x pairs that share the barcode read and whitelist: the cDNA read aligns sense
+    // in 3' kits and antisense in 5' kits. When the strand probe or the safety net counted the other orientation than the detected
+    // protocol implies, report the sibling so the label matches the counts (a 26-base R1 holds no TSO or poly(T) to tell them apart).
+    if (onefq_mode && engine_ptr && config.stranded && !strand_from_user) {
+        static constexpr uint8_t kSiblings[][2] = {{1, 4}, {2, 5}, {13, 14}};   // 10x 3' / 5' v3, v2, v4
+        const bool rev = engine_ptr->reverse_strand();
+        for (const auto& s : kSiblings) {
+            const uint8_t to = (onefq_protocol_id == s[0] && rev) ? s[1] : (onefq_protocol_id == s[1] && !rev) ? s[0] : 0;
+            if (to) {
+                std::cerr << "[singlet] Protocol relabeled by strand: id " << static_cast<int>(onefq_protocol_id) << " -> "
+                          << static_cast<int>(to) << " (cDNA read counted " << (rev ? "antisense, 5'" : "sense, 3'") << ")\n";
+                onefq_protocol_id = to;
+                break;
+            }
+        }
+    }
 
     // ── §3.6 fields for summary.json ──
     {

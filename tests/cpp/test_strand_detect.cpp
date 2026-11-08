@@ -95,6 +95,9 @@ void test_five_prime_evidence() {
     CHECK(!five_prime_evidence(spots(false, 0, 8, 0.03, 0.002, 150, 0.04), 26).is_5prime(), "3', 150-nt R2 -> 3'");
     CHECK(!five_prime_evidence(spots(false, 0, 11, 0.0, 0.0, 110, 0.0), 26).is_5prime(), "R2 without TSO or poly(A)/poly(T) runs -> no evidence, stays 3'");
     CHECK(!five_prime_evidence(spots(false, 0, 12, 0.9, 0.0, 110, 0.0), 26).is_5prime(), "feature-barcode R2 (poly(A) in 90%), no TSO -> stays 3'");
+    // B20: SRR9916657 (3' v2, R2 100 nt, no 3' TSO) has poly(A) in 4% of R2 reads and no poly(T): sense reads, 3'
+    CHECK(!five_prime_evidence(spots(false, 0, 13, 0.042, 0.0, 100, 0.0), 26).is_5prime(), "3', long R2, poly(A) runs dominate, no 3' TSO -> 3'");
+    CHECK(five_prime_evidence(spots(true, 0, 14, 0.022, 0.073, 150, 0.0), 26).is_5prime(), "5', long R2, poly(T) > poly(A), no 3' TSO -> 5'");
     // short R2 keeps the poly(T) > poly(A) condition
     CHECK(!five_prime_evidence(spots(true, 0, 9, 0.006, 0.0004, 50), 26).is_5prime(), "5', 50-nt R2, poly(A) > poly(T) -> undecided, stays 3'");
     CHECK(five_prime_evidence(spots(true, 0, 10, 0.015, 0.03, 50), 26).is_5prime(), "5', 50-nt R2, poly(T) > poly(A) -> 5'");
