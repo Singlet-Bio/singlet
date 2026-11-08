@@ -146,3 +146,13 @@ an exonic alignment is judged on its exonic alignments only, as STARsolo Gene, S
 `tests/cpp/test_exon_precedence.cpp` pins the serial run over seven record orders and `run_parallel` over five worker splits to one result
 under 2957 and 7053. `test_gpu_pileup_labels` compares the GPU pileup with the CPU pileup under 7053 as well (fixture read `xpi`: intronic primary,
 exonic secondary). The CPU = GPU gate on real data is still to run.
+
+### Within one genome (2026-11-07)
+
+On a joint reference the rule decides only when all alignments of the read lie in one genome. A contig named `<genome>___<contig>`
+(`GRCh38___chr1`, `GRCm39___1`) belongs to `<genome>`, and any other contig to an unnamed genome. Each multimapper entry keeps a bit mask of
+its alignments' genomes (`sp_mask`, every alignment, exonic or not); `mm_verdict` and `k_resolve` (`spm`, from `PileupInput::tidSpecies`)
+fall back to the all-alignment set when the mask names two genomes. On hgmm1k_v3 the rule had added about 7,000 wrong-species exon UMIs, most
+of them human rRNA reads whose only exonic alignment is the mouse 18S pseudogene Rn18s-rs5. A single-genome reference has an empty species
+map, so its outputs do not change. `test_exon_precedence` adds a three-contig joint reference that pins the cross-genome read as ambiguous and
+the one-genome read as counted, over record orders and worker splits.

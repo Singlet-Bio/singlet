@@ -532,6 +532,7 @@ struct PileupInput {
     std::vector<uint8_t> lowq;
     uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneVelo, kUmiGeneSpliced, kExonPrecedence
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
+    std::vector<uint8_t> tidSpecies;        // per tid: one bit per genome of a joint reference; empty for one genome (kExonPrecedence within one species)
     // kFlank (only when intronRules has it): per gene its body [geneStart, geneEnd) and its merged exons geneExons[geneExonOff[g] .. geneExonOff[g + 1])
     // (GeneRecord::exon_indices, sorted by start), exon coordinates by exon index
     std::vector<int32_t> geneStart, geneEnd, exonStart, exonEnd;
