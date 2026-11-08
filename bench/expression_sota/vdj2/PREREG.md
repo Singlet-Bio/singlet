@@ -325,3 +325,28 @@ rises from 0.9123 to 0.9155 (melanoma_b 0.8976 to 0.9019; pbmc3_b and ngpbmc3_b 
 from -0.0075 to -0.0043 (95% interval -0.0090 to 0.0000). The fresh-library confirmation is pending: a new untouched NextGem BCR
 library is still to be named.
 
+## Addendum 8 (2026-11-08, registered before any file of the library is opened): fresh-library confirmation of Addendum 7
+
+**Library.** 10x Genomics "20k Human PBMCs, 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger 6.1.0 `multi`, one male donor;
+dataset prefix `20k_PBMC_5pv2_HT_nextgem_Chromium_X`), short name `pbmc20kht_b`. It comes from another study and donor than every
+library used so far (the Addendum 6 held-out library is a female donor of a vaccination series). Its page lists about 960 B cells,
+so the interval will be wide. A search of both repositories (all branches, commit messages included) and of the cluster's data, job
+and benchmark folders found no earlier use; the only near match is the human-mouse cell-line mixture
+`20k_hgmm_5pv2_HT_nextgem_Chromium_X`, a different dataset. Only the dataset page has been read. Inputs: the BCR FASTQs from the
+dataset's FASTQ tarball, truth from its `vdj_b_filtered_contig_annotations.csv`, called cells from its GEX filtered matrix.
+
+**Run.** One Singlet run at the tip of `fix/vdj-ig-cross-rescue` (Addendum 7 defaults, `ig_top_weaker_kept` on) with the first-Cys
+reference (Cell Ranger >= 5), and one TRUST4 run on the same reads. The Addendum 6 setting (#222) is the same run re-filtered with
+`ig_top_weaker_kept=false` through `refilter.py`, which reproduces a run's own filter exactly; the assembly is shared, so this is one
+run. Barcode whitelist: `737K-august-2016`, unless fewer than 90% of Cell Ranger's cell barcodes are on it, in which case
+`3M-february-2018`; the same list is given to Singlet and TRUST4. The choice is made by the job before either tool runs and is
+printed. Nothing is re-run or tuned afterwards, and the result is reported whichever way it falls.
+
+**Rule for Addendum 7 (#224 against #222).** `ig_top_weaker_kept` stays on only when, on this library, its correct pairing is
+strictly higher than with the setting off, its wrong-lineage rate is at most 0.001 higher and its contig F1 at most 0.005 lower. Equal
+or lower pairing turns it off.
+
+**Rule for Singlet against TRUST4.** That of Addendum 6, applied to the Singlet setting the previous rule selects: the difference
+Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95% interval, with
+the wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's.
+
