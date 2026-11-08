@@ -35,7 +35,7 @@ namespace singlet_engine_gpu {
 // ---- E8 (SINGLET_ENGINE_GPU_E2E=1; docs/gpu-engine/fable/E8-e2e.md): the GPU pileup's input built on the device, no hand-off file.
 // The pipeline forks STAR, and STAR's prefill (mapDistinct) is where the mapping results are on the device; the pileup runs in the parent.
 // The parent creates an anonymous shared memory object (memfd) before the fork (e2eRegion().create(); nothing mapped, so the parent's
-// VmPeak, which summary.json reports as memory_tier, does not grow by a reservation); STAR's prefill sizes it (sparse) and maps it (attach),
+// VmPeak, which private/run_metadata.json reports as memory_tier, does not grow by a reservation); STAR's prefill sizes it (sparse) and maps it (attach),
 // mapDistinct builds the pileup's records on the device from its device-resident results and copies them into it, STAR's mapping threads
 // write the per-read entries into it, and the parent maps the bytes in use (mapUsed) and takes the records and the per-read pass from it.
 // Layout: this header at offset 0, then arrays at the byte offsets below (64-byte aligned). magic is written last by the prefill.

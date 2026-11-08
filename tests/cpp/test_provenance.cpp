@@ -235,6 +235,38 @@ void test_json_structure() {
     std::cout << "✓ Test 8: JSON structure contains all expected blocks\n";
 }
 
+// Test 9: add_provenance_run_block appends a "run" block and keeps the object well formed
+void test_run_block() {
+    std::string out_dir = "/tmp/test_prov_9";
+    system(("mkdir -p " + out_dir).c_str());
+
+    ProvenanceConfig prov;
+    prov.input_file = "/data/reads.fq";
+    write_provenance_json(out_dir, prov, 10, 5, 1000);
+    std::string before = read_file(out_dir + "/provenance.json");
+
+    bool ok = add_provenance_run_block(out_dir, "\"timestamp\": \"2026-01-01T00:00:00Z\", \"peak_rss_gb\": 1.5, "
+                                                "\"outputs\": {\"files\": [{\"path\": \"a\", \"bytes_public\": 3}]}");
+    assert(ok && "add_provenance_run_block should succeed on a written provenance.json");
+    std::string after = read_file(out_dir + "/provenance.json");
+    assert(contains(after, "\"run\": {\"note\": \"run metadata") && "run block with its note");
+    assert(contains(after, "\"bytes_public\": 3") && "run block carries the fields");
+    // Everything before the run block is unchanged, and braces and brackets balance.
+    size_t cut = before.find_last_not_of(" \t\r\n}");
+    assert(after.compare(0, cut + 1, before, 0, cut + 1) == 0 && "existing fields unchanged");
+    int depth = 0; bool in_str = false, esc = false;
+    for (char c : after) {
+        if (in_str) { if (esc) esc = false; else if (c == '\\') esc = true; else if (c == '"') in_str = false; continue; }
+        if (c == '"') in_str = true;
+        else if (c == '{' || c == '[') ++depth;
+        else if (c == '}' || c == ']') { --depth; assert(depth >= 0); }
+    }
+    assert(depth == 0 && !in_str && "balanced JSON");
+    assert(!add_provenance_run_block("/tmp/test_prov_9_missing_dir", "\"a\": 1") && "missing file returns false");
+
+    std::cout << "✓ Test 9: run block appended, existing fields unchanged\n";
+}
+
 int main() {
     std::cout << "Running provenance tests...\n";
     
@@ -247,6 +279,7 @@ int main() {
         test_default_config_values();
         test_version_fields();
         test_json_structure();
+        test_run_block();
         
         std::cout << "\n✅ All provenance tests passed!\n";
         return 0;

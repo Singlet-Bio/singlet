@@ -4092,7 +4092,7 @@ static int singlet_main(int argc, char* argv[]) {
                 const char* env_sha = std::getenv("SINGLET_GIT_SHA");
                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                 sj << "{\n"
-                   << "  \"schema_version\": \"1.1\",\n"
+                   << "  \"schema_version\": \"1.2\",\n"
                    << "  \"sample_id\": \"" << fb_sample_id << "\",\n"
                    << "  \"status\": \"feature_barcode_not_gex\",\n"
                    << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
@@ -4107,7 +4107,6 @@ static int singlet_main(int argc, char* argv[]) {
                    << "  \"n_cells_called\": 0,\n"
                    << "  \"median_umi_per_cell\": 0.0,\n"
                    << "  \"median_genes_per_cell\": 0.0,\n"
-                   << "  \"memory_tier\": \"unknown\",\n"
                    << "  \"peak_rss_gb\": 0.0,\n"
                    << "  \"wall_seconds\": 0.0,\n"
                    << "  \"track\": \"A\",\n"
@@ -5864,7 +5863,7 @@ static int singlet_main(int argc, char* argv[]) {
                                 const char* env_sha = std::getenv("SINGLET_GIT_SHA");
                                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 sj << "{\n"
-                                   << "  \"schema_version\": \"1.1\",\n"
+                                   << "  \"schema_version\": \"1.2\",\n"
                                    << "  \"sample_id\": \"" << sample_id << "\",\n"
                                    << "  \"status\": \"data_incomplete\",\n"
                                    << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
@@ -5879,7 +5878,6 @@ static int singlet_main(int argc, char* argv[]) {
                                    << "  \"n_cells_called\": 0,\n"
                                    << "  \"median_umi_per_cell\": 0.0,\n"
                                    << "  \"median_genes_per_cell\": 0.0,\n"
-                                   << "  \"memory_tier\": \"unknown\",\n"
                                    << "  \"peak_rss_gb\": 0.0,\n"
                                    << "  \"wall_seconds\": " << total_sw.elapsed_s() << ",\n"
                                    << "  \"track\": \"A\",\n"
@@ -9470,7 +9468,13 @@ static int singlet_main(int argc, char* argv[]) {
     // §3.2: Populate per-stage read statistics for read_stats.tsv
     {
         using SS = singlet::PipelineStageStats;
-        // Encode stage: .1fq decode → FASTQ (file-mode only; FIFO overlaps with align)
+        // The same rows and definitions on every route (file decode, FIFO, STAR's own .1fq ingest, E13); only wall_seconds differs.
+        // A .1fq input: the read pairs stored in its runs, from the block headers (the FIFO and STAR-ingest routes count none themselves)
+        if (!onefq_files.empty()) {
+            try { singlet::fq::RunSet rs; rs.open(onefq_files); decode_reads_out = rs.stored_reads(); }
+            catch (const std::exception& e) { std::cerr << "[read_stats] cannot count the .1fq read pairs: " << e.what() << "\n"; }
+        }
+        // Encode stage: the .1fq's read pairs, decoded (wall_seconds 0 where the decode overlaps STAR)
         if (decode_reads_out > 0 || decode_time > 0) {
             SS enc;
             enc.stage = "encode";
@@ -9479,12 +9483,13 @@ static int singlet_main(int argc, char* argv[]) {
             enc.wall_seconds = decode_time;
             export_cfg.stage_stats.push_back(std::move(enc));
         }
-        // Align stage: STAR genome alignment
+        // Align stage: STAR genome alignment. reads_in: the read pairs given to STAR; reads_out: the mapped reads, one per read (BAM records
+        // without the secondary alignments: STAR writes one primary record per mapped read, and no supplementary records)
         {
             SS aln;
             aln.stage = "align";
             aln.reads_in = decode_reads_out > 0 ? decode_reads_out : stats.total_reads;
-            aln.reads_out = stats.mapped_reads;
+            aln.reads_out = stats.mapped_reads >= stats.secondary_reads ? stats.mapped_reads - stats.secondary_reads : stats.mapped_reads;
             if (stats.total_reads > 0 && stats.mapped_reads == 0)
                 aln.fail_reason = "unmapped";
             aln.wall_seconds = star_time;
@@ -9494,8 +9499,8 @@ static int singlet_main(int argc, char* argv[]) {
         {
             SS pil;
             pil.stage = "pileup";
-            pil.reads_in = stats.total_reads;
-            pil.reads_out = stats.mapped_reads;  // reads assigned to genes/cells
+            pil.reads_in = stats.total_reads;    // BAM records (primary and secondary alignments)
+            pil.reads_out = stats.mapped_reads;  // the mapped records among them
             pil.wall_seconds = pileup_time;
             export_cfg.stage_stats.push_back(std::move(pil));
         }
@@ -10082,6 +10087,7 @@ static int singlet_main(int argc, char* argv[]) {
         "  \"strand_antisense\": " + std::to_string(stats.strand_antisense) + ",\n"
         "  \"counted_antisense_frac\": " + std::to_string(counted_anti) + ",\n"
         "  \"reverse_strand\": " + (config.reverse_strand ? "true" : "false") + ",\n";
+    std::string outputs_inv;   // the output inventory: pileup_stats.json's provenance.outputs and provenance.json's run block
     {
         // Provenance (atlas plan §6 item 5): which engine, binary, reference, cell call, runs and threads.
         singlet::RunProvenance rp;
@@ -10116,7 +10122,8 @@ static int singlet_main(int argc, char* argv[]) {
         rp.extra.emplace_back("snp_panel", "{\"source\": \"" + snp_panel_source + "\", \"path\": " +
                                                singlet::json_str(config.snp_path) + "}");
         rp.extra.emplace_back("bam_sort_mode", singlet::json_str(bam_sort_mode));
-        rp.extra.emplace_back("outputs", singlet::outputs_inventory_json(out_prefix));
+        outputs_inv = singlet::outputs_inventory_json(out_prefix);
+        rp.extra.emplace_back("outputs", outputs_inv);
         extra_json += "  \"cell_caller\": \"" + export_stats.cell_caller + "\",\n";
         extra_json += "  \"n_called_knee\": " + std::to_string(export_stats.n_knee_called) + ",\n";
         extra_json += "  \"n_called_cells\": " + std::to_string(export_stats.n_called_cells) + ",\n";
@@ -10125,6 +10132,21 @@ static int singlet_main(int argc, char* argv[]) {
     singlet::write_stats_json(out_prefix + "/pileup_stats.json",
                               stats, std::string("singlet-") + singlet::kVersion,
                               total_sw.elapsed_s(), extra_json);
+    {   // provenance.json's run block: every run-dependent field in one place, documented as varying between runs (not data)
+        char ts[32] = "";
+        const std::time_t now_t = std::time(nullptr);
+        std::strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now_t));
+        char host[256] = "unknown";
+        gethostname(host, sizeof host);
+        host[sizeof host - 1] = '\0';
+        std::ostringstream rb;
+        rb << "\"timestamp\": \"" << ts << "\", \"host\": {\"node\": " << singlet::json_str(host) << "}, "
+           << "\"timings\": {\"wall_seconds\": " << total_sw.elapsed_s() << ", \"star_seconds\": " << star_time
+           << ", \"pileup_seconds\": " << pileup_time << ", \"export_seconds\": " << export_stats.export_time_s << "}, "
+           << "\"peak_rss_gb\": " << export_cfg.peak_rss_gb << ", \"outputs\": " << (outputs_inv.empty() ? std::string("null") : outputs_inv);
+        if (!singlet::add_provenance_run_block(out_prefix, rb.str()))
+            std::cerr << "[singlet] WARNING: provenance.json: run block not added\n";
+    }
 
     // ── Track B: write cascade_stats.json if enabled (T-L2-8) ───────────────
     if (cascade_enabled && cascade_stats_enabled) {
