@@ -34,7 +34,7 @@ case "$INPUT" in
   *) FQ=$O/input.1fq
      if [ ! -s $FQ ]; then
        cat $(echo "${INPUT%%:*}" | tr , ' ') > $SCR/R1.fastq.gz; cat $(echo "${INPUT##*:}" | tr , ' ') > $SCR/R2.fastq.gz
-       $BINDIR/singlet-gpu encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz -o $FQ.tmp > $O/encode.log 2>&1 && mv $FQ.tmp $FQ
+       $BINDIR/singlet-gpu encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz ${PROTOCOL:+--protocol $PROTOCOL} -o $FQ.tmp > $O/encode.log 2>&1 && mv $FQ.tmp $FQ
        echo "encode $(du -b $FQ 2>/dev/null)"; tail -3 $O/encode.log; rm -f $SCR/R1.fastq.gz $SCR/R2.fastq.gz
      fi ;;
 esac
@@ -53,10 +53,19 @@ grep -a -E "^\[allsite\]|\[genotype\]|pileup_path|parallel_pileup|BAM:" $O/engin
 du -b $O/out/private/allsite/* $O/out/private/genotype/*.vcf.gz $O/out/private/snp_*.mtx.gz 2>/dev/null | tee $R/sizes.txt
 [ -f $O/out/private/allsite/sites.tsv.gz ] || { echo "no all-site member in out/"; exit 4; }
 [ -f $O/bam/possorted.bam ] || engine $O/bam $O/engine_bam.log --tagged-bam $O/bam/possorted.bam --bam-sort-mode disk
+# PARCHECK=1: the tagged-BAM run takes the region-parallel pileup; its all-site member must equal the serial run's entry for entry
+if [ "${PARCHECK:-0}" = 1 ]; then
+  grep -a -E "^\[allsite\]" $O/engine_bam.log | cut -c1-300 | tee $R/parallel_lines.txt
+  for f in allele_ad.mtx.gz allele_dp.mtx.gz allele_ad_features.tsv.gz allele_ad_barcodes.tsv.gz sites.tsv.gz; do
+    a=$(zcat $O/out/private/allsite/$f 2>/dev/null | md5sum | cut -c1-32); b=$(zcat $O/bam/private/allsite/$f 2>/dev/null | md5sum | cut -c1-32)
+    [ -n "$a" ] && [ "$a" = "$b" ] && [ -s $O/bam/private/allsite/$f ] && echo "parallel=serial $f" || echo "parallel!=serial $f ($a $b)"
+  done | tee $R/parallel_check.txt
+fi
 BAM=$O/bam/possorted.bam; [ -f $BAM ] || { echo "no tagged BAM"; exit 3; }; [ -f $BAM.bai ] || samtools index -@ $T $BAM
 SUF=""; samtools view $BAM chr1 2>/dev/null | head -5000 | grep -q -E "CB:Z:[ACGTN]+-1" && SUF="-1"
 awk -F"\t" -v s="$SUF" 'NR>1 && $2=="TRUE"{print $1 s}' $O/out/cell_calls.tsv > $O/barcodes.txt; echo "called cells $(wc -l < $O/barcodes.txt) suffix '$SUF'"
-( echo -e "##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT"; zcat $O/out/private/allsite/sites.tsv.gz | awk -F"\t" 'NR>1{print $1"\t"$2"\t.\t"$3"\t"$4}' ) > $O/allsite_sites.vcf
+( printf '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'
+  zcat $O/out/private/allsite/sites.tsv.gz | awk -F"\t" 'NR>1{print $1"\t"$2"\t.\t"$3"\t"$4"\t.\t.\t."}' ) > $O/allsite_sites.vcf
 rm -rf $O/cellsnp_sites
 /usr/bin/time -v -o $R/cellsnp_sites.time.txt apptainer exec $E/cellsnp-lite.sif cellsnp-lite -s $BAM -b $O/barcodes.txt -O $O/cellsnp_sites -R $O/allsite_sites.vcf \
   -p $T --minMAF 0 --minCOUNT 0 --cellTAG CB --UMItag UB > $O/cellsnp_sites.log 2>&1; echo "cellsnp sites exit $?"
