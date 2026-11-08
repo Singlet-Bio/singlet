@@ -34,9 +34,9 @@ assert m.get("transcode", {}).get("labels") == "cells-table+sidecar/1", m.get("t
 for s in m["samples"]:
     ann = s.get("annotations") or {}
     assert ann, "no annotations for %s" % s["gsm"]
-    for key in ann.values():
-        assert os.path.isfile(os.path.join(work, key)), key
-    print(s["gsm"], "annotations", ann)
+    for a in ann.values():  # {version: {"key": "s1/a/<GSM>/<d16>.parquet", "sha256": ..., ...}}
+        assert os.path.isfile(os.path.join(work, a["key"])), a["key"]
+    print(s["gsm"], "annotations", {v: a["key"] for v, a in ann.items()})
 bad = [os.path.relpath(os.path.join(d, f), work) for d, _, fs in os.walk(work) for f in fs
        if "private" in os.path.join(d, f) or f.endswith(("_coverage.tsv", ".vcf", ".vcf.gz", ".zip"))]
 assert not bad, bad
