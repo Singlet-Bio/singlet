@@ -14,7 +14,7 @@
 #   fetch  : B7 data still missing after 804124 (mESC R2 resume, A375 nanopore reads)
 #   solo   : B7 STARsolo BAMs for scTE/SoloTE (A375 now, mESC once its reads are complete)
 set -uo pipefail
-: "${BR:?}" "${NAME:?}"
+BR=${BR:-bench/readlevel-oracles}; NAME=${NAME:-rlo-13ee63ac}
 W=/mnt/projects/debruinz_project/debruinz/singlet; J=$W/jobs/readlevel; L=$W/logs/rl-or1-$SLURM_JOB_ID; mkdir -p $L
 REF=/mnt/projects/debruinz_project/cellarium/reference; WL=$W/pipeline-benchmark/whitelists; ENV=$W/envs/tebench
 BIN=$J/bin/$NAME; P=$W/data/readlevel/penter2024; TD=$W/data/readlevel/te
