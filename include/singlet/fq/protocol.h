@@ -1311,7 +1311,7 @@ ProtocolCallTest test_protocol_call(const std::string& tag, const std::vector<Sp
                                     const FivePrimeEvidence* strand_ev = nullptr, uint32_t max_spots = 10000) {
     ProtocolCallTest t;
     const CandidateSpec* spec = find_protocol_spec(tag);
-    if (!spec) { t.why = "'" + tag + "' is not a known protocol"; return t; }
+    if (!spec) { t.why = "unsupported chemistry: '" + tag + "' has no protocol spec in this engine"; return t; }
     t.tag = spec->tag;
     if (spec->whitelist_file.empty() || spec->bc_len < 14) {
         t.why = spec->tag + " has no barcode whitelist to test against";
@@ -1407,7 +1407,7 @@ ProtocolDecision resolve_protocol_call(const std::string& detector_tag, Confiden
     if (!d.geo_tag.empty() && d.geo_tag != d.detector_tag)
         d.geo_test = test_protocol_call(d.geo_tag, spots, whitelist_dirs, strand_for(d.geo_tag, ev_g));
     else if (!geo_raw.empty() && d.geo_tag.empty())
-        d.geo_test.why = "'" + geo_raw + "' is not a known protocol";
+        d.geo_test.why = "unsupported chemistry: '" + geo_raw + "' has no protocol spec in this engine";
     return decide_protocol_call(d);
 }
 
