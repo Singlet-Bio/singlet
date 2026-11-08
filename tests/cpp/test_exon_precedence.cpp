@@ -178,10 +178,18 @@ void check_expected(const Result& r, uint32_t rules, const std::string& tag) {
 const char* kJointHeader = "@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:GRCh38___chr1\tLN:2000\n@SQ\tSN:GRCm39___1\tLN:2000\n"
                            "@SQ\tSN:GRCm39___2\tLN:2000\n";
 
+// a unique read (NH 1) needs a MAPQ above min_mapq, which the multimapper records (MAPQ 3, as STAR writes them) do not
+std::string unique_line(const std::string& q, const std::string& chr, int pos, const std::string& umi) {
+    std::string s = sam_line(q, 0, chr, pos, umi, 1);
+    const std::string from = "\t3\t20M\t", to = "\t255\t20M\t";
+    s.replace(s.find(from), from.size(), to);
+    return s;
+}
+
 std::vector<std::string> joint_records() {
     return {sam_line("b1", 0, "GRCh38___chr1", 500, "AAAAAAAAAA", 2), sam_line("b1", 256, "GRCm39___1", 150, "AAAAAAAAAA", 2),
             sam_line("b2", 0, "GRCm39___2", 500, "CCCCCCCCCC", 2), sam_line("b2", 256, "GRCm39___1", 160, "CCCCCCCCCC", 2),
-            sam_line("b3", 0, "GRCh38___chr1", 150, "GGGGGGGGGG", 1)};
+            unique_line("b3", "GRCh38___chr1", 150, "GGGGGGGGGG")};
 }
 
 bool write_joint(const std::string& dir, const std::string& name, const std::vector<std::string>& recs) {
