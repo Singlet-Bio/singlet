@@ -42,7 +42,7 @@ esac
 engine() {   # $1 out dir, $2 log, rest: extra flags
   local d=$1 log=$2; shift 2; rm -rf $d; mkdir -p $d
   ( cd $SCR && /usr/bin/time -v -o $log.time $BINDIR/singlet-gpu "$FQ" --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
-      --out-prefix $d/ --threads $T --pipeline --output-format mtx "$@" > $log 2>&1 )
+      --out-prefix $d/ --threads $T --pipeline --output-format ${FORMAT:-all} "$@" > $log 2>&1 )
   local rc=$?; echo "engine $(basename $d) exit $rc"; grep -h -E "Elapsed|Maximum res" $log.time; return $rc
 }
 # a tagged-BAM run left in out/ by the first version of this job becomes bam/
