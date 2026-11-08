@@ -50,6 +50,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <charconv>
 #include <functional>
 #include <string>
 #include <thread>
@@ -1110,18 +1111,40 @@ inline bool ingRecord(uint64 r, E10Rec &x) {
     static const char kNt[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
     const uint32 b = ing.block(r);
     std::string &o = x.own;
-    o.clear();
-    o += "@r";
-    o += std::to_string(ing.name(b, r));
-    const uint64 idLen = o.size(), s0 = ingOff[r], L = ingOff[r + 1] - s0, L1 = ing.r1L;
-    const size_t aS0 = o.size();
-    for (uint64 j = 0; j < L; j++) o += kNt[(int) ingSeq[s0 + j] & 7];
-    const size_t aQ0 = o.size();
-    for (uint64 j = 0; j < L; j++) o += (char) (ing.qualPhred[ing.qcode(b, s0 + j)] + 33);
-    const size_t aS1 = o.size();
-    for (uint32 j = 0; j < L1; j++) o += kNt[ing.r1code(r, j)];
-    const size_t aQ1 = o.size();
-    o.append(L1, 'F');
+    // the record's text written in place: "@r<name>", the cDNA, its quality (four codes per quality byte), the barcode read (21 codes per
+    // word) and its 'F's
+    char nb[24];
+    const int nl = (int) (std::to_chars(nb, nb + sizeof(nb), (unsigned long long) ing.name(b, r)).ptr - nb);
+    const uint64 s0 = ingOff[r], L = ingOff[r + 1] - s0, L1 = ing.r1L;
+    const uint64 idLen = 2 + (uint64) nl;
+    const size_t aS0 = idLen, aQ0 = aS0 + L, aS1 = aQ0 + L, aQ1 = aS1 + L1;
+    o.resize(aQ1 + L1);
+    char *w = &o[0];
+    w[0] = '@'; w[1] = 'r'; std::memcpy(w + 2, nb, nl);
+    for (uint64 j = 0; j < L; j++) w[aS0 + j] = kNt[(int) ingSeq[s0 + j] & 7];
+    {
+        char qc[4];
+        for (int c = 0; c < 4; c++) qc[c] = (char) (ing.qualPhred[c] + 33);
+        char *q = w + aQ0;
+        const uint64 k0 = s0 - ing.baseAt[b];
+        const uint8_t *qb = ing.qual.data() + ing.qualAt[b];
+        uint64 j = 0;
+        for (; j < L && ((k0 + j) & 3) != 0; j++) q[j] = qc[ing.qcode(b, s0 + j)];
+        for (; j + 4 <= L; j += 4) {
+            const uint8_t v = qb[(k0 + j) >> 2];
+            q[j] = qc[v & 3]; q[j + 1] = qc[(v >> 2) & 3]; q[j + 2] = qc[(v >> 4) & 3]; q[j + 3] = qc[v >> 6];
+        }
+        for (; j < L; j++) q[j] = qc[ing.qcode(b, s0 + j)];
+    }
+    {
+        const uint64_t *rw = ing.r1.data() + r * ing.r1w;
+        char *s = w + aS1;
+        for (uint32 j = 0; j < L1; rw++) {
+            uint64_t v = *rw;
+            for (uint32 e = std::min<uint32>(L1, j + 21); j < e; j++, v >>= 3) *s++ = kNt[v & 7];
+        }
+    }
+    std::memset(w + aQ1, 'F', L1);
     x.id = o.data(); x.idLen = idLen; x.filter = 'N';
     x.seq[0] = o.data() + aS0; x.seqLen[0] = L; x.qual[0] = o.data() + aQ0; x.qualLen[0] = L;
     x.seq[1] = o.data() + aS1; x.seqLen[1] = L1; x.qual[1] = o.data() + aQ1; x.qualLen[1] = L1;
@@ -1187,10 +1210,15 @@ bool e10FormatUnmapped(Parameters &P, const std::vector<uint32_t> &reads, int nT
         for (uint64 k = k0; k < k1; k++) {
             const uint64 r = reads[k];
             if (!e10Record(r, x)) { bad[t] = 1; return; }
-            const std::string nm = e10ReadName(P, r, x, true);
+            // e10ReadName(P, r, x, true) without a string per read: the id cut at the first of the separator characters
+            const char *nmP = x.id; size_t nmL = x.idLen;
+            std::string nmS;
+            if (P.outSAMreadIDnumber) { nmS = e10ReadName(P, r, x, true); nmP = nmS.data(); nmL = nmS.size(); }
+            else
+                for (char c : P.readNameSeparatorChar) { const void *f = std::memchr(nmP, c, nmL); if (f) nmL = (size_t) ((const char *) f - nmP); }
             for (int im = 0; im < 2; im++) {
                 std::string &o = out[im][t];
-                o += nm; o += ' '; o += (char) ('0' + im); o += ':'; o += x.filter; o += ": \n";
+                o.append(nmP, nmL); o += ' '; o += (char) ('0' + im); o += ':'; o += x.filter; o += ": \n";
                 o.append(x.seq[im], x.seqLen[im]); o += "\n+\n"; o.append(x.qual[im], x.qualLen[im]); o += '\n';
             }
         }
