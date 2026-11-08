@@ -2,6 +2,8 @@
 #include "hostloop_gpu.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include <cuda_runtime.h>
+#include <algorithm>
+#include <cstdlib>
 #include <thrust/device_ptr.h>
 #include <thrust/execution_policy.h>
 #include <thrust/scan.h>
@@ -128,7 +130,7 @@ __device__ double g_portion;
 // per record: mappedFilter (as e6::recordCount), Stats of its reads (x multiplicity), its junction entries (outputTranscriptSJ, before the
 // in-read duplicate rule), and whether its reads replay a summary
 __global__ void k_rec(e6::RecParams P, const uint8_t* blob, const uint64_t* bOff, const uint64_t* sOff, uint64_t nRec, const uint32_t* mult,
-                      bool outSJ, bool sjAll, uint8_t* recMapped, uint8_t* recUniq, uint32_t* nJ) {
+                      bool outSJ, bool sjAll, uint8_t* recMapped, uint8_t* recUniq, uint32_t* nJ, uint32_t scMin) {
     const uint64_t r = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x;
     ull st[E10::S_N + 1];
     for (int k = 0; k <= E10::S_N; k++) st[k] = 0;
@@ -170,7 +172,8 @@ __global__ void k_rec(e6::RecParams P, const uint8_t* blob, const uint64_t* bOff
         else if ((bMM > mmTotal) || (double(bMM) / double(bRL) > P.outFilterMismatchNoverLmax)) unmapType = 2;
         else if (nTr > P.outFilterMultimapNmax) unmapType = 3;
         const bool mapped = unmapType < 0 && nTr > 0;
-        recMapped[r] = mapped; recUniq[r] = nTr == 1;
+        // singlet --chimeric soft-clip route (bit 2): a unique mapper with >= scMin bases outside its alignment, as the CPU path routes it (softclipRoute)
+        recMapped[r] = mapped ? (scMin > 0 && nTr == 1 && L >= mappedL + scMin ? 3 : 1) : 0; recUniq[r] = nTr == 1;
         nJ[r] = (mapped && outSJ && (sjAll || nTr == 1)) ? nj : 0;
         st[E10::S_readN] = m; st[E10::S_readBases] = m * L;
         if (unmapType < 0 && nTr == 0) st[E10::S_N] = 1;   // odd: mapped without a transcript (no summary, but not unmapped either)
@@ -309,7 +312,8 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
     k_mult<<<GN, 256>>>(dRR, n, mult);
     ull z[E10::S_N + 2] = {}; double zp = 0;
     HL_CK(cudaMemcpyToSymbol(g_stat, z, sizeof z)); HL_CK(cudaMemcpyToSymbol(g_portion, &zp, sizeof zp));
-    k_rec<<<GR, 256>>>(P, dBlob, dBOff, dSOff, nRec, mult, outSJ, sjAll, rm, ru, nJ);
+    const char* scEnv = std::getenv("SINGLET_CHIM_SOFTCLIP_MIN");
+    k_rec<<<GR, 256>>>(P, dBlob, dBOff, dSOff, nRec, mult, outSJ, sjAll, rm, ru, nJ, scEnv ? (uint32_t) std::max(0, std::atoi(scEnv)) : 0u);
     HL_CK(cudaGetLastError());
     if (dEnt) k_zero<<<GN, 256>>>(dRR, n, dEnt, dMask, singlet_qmask::words());   // E17: without dEnt (the entries already in the region) the caller zeroes them
     ull st[E10::S_N + 2];

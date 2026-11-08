@@ -242,7 +242,7 @@ struct Output {
         uint64_t nSJ = 0, nSJentries = 0;
         int sjGapBits = 32;                         // E17: the junction sort key's gap bits (start << sjGapBits | gap; 31 on genomes above 2^32 bases)
         std::vector<uint32_t> unmappedReads;        // reads whose record is unmapped (STAR writes them to Unmapped.out.mate1/2), read order
-        std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped
+        std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped; 3: mapped, and its reads take the --chimeric soft-clip route
         double msEntries = 0, msUpAux = 0, msProducts = 0, msD2H = 0;
         // R11: per whitelist entry the reads with that exact CB and a UMI without N that is not a homopolymer (empty: not computed)
         std::vector<uint32_t> r11;
