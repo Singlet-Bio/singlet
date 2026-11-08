@@ -20,6 +20,15 @@
 //   b1 NH 2  primary H intron, secondary R exon     ambiguous (H, R) under both: the alignments span two genomes
 //   b2 NH 2  primary M intron, secondary R exon     2957: ambiguous (M, R)   7053: R (one genome)
 //   b3 NH 1  H exon                                 H under both
+//
+// intron_rule::kChrMPrecedence (8192), same single-genome reference; chrM 1001-2000 lies outside every gene, like the 12S / 16S rRNA that
+// Cell Ranger's 2024-A references leave out. Rules 6541 and 7053, each without and with 8192.
+//   m1 NH 2  primary chrM 1500, secondary NUMT exon            NUMT; with 8192 nothing
+//   m2 NH 2  primary NUMT exon, secondary chrM 1500            NUMT; with 8192 nothing
+//   m3 NH 2  primary MT exon, secondary B intron               MT under all four
+//   m4 NH 2  primary chrM 1500, secondary A exon               A; with 8192 nothing
+//   m5 NH 3  primary chrM 1500, secondaries A exon, D exon     G-EM pair (A, D); with 8192 neither counted nor an EM pair
+//   m6 NH 3  primary NUMT exon, secondaries MT exon, chrM 1600 MT under all four (kMtPrefer)
 
 #include <unistd.h>
 
@@ -238,6 +247,45 @@ void check_joint(const std::string& dir) {
     std::system(("rm -rf " + dir).c_str());
 }
 
+std::vector<std::string> chrm_records() {
+    return {sam_line("m1", 0, "chrM", 1500, "AAAAAAAAAA", 2), sam_line("m1", 256, "chr5", 150, "AAAAAAAAAA", 2),
+            sam_line("m2", 0, "chr5", 200, "CCCCCCCCCC", 2), sam_line("m2", 256, "chrM", 1500, "CCCCCCCCCC", 2),
+            sam_line("m3", 0, "chrM", 150, "GGGGGGGGGG", 2), sam_line("m3", 256, "chr2", 500, "GGGGGGGGGG", 2),
+            sam_line("m4", 0, "chrM", 1500, "TTTTTTTTTT", 2), sam_line("m4", 256, "chr1", 150, "TTTTTTTTTT", 2),
+            sam_line("m5", 0, "chrM", 1500, "ACACACACAC", 3), sam_line("m5", 256, "chr1", 160, "ACACACACAC", 3),
+            sam_line("m5", 256, "chr4", 150, "ACACACACAC", 3),
+            sam_line("m6", 0, "chr5", 250, "AGAGAGAGAG", 3), sam_line("m6", 256, "chrM", 250, "AGAGAGAGAG", 3),
+            sam_line("m6", 256, "chrM", 1600, "AGAGAGAGAG", 3)};
+}
+
+void check_chrm(const std::string& dir) {
+    const auto recs = chrm_records();
+    if (!write_bam(dir, "m", recs) ||
+        std::system(("samtools sort -o " + dir + "/ms.bam " + dir + "/m.bam 2>/dev/null && samtools index " + dir + "/ms.bam").c_str()) != 0) {
+        CHECK(false, "chrM BAM");
+        return;
+    }
+    for (uint32_t base : {6541u, 7053u}) {
+        for (bool on : {false, true}) {
+            const uint32_t rules = base | (on ? singlet::intron_rule::kChrMPrecedence : 0u);
+            const std::string rt = "chrM rules " + std::to_string(rules);
+            const Result ref = run_case(dir, dir + "/ms.bam", rules, 0);
+            auto g = ref.by_gene;
+            const bool ok = g["NUMT"] == (on ? 0 : 2) && g["A"] == (on ? 0 : 1) && g["MT"] == 2 && g["B"] == 0 && g["D"] == 0;
+            CHECK(g["NUMT"] == (on ? 0 : 2), rt + ": NUMT gets m1 and m2 only without kChrMPrecedence");
+            CHECK(g["A"] == (on ? 0 : 1), rt + ": A gets m4 only without kChrMPrecedence");
+            CHECK(g["MT"] == 2, rt + ": MT gets m3 and m6");
+            CHECK(g["B"] == 0 && g["D"] == 0, rt + ": B and D get nothing");
+            const std::vector<std::string> em_off = {"ACACACACAC A D"}, em_on = {};
+            CHECK(ref.em == (on ? em_on : em_off), rt + ": G-EM pairs");
+            if (!ok || ref.em != (on ? em_on : em_off)) std::cout << "    " << ref.text() << "\n";
+            const std::vector<std::string> rev(recs.rbegin(), recs.rend());
+            if (write_bam(dir, "mr", rev)) CHECK(run_case(dir, dir + "/mr.bam", rules, 0).text() == ref.text(), rt + ": run(reversed) == run(sorted)");
+            for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ms.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -303,6 +351,8 @@ int main() {
         CHECK(a_off["A"] == 1, "397: A gets r1 only");
         CHECK(a_on["A"] == 3, "4493: A gets r1, r2 and r5");
     }
+    std::cout << "\n=== chrM precedence ===\n";
+    check_chrm(dir);
     std::system(("rm -rf " + dir).c_str());
     std::cout << "\n=== joint reference ===\n";
     check_joint(dir + "_joint");
