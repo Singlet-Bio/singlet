@@ -9463,8 +9463,7 @@ static int singlet_main(int argc, char* argv[]) {
             StopWatch chim_sw;
             uint64_t chim_in = 0;   // reads going into the second pass (FASTQ records of the cDNA mate)
             { std::ifstream uf(unm1); std::string l; while (std::getline(uf, l)) ++chim_in; chim_in /= 4; }
-            std::cerr << "[singlet] chimeric: " << chim_in << " reads into the second pass
-";
+            std::cerr << "[singlet] chimeric: " << chim_in << " reads into the second pass\n";
             static const std::set<std::string> drop = {
                 "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
                 "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
