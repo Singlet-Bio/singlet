@@ -2953,6 +2953,12 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --chimeric             Second STAR pass in chimeric mode on the unmapped reads -> chimeric_junctions.tsv.gz\n"
+        << "  --chimeric-blacklist F Arriba blacklist for the chimeric table (default <ref-base>/pileup_indices/fusion/\n"
+        << "                         blacklist_hg38_GRCh38_v2.5.1.tsv.gz on GRCh38, when present; 'none' = no blacklist)\n"
+        << "  --chimeric-recurrent F Recurrent gene pairs flagged in the table's filter column (default <ref-base>/pileup_indices/\n"
+        << "                         fusion/chimeric_recurrent_GRCh38.tsv on GRCh38, when present; 'none' = no flags)\n"
+        << "  --chimeric-noncanonical  Keep non-canonical-motif junctions in the chimeric table (default: GT/AG only)\n"
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
@@ -3240,6 +3246,9 @@ static int singlet_main(int argc, char* argv[]) {
     std::vector<std::string> star_extra;
     bool chimeric = false;                  // --chimeric: second STAR pass in chimeric mode on the reads the main pass left unmapped -> chimeric_junctions.tsv.gz (the main pass is not changed)
     std::string fusion_catalog_path;        // --fusion-catalog: output of scripts/build_fusion_catalog.py
+    std::string chimeric_blacklist_path;    // --chimeric-blacklist: Arriba blacklist ("none" = off; default under <ref-base>/pileup_indices/fusion)
+    std::string chimeric_recurrent_path;    // --chimeric-recurrent: recurrent gene pairs, flagged in the table ("none" = off)
+    bool chimeric_noncanonical = false;     // --chimeric-noncanonical: keep non-canonical-motif junctions in the table
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
@@ -3431,6 +3440,9 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
         else if (arg == "--chimeric") chimeric = true;
         else if (arg == "--fusion-catalog" && i+1 < argc) fusion_catalog_path = argv[++i];
+        else if (arg == "--chimeric-blacklist" && i+1 < argc) chimeric_blacklist_path = argv[++i];
+        else if (arg == "--chimeric-recurrent" && i+1 < argc) chimeric_recurrent_path = argv[++i];
+        else if (arg == "--chimeric-noncanonical") chimeric_noncanonical = true;
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -9492,10 +9504,30 @@ static int singlet_main(int argc, char* argv[]) {
                 cc.gtf_path = config.exon_gtf_path;
                 cc.catalog_path = fusion_catalog_path;
                 cc.out_path = out_prefix + "/chimeric_junctions.tsv.gz";
+                cc.reverse_strand = engine_ptr->reverse_strand();   // the strand probe's verdict orients non-canonical lines
+                cc.canonical_only = !chimeric_noncanonical;
+                {   // default annotation files on GRCh38: <ref-base>/pileup_indices/fusion/ (scripts/fetch_arriba_blacklist.sh, data/fusion/)
+                    std::string rb = ref_base;
+                    if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+                    const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+                    auto pick = [&](const std::string& given, const char* file) -> std::string {
+                        if (given == "none") return "";
+                        if (!given.empty()) return given;
+                        if (rb.empty() || !human) return "";
+                        const std::string cand = rb + "/pileup_indices/fusion/" + file;
+                        return std::filesystem::exists(cand) ? cand : "";
+                    };
+                    cc.blacklist_path = pick(chimeric_blacklist_path, "blacklist_hg38_GRCh38_v2.5.1.tsv.gz");
+                    cc.recurrent_path = pick(chimeric_recurrent_path, "chimeric_recurrent_GRCh38.tsv");
+                }
                 const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
                 std::cerr << "[singlet] chimeric: second pass " << chim_sw.elapsed_s() << " s; " << cs.lines << " junction lines, " << cs.kept_lines << " kept, "
-                          << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous; " << cs.rows
-                          << " rows in " << cs.cells << " cells, " << cs.annotated << " in the catalogue" << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
+                          << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous, "
+                          << cs.noncanonical << " non-canonical, " << cs.reoriented << " turned to transcript orientation (library "
+                          << (cc.reverse_strand ? "antisense" : "sense") << "); blacklist " << (cc.blacklist_path.empty() ? std::string("none") : cc.blacklist_path)
+                          << ": " << cs.blacklisted_junctions << " junctions, " << cs.blacklisted_rows << " rows dropped; " << cs.rows
+                          << " rows in " << cs.cells << " cells, " << cs.recurrent_rows << " flagged recurrent, " << cs.annotated << " in the catalogue"
+                          << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
             }
             // the second pass's own files: logs carry timings and paths (they differ between runs), the junction file is the table's input
             const char* keep = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");

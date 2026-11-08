@@ -82,7 +82,7 @@ def engine_rows(path):
         yield from csv.DictReader(f, delimiter="\t")
 
 
-def engine_calls(path, cells=None, min_dist=1_000_000, canonical_only=False, allow_multimap=False):
+def engine_calls(path, cells=None, min_dist=1_000_000, canonical_only=False, allow_multimap=False, pass_only=True):
     """Gene pairs of the engine's table after generic artifact filters (no catalogue): both sides in genes, different genes, not chrM,
     not a same-strand neighbour within ``min_dist`` on one chromosome (read-through), and optionally canonical-motif junctions and
     uniquely placed chimeric reads only. Support = molecules summed over cells and junctions; per-cell molecules are kept."""
@@ -101,6 +101,8 @@ def engine_calls(path, cells=None, min_dist=1_000_000, canonical_only=False, all
         if canonical_only and int(r["junction_type"]) < 1:
             continue
         if not allow_multimap and r["multimap"] == "1":
+            continue
+        if pass_only and r.get("filter", "PASS") != "PASS":  # tables with a filter column: the call set is PASS rows
             continue
         p = pair(a, b)
         n = int(r["n_umis"])
@@ -283,6 +285,7 @@ def main():
         "engine_all_barcodes": engine_calls(x.engine),
         "engine_cells": engine_calls(x.engine, cells),
         "engine_cells_canonical": engine_calls(x.engine, cells, canonical_only=True),
+        "engine_cells_with_flagged": engine_calls(x.engine, cells, pass_only=False),
     }
     res["sample"] = {"starfusion": sample_point(sf, truth), "arriba": sample_point(ar, truth), "arriba_high_medium": sample_point(ar_hm, truth)}
     res["curves"] = {"starfusion": curve(sf, truth), "arriba": curve(ar, truth)}
