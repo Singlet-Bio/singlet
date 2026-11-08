@@ -39,3 +39,24 @@ def test_lone_chain_in_many_droplets_is_ambient():
     assert not df[df.bcix >= 1].kept.any()
     df = A.filter_contigs(pd.DataFrame(rows), A.Params(ig_lone_spread=0, ig_top_min_umis=0, ambient_rescue="none"))
     assert df.kept.sum() >= 1
+
+
+def test_weaker_kept_light_chain_does_not_block_the_cells_own():
+    rows = [_row(0, "IGK", "TGTCAGCAGTATAAT", 400), _row(0, "IGH", "TGTGCGAGAGATTAC", 900)]  # plasma cell
+    rows += [_row(1, "IGK", "TGTCAGCAGTATAAT", 6), _row(1, "IGH", "TGTGCGAGAGGGTTT", 30),
+             _row(1, "IGL", "TGCAGCTCATATACA", 3)]  # B cell: its own IGK (cross-filtered) and a stray IGL
+    df = A.filter_contigs(pd.DataFrame(rows), A.Params())
+    assert not _kept(df, 1, "IGK")
+    df = A.filter_contigs(pd.DataFrame(rows), A.Params(ig_top_weaker_kept=True))
+    assert _kept(df, 1, "IGK")
+
+
+def test_pair_rescue_gives_back_both_chains_of_a_clone_member():
+    rows = [_row(0, "IGK", "TGTCAGCAGTATAAT", 400), _row(0, "IGH", "TGTGCGAGAGATTAC", 900)]  # plasma cell
+    rows += [_row(1, "IGK", "TGTCAGCAGTATAAT", 8), _row(1, "IGH", "TGTGCGAGAGATTAC", 20)]  # B cell of the same clone
+    rows += [_row(2, "IGK", "TGTCAGCAGTATAAT", 1), _row(2, "IGH", "TGTGCGAGAGATTAC", 1)]  # ambient: 1 UMI each
+    base = A.filter_contigs(pd.DataFrame(rows), A.Params(ambient_rescue="none"))
+    assert not _kept(base, 1, "IGH") and not _kept(base, 1, "IGK")
+    df = A.filter_contigs(pd.DataFrame(rows), A.Params(ambient_rescue="none", ig_pair_rescue=True))
+    assert _kept(df, 1, "IGH") and _kept(df, 1, "IGK")
+    assert not _kept(df, 2, "IGH") and not _kept(df, 2, "IGK")

@@ -113,6 +113,11 @@ class Params:
     # True: a junction ending at the J anchor codon in place of Phe/Trp (a somatic substitution of the germline Phe/Trp118
     # codon, which asm_fw_relax assembles) is productive when the rest of the productivity checks hold
     fw_mut_productive: bool = True
+    # True: in the ig_top_min_umis rescue a kept chain of the class blocks the strongest contig only when it has as many UMIs
+    ig_top_weaker_kept: bool = False
+    # True: the strongest heavy and light contigs of a barcode with no kept IG chain, both removed by the cross filter, come
+    # back together (a B cell of an expanded clone whose plasma cells hold its junctions at > 10x the UMIs)
+    ig_pair_rescue: bool = False
     threads: int = 8
 
 
@@ -838,6 +843,11 @@ def filter_contigs(df, params: Params):
         hc = df["high_confidence"].astype(bool)
         top_hc = df["umis"].where(hc).groupby([df["bcix"], cls]).transform("max")
         has = df["kept"].groupby([df["bcix"], cls]).transform("any")
+        if params.ig_top_weaker_kept:
+            # a weaker kept chain of the class does not block the strongest one (a stray light chain kept at 3 UMIs while
+            # the cell's own light chain, at 6, was taken for ambient)
+            kmax = df["umis"].where(df["kept"]).groupby([df["bcix"], cls]).transform("max").fillna(-1)
+            has = df["umis"] <= kmax
         give = (
             cand
             & df["chain"].isin(("IGH", "IGK", "IGL"))
@@ -855,6 +865,22 @@ def filter_contigs(df, params: Params):
             l_ = (ok & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
             give &= ((df["chain"] == "IGH") & l_) | (df["chain"].isin(("IGK", "IGL")) & h)
         df.loc[give, "kept"] = True
+        if params.ig_pair_rescue:
+            # both chains of a B cell of an expanded clone taken for ambient: the strongest high-confidence heavy and the
+            # strongest high-confidence light contig of a barcode with no kept IG chain come back together, each with
+            # >= ig_top_min_umis UMIs
+            ig_ = df["chain"].isin(("IGH", "IGK", "IGL"))
+            top_hc = df["umis"].where(hc).groupby([df["bcix"], cls]).transform("max")
+            any_kept = (df["kept"] & ig_).groupby(df["bcix"]).transform("any")
+            pc = cand & ig_ & hc & (df["umis"] == top_hc) & (df["umis"] >= params.ig_top_min_umis) & ~any_kept
+            pc &= df["productive"].astype(bool)
+            h = (pc & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+            l_ = (pc & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+            pc &= h & l_
+            # one contig per class: on a UMI tie keep the first (highest reads, by the sort above)
+            dup = df.assign(_cls=cls)[pc].duplicated(["bcix", "_cls"])
+            pc &= ~dup.reindex(df.index, fill_value=False)
+            df.loc[pc, "kept"] = True
     if params.ig_lone_spread > 0:
         # ambient IG spread: a junction present in many droplets (a plasma clone's light chain in thousands of barcodes at
         # 1-9 UMIs) is a real chain where its barcode also holds the partner chain; alone (heavy without light or light
