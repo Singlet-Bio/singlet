@@ -16,6 +16,9 @@
 #   3. cellsnp-lite 1.2.3 mode 1 on that BAM at the engine's all-site sites over out/'s called cells (--minCOUNT 0 --minMAF 0)
 #   4. with TRUTH: cellsnp-lite mode 2 (de novo, documented 10x settings --minMAF 0.1 --minCOUNT 20) on the same BAM and cells, then
 #      score_genotypes.py against the donor's 1000 Genomes genotypes
+# WLFILE: the 10x whitelist file of the chemistry (e.g. $W/pipeline-benchmark/whitelists/737K-april-2014.txt). Engine runs before the
+# run-path fix (fix/encode-whitelist) ignore $SINGLET_WHITELIST_DIR and fall back to barcode auto-discovery, which gives each run its own
+# barcode set. FORMAT defaults to mtx: the cellsnp comparison and PARCHECK read the mtx files (format all writes 1pz only for these members).
 # Steps whose output exists are skipped, so a timed-out job can be resubmitted. Outputs (owner-only):
 # $W/genotypes/allsite-val/$NAME/{out,bam,cellsnp_sites,cellsnp_denovo}; counts-only JSON in $W/jobs/allsite/results/$NAME/.
 set -uo pipefail
@@ -42,7 +45,7 @@ esac
 engine() {   # $1 out dir, $2 log, rest: extra flags
   local d=$1 log=$2; shift 2; rm -rf $d; mkdir -p $d
   ( cd $SCR && /usr/bin/time -v -o $log.time $BINDIR/singlet-gpu "$FQ" --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
-      --out-prefix $d/ --threads $T --pipeline --output-format ${FORMAT:-all} "$@" > $log 2>&1 )
+      --out-prefix $d/ --threads $T --pipeline --output-format ${FORMAT:-mtx} ${WLFILE:+--whitelist $WLFILE} "$@" > $log 2>&1 )
   local rc=$?; echo "engine $(basename $d) exit $rc"; grep -h -E "Elapsed|Maximum res" $log.time; return $rc
 }
 # a tagged-BAM run left in out/ by the first version of this job becomes bam/
