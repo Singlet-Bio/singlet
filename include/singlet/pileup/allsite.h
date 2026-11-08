@@ -87,6 +87,8 @@ struct Params {
     int use_qual = 0, qwords = 2, skip_n = 0;
     int umi_dedup = 1, directional = 1, umi_len = 12;
     unsigned threads = 8;
+    uint64_t block_hits = 8000000;   // counting works on blocks of sites with about this many read-site hits, so each thread's
+                                     // consensus table stays bounded (a whole contig of a 400M-read library needs hundreds of GB)
 };
 
 struct Site { int32_t tid, pos; char ref, alt; uint32_t alt_molecules, alt_cells; };
@@ -213,27 +215,47 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
             }
             std::vector<Obs>().swap(obs);
             if (pt.sites.empty()) continue;
-            // 3b. counting: R1 consensus per (barcode, site, UMI), R9 per (barcode, site)
-            std::vector<int32_t> spos(pt.sites.size()); for (size_t i = 0; i < spos.size(); ++i) spos[i] = pt.sites[i].pos;
-            SnpConsensus cons; char ub[24];
+            // 3b. counting: R1 consensus per (barcode, site, UMI), R9 per (barcode, site), in blocks of sites. Every molecule of a
+            // (barcode, site) falls in that site's block and the consensus sorts before it collapses, so blocks change no count.
+            const size_t nsite = pt.sites.size();
+            std::vector<int32_t> spos(nsite); for (size_t i = 0; i < nsite; ++i) spos[i] = pt.sites[i].pos;
+            // each read's site range [rf, rl) from its alignment span; the span bounds the hits per site (spliced reads overcount)
+            std::vector<uint32_t> rf(b1 - b0, 0), rl(b1 - b0, 0);
+            std::vector<int64_t> load(nsite + 1, 0);
             for (uint64_t k = b0; k < b1; ++k) {
-                const uint64_t r = by_tid[k]; const auto& x = R.read(r);
-                umi_chars(x.umi3, ub);
-                // the read's sites: its aligned positions increase, so one cursor over the sorted site positions
-                const auto& sg = R.sig(x.sig);
-                size_t cur = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), R.aln(sg.aln_off + sig_p[x.sig]).pos) - spos.begin());
-                if (cur == spos.size()) continue;
-                walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
-                    while (cur < spos.size() && spos[cur] < pos) ++cur;
-                    if (cur == spos.size() || spos[cur] != pos || !pass_q(r, ri, code)) return;
-                    const size_t si = cur;
-                    cons.add(static_cast<uint32_t>(x.bc), static_cast<uint32_t>(si), P.umi_dedup ? ub : nullptr, P.umi_len,
-                             SnpConsensus::base_class(kNt16[code], pt.sites[si].ref, pt.sites[si].alt));
-                });
+                const auto& x = R.read(by_tid[k]); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
+                const uint32_t* o = R.ops_at(a.ops_off); int64_t end = a.pos;
+                for (int i = 0; i < a.n_ops; ++i) { const int op = o[i] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[i] >> 4; }
+                const size_t f = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), a.pos) - spos.begin());
+                const size_t l = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), end) - spos.begin());
+                if (f >= l) continue;
+                rf[k - b0] = static_cast<uint32_t>(f); rl[k - b0] = static_cast<uint32_t>(l); load[f]++; load[l]--;
             }
-            TriAcc ad, dp;
-            cons.finalize(ad, dp, pt.st, P.directional != 0);
-            cons.clear();
+            std::vector<size_t> cuts{0};
+            { int64_t run = 0, acc = 0;
+              for (size_t i = 0; i < nsite; ++i) { run += load[i]; acc += run; if (acc >= static_cast<int64_t>(P.block_hits) && i + 1 < nsite) { cuts.push_back(i + 1); acc = 0; } } }
+            cuts.push_back(nsite);
+            std::vector<int64_t>().swap(load);
+            SnpConsensus cons; char ub[24]; TriAcc ad, dp;
+            for (size_t bi = 0; bi + 1 < cuts.size(); ++bi) {
+                const size_t s0 = cuts[bi], s1 = cuts[bi + 1];
+                for (uint64_t k = b0; k < b1; ++k) {
+                    if (rl[k - b0] <= s0 || rf[k - b0] >= s1) continue;
+                    const uint64_t r = by_tid[k]; const auto& x = R.read(r);
+                    umi_chars(x.umi3, ub);
+                    // the read's sites: its aligned positions increase, so one cursor over the sorted site positions
+                    size_t cur = std::max<size_t>(rf[k - b0], s0);
+                    walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
+                        while (cur < s1 && spos[cur] < pos) ++cur;
+                        if (cur >= s1 || spos[cur] != pos || !pass_q(r, ri, code)) return;
+                        const size_t si = cur;
+                        cons.add(static_cast<uint32_t>(x.bc), static_cast<uint32_t>(si), P.umi_dedup ? ub : nullptr, P.umi_len,
+                                 SnpConsensus::base_class(kNt16[code], pt.sites[si].ref, pt.sites[si].alt));
+                    });
+                }
+                cons.finalize(ad, dp, pt.st, P.directional != 0);
+                cons.clear();
+            }
             pt.ad.swap(ad.v); pt.dp.swap(dp.v);
         }
     };

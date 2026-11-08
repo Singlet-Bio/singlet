@@ -139,6 +139,13 @@ int main() {
     P.min_alt_molecules = 1; P.min_alt_cells = 1;
     const A::Result r3 = A::run(R, G, 3, 4, P);
     CHECK(r3.sites.size() == 2, "two sites at 1/1, got " + std::to_string(r3.sites.size()));
+    // counting blocks: one site per block gives the same matrices
+    P.block_hits = 1;
+    const A::Result r4 = A::run(R, G, 3, 4, P);
+    CHECK(r4.sites.size() == r3.sites.size() && r4.dp.data == r3.dp.data && r4.dp.indices == r3.dp.indices && r4.dp.indptr == r3.dp.indptr
+          && r4.ad.data == r3.ad.data && r4.ad.indices == r3.ad.indices && r4.ambiguous == r3.ambiguous && r4.other == r3.other,
+          "site blocks do not change the result");
+    P.block_hits = 8000000;
     // sites.tsv
     const std::string tsv = (dir / "sites.tsv.gz").string();
     CHECK(A::write_sites_tsv(tsv, r, tids), "sites.tsv written");

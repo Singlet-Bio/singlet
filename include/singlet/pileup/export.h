@@ -1883,7 +1883,15 @@ inline ExportStats export_results(const PileupEngine& engine,
     std::string allsite_rule; int allsite_donors = 0;   // mirrored in provenance.json (no genotype information)
     if (engine.allsite_ready()) {
         std::filesystem::create_directories(out_prefix + "/private/allsite");
-        const auto plan = allsite::plan_store(engine.allsite().ad, engine.allsite().dp, cc_result.cell_indices,
+        // without a cell call (--barcodes and no --cell-calling) every barcode is kept, as in the mt allele members
+        std::vector<uint32_t> all_cols;
+        if (!export_cfg.run_cell_calling) {
+            all_cols.resize(engine.allsite().dp.ncols);
+            for (uint32_t c = 0; c < all_cols.size(); ++c) all_cols[c] = c;
+            std::cerr << "[allsite] no cell call ran: every barcode is kept\n";
+        }
+        const auto plan = allsite::plan_store(engine.allsite().ad, engine.allsite().dp,
+                                              export_cfg.run_cell_calling ? cc_result.cell_indices : all_cols,
                                               demux_thread_ran ? demux_result.n_donors_k : 0);
         auto ad = allsite::restrict_store(engine.allsite().ad, plan);
         auto dp = allsite::restrict_store(engine.allsite().dp, plan);
