@@ -6,6 +6,8 @@ against the PacBio BCR::ABL1 cells over all genotyped barcodes (the secondary ch
         --labels pacbio=labels_pacbio.tsv,kit=labels_kit.tsv,hashtag=labels.tsv --pacbio pacbio.csv.gz --out report.json
 """
 import argparse, csv, gzip, json
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fusion_eval as fe
 
 P = fe.pair("BCR", "ABL1")
