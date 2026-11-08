@@ -273,3 +273,35 @@ and wall time rises by at most 11% (nsclc22_b). The setting meets the dev rule a
 0.9123 (pbmc3_b 0.9515 to 0.9584, ngpbmc3_b 0.9394 to 0.9505, melanoma_b 0.8927 to 0.8976), with no library losing; the gap to
 TRUST4 (0.9198) narrows from -0.0136 to -0.0075 (95% interval -0.0122 to -0.0031). The held-out library is run next, once, with
 these defaults.
+
+## Addendum 7 (2026-11-08, registered before any run of the change): IG chains of expanded clones removed by the cross filter
+
+**Diagnosis (development libraries only, Addendum 6 code with its defaults on).** On the GEX-called reference-paired cells, 429
+reference chains are still wrong. The two largest groups after the never-assembled chains are chains removed by the cross filter
+(104, of which TRUST4 reports 96 correctly) and kept chains outranked by another kept contig of the same chain (106, of which TRUST4
+reports 38). The outranked contigs are mostly second cells in a droplet, each with its own junction, and neither tool resolves them
+reliably, so they are not targeted. Among the 104 cross-filtered chains, the IG rescue of Addendum 4 (`ig_top_min_umis`) misses
+them for two reasons. In 34, a light chain is the strongest high-confidence light contig of its barcode with the heavy partner kept,
+but a weaker light contig of the barcode is kept, and any kept chain of the class blocks the rescue. In 31, both the heavy and the
+light chain of the cell are cross-filtered, and the rescue needs a kept partner.
+
+**Change (each default off until the rule is met).** Two filter settings of `filter_contigs`; the assembly is unchanged.
+1. `ig_top_weaker_kept=True`: in the `ig_top_min_umis` rescue, a kept contig of the class (heavy, or light: IGK and IGL together)
+   blocks the candidate only when it has at least as many UMIs.
+2. `ig_pair_rescue=True`: in a barcode with no kept IG contig, the strongest high-confidence productive heavy contig and the
+   strongest high-confidence productive light contig, both removed by the cross filter and each with at least `ig_top_min_umis`
+   (2) UMIs, are kept together; on a UMI tie the contig with more reads is taken.
+No threshold is new: both reuse `ig_top_min_umis` as set in Addendum 4.
+
+**Runs.** Filter-only settings are applied with `refilter.py` to the Addendum 6 runs of the development and confirmation libraries
+(job 804415, `singlet_fwp`), so no library is re-assembled. Three settings are tested: 1 alone, 2 alone, and both.
+
+**Rules.** The dev rule of Addendum 5 applies unchanged, against the Addendum 6 result as baseline (pooled development BCR pairing
+0.9217): pairing +0.003 at least, no library losing more than 0.005 in pairing or contig F1, wrong-lineage rate +0.001 at most,
+clonotype ARI of no library falling by more than 0.02, TCR pairing and contig F1 falling by at most 0.002 (TCR guards: pbmc2_t and
+pbmc10k_t). Wall time is unaffected by a filter setting and is not re-measured. If several settings keep, the one with the highest
+pooled development pairing is taken. Confirmation (pbmc3_b, ngpbmc3_b, melanoma_b) is reported before and after, and a library
+that loses more than 0.005 counts as a failure. The held-out library of Addendum 6 has had its single run and is not used again.
+A setting adopted here is confirmed on a new untouched NextGem BCR library, named in a further note before it is opened and run
+once.
+
