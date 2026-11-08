@@ -152,12 +152,39 @@ class RunSet {
                                        first_block_.begin()) - 1;
         const Reader& r = *readers_[f];
         const uint32_t bi = g - first_block_[f];
-        const uint64_t off = r.block_offset(bi);
-        const uint32_t comp_size = r.block_comp_size(bi);
         BlockHeader bh;
         BlockScratch& sc = scratch();
-        const size_t raw_size = read_block(r, r.file_descriptor(), off, comp_size, bh, sc);
-        const uint8_t* p = sc.raw.data();
+        const size_t raw_size = read_block(r, r.file_descriptor(), r.block_offset(bi), r.block_comp_size(bi), bh, sc);
+        scan_payload(r, sc.raw.data(), raw_size, bh, o, h, sc);
+    }
+    // scan_head and decode of block g from one read and one decompression (the pipeline's fused head scan and packed-read decode)
+    void decode_scan(uint32_t g, DecodedBlock& blk, const HeadScanOptions& o, BlockHead& h) const {
+        size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
+                                       first_block_.begin()) - 1;
+        const Reader& r = *readers_[f];
+        const uint32_t bi = g - first_block_[f];
+        BlockHeader bh;
+        BlockScratch& sc = scratch();
+        const size_t raw_size = read_block(r, r.file_descriptor(), r.block_offset(bi), r.block_comp_size(bi), bh, sc);
+        scan_payload(r, sc.raw.data(), raw_size, bh, o, h, sc);
+        blk.clear();
+        r.decode_payload(sc.raw.data(), raw_size, bh, blk);
+    }
+    // the reads stored in block g, from its header alone
+    uint32_t block_reads(uint32_t g) const {
+        size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
+                                       first_block_.begin()) - 1;
+        const Reader& r = *readers_[f];
+        BlockHeader bh;
+        if (::pread(r.file_descriptor(), &bh, sizeof(bh), static_cast<off_t>(r.block_offset(g - first_block_[f]))) != static_cast<ssize_t>(sizeof(bh)))
+            throw std::runtime_error("RunSet: short read of a block header");
+        return bh.n_reads;
+    }
+
+   private:
+    struct BlockScratch;
+    static void scan_payload(const Reader& r, const uint8_t* p, size_t raw_size, const BlockHeader& bh, const HeadScanOptions& o, BlockHead& h,
+                             BlockScratch& sc) {
         const uint8_t* end = p + raw_size;
         const uint32_t n = bh.n_reads;
         const uint32_t dict_n = r.bc_dict_size();

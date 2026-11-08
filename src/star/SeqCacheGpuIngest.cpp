@@ -12,10 +12,12 @@
 // SeqCacheGpuPrefill.cpp.
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu_ingest.h"
+#include "singlet/engine_gpu_ingest_fused.h"
 #include "singlet/fq/read_source.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -27,28 +29,61 @@
 namespace singlet_engine_gpu {
 namespace ingest {
 
-bool decodeReads(int threads, PackedReads& out, std::string& why) {
+namespace {
+// The fused pass (decodeScan): the head scan's options and per-block results, and the fixed cDNA length that bounds the arrays
+struct Fused {
+    const singlet::fq::RunSet::HeadScanOptions* so = nullptr;
+    std::vector<singlet::fq::RunSet::BlockHead>* heads = nullptr;
+    uint32_t r2Fixed = 0;
+};
+
+bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz) {
     const auto t0 = std::chrono::steady_clock::now();
     const Plan& pl = plan();
-    if (!pl.on || !pl.runs) { why = "no head-scan plan"; return false; }
+    if (!(fz || pl.on) || !pl.runs) { why = "no head-scan plan"; return false; }
     const singlet::fq::RunSet& runs = *pl.runs;
     const uint32_t nB = pl.nBlocks;
-    if (runs.block_count() != nB || pl.first.size() != (size_t) nB + 1 || pl.baseAt.size() != (size_t) nB + 1 || pl.nameAt.size() < nB) {
+    if (fz ? (runs.block_count() != nB || fz->heads->size() != (size_t) nB || fz->r2Fixed == 0)
+           : (runs.block_count() != nB || pl.first.size() != (size_t) nB + 1 || pl.baseAt.size() != (size_t) nB + 1 || pl.nameAt.size() < nB)) {
         why = "the head scan's plan does not match the .1fq"; return false;
     }
     if (pl.r1L == 0 || pl.r1L > 63) { why = "barcode read length " + std::to_string(pl.r1L); return false; }
-    const uint64_t N = pl.reads(), B = pl.bases();
     out.release();
+    // Fused: every block's offsets are found as the blocks decode (block b is written once the counts of blocks 0 .. b are known), into
+    // arrays sized for every stored read at the fixed cDNA length and cut to the reads and bases given to STAR at the end (the untouched
+    // tail of a reservation takes no memory). Otherwise the head scan's plan gives them.
+    uint64_t N = 0, B = 0, Q = 0;
+    if (fz) {
+        out.first.assign((size_t) nB + 1, 0); out.baseAt.assign((size_t) nB + 1, 0); out.qualAt.assign((size_t) nB + 1, 0);
+        out.nameAt.assign((size_t) nB + 1, 0);
+        try {
+            for (uint32_t b = 0; b < nB; b++) { out.nameAt[b] = runs.block_read_offset(b); N += runs.block_reads(b); }
+        } catch (const std::exception& e) { why = e.what(); return false; }
+        out.nameAt[nB] = N;
+        B = N * fz->r2Fixed;
+        Q = B / 4 + nB;
+    } else {
+        N = pl.reads(); B = pl.bases();
+        out.first = pl.first; out.baseAt = pl.baseAt; out.nameAt = pl.nameAt;
+        out.qualAt.assign((size_t) nB + 1, 0);
+        for (uint32_t b = 0; b < nB; b++) out.qualAt[b + 1] = out.qualAt[b] + (pl.baseAt[b + 1] - pl.baseAt[b] + 3) / 4;
+        Q = out.qualAt[nB];
+    }
     out.n = N;
-    out.first = pl.first; out.baseAt = pl.baseAt; out.nameAt = pl.nameAt;
-    out.qualAt.assign((size_t) nB + 1, 0);
-    for (uint32_t b = 0; b < nB; b++) out.qualAt[b + 1] = out.qualAt[b] + (pl.baseAt[b + 1] - pl.baseAt[b] + 3) / 4;
     out.seq.resize(B);
     out.off.resize(N + 1);
     out.off[0] = 0;
-    out.qual.resize(std::max<uint64_t>(1, out.qualAt[nB]));
+    out.qual.resize(std::max<uint64_t>(1, Q));
     out.r1L = pl.r1L; out.r1w = (pl.r1L + 20) / 21;
     out.r1.resize(std::max<uint64_t>(1, N * out.r1w));
+    const std::vector<uint64_t>& F = fz ? out.first : pl.first;
+    const std::vector<uint64_t>& BA = fz ? out.baseAt : pl.baseAt;
+    // fused: the counts per block as they arrive, and the frontier below which every block's offsets are known
+    std::vector<uint64_t> cntN(fz ? nB : 0), cntB(fz ? nB : 0);
+    std::vector<uint8_t> ready(fz ? nB : 0, 0);
+    uint32_t front = 0;
+    std::mutex fmu;
+    std::condition_variable fcv;
     std::memcpy(out.qualPhred, pl.qualPhred, 4);
     int codeOf[256];
     for (int k = 0; k < 256; k++) codeOf[k] = -1;
@@ -80,7 +115,8 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
         uint64_t bytesOf[256];
         for (uint32_t b; !stop && (b = next.fetch_add(1)) < nB;) {
             try {
-                runs.decode(b, blk);
+                if (fz) runs.decode_scan(b, blk, *fz->so, (*fz->heads)[b]);
+                else runs.decode(b, blk);
                 if (!blk.r2_qual_packed.empty() && blk.r2_qual_packed_phred != mapFor) {
                     mapFor = blk.r2_qual_packed_phred;
                     int cOf[4];
@@ -99,8 +135,27 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
                 fail(std::string("block ") + std::to_string(b) + ": " + ex.what());
                 return;
             }
-            const uint64_t rEnd = pl.first[b + 1], posEnd = pl.baseAt[b + 1];
-            uint64_t r = pl.first[b], pos = pl.baseAt[b], k = 0;
+            if (fz) {   // publish this block's counts, advance the frontier, and wait until it passes this block
+                const auto& h = (*fz->heads)[b];
+                bool over = false;
+                {
+                    std::unique_lock<std::mutex> lk(fmu);
+                    cntN[b] = h.n_out; cntB[b] = h.bases_out; ready[b] = 1;
+                    while (front < nB && ready[front]) {
+                        out.first[front + 1] = out.first[front] + cntN[front];
+                        out.baseAt[front + 1] = out.baseAt[front] + cntB[front];
+                        out.qualAt[front + 1] = out.qualAt[front] + (cntB[front] + 3) / 4;
+                        if (out.first[front + 1] > N || out.baseAt[front + 1] > B || out.qualAt[front + 1] > Q) { over = true; break; }
+                        front++;
+                    }
+                    fcv.notify_all();
+                    while (!over && front <= b && !stop) fcv.wait_for(lk, std::chrono::milliseconds(20));
+                }
+                if (over) { fail("block counts beyond the reads and bases the block headers allow"); fcv.notify_all(); return; }
+                if (stop) return;
+            }
+            const uint64_t rEnd = F[b + 1], posEnd = BA[b + 1];
+            uint64_t r = F[b], pos = BA[b], k = 0;
             uint8_t* qd = out.qual.data() + out.qualAt[b];
             uint8_t qacc = 0;
             const bool packedQ = !blk.r2_qual_packed.empty();
@@ -175,11 +230,22 @@ bool decodeReads(int threads, PackedReads& out, std::string& why) {
         for (auto& x : th) x.join();
     }
     if (!err.empty()) { why = err; out.release(); return false; }
+    if (fz) {   // the reads and bases given to STAR
+        N = out.first[nB];
+        out.n = N;
+        out.seq.resize(out.baseAt[nB]);
+        out.off.resize(N + 1);
+        out.qual.resize(std::max<uint64_t>(1, out.qualAt[nB]));
+        out.r1.resize(std::max<uint64_t>(1, N * out.r1w));
+    }
     for (const Acc& a : acc)
         for (int c = 0; c < 4; c++) out.qualHist[c] += a.hist[c];
     out.sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     return true;
 }
+}  // namespace
+
+bool decodeReads(int threads, PackedReads& out, std::string& why) { return decodeImpl(threads, out, why, nullptr); }
 
 bool barcodes(const BarcodeConfig& cfg, PackedReads& out, std::string& why) {
     const uint64_t N = out.n;
@@ -347,6 +413,26 @@ void startParent(int threads) {
         a->ok = decodeReads(a->threads, a->out, a->why);
         a->done = std::chrono::duration<double>(std::chrono::steady_clock::now() - a->t0).count();
     });
+}
+bool decodeScan(int threads, const singlet::fq::RunSet::HeadScanOptions& so, std::vector<singlet::fq::RunSet::BlockHead>& heads, uint32_t r2Fixed,
+                std::string& why) {
+    if (parentA_ != nullptr) { why = "the packed reads are decoded already"; return false; }
+    ParentA* a = new ParentA;
+    a->pid = getpid();
+    a->threads = std::max(1, threads);
+    a->t0 = std::chrono::steady_clock::now();
+    Fused fz;
+    fz.so = &so; fz.heads = &heads; fz.r2Fixed = r2Fixed;
+    a->ok = decodeImpl(a->threads, a->out, a->why, &fz);
+    if (!a->ok) { why = a->why; a->out.release(); delete a; return false; }
+    a->done = 0;
+    parentA_ = a;   // startParent finds it decoded; joinParent and takeParent as for the background decode
+    return true;
+}
+void dropFused() {
+    if (parentA_ == nullptr || parentA_->pid != getpid() || parentA_->th.joinable()) return;
+    parentA_->out.release();
+    parentA_ = nullptr;
 }
 bool joinParent(double& waited, std::string& log) {
     waited = 0;

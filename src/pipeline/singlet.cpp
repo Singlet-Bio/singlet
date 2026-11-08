@@ -73,6 +73,7 @@
 #include "singlet/engine_gpu.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14: per-read low-quality mask width
 #include "singlet/engine_gpu_ingest.h"   // E13: the GPU prefill decodes the .1fq itself
+#include "singlet/engine_gpu_ingest_fused.h"
 #endif
 #include "singlet/pileup/tiny_dataset_guard.h"
 #include "singlet/fq/prefix_probe.h"
@@ -5066,6 +5067,7 @@ static int singlet_main(int argc, char* argv[]) {
             std::vector<uint64_t> freq;
             std::vector<std::string> probe;
             uint64_t stored = 0;
+            bool ingest_fused = false;
             if (why.empty()) {
                 const uint32_t nb = runs->block_count();
                 const uint32_t dict_n = runs->bc_dict_size();
@@ -5077,20 +5079,45 @@ static int singlet_main(int argc, char* argv[]) {
                     so.r11 = true; so.cb0 = r11_cb0; so.cbl = r11_cbl; so.umi0 = r11_umi0; so.umil = r11_umil; so.r11_dict = r11_dict->data();
                 }
                 heads.resize(nb);
-                std::atomic<uint32_t> nxt{0};
-                std::mutex emu;
                 std::string err;
-                auto work = [&]() {
-                    for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
-                        try { runs->scan_head(b, so, heads[b]); }
-                        catch (const std::exception& e) { std::lock_guard<std::mutex> lk(emu); if (err.empty()) err = e.what(); }
-                    }
-                };
                 const int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
-                std::vector<std::thread> pool;
-                for (int t = 1; t < nt; ++t) pool.emplace_back(work);
-                work();
-                for (auto& t : pool) t.join();
+                // The fused pass (engine_gpu_ingest_fused.h): the head scan and the packed-read decode from one decompression of each block,
+                // where the decode would start right after this scan anyway (the early decode, a fixed cDNA length). The head scan's results
+                // are the same; the decode is then done before the reference load instead of beside it. SINGLET_INGEST_FUSED=0: two passes.
+                const auto& h0f = runs->header();
+                const uint32_t r2fixed = (h0f.flags & singlet::fq::Flags::TRIMMED) ? 0u : static_cast<uint32_t>(h0f.stream_lengths[1]);
+                const char* fuE = std::getenv("SINGLET_INGEST_FUSED");
+                const char* eaE = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
+                bool fused = !(fuE && fuE[0] == '0') && !(eaE && eaE[0] == '0') && r2fixed > 0;
+                if (fused) {
+                    auto& fpl = singlet_engine_gpu::ingest::plan();
+                    fpl.runs = runs; fpl.nBlocks = nb; fpl.paths = onefq_files;
+                    fpl.r1L = h0f.stream_lengths[0];
+                    std::memcpy(fpl.qualPhred, qphred, 4); fpl.qualCodes = qcodes;
+                    std::string fw;
+                    if (!singlet_engine_gpu::ingest::decodeScan(nt, so, heads, r2fixed, fw)) {
+                        std::cerr << "[1fq-ingest] fused scan and decode not used (" << fw << "): the head scan, then the decode\n";
+                        fused = false;
+                        std::fill(freq.begin(), freq.end(), 0);   // what the fused pass counted before it stopped
+                        if (r11_early) std::fill(r11_dict->begin(), r11_dict->end(), 0);
+                        heads.assign(nb, singlet::fq::RunSet::BlockHead{});
+                    }
+                }
+                if (!fused) {
+                    std::atomic<uint32_t> nxt{0};
+                    std::mutex emu;
+                    auto work = [&]() {
+                        for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
+                            try { runs->scan_head(b, so, heads[b]); }
+                            catch (const std::exception& e) { std::lock_guard<std::mutex> lk(emu); if (err.empty()) err = e.what(); }
+                        }
+                    };
+                    std::vector<std::thread> pool;
+                    for (int t = 1; t < nt; ++t) pool.emplace_back(work);
+                    work();
+                    for (auto& t : pool) t.join();
+                }
+                ingest_fused = fused;
                 if (!err.empty()) why = "head scan: " + err;
                 if (r11_early && err.empty()) {
                     r11_raws->resize(nb);
@@ -5108,6 +5135,7 @@ static int singlet_main(int argc, char* argv[]) {
                 if (why.empty() && clip > 0) why = "a constant 5' prefix to clip (" + std::to_string(clip) + " bp)";
             }
             if (!why.empty()) {
+                if (ingest_fused) singlet_engine_gpu::ingest::dropFused();
                 std::cerr << "[1fq-ingest] not used (" << why << "): the .1fq is decoded to FASTQ files\n";
             } else {
                 auto& pl = singlet_engine_gpu::ingest::plan();
