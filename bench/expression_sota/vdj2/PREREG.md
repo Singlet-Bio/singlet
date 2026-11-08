@@ -305,3 +305,16 @@ that loses more than 0.005 counts as a failure. The held-out library of Addendum
 A setting adopted here is confirmed on a new untouched NextGem BCR library, named in a further note before it is opened and run
 once.
 
+**Result of Addendum 7 (2026-11-08, `refilter.py` on the Addendum 6 runs; with no setting it reproduces their `kept` column
+exactly).** Pooled development BCR pairing (TRUST4 0.9159), against the Addendum 6 baseline of 0.9217:
+- `ig_top_weaker_kept`: 0.9252 (+0.0035). No library loses (chx10k_b 0.9555, pbmc10k_b 0.9792, pbmc2_b 0.9355, nsclc22_b 0.8462,
+  melv11_b 0.9370), contig F1 rises in every library, ARI does not fall, the wrong-lineage rate moves from 0.00306 to 0.00305. It
+  meets the dev rule.
+- `ig_pair_rescue`: 0.9235 (+0.0018), with the wrong-lineage rate up to 0.00515 and the ARI of nsclc22_b down by 0.044. It fails.
+- Both: 0.9270 (+0.0053), with the same wrong-lineage rise (0.00514) and nsclc22_b ARI drop (0.042). It fails.
+The settings change IG contigs only, so the TCR guards are unchanged by construction. `ig_top_weaker_kept` is adopted and on by
+default; `ig_pair_rescue` stays off. Confirmation with `ig_top_weaker_kept`: pooled pairing on pbmc3_b, ngpbmc3_b and melanoma_b
+rises from 0.9123 to 0.9155 (melanoma_b 0.8976 to 0.9019; pbmc3_b and ngpbmc3_b unchanged), and the gap to TRUST4 (0.9198) narrows
+from -0.0075 to -0.0043 (95% interval -0.0090 to 0.0000). The fresh-library confirmation is pending: a new untouched NextGem BCR
+library is still to be named.
+
