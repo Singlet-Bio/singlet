@@ -347,3 +347,13 @@ has at least one KIT mutant read (`KIT_c2447_MT` or `KIT_c1679_MT`) and no BCR::
 out. Truth, rule, frozen configuration and the reported variants are unchanged. Because Ku812 cells are now defined by an
 expressed BCR::ABL1 molecule, recall here measures detection in cells known to express the fusion, so it will read higher than
 on hashtag-labelled cells. The translated hashtag labels are scored as well and reported as secondary.
+
+### Fusion-independent check (coordinator ruling, declared before scoring)
+
+The coordinator accepted the label amendment, and the PacBio-labelled run stays the deciding run. Recall on those labels is
+partly circular, because a Ku812 cell is defined there by a BCR::ABL1 read. It is therefore reported beside a check that uses no
+fusion information. A cell is Ku812 by KIT genotype when its PacBio row has at least one KIT wild-type read (`KIT_c2447_WT` or
+`KIT_c1679_WT`) and no KIT mutant read; it is HMC1.2 when it has at least one KIT mutant read, whatever its BCR::ABL1 count.
+For each caller this check reports the share of KIT-genotype Ku812 cells in which it finds BCR–ABL1 and its BCR–ABL1 calls
+in HMC1.2 cells. HMC1.2 is heterozygous for its KIT mutations, so a few HMC1.2 cells with only wild-type reads will sit in the
+Ku812 group and pull every caller's share down by the same amount.
