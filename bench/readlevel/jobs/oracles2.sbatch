@@ -58,6 +58,14 @@ eng() {   # TAG SAMPLE threads [GENOME FQDIR EXTRA]: engine run unless finished
     --cr-filtered $PB/cellranger_pbmc_1k_v3_filtered_feature_bc_matrix.h5 --calls $M/out/cell_calls.tsv --out $J/results/b8_matched.json
 ) > $L/b8.log 2>&1 & P8=$!
 
+# mESC: 804363 used the 101 bp barcode read as cDNA (the old length rule); clear everything built from that once
+M=$TD/mesc_2c
+if [ ! -f $M/.mates_fixed ]; then
+  rm -rf $J/te/mesc_2c/starsolo $J/runs/te/mesc_2c $W/data/readlevel/1fq/mesc_2c.1fq $M/10x
+  mkdir -p $M/10x; ln -sfn $M/ERR3981386_1.fastq.gz $M/10x/mesc_2c_S1_L001_R1_001.fastq.gz; ln -sfn $M/ERR3981386_2.fastq.gz $M/10x/mesc_2c_S1_L001_R2_001.fastq.gz
+  touch $M/.mates_fixed; echo "mesc_2c: outputs from swapped mates cleared"
+fi
+
 te() {   # NAME GENOME threads
   local n=$1 F=$TD/$1/10x O=$J/te/$1
   eng te $n $3 $2 $F

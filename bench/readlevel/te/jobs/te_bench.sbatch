@@ -27,8 +27,9 @@ echo "node=$(hostname) name=$NAME genome=$GENOME bin=$BIN cpus=$N scTE=$(cat $T/
 [ -x $ENV/bin/Rscript ] || MAMBA_ROOT_PREFIX=$W/tools/mm/root CONDA_PKGS_DIRS=$W/cache/conda_pkgs HOME=$W/cache/condahome \
   $W/tools/mm/bin/micromamba install -y -p $ENV -c conda-forge --strict-channel-priority r-base > $O/rbase.log 2>&1   # SoloTE's matrix step
 # the barcode read is the short one (ENA file order is not guaranteed)
-L1=$(zcat $R1 | head -2 | tail -1 | awk '{print length($0)}')
-if [ "$L1" -gt 50 ]; then t=$R1; R1=$R2; R2=$t; L1=$(zcat $R1 | head -2 | tail -1 | awk '{print length($0)}'); fi
+# swap only when the first file is the longer one: some runs (E-MTAB-8869) deposit a 101 bp barcode read, as long as the cDNA read
+L1=$(zcat $R1 | head -2 | tail -1 | awk '{print length($0)}'); L2=$(zcat $R2 | head -2 | tail -1 | awk '{print length($0)}')
+if [ "$L1" -gt "$L2" ]; then t=$R1; R1=$R2; R2=$t; L1=$L2; fi
 # 10x names for the engine
 F=$D/10x; mkdir -p $F; ln -sfn $R1 $F/${NAME}_S1_L001_R1_001.fastq.gz; ln -sfn $R2 $F/${NAME}_S1_L001_R2_001.fastq.gz
 if [ "$L1" -ge 28 ]; then CBWL=$WL/3M-february-2018.txt; UMIL=12; else CBWL=$WL/737K-august-2016.txt; UMIL=10; fi
