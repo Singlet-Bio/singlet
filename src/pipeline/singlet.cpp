@@ -900,6 +900,13 @@ static int cmd_download(int argc, char* argv[]) {
     if (!catalog_protocol.empty())
         std::cerr << "[singlet-download] Catalog protocol (metadata): " << catalog_protocol << "\n";
 
+    // Auto-detection without the 10x whitelists scores chemistries on read lengths alone (B20: a 101-nt 10x v3 R1 became split-seq), so
+    // it stops here, as singlet encode does; an explicit --protocol needs no whitelist.
+    if (ecfg.protocol_tag.empty() && !singlet::fq::autodetect_whitelists_present(ecfg.whitelist_dirs)) {
+        std::cerr << "[singlet-download] ERROR: " << singlet::fq::autodetect_no_whitelist_error(ecfg.whitelist_dirs) << "\n";
+        return 1;
+    }
+
     // Encode
     singlet::fq::SraEncoder encoder;
     auto stats = encoder.encode(sra_input, ecfg);
