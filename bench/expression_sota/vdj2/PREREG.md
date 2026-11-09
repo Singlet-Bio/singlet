@@ -281,3 +281,195 @@ half-width is 0.0037 and the difference lies above the negative half-width. The 
 Ranger, and contig F1 is 0.9815 for Singlet against 0.7316 for TRUST4. All three conditions of the registered rule hold: **pass**.
 The point estimate stays 0.0016 below TRUST4, within the interval.
 
+## Addendum 7 (2026-11-08, registered before any run of the change): IG chains of expanded clones removed by the cross filter
+
+**Diagnosis (development libraries only, Addendum 6 code with its defaults on).** On the GEX-called reference-paired cells, 429
+reference chains are still wrong. The two largest groups after the never-assembled chains are chains removed by the cross filter
+(104, of which TRUST4 reports 96 correctly) and kept chains outranked by another kept contig of the same chain (106, of which TRUST4
+reports 38). The outranked contigs are mostly second cells in a droplet, each with its own junction, and neither tool resolves them
+reliably, so they are not targeted. Among the 104 cross-filtered chains, the IG rescue of Addendum 4 (`ig_top_min_umis`) misses
+them for two reasons. In 34, a light chain is the strongest high-confidence light contig of its barcode with the heavy partner kept,
+but a weaker light contig of the barcode is kept, and any kept chain of the class blocks the rescue. In 31, both the heavy and the
+light chain of the cell are cross-filtered, and the rescue needs a kept partner.
+
+**Change (each default off until the rule is met).** Two filter settings of `filter_contigs`; the assembly is unchanged.
+1. `ig_top_weaker_kept=True`: in the `ig_top_min_umis` rescue, a kept contig of the class (heavy, or light: IGK and IGL together)
+   blocks the candidate only when it has at least as many UMIs.
+2. `ig_pair_rescue=True`: in a barcode with no kept IG contig, the strongest high-confidence productive heavy contig and the
+   strongest high-confidence productive light contig, both removed by the cross filter and each with at least `ig_top_min_umis`
+   (2) UMIs, are kept together; on a UMI tie the contig with more reads is taken.
+No threshold is new: both reuse `ig_top_min_umis` as set in Addendum 4.
+
+**Runs.** Filter-only settings are applied with `refilter.py` to the Addendum 6 runs of the development and confirmation libraries
+(job 804415, `singlet_fwp`), so no library is re-assembled. Three settings are tested: 1 alone, 2 alone, and both.
+
+**Rules.** The dev rule of Addendum 5 applies unchanged, against the Addendum 6 result as baseline (pooled development BCR pairing
+0.9217): pairing +0.003 at least, no library losing more than 0.005 in pairing or contig F1, wrong-lineage rate +0.001 at most,
+clonotype ARI of no library falling by more than 0.02, TCR pairing and contig F1 falling by at most 0.002 (TCR guards: pbmc2_t and
+pbmc10k_t). Wall time is unaffected by a filter setting and is not re-measured. If several settings keep, the one with the highest
+pooled development pairing is taken. Confirmation (pbmc3_b, ngpbmc3_b, melanoma_b) is reported before and after, and a library
+that loses more than 0.005 counts as a failure. The held-out library of Addendum 6 has had its single run and is not used again.
+A setting adopted here is confirmed on a new untouched NextGem BCR library, named in a further note before it is opened and run
+once.
+
+**Result of Addendum 7 (2026-11-08, `refilter.py` on the Addendum 6 runs; with no setting it reproduces their `kept` column
+exactly).** Pooled development BCR pairing (TRUST4 0.9159), against the Addendum 6 baseline of 0.9217:
+- `ig_top_weaker_kept`: 0.9252 (+0.0035). No library loses (chx10k_b 0.9555, pbmc10k_b 0.9792, pbmc2_b 0.9355, nsclc22_b 0.8462,
+  melv11_b 0.9370), contig F1 rises in every library, ARI does not fall, the wrong-lineage rate moves from 0.00306 to 0.00305. It
+  meets the dev rule.
+- `ig_pair_rescue`: 0.9235 (+0.0018), with the wrong-lineage rate up to 0.00515 and the ARI of nsclc22_b down by 0.044. It fails.
+- Both: 0.9270 (+0.0053), with the same wrong-lineage rise (0.00514) and nsclc22_b ARI drop (0.042). It fails.
+The settings change IG contigs only, so the TCR guards are unchanged by construction. `ig_top_weaker_kept` is adopted and on by
+default; `ig_pair_rescue` stays off. Confirmation with `ig_top_weaker_kept`: pooled pairing on pbmc3_b, ngpbmc3_b and melanoma_b
+rises from 0.9123 to 0.9155 (melanoma_b 0.8976 to 0.9019; pbmc3_b and ngpbmc3_b unchanged), and the gap to TRUST4 (0.9198) narrows
+from -0.0075 to -0.0043 (95% interval -0.0090 to 0.0000). The fresh-library confirmation is pending: a new untouched NextGem BCR
+library is still to be named.
+
+## Addendum 8 (2026-11-08, registered before any file of the library is opened): fresh-library confirmation of Addendum 7
+
+**Library.** 10x Genomics "20k Human PBMCs, 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger 6.1.0 `multi`, one male donor;
+dataset prefix `20k_PBMC_5pv2_HT_nextgem_Chromium_X`), short name `pbmc20kht_b`. It comes from another study and donor than every
+library used so far (the Addendum 6 held-out library is a female donor of a vaccination series). Its page lists about 960 B cells,
+so the interval will be wide. A search of both repositories (all branches, commit messages included) and of the cluster's data, job
+and benchmark folders found no earlier use; the only near match is the human-mouse cell-line mixture
+`20k_hgmm_5pv2_HT_nextgem_Chromium_X`, a different dataset. Only the dataset page has been read. Inputs: the BCR FASTQs from the
+dataset's FASTQ tarball, truth from its `vdj_b_filtered_contig_annotations.csv`, called cells from its GEX filtered matrix.
+
+**Run.** One Singlet run at the tip of `fix/vdj-ig-cross-rescue` (Addendum 7 defaults, `ig_top_weaker_kept` on) with the first-Cys
+reference (Cell Ranger >= 5), and one TRUST4 run on the same reads. The Addendum 6 setting (#222) is the same run re-filtered with
+`ig_top_weaker_kept=false` through `refilter.py`, which reproduces a run's own filter exactly; the assembly is shared, so this is one
+run. Barcode whitelist: `737K-august-2016`, unless fewer than 90% of Cell Ranger's cell barcodes are on it, in which case
+`3M-february-2018`; the same list is given to Singlet and TRUST4. The choice is made by the job before either tool runs and is
+printed. Nothing is re-run or tuned afterwards, and the result is reported whichever way it falls.
+
+**Rule for Addendum 7 (#224 against #222).** `ig_top_weaker_kept` stays on only when, on this library, its correct pairing is
+strictly higher than with the setting off, its wrong-lineage rate is at most 0.001 higher and its contig F1 at most 0.005 lower. Equal
+or lower pairing turns it off.
+
+**Rule for Singlet against TRUST4.** That of Addendum 6, applied to the Singlet setting the previous rule selects: the difference
+Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95% interval, with
+the wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's.
+
+
+**Aborted first attempt (2026-11-08).** The first job (Slurm 804607, state FAILED) downloaded the library, found one BCR FASTQ
+folder and chose `737K-august-2016` (all of Cell Ranger's cell barcodes are on it). Singlet then stopped after five seconds on its
+first read with `gzip.BadGzipFile`: the dataset's tarball stores its FASTQs as plain text under `.fastq.gz` names. TRUST4 received the
+same unreadable input. Neither tool produced any output, so no result was produced or seen. The rerun compresses the same reads with
+gzip into a new folder and is otherwise identical: same commit, settings, whitelist, rules and comparator. It counts as this
+addendum's one run.
+
+**Result (2026-11-08, Slurm 804625, commit 9bb0e777).** The rerun read the gzip copies of the same reads. Singlet took 3 minutes and
+TRUST4 24 minutes on 914 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| `ig_top_weaker_kept` on (#224) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+| `ig_top_weaker_kept` off (#222) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+
+*Addendum 7 rule: fail.* The refilter with the setting off changed none of the 5,427 contigs, so pairing is equal and
+`ig_top_weaker_kept` is turned off (default `False` from this commit on).
+
+*Addendum 6 rule, Singlet against TRUST4: fail.* The pairing difference passes, because -0.0088 is above the negative half-width
+(-0.0110), and contig F1 is above TRUST4's. Wrong-lineage fails: 109 of 1,829 Singlet chains with a known GEX lineage sit in a
+non-B lineage, a rate of 0.0596 against the limit of 0.0062 (Cell Ranger's 0.0012 plus 0.005). The library is not re-run, and the
+rule and comparator stay as registered.
+
+## Addendum 9 (2026-11-08, registered before any file of the library is opened): IG barcode floor, confirmed on King 2021 tonsil
+
+**Failure.** On the Addendum 8 library 6% of Singlet's IG chains sat in GEX T cells, against 0.1% for Cell Ranger. On the
+development libraries those chains carry a median of 1 UMI, 72% of them at most 2, and most are the only IG chain of their
+barcode. Cell Ranger confirms 2% of them, while TRUST4's barcode report holds 72%.
+
+**How the comparators suppress them.** TRUST4 (`trust-barcoderep.pl`) applies no abundance floor. It calls a barcode B
+when its most abundant locus is IG. Its one ambient filter, `scripts/barcoderep-filter.py`, is a cross filter (2% of a
+barcode holding >= 50 of the same CDR3), which `run-trust4` does not call and which our cross filter already covers. No
+TRUST4 code is therefore ported. Cell Ranger's documented V(D)J cell rules are what remove these chains: a barcode needs
+>= 3 UMIs, and a lone productive contig needs more than one UMI over its junction. Singlet reimplements both rules from the
+documentation, for IG chains only (TCR is unchanged): `ig_cell_min_umis=3` and `ig_lone_min_junction_umis=2`, both now
+defaults.
+
+**Development measurement** (an exploratory sweep by refiltering the Addendum 6 runs). Pooled wrong-lineage falls from
+0.0031 to 0.0009 (Cell Ranger 0.0008). Correct pairing is unchanged at 0.9217 (TRUST4 0.9159), and contig F1 is unchanged
+or higher on every library. The confirmation libraries were not scored.
+
+**Library.** King et al. 2021, paediatric tonsil, unsorted immune cells of donors BCP8 and BCP9 ("Total" in the deposit),
+10x 5' v1. The BCR reads and Cell Ranger 3.0.0 `vdj` filtered contigs come from ArrayExpress E-MTAB-9003, and the GEX
+filtered matrices (Cell Ranger 3.0.0 `count`) from E-MTAB-9005. It comes from another study, tissue and donors than every
+library used so far. A search of both repositories (all branches, commit messages included) and of the cluster's data
+folders found no earlier use, only mentions in the launch held-out panel and a literature index. Only the dataset pages
+have been read. The data are staged and hash-locked by the launch held-out panel (`sprint/heldout-launch/MANIFEST.md` in
+the project repository). The run waits for that manifest and uses the files it locks.
+
+**Run.** One Singlet run per donor at the commit that adds this addendum (defaults), with the second-Cys reference (Cell
+Ranger 3), the `737K-august-2016` whitelist, and one TRUST4 run on the same reads. Truth is the deposited Cell Ranger
+filtered contig annotations. Cells and lineage labels come from the deposited GEX matrices. The setting off is reported
+from a refilter with both floors at 0. If the deposit holds no Cell Ranger contig annotations, or its GEX barcodes do not
+match the BCR barcodes, the run stops before either tool starts and this is reported.
+
+**Rule.** The Addendum 6 rule on the two donors pooled, wrong-lineage included. The difference Singlet minus TRUST4 in
+correct pairing must be at least the negative half-width of its paired bootstrap 95% interval. The wrong-lineage rate must
+be at most Cell Ranger's plus 0.005, and contig F1 must be above TRUST4's. A pass meets the B12 endpoint. A fail is
+reported, and the library is not run again.
+
+**Observations, out of scope.** The never-assembled chains (Addendum 6 breakdown: the seed and anchor losses) and other
+pairing gains are recorded only. A port of TRUST4's V motif as a Cys104 fallback was written and then dropped unmeasured.
+
+**Build and input route (2026-11-08, before the run).** The build is the IG cell floor applied to `gpu/frontier` at
+e0a85e20 (which holds the Addendum 6 fix), as branch `fix/vdj-ig-cell-floor-frontier`. The run uses the commit that adds
+this paragraph. The data are the files locked in the held-out manifest (project repository PR #52, manifest commit
+edef45a8). The BCR BAMs are unaligned and hold one 155-bp read per molecule fragment: 10x R1 with the barcode in bases
+1-16, the UMI in 17-26, then the template-switch oligo and the transcript's 5' end. The R2 mate is absent. The job writes
+each record as a pair, with bases 1-26 as the barcode read and bases 27 on as the cDNA read. TRUST4 gets the same reads
+with `--barcode`/`--UMI` on the first file (`bc:0:15,um:16:25`). A format check on the first 2M records of one BAM, which
+compared nothing with truth, found the following. The engine took barcode and UMI from the first 26 bases (91% of reads
+carry a valid barcode), found the forward strand of the cDNA read (94% of reads hit a V(D)J segment), and assembled
+productive IG contigs and no TCR contigs. The cDNA read starts at the 5' end of the transcript, so only about 5% of reads
+reach the junction. Both tools work from this same sparse input. Cells and lineage come from the deposited GEX
+`filtered_feature_bc_matrix` (all barcodes are cells, and lineage follows `gex_lineage.py`'s marker rule, read from the
+matrix files instead of an h5).
+
+## Addendum 10 (2026-11-09, registered before any file of the library is opened): deciding held-out library for the IG cell floor
+
+**Why this addendum exists.** An owner decision moved the deciding run from King 2021 tonsil to an ordinary paired-end library,
+because of the input format and the compute. The King BCR deposit holds R1 only, so about 5% of reads reach the junction, and
+stock TRUST4 needs more than 96 GB and more than a day per donor on it. The change was made with Singlet's King numbers already
+seen (pairing 0.066, chain recall 13.1%, wrong-lineage 0 of 1,376 chains) and TRUST4's King numbers not yet produced. The King
+run continues as a supplementary result and has no effect on this addendum's verdict.
+
+**Library.** 10x Genomics "20k Bone Marrow Mononuclear Cells (BMMNCs), 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger
+6.1.0 `multi`, one healthy male donor from StemExpress; dataset prefix `20k_BMMNC_5pv2_HT_nextgem`), short name `bmmnc20kht_b`.
+The cells are unsorted bone marrow, and the page lists 17,645 of them. It has another donor and tissue than every library used so
+far. It is absent from the project's engine-touch table, the launch held-out panel and manifest, the dev and confirmation lists,
+the cluster's data and job folders, and both repositories' main lines; the Alpha sample index holds one unrelated GEO sample
+whose text mentions bone marrow mononuclear cells. Only the dataset page has been read, and the files below were downloaded and
+hashed without being opened.
+
+| File | sha256 |
+|---|---|
+| `20k_BMMNC_5pv2_HT_nextgem_Multiplex_fastqs.tar` | `78037483658208fc47adf5a38121772974569e26383195852b2c5a38625a72f3` |
+| `vdj_b_filtered_contig_annotations.csv` (truth) | `5e1f9ed50e9b0f6c5bdd4f4dea2325150cb77289cc67cfbcea656b2f3421f99a` |
+| `count_sample_feature_bc_matrix.h5` (GEX cells and lineage) | `b6f5b9208cd3c5490b712e8ba214f075f300eac724575f26779ee6e6f593c69d` |
+| `..._vdj_b_S1_L001_R1_001.fastq.gz` | `6a30a1344196e8327783a5f221e83c9deff7aff46db802df534da7d535ee3de7` |
+| `..._vdj_b_S1_L001_R2_001.fastq.gz` | `207df647699b2e5d2f4ee538d83e263fb1164926e3da45a9f1fa89f2d8670944` |
+
+**Run.** One Singlet run at c5ef9032 (the IG cell floor on `gpu/frontier` e0a85e20, defaults) with the first-Cys reference (Cell
+Ranger >= 5), and one stock TRUST4 run on the same reads. The whitelist is `737K-august-2016` unless fewer than 90% of Cell Ranger's
+cell barcodes are on it, in which case `3M-february-2018`; the same list goes to both tools. Lineage labels follow `gex_lineage.py`.
+The floor-off setting is reported from a refilter with both floors at 0. Nothing is tuned or re-run afterwards, and the result is
+reported whichever way it falls.
+
+**Rule.** That of Addendum 6, unchanged, applied to the registered setting (floor on). The difference Singlet minus TRUST4 in
+correct pairing must be at least the negative half-width of its paired bootstrap 95% interval, the wrong-lineage rate at most Cell
+Ranger's plus 0.005, and contig F1 above TRUST4's.
+
+**Result (2026-11-09, Slurm 805795, commit c5ef9032): pass.** The barcode whitelist was `737K-august-2016` (all of Cell Ranger's
+cell barcodes are on it). Singlet took 3 minutes and TRUST4 25 minutes on 1,489 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| IG cell floor on (registered) | 0.9765 (0.9684, 0.9839) | 0.9805 | -0.0040 (-0.0114, +0.0040) | 0.0046, 13 of 2,802 (0.0007) | 0.9891 (0.9058) |
+| Floor off | 0.9765 (0.9684, 0.9839) | 0.9805 | -0.0040 (-0.0114, +0.0040) | 0.0096, 27 of 2,817 (0.0007) | 0.9891 (0.9058) |
+
+All three parts of the rule hold for the registered setting. The pairing difference is above the negative half-width (-0.0077),
+wrong-lineage is below its limit of 0.0057, and contig F1 is above TRUST4's. With the floor off, wrong-lineage would have exceeded
+that limit. The library is not run again.
