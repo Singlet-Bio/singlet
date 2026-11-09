@@ -88,11 +88,15 @@ add_pileup_test(test_saturation_curve)
 add_pileup_test(test_splice_psi)
 add_pileup_test(test_sj_unique_only)
 add_pileup_test(test_em_rescue)
+add_pileup_test(test_multimap_record)   # the multi-mapping record: two-gene reads, serial = parallel, the classes x barcodes matrix
 add_pileup_test(test_molecule_labels)
+add_pileup_test(test_rna_editing)      # D-101: REDIportal editing rows ride the SNP pileup and split off before every SNP consumer
+add_pileup_test(test_chimeric_table)
 add_pileup_test(test_csc_add_signed)   # the uint16 cap of the pre-USA exon / intron split (csc_add_signed, mixed molecules past 65535)
 add_pileup_test(test_umi_store_scale)
 add_pileup_test(test_umi_deep_roots)
 add_pileup_test(test_umi_consume)
+add_pileup_test(test_umi_staging)
 add_pileup_test(test_umi_seeds)         # SINGLET_UMI_COLLAPSE=seed: order-free seed-based directional collapse
 add_pileup_test(test_mt_numt_tie)
 add_pileup_test(test_gene_full_set)
@@ -255,8 +259,10 @@ add_pileup_test(test_te_kmer_integration)
 add_pileup_test(test_txome_gene_index)
 add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
+add_pileup_test(test_hla_typing)       # D-101: the HLA prefilter keeps every read T1K counts; donor rule; genotype JSON
 add_pileup_test(test_read_source)   # read_source.h: shared .1fq decoder, STAR chunk source
 add_pileup_test(test_fastq_encoder_r1_101)
+add_pileup_test(test_encode_autodetect_whitelist)
 add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)

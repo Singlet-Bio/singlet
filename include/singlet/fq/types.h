@@ -707,6 +707,7 @@ struct EncoderConfig {
     // Feature disable flags (override protocol-level defaults)
     bool no_dedup = false;    // --no-dedup: skip PCR duplicate collapsing
     bool no_trim = false;     // --no-trim: skip polyA/adapter trimming
+    bool trim_polya = false;  // --trim-polya: poly(A) trimming on any 3' protocol, including 10x Visium (off there by default)
     bool sort_by_bc = false;  // --sort-by-bc: sort reads by barcode within blocks
 
     // When set, flushed blocks go to this sink (no .1fq is written, no sort); see StagedBlock

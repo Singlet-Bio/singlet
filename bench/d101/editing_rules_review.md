@@ -1,0 +1,24 @@
+# B4 rule review: Singlet editing pileup against REDItools2 and REDItools3
+
+D-109 asks for the competitor's site-calling rules to be compared with ours before runs are spent finding differences. REDItools2 (BioinfoUNIBA/REDItools2, `src/cineca/reditools.py`, CC BY 4.0) may be ported with credit. REDItools3 3.7 (`reditools/tools/analyze/parse_args.py`, `alignment_file.py`, `compiled_reads.py`) is the comparator the D-101 benchmark runs, with `-me 0 -s 0` and every other option at its default. Singlet's rules come from `pileup_engine.h` (`pileup_aligned_bases`, the `high_mapq` gate) and `umi_dedup.h` (`SnpConsensus`). The editing sites join the SNP pileup, so they share its filters.
+
+| Rule | REDItools2 default | REDItools3 3.7 default (as run) | Singlet | Same? | Likely effect of the difference |
+|---|---|---|---|---|---|
+| Base quality | Phred ≥ 30 (`-bq`) | Phred ≥ 30 | Phred ≥ 10 (`min_baseq`, shared with the SNP panel) | Different | Singlet keeps bases at Phred 10 to 29, so it covers more sites and admits more sequencing errors. An A>G error inflates the level at lowly edited sites, and molecule consensus removes most single-read errors. This is the main candidate if Singlet's levels trail. |
+| Mapping quality | MAPQ ≥ 20 (`-q`) | MAPQ ≥ 20 | MAPQ ≥ 20; low-MAPQ multimappers skip the variant pileup | Same | None. STAR gives 255 to unique reads and 0 to 3 to multimappers. |
+| Secondary and supplementary records | Dropped | Dropped (flags kept: 0, 16, 83, 99, 147, 163) | Dropped | Same | None. |
+| Chimeric reads (SA tag) | Dropped | Dropped | The primary record is kept; only the supplementary is dropped | Different | Small. STARsolo in the engine writes few chimeric alignments. |
+| Duplicates | Reads with flag 1024 dropped; every other read counts | Any flag outside the kept set dropped, which includes 1024; every other read counts | One vote per (cell, site, UMI) molecule by strict majority; ties and "other base" majorities are dropped | Different | Singlet's levels are molecule-level and REDItools' are read-level. PCR copies of one molecule raise REDItools' depth without new information, so its levels are noisier per read but not biased. The matched-depth metrics (REDItools reads downsampled to Singlet's UMI count, and depth bins) control for this. |
+| Read-end trimming | None (`-mbp 0`, `-Mbp 0`) | None | None | Same | None at defaults. Both could gain from trimming the 5' and 3' ends, where 10x reads carry template-switch and poly-A artifacts. A shared change would leave the comparison unchanged. |
+| Soft-clipped bases | Not piled up | Not piled up | Not piled up (only M, =, X CIGAR blocks) | Same | None. |
+| Strand | Unstranded at `-s 0`; strand inferred per column when stranded | Unstranded as run (`-s 0`) | Unstranded pileup; the site strand comes from REDIportal | Same | None between the tools. Both count antisense reads at a site that overlaps a gene on the other strand. Using 10x 3' strandedness would help both. |
+| Homopolymer exclusion | Optional (`-m`, off unless a file is given; span 5) | No such option; `-k` exclusion BED is off | None | Same (off) | None as run. REDIportal sites sit mostly in Alu elements, where homopolymer runs are short. |
+| Splice-site exclusion | Optional (`-sf`, off unless a file is given; span 4) | No such option | None | Same (off) | None as run. Near junctions, reads that STAR misplaces can mimic edits in all three. |
+| Minimum read length | 30 (`-mrl`) | 30 | No length filter in the variant pileup; 10x cDNA reads are about 90 bases | Same in practice | None. |
+| Minimum column coverage | 1 read (`-l`) | 1 read (`-l`) | 1 molecule | Same | None. The scorer applies the depth threshold of 5 to both. |
+| Base N or third allele | N dropped; other bases reported in BaseCount | Same | Read base classed as REF, ALT or other; an "other" majority is dropped | Same in effect | None. The scorer computes the level from REF and ALT counts for both. |
+| Cells | All reads in the BAM | Called-cell reads only (the benchmark subsets the BAM by CB) | Called-cell molecules | Same as run | None. |
+
+Two rules differ in a way that can move the verdict. Base quality is the main one: if Singlet's levels trail REDItools3 on the neutral set, the first test is one donor rerun with Phred ≥ 30 at the editing sites only. The SNP panel keeps its own threshold, and porting REDItools2's rule needs a separate `editing_min_baseq`. Molecule consensus against read counting is the other, and the matched-depth metrics already separate it from accuracy. The chimeric-read rule is minor. Read-end trimming, strand use and homopolymer or splice exclusions are off in both tools, so they cannot explain a gap. They would be shared improvements, not catch-up.
+
+REDItools v1 (CC BY-NC) is not read for code and is not used here.

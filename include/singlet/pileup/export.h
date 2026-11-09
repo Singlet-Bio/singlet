@@ -58,9 +58,11 @@
 #include "multiome_router.h"
 #include "atomic_io.h"
 #include "validate_output.h"
+#include "multimap_record.h"
 #include "mt_reference.h"
 #include "sj_features.h"
 #include "star_cell_read_stats.h"
+#include "rna_editing.h"
 
 namespace singlet {
 
@@ -312,7 +314,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     const bool use_loom = (export_cfg.output_format == "loom");
     const auto& out_prefix = export_cfg.out_prefix;
     // D-52: private/ (genotypes, chrM alleles) is created owner-only before anything is written into it
-    if (!pileup_cfg.snp_path.empty() || pileup_cfg.count_mt) genotype::make_private_dir(out_prefix + "/private");
+    if (!pileup_cfg.snp_path.empty() || !pileup_cfg.edit_path.empty() || pileup_cfg.count_mt) genotype::make_private_dir(out_prefix + "/private");
 
     // ── Phase 1: COO → CSC (parallel) ──
     nvexp.next("export: Phase 1: COO  CSC (parallel)"); expclk.next("export: Phase 1: COO  CSC (parallel)");
@@ -337,7 +339,8 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     std::vector<std::thread> csc_threads;
     bool need_snp_csc = !pileup_cfg.snp_path.empty() ||
-                         engine.aim_snp_start() != UINT32_MAX;
+                         engine.aim_snp_start() != UINT32_MAX ||
+                         engine.edit_snp_start() != UINT32_MAX;
     if (need_snp_csc) {
         csc_threads.emplace_back([&]() { snp_ad_csc = engine.snp_ad().to_csc(); });
         csc_threads.emplace_back([&]() { snp_dp_csc = engine.snp_dp().to_csc(); });
@@ -371,6 +374,14 @@ inline ExportStats export_results(const PileupEngine& engine,
         csc_threads.emplace_back([&]() { vdj_csc = engine.vdj_counts().to_csc(); });
 
     for (auto& t : csc_threads) t.join();
+    // D-101: the RNA editing rows sit after the SNP and AIM rows; cut them off here so every SNP consumer below (demux, genotypes,
+    // ASE, ancestry, the snp_* matrices) reads the matrices it read without an editing panel (rna_editing.h).
+    editing::Csc edit_alt_csc, edit_dp_csc;
+    const bool have_editing = engine.edit_snp_start() != UINT32_MAX && snp_dp_csc.ncols > 0;
+    if (have_editing) {
+        edit_alt_csc = editing::split_tail(snp_ad_csc, engine.edit_snp_start());
+        edit_dp_csc = editing::split_tail(snp_dp_csc, engine.edit_snp_start());
+    }
     // The pre-USA split (see the declarations above): keep the USA matrices for the published layers, and rebind exon_csc /
     // intron_csc to the legacy ones for every other consumer. No mixed molecules: the two splits are the same matrices.
     // At the uint16 cap (65535) legacy exon stays exact and legacy intron undercounts only a saturated entry, never wraps
@@ -1378,6 +1389,38 @@ inline ExportStats export_results(const PileupEngine& engine,
         });
     }
 
+    // D-101: RNA editing at the REDIportal sites. Per-site allele counts are owner-only (private/editing/); the per-cell index and the
+    // summary are public (rna_editing.h). Its own thread, joined before the run's provenance below rather than with write_threads, so the
+    // donor VCFs and the mt outputs after the demux join do not wait for it; inside it the two matrices and the site table are written at once.
+    std::thread edit_thread;
+    if (have_editing) {
+        edit_thread = std::thread([&]() {
+            std::filesystem::create_directories(out_prefix + "/private/editing");
+            const auto er = editing::summarize(edit_alt_csc, edit_dp_csc, cc_result.cell_indices);
+            std::vector<std::string> cov_names(er.covered.size());
+            for (size_t j = 0; j < er.covered.size(); ++j) cov_names[j] = engine.edit_name(er.covered[j]);
+            std::thread t_alt([&]() {
+                auto alt_cov = editing::select_rows(edit_alt_csc, er.covered);
+                write_matrix("private/editing/editing_alt", alt_cov, cov_names);
+            });
+            std::thread t_dp([&]() {
+                auto dp_cov = editing::select_rows(edit_dp_csc, er.covered);
+                write_matrix("private/editing/editing_dp", dp_cov, cov_names);
+            });
+            if (!editing::write_sites(out_prefix + "/private/editing/editing_sites.tsv.gz", er, cov_names))
+                record_failed_write("private/editing/editing_sites.tsv.gz");
+            if (!editing::write_cells(out_prefix + "/editing_cells.tsv", er, cc_result.cell_indices, barcodes))
+                record_failed_write("editing_cells.tsv");
+            if (!editing::write_summary(out_prefix + "/editing_summary.json", pileup_cfg.edit_path, engine.n_edit_sites(), er,
+                                        cc_result.cell_indices.size()))
+                record_failed_write("editing_summary.json");
+            t_alt.join(); t_dp.join();
+            std::cerr << "[editing] " << er.covered.size() << " of " << engine.n_edit_sites() << " panel sites covered, "
+                      << er.n_sites_10 << " with >= 10 UMIs in called cells; editing index "
+                      << (er.dp_total ? double(er.alt_total) / double(er.dp_total) : 0.0) << "\n";
+        });
+    }
+
     // N15: ASE — per-cell, per-SNP allele counts (both pipeline and non-pipeline).
     // Uses the already-computed snp_ad_csc / snp_dp_csc; no extra BAM pass.
     // Always written when --snps is provided (empty file if no het-SNP coverage).
@@ -1642,6 +1685,17 @@ inline ExportStats export_results(const PileupEngine& engine,
                 write_matrix("ambiguous_counts", amb_csc, names);
             });
         }
+        // The multi-mapping record (multimap_record.h): molecules whose reads are compatible with two genes, as gene-set
+        // classes x barcodes. The gene counts above never include them; retrieval adds them (EM or Uniform) only on request.
+        if (engine.gene_model().n_genes() > 0)
+            write_threads.emplace_back([&]() {
+                const auto mm = multimap::build(engine.ambig_reads(), static_cast<uint32_t>(barcodes.size()), engine.gene_ids(),
+                                                engine.gene_names(), &engine.counted_umis());
+                write_matrix("multimap_counts", mm, mm.names);
+                std::cerr << "[multimap] " << mm.reads << " two-gene reads, " << mm.molecules << " molecules in " << mm.nrows
+                          << " gene sets (" << mm.dropped_umis << " UMIs whose reads share no gene, " << mm.counted_umis
+                          << " UMIs already in the gene counts)\n";
+            });
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             SINGLET_TIMED(write_threads, [&]() { write_matrix("sj_counts", sj_csc, engine.sj_names()); });
         // Poly(A) site usage (polya_sites.h): sites x barcodes molecules + per-site table with internal-priming flag.
@@ -1850,6 +1904,12 @@ inline ExportStats export_results(const PileupEngine& engine,
         // Release SNP matrices — they were only needed for demux
         { auto _unused1 = std::move(snp_ad_csc); }
         { auto _unused2 = std::move(snp_dp_csc); }
+    }
+
+    if (edit_thread.joinable()) {   // D-101: the editing outputs, before the provenance lists the run's files
+        edit_thread.join();
+        std::lock_guard<std::mutex> lock(failed_writes_mu);
+        result.failed_writes = failed_writes;
     }
 
     auto export_t1 = std::chrono::high_resolution_clock::now();
@@ -2331,8 +2391,13 @@ inline void write_stats_json(const std::string& path,
        << "  \"rrna_reads\": " << stats.rrna_reads << ",\n"
        << "  \"snp_molecules\": " << stats.snp_molecules << ",\n"
        << "  \"snp_molecules_ambiguous\": " << stats.snp_molecules_ambiguous << ",\n"
-       << "  \"snp_molecules_other\": " << stats.snp_molecules_other << ",\n"
-       << "  \"molecules_spliced\": " << stats.molecules_spliced << ",\n"
+       << "  \"snp_molecules_other\": " << stats.snp_molecules_other << ",\n";
+    if (stats.edit_panel)   // D-101: the RNA editing sites' counts, apart from the SNP panel's
+        sf << "  \"edit_hits\": " << stats.edit_hits << ",\n"
+           << "  \"edit_molecules\": " << stats.edit_molecules << ",\n"
+           << "  \"edit_molecules_ambiguous\": " << stats.edit_molecules_ambiguous << ",\n"
+           << "  \"edit_molecules_other\": " << stats.edit_molecules_other << ",\n";
+    sf << "  \"molecules_spliced\": " << stats.molecules_spliced << ",\n"
        << "  \"molecules_unspliced\": " << stats.molecules_unspliced << ",\n"
        << "  \"molecules_ambiguous\": " << stats.molecules_ambiguous << ",\n"
        << "  \"molecules_legacy_double\": " << stats.molecules_legacy_double << ",\n"

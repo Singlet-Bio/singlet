@@ -98,6 +98,12 @@ class FastqEncoder {
         }
 
         ProtocolCandidate detected{};
+        if (need_detection && !autodetect_whitelists_present(cfg.whitelist_dirs)) {
+            // without the 10x whitelists the scores rest on read lengths alone (GSE230239: 10x v3 with a 101-nt R1 became split-seq)
+            close_fastq(r1_fp, r1_path);
+            close_fastq(r2_fp, r2_path);
+            throw std::runtime_error(autodetect_no_whitelist_error(cfg.whitelist_dirs));
+        }
         if (need_detection) {
             // Full protocol auto-detection from probe reads
             struct ProbeSpot {
@@ -275,6 +281,9 @@ class FastqEncoder {
         else if (auto_r2_maxlen > 0)
             wcfg.r2_maxlen = auto_r2_maxlen;
         if (cfg.no_trim) wcfg.polya_trim = false;
+        if (cfg.trim_polya && !cfg.no_trim && is_3prime_protocol(detected.tag)) {   // --trim-polya (10x Visium's pre-1.3.x behavior)
+            wcfg.polya_trim = true; wcfg.polya_min_len = 10; wcfg.polya_max_mm = 1;
+        }
         if (cfg.no_dedup) wcfg.deduped = false;
         if (cfg.sort_by_bc) wcfg.sort_by_bc = true;
 

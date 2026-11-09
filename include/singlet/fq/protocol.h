@@ -11,7 +11,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <unistd.h>
 #include <iostream>
 #include <string>
 #include <sys/stat.h>
@@ -71,9 +74,10 @@ constexpr uint16_t kShortBarcodeReadMaxTrim = 4;
 constexpr uint16_t kShortBarcodeReadMinUmi = 8;
 
 // A whitelist protocol with a barcode of at least 14 nt that was chosen by auto-detection must find its barcodes in its whitelist.
-// Random 16-mers hit a 3.6 M list about once in a million; real 10x libraries hit 50-95%. Below this rate the reads are not this
-// chemistry (or the whitelist is missing) and counts from them would be garbage.
-constexpr double kProtocolWlRateFloor = 0.02;
+// Random 16-mers hit a 3.6 M list about once in a million; real 10x libraries hit 50-95%, the weakest seen (B20 at scale) 15%.
+// Below this rate the reads are not this chemistry (or the whitelist is missing) and counts from them would be garbage: an inDrop
+// library hit the 3' v1 list in 8% of reads (SRR10046401).
+constexpr double kProtocolWlRateFloor = 0.10;
 
 inline const std::vector<CandidateSpec>& known_protocols() {
     // Protocol specs: tag, id, r1_len, bc_off, bc_len, umi_off, umi_len,
@@ -126,11 +130,13 @@ inline const std::vector<CandidateSpec>& known_protocols() {
          "indrop_bc1.txt", "GAGTGATTGCTTGTGACGCCTT", 10, false, "",
          {"indrop_bc1.txt", "indrop_bc2.txt"}},
 
-        // ── 10x Chromium v4 (GEM-X) ──
-        // Same geometry as v3: R1(28bp) = BC(16bp) + UMI(12bp), R2 = cDNA
-        // Uses same 3M barcode set (compatible with 3M-february-2018.txt)
-        {"10x-3p-v4", 13, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false},
-        {"10x-5p-v4", 14, 28, 0, 16, 16, 12, "3M-february-2018.txt", "", 0, false,
+        // ── 10x Chromium GEM-X: 3' v4 and 5' v3 ──
+        // Same geometry as v3: R1(28bp) = BC(16bp) + UMI(12bp), R2 = cDNA. GEM-X has its own barcode lists, which are not bundled:
+        // `singlet whitelists fetch` downloads them (kFetchableWhitelists). Without the list neither spec is ever chosen (detection skips
+        // it in favor of 10x-3p-v3, the lower id of the same geometry) and a GEM-X call fails with the fetch command named.
+        // "10x-5p-v4" is the engine's name for 10x's GEM-X Single Cell 5' v3 kit.
+        {"10x-3p-v4", 13, 28, 0, 16, 16, 12, "3M-3pgex-may-2023.txt", "", 0, false},
+        {"10x-5p-v4", 14, 28, 0, 16, 16, 12, "3M-5pgex-jan-2023.txt", "", 0, false,
          "AAGCAGTGGTATCAACGCAGAGTACATGGG"},
 
         // ── DNBelab C4 (MGI) ──
@@ -193,9 +199,11 @@ inline const std::vector<CandidateSpec>& known_protocols() {
 
         // ── 10x Visium (Spatial Transcriptomics) ──
         // R1(28bp): BC(16bp@0) + UMI(12bp@16), geometrically identical to 10x v3.
-        // Spatial barcode WL (~4992 barcodes) is Space Ranger licensed — not bundled.
-        // Without WL, detection falls back to 10x-3p-v3. Classified as SPATIAL_RNA.
-        {"10x-visium", 24, 28, 0, 16, 16, 12, "", "", 0, false},
+        // Spot list visium-v1.txt (4,992 barcodes, rebuilt from 10x public datasets, bundled): Visium v1 libraries hit it in 90-96%
+        // of reads and the 3M list in about 1%, so the list tells Visium from 3' v3. Classified as SPATIAL_RNA.
+        // Beta aligner profile on, as STARsolo's Space Ranger-like run (CellRanger4 clip), with poly(A) trimming off (apply_protocol_to_writer):
+        // on the anterior mouse brain slide spot profiles go from r 0.986 to 0.993 against Space Ranger (STARsolo 0.989).
+        {"10x-visium", 24, 28, 0, 16, 16, 12, "visium-v1.txt", "", 0, false, "", {}, true},
 
         // ── CITE-seq GEX ──
         // R1(28bp): CB(16bp@0) + UMI(12bp@16) — identical geometry to 10x-3p-v3.
@@ -444,6 +452,12 @@ inline bool hamming1_match(const uint8_t* bc, uint16_t len,
 //     poly(A)15 / poly(T)15 = 23-32 / 1.4-30 in 3', 15 / 32 in 5'.
 // A 5' R1 sequenced past BC+UMI also shows the 5' TSO tail (TTTCTTATATGGG) where
 // a 3' R1 shows poly(dT); that decides alone when present.
+// With R2 reads of 75 nt or more, the absence of the 3' TSO decides: a long 5' R2
+// can run into the poly(A) tail, so poly(A) outnumbers poly(T) there too (B20,
+// GSM4987144, 10x 5' v1 with a 110-nt R2: 3' TSO 0, poly(A) 118, poly(T) 8 per
+// 20000), while every 3' library of B20 shows the 3' TSO in 1.6-19% of R2 reads.
+// R2 reads without any poly(A)/poly(T) run carry no strand evidence and stay 3'.
+// Shorter R2 reads keep the poly(T) > poly(A) condition.
 struct FivePrimeEvidence {
     uint32_t n = 0;          // spots examined
     uint32_t r1_tso = 0;     // R1: 5' TSO tail right after BC+UMI
@@ -451,10 +465,17 @@ struct FivePrimeEvidence {
     uint32_t r2_smart = 0;   // R2: 3' kit TSO (CAGAGTACATGGG) anywhere
     uint32_t r2_polya = 0;   // R2: 15-base poly(A) run anywhere
     uint32_t r2_polyt = 0;   // R2: 15-base poly(T) run anywhere
+    uint64_t r2_bases = 0;   // R2 bases examined (mean R2 length = r2_bases / n)
     bool is_5prime() const {
         if (r1_tso + r1_polyt >= 50) return r1_tso > 4 * r1_polyt;
-        // no 3' TSO (< 0.2%), and poly(T) outnumbers poly(A) in R2
-        return n >= 500 && 500ull * r2_smart < n && r2_polyt >= 10 && r2_polyt > r2_polya;
+        if (n < 500 || 500ull * r2_smart >= n) return false;   // the 3' TSO in >= 0.2% of R2 reads: 3'
+        // poly(A) runs in >= 1% of R2 reads and over four times the poly(T) runs: a sense cDNA read that reaches the tail, 3'
+        if (100ull * r2_polya >= n && r2_polya > 4ull * r2_polyt) return false;
+        // long R2 reads without the 3' TSO that reach transcript ends as cDNA does (poly(A) or poly(T) runs in 0.1-10% of reads; a
+        // feature-barcode read, tag + poly(A), has one in nearly every read and stays 3'): 5'
+        const uint64_t runs = static_cast<uint64_t>(r2_polya) + r2_polyt;
+        if (r2_bases >= 75ull * n && 1000ull * runs >= n && 10ull * runs < n) return true;
+        return r2_polyt >= 10 && r2_polyt > r2_polya;           // short R2: poly(T) outnumbers poly(A)
     }
 };
 
@@ -491,6 +512,7 @@ FivePrimeEvidence five_prime_evidence(const std::vector<SpotT>& spots, uint16_t 
             if (trun >= 15) polyt = true;
             if (!smart && j + 13 <= s.r2_len && mism(s.r2_seq, j, kSmart) == 0) smart = true;
         }
+        ev.r2_bases += s.r2_len;
         ev.r2_smart += smart;
         ev.r2_polya += polya;
         ev.r2_polyt += polyt;
@@ -647,7 +669,8 @@ ProtocolCandidate detect_protocol(
     // so it must never be chosen over one.
     // Enforces the stated intent in known_protocols(): "Without WL, detection falls
     // back to 10x-3p-v3."
-    std::unordered_set<uint64_t> wl_geometries;
+    std::unordered_map<uint64_t, int> wl_geometries;   // geometry -> number of WL protocols with it
+    std::unordered_map<uint64_t, uint8_t> wl_geometry_min_id;   // geometry -> lowest protocol_id of a WL protocol with it
     auto pack_geom5 = [](uint16_t r1, uint16_t bco, uint16_t bcl,
                          uint16_t umio, uint16_t umil) -> uint64_t {
         // Combine five 16-bit fields into one 64-bit integer for unambiguous keying.
@@ -660,8 +683,10 @@ ProtocolCandidate detect_protocol(
     };
     for (const auto& k : known_protocols()) {
         if (!k.whitelist_file.empty()) {
-            wl_geometries.insert(pack_geom5(k.r1_len, k.bc_offset, k.bc_len,
-                                            k.umi_offset, k.umi_len));
+            const uint64_t g = pack_geom5(k.r1_len, k.bc_offset, k.bc_len, k.umi_offset, k.umi_len);
+            ++wl_geometries[g];
+            auto [mit, fresh] = wl_geometry_min_id.emplace(g, k.protocol_id);
+            if (!fresh && k.protocol_id < mit->second) mit->second = k.protocol_id;
         }
     }
 
@@ -740,6 +765,14 @@ ProtocolCandidate detect_protocol(
                 it = wl_cache.emplace(cache_key, std::move(wl_hashes)).first;
             }
             const auto& wl_hashes = it->second;
+            // A WL protocol whose list is not installed cannot tell itself apart from a WL protocol of the same geometry: skip it when
+            // one with a lower protocol_id exists (10x-visium without visium-v1.txt, GEM-X without its lists), so the lowest id of
+            // the geometry (10x-3p-v3 for 28 nt) stays as the fallback even when no list is installed at all.
+            if (wl_hashes.empty() && cand->linker.empty()) {
+                const auto mit = wl_geometry_min_id.find(
+                    pack_geom5(cand->r1_len, cand->bc_offset, cand->bc_len, cand->umi_offset, cand->umi_len));
+                if (mit != wl_geometry_min_id.end() && mit->second < cand->protocol_id) continue;
+            }
             if (!wl_hashes.empty()) {
                 has_wl = true;
                 curr_wl_size = wl_hashes.size();
@@ -1035,9 +1068,11 @@ ProtocolCandidate detect_protocol(
         // to be the same file as the v3 whitelist, match rates are identical.  Standard
         // 3p/5p libraries vastly outnumber multiome, so the lower protocol_id (earlier,
         // more common protocol) should win the tie.
+        // The larger list wins a tie only on real hits: at near-zero rates (reads of no listed chemistry) a larger list is just
+        // more chance matches, and the 7.4 M GEM-X 3' list would take every such tie from 10x-3p-v3.
         bool tie_break_wins = has_wl && best_wl_size > 0 &&
                               score >= best.score - 0.05 &&
-                              (curr_wl_size > best_wl_size ||
+                              ((curr_wl_size > best_wl_size && rate >= kProtocolWlRateFloor) ||
                                (curr_wl_size == best_wl_size &&
                                 cand->protocol_id < best.protocol_id));
 
@@ -1096,9 +1131,12 @@ ProtocolCandidate detect_protocol(
     // low match rate should not prevent the swap: AUTOFIX-E2E-A2-READ-SWAP.
     // 10x 3' and 5' of one generation are indistinguishable above; switch to the
     // 5' sibling when the cDNA read looks 5' (see five_prime_evidence).
+    // Only a sibling that shares the whitelist is a candidate: GEM-X 3' and 5' have lists of their own, which decide alone.
     if (!inverted && !concat_mode && best.tag.rfind("10x-3p-v", 0) == 0) {
         std::string five = "10x-5p-" + best.tag.substr(7);
-        if (const CandidateSpec* fp = find_protocol_spec(five)) {
+        const CandidateSpec* tp = find_protocol_spec(best.tag);
+        const CandidateSpec* fp = find_protocol_spec(five);
+        if (fp && tp && fp->whitelist_file == tp->whitelist_file) {
             auto ev = five_prime_evidence(probe_spots,
                 static_cast<uint16_t>(best.umi_offset + best.umi_length));
             std::cerr << "[protocol_detect] 3'/5' check: R1 5'-TSO " << ev.r1_tso << " / polyT "
@@ -1121,6 +1159,69 @@ ProtocolCandidate detect_protocol(
 
 // Error text if an auto-detected protocol fails the whitelist floor, "" otherwise. Not applied to a forced/manual protocol, to protocols
 // without a whitelist, or to short barcodes (bc_len < 14: chance hits).
+// Whitelist directories of a command, in the order singlet download and singlet encode both use: the --whitelist-dir values when given,
+// else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists. Only existing directories are returned.
+inline std::vector<std::string> resolve_whitelist_dirs(const std::vector<std::string>& cli_dirs) {
+    if (!cli_dirs.empty()) return cli_dirs;
+    std::vector<std::string> out;
+    auto is_dir = [](const std::string& p) { struct stat st; return !p.empty() && stat(p.c_str(), &st) == 0 && S_ISDIR(st.st_mode); };
+    if (const char* e = std::getenv("SINGLET_WHITELIST_DIR"); e && is_dir(e)) { out.push_back(e); return out; }
+    char buf[4096];
+    const ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len > 0) {
+        const std::string exe(buf, static_cast<size_t>(len));
+        const auto pos = exe.rfind('/');
+        if (pos != std::string::npos && is_dir(exe.substr(0, pos) + "/../whitelists")) out.push_back(exe.substr(0, pos) + "/../whitelists");
+    }
+    return out;
+}
+
+// Auto-detection scores the 10x chemistries by whitelist hits. Without a 10x whitelist it can only weigh read lengths, and a long barcode
+// read then looks like split-seq (GSE230239: a 101-nt 10x v3 R1). True when some directory holds the 10x 3' v3 or v2 whitelist.
+inline bool autodetect_whitelists_present(const std::vector<std::string>& dirs) {
+    for (const char* tag : {"10x-3p-v3", "10x-3p-v2"}) {
+        const CandidateSpec* s = find_protocol_spec(tag);
+        if (!s || s->whitelist_file.empty()) continue;
+        for (const auto& d : dirs) { struct stat st; if (stat((d + "/" + s->whitelist_file).c_str(), &st) == 0 && S_ISREG(st.st_mode)) return true; }
+    }
+    return false;
+}
+
+// The error auto-detection stops with when no 10x whitelist is found; names the three places looked and the directories searched
+inline std::string autodetect_no_whitelist_error(const std::vector<std::string>& dirs) {
+    std::string searched;
+    for (const auto& d : dirs) searched += (searched.empty() ? "" : ", ") + d;
+    return "protocol auto-detection needs the 10x whitelists (3M-february-2018.txt, 737K-august-2016.txt) and found none. Looked in "
+           "--whitelist-dir, then $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists (searched: " +
+           (searched.empty() ? std::string("no existing directory") : searched) +
+           "). Point one of them at the whitelist directory, or name the chemistry with --protocol.";
+}
+
+// singlet run: the 10x 3' and 5' chemistries (every version) correct barcodes against their whitelist. Without it the run stops,
+// unless --barcode-discovery asks for discovery; whitelist-free protocols (Visium and the rest) keep discovery.
+inline bool whitelist_required(const std::string& tag) {
+    return tag.rfind("10x-3p-", 0) == 0 || tag.rfind("10x-5p-", 0) == 0;
+}
+
+// The first <dir>/<file> that exists, in the order of the dirs (resolve_whitelist_dirs), else "".
+inline std::string find_whitelist_file(const std::string& file, const std::vector<std::string>& dirs) {
+    if (file.empty()) return "";
+    for (const auto& d : dirs) {
+        const std::string p = d + "/" + file;
+        struct stat st;
+        if (stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode)) return p;
+    }
+    return "";
+}
+
+inline std::string run_no_whitelist_error(const std::string& tag, const std::string& file, const std::vector<std::string>& dirs) {
+    std::string searched;
+    for (const auto& d : dirs) searched += (searched.empty() ? "" : ", ") + d;
+    return tag + " corrects barcodes against " + file + ", which was not found. Looked in --whitelist-dir, then $SINGLET_WHITELIST_DIR, "
+           "then <binary dir>/../whitelists (searched: " + (searched.empty() ? std::string("no existing directory") : searched) +
+           "). Point one of them at the whitelist directory, pass --whitelist FILE, or ask for barcode discovery with --barcode-discovery.";
+}
+
 inline std::string protocol_wl_floor_error(const ProtocolCandidate& d) {
     if (d.confidence == Confidence::FORCE || d.confidence == Confidence::MANUAL) return "";
     const CandidateSpec* spec = find_protocol_spec(d.tag);
@@ -1133,6 +1234,225 @@ inline std::string protocol_wl_floor_error(const ProtocolCandidate& d) {
                   "is the barcode read and its length, or name the protocol with --protocol.",
                   d.tag.c_str(), d.wl_match_rate * 100.0, spec->whitelist_file.c_str(), kProtocolWlRateFloor * 100.0);
     return buf;
+}
+
+// ── Barcode lists that are fetched, not bundled ──
+// 10x ships the GEM-X lists only inside Cell Ranger. `singlet whitelists fetch` downloads the copies that the Broad Institute publishes
+// for its WARP/Optimus pipelines (public bucket gcp-public-data--broad-references) over HTTPS and refuses any file whose sha256 differs
+// from the pin below.
+struct FetchableWhitelist {
+    const char* file;      // file name in the whitelist directory (as named in known_protocols())
+    const char* url;       // HTTPS source
+    const char* sha256;    // pinned digest of the file as published
+    uint64_t bytes;        // size as published
+    const char* chemistry; // what it serves
+};
+
+inline const std::vector<FetchableWhitelist>& fetchable_whitelists() {
+    static const std::vector<FetchableWhitelist> v = {
+        {"3M-3pgex-may-2023.txt",
+         "https://storage.googleapis.com/gcp-public-data--broad-references/optimus_whitelists/3M-3pgex-may-2023.txt",
+         "62df04844ed0d1281b302f862ec0d005d3298fc169f507f68dd6e8d4cb5ccccd", 125337600ull, "10x GEM-X Single Cell 3' v4 (10x-3p-v4)"},
+        {"3M-5pgex-jan-2023.txt",
+         "https://storage.googleapis.com/gcp-public-data--broad-references/optimus_whitelists/3M-5pgex-jan-2023.txt",
+         "b402db8acbcd3a076bf50991538d6c08464ddb137e0b81916a9fa92cf222dd0d", 62668800ull, "10x GEM-X Single Cell 5' v3 (10x-5p-v4)"},
+    };
+    return v;
+}
+
+inline const FetchableWhitelist* find_fetchable_whitelist(const std::string& file) {
+    for (const auto& f : fetchable_whitelists())
+        if (file == f.file) return &f;
+    return nullptr;
+}
+
+// Error text for a call whose barcode list must be fetched and is absent, "" otherwise (list present, or bundled).
+inline std::string fetched_whitelist_missing_error(const std::string& tag, const std::vector<std::string>& dirs) {
+    const CandidateSpec* spec = find_protocol_spec(tag);
+    if (!spec || spec->whitelist_file.empty() || !find_fetchable_whitelist(spec->whitelist_file)) return "";
+    for (const auto& d : dirs) {
+        struct stat st;
+        if (stat((d + "/" + spec->whitelist_file).c_str(), &st) == 0 && S_ISREG(st.st_mode)) return "";
+    }
+    return spec->tag + " needs the barcode list " + spec->whitelist_file +
+           ", which is not bundled and was not found in the whitelist directory. Run `singlet whitelists fetch` (add --dir DIR for a "
+           "directory other than <binary dir>/../whitelists) to download it, then run again. No other list is substituted.";
+}
+
+// ── Low-confidence calls against the GEO chemistry ──
+// The campaign passes each sample's GEO chemistry as "protocol" in --metadata-json. When detection is confident (MEDIUM or HIGH) the
+// detector's call stands. When it is not (LOW or NONE) and GEO names a different chemistry, both calls are tested on the same probe reads
+// with the same evidence: the share of barcode reads found in the call's whitelist (at least kProtocolWlRateFloor) and, for a 10x 3'/5'
+// pair that shares one list, the strand check of five_prime_evidence(). The call that passes is taken. When both pass, or neither does,
+// the run is excluded with the reason recorded; nothing is guessed.
+
+struct ProtocolCallTest {
+    std::string tag;           // canonical tag tested ("" when the name is not a known protocol)
+    double wl_rate = -1.0;     // share of probe barcode reads in the whitelist; -1 when not measured
+    uint32_t n = 0;            // probe reads examined
+    std::string strand;        // "3p" or "5p" when the strand check applied, else ""
+    bool pass = false;
+    std::string why;           // reason a call fails ("" when it passes)
+};
+
+struct ProtocolDecision {
+    std::string source;        // "detector", "geo", "excluded"; "forced" for an explicit --protocol; "" when not decided
+    std::string tag;           // final call ("" when excluded)
+    Confidence detector_confidence = Confidence::NONE;
+    std::string detector_tag;
+    std::string geo_raw;       // the GEO chemistry as given ("" when none)
+    std::string geo_tag;       // its canonical tag ("" when unknown or none)
+    ProtocolCallTest detector_test, geo_test;
+    FivePrimeEvidence strand_evidence;
+    bool strand_measured = false;
+    std::string exclusion_reason;
+};
+
+// Test one call on oriented probe reads (R1 = barcode read).
+template<typename SpotT>
+ProtocolCallTest test_protocol_call(const std::string& tag, const std::vector<SpotT>& spots,
+                                    const std::vector<std::string>& whitelist_dirs,
+                                    const FivePrimeEvidence* strand_ev = nullptr, uint32_t max_spots = 10000) {
+    ProtocolCallTest t;
+    const CandidateSpec* spec = find_protocol_spec(tag);
+    if (!spec) { t.why = "unsupported chemistry: '" + tag + "' has no protocol spec in this engine"; return t; }
+    t.tag = spec->tag;
+    if (spec->whitelist_file.empty() || spec->bc_len < 14) {
+        t.why = spec->tag + " has no barcode whitelist to test against";
+        return t;
+    }
+    std::unordered_set<uint64_t> wl;
+    for (const auto& d : whitelist_dirs) {
+        wl = load_whitelist_hashes(d + "/" + spec->whitelist_file, spec->bc_len);
+        if (!wl.empty()) break;
+    }
+    if (wl.empty()) {
+        t.why = "whitelist " + spec->whitelist_file + " is not installed" +
+                (find_fetchable_whitelist(spec->whitelist_file) ? " (singlet whitelists fetch)" : "");
+        return t;
+    }
+    const bool exact = wl.size() >= 100000;   // as detect_protocol: one-mismatch matching only for small lists
+    uint32_t hits = 0;
+    for (const auto& s : spots) {
+        if (t.n >= max_spots) break;
+        ++t.n;
+        if (s.r1_len < spec->bc_offset + spec->bc_len) continue;
+        const uint8_t* bc = s.r1_seq.data() + spec->bc_offset;
+        if (exact ? wl.count(hash_barcode(bc, spec->bc_len)) > 0 : hamming1_match(bc, spec->bc_len, wl)) ++hits;
+    }
+    t.wl_rate = t.n ? static_cast<double>(hits) / t.n : 0.0;
+    if (t.wl_rate < kProtocolWlRateFloor) {
+        char buf[160];
+        std::snprintf(buf, sizeof buf, "%.1f%% of barcode reads in %s (floor %.0f%%)", t.wl_rate * 100.0,
+                      spec->whitelist_file.c_str(), kProtocolWlRateFloor * 100.0);
+        t.why = buf;
+        return t;
+    }
+    // Strand: a 10x 3' and 5' kit that share a list differ only in the cDNA read.
+    const bool is3 = spec->tag.rfind("10x-3p-v", 0) == 0, is5 = spec->tag.rfind("10x-5p-v", 0) == 0;
+    if (strand_ev && (is3 || is5)) {
+        const std::string sib = (is3 ? "10x-5p-" : "10x-3p-") + spec->tag.substr(7);
+        const CandidateSpec* sp = find_protocol_spec(sib);
+        if (sp && sp->whitelist_file == spec->whitelist_file) {
+            const bool five = strand_ev->is_5prime();
+            t.strand = five ? "5p" : "3p";
+            if (five != is5) {
+                t.why = std::string("strand check: the cDNA read looks ") + (five ? "5'" : "3'");
+                return t;
+            }
+        }
+    }
+    t.pass = true;
+    return t;
+}
+
+// The policy on two tested calls (pure; unit-tested on its own). An empty detector_tag means detection made no call.
+inline ProtocolDecision decide_protocol_call(ProtocolDecision d) {
+    auto take = [&](const char* src, const std::string& tag) { d.source = src; d.tag = tag; d.exclusion_reason.clear(); return d; };
+    // A call whose own whitelist rate was measured below kProtocolWlRateFloor is not confident, whatever its score: the floor says
+    // the reads are not that chemistry (as FastqEncoder's protocol_wl_floor_error does for auto-detection).
+    const bool floor_failed = d.detector_test.wl_rate >= 0.0 && d.detector_test.wl_rate < kProtocolWlRateFloor;
+    if (d.geo_raw.empty() || d.geo_tag.empty() || d.geo_tag == d.detector_tag ||
+        (d.detector_confidence >= Confidence::MEDIUM && !floor_failed))
+        return take("detector", d.detector_tag);
+    const bool dp = d.detector_test.pass, gp = d.geo_test.pass;
+    if (dp && !gp) return take("detector", d.detector_tag);
+    if (gp && !dp) return take("geo", d.geo_tag);
+    d.source = "excluded";
+    d.tag.clear();
+    const std::string dn = d.detector_tag.empty() ? std::string("no call") : d.detector_tag;
+    if (dp && gp)
+        d.exclusion_reason = "low-confidence detection " + dn + " and GEO chemistry " + d.geo_tag +
+                             " both pass the whitelist and strand checks";
+    else
+        d.exclusion_reason = "low-confidence detection " + dn + " (" + d.detector_test.why + ") and GEO chemistry " + d.geo_tag +
+                             " (" + d.geo_test.why + ") both fail";
+    return d;
+}
+
+// Whole policy on oriented probe reads: test the detector's call, and the GEO call when GEO names a different chemistry.
+template<typename SpotT>
+ProtocolDecision resolve_protocol_call(const std::string& detector_tag, Confidence detector_conf, const std::string& geo_raw,
+                                       const std::vector<SpotT>& spots, const std::vector<std::string>& whitelist_dirs) {
+    ProtocolDecision d;
+    d.detector_tag = (detector_tag == "UNKNOWN") ? "" : detector_tag;
+    d.detector_confidence = detector_conf;
+    d.geo_raw = geo_raw;
+    if (const CandidateSpec* g = geo_raw.empty() ? nullptr : find_protocol_spec(geo_raw)) d.geo_tag = g->tag;
+    // Strand evidence for a 10x call, measured after that call's BC + UMI.
+    FivePrimeEvidence ev_d, ev_g;
+    auto strand_for = [&](const std::string& tag, FivePrimeEvidence& ev) -> const FivePrimeEvidence* {
+        const CandidateSpec* s = find_protocol_spec(tag);
+        if (!s || (s->tag.rfind("10x-3p-v", 0) != 0 && s->tag.rfind("10x-5p-v", 0) != 0)) return nullptr;
+        ev = five_prime_evidence(spots, static_cast<uint16_t>(s->umi_offset + s->umi_len));
+        d.strand_evidence = ev;
+        d.strand_measured = true;
+        return &ev;
+    };
+    if (d.detector_tag.empty()) d.detector_test.why = "no call";
+    else d.detector_test = test_protocol_call(d.detector_tag, spots, whitelist_dirs, strand_for(d.detector_tag, ev_d));
+    if (!d.geo_tag.empty() && d.geo_tag != d.detector_tag)
+        d.geo_test = test_protocol_call(d.geo_tag, spots, whitelist_dirs, strand_for(d.geo_tag, ev_g));
+    else if (!geo_raw.empty() && d.geo_tag.empty())
+        d.geo_test.why = "unsupported chemistry: '" + geo_raw + "' has no protocol spec in this engine";
+    return decide_protocol_call(d);
+}
+
+// Provenance fields for the metadata JSON: one field per line, each ending with ",\n"; no braces.
+inline std::string protocol_provenance_json(const ProtocolDecision& d) {
+    auto q = [](const std::string& s) {
+        std::string o = "\"";
+        for (char c : s) {
+            if (c == '"' || c == '\\') o += '\\';
+            o += (c == '\n' || c == '\r' || c == '\t') ? ' ' : c;
+        }
+        return o + "\"";
+    };
+    auto rate = [](double r) {
+        if (r < 0) return std::string("null");
+        char b[32];
+        std::snprintf(b, sizeof b, "%.4f", r);
+        return std::string(b);
+    };
+    std::string o;
+    o += "  \"protocol_source\": " + q(d.source) + ",\n";
+    o += "  \"protocol_confidence\": " + std::to_string(static_cast<int>(d.detector_confidence)) + ",\n";
+    o += "  \"protocol_detector\": " + q(d.detector_tag) + ",\n";
+    o += "  \"protocol_geo\": " + q(d.geo_raw) + ",\n";
+    o += "  \"protocol_evidence\": {\"detector_wl_rate\": " + rate(d.detector_test.wl_rate) +
+         ", \"detector_test\": " + q(d.detector_test.pass ? "pass" : d.detector_test.why) +
+         ", \"geo_wl_rate\": " + rate(d.geo_test.wl_rate) +
+         ", \"geo_test\": " + q(d.geo_test.pass ? "pass" : d.geo_test.why) +
+         ", \"wl_floor\": " + rate(kProtocolWlRateFloor) + ", \"spots\": " + std::to_string(std::max(d.detector_test.n, d.geo_test.n));
+    if (d.strand_measured) {
+        const auto& e = d.strand_evidence;
+        o += ", \"strand\": {\"spots\": " + std::to_string(e.n) + ", \"r1_5p_tso\": " + std::to_string(e.r1_tso) +
+             ", \"r1_polyt\": " + std::to_string(e.r1_polyt) + ", \"r2_3p_tso\": " + std::to_string(e.r2_smart) +
+             ", \"r2_polya\": " + std::to_string(e.r2_polya) + ", \"r2_polyt\": " + std::to_string(e.r2_polyt) + "}";
+    }
+    o += "},\n";
+    o += "  \"protocol_exclusion_reason\": " + q(d.exclusion_reason) + ",\n";
+    return o;
 }
 
 // Check if protocol is a 3' protocol (polyA trimming appropriate)
@@ -1625,8 +1945,10 @@ inline void apply_protocol_to_writer(
         }
     }
 
-    // Enable polyA trimming for 3' protocols
-    if (is_3prime_protocol(proto.tag)) {
+    // Enable polyA trimming for 3' protocols. Not for 10x Visium: STARsolo and Space Ranger align the full cDNA read, and the trimmer
+    // cuts genomic A-rich tracts too. On Visium it removed the A-rich body of BC1 RNA (Bc1: 20 k molecules against STARsolo's 2.95 M,
+    // 2.91 M untrimmed); the CellRanger4 clip of the Beta aligner profile removes the real poly(A) tails instead.
+    if (is_3prime_protocol(proto.tag) && proto.tag != "10x-visium") {
         wcfg.polya_trim = true;
         wcfg.polya_min_len = 10;
         wcfg.polya_max_mm = 1;

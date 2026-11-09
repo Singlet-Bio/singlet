@@ -20,6 +20,15 @@
 //   b1 NH 2  primary H intron, secondary R exon     ambiguous (H, R) under both: the alignments span two genomes
 //   b2 NH 2  primary M intron, secondary R exon     2957: ambiguous (M, R)   7053: R (one genome)
 //   b3 NH 1  H exon                                 H under both
+//
+// intron_rule::kChrMPrecedence (8192), same single-genome reference; chrM 1001-2000 lies outside every gene, like the 12S / 16S rRNA that
+// Cell Ranger's 2024-A references leave out. Rules 6541 and 7053, each without and with 8192.
+//   m1 NH 2  primary chrM 1500, secondary NUMT exon            NUMT; with 8192 nothing
+//   m2 NH 2  primary NUMT exon, secondary chrM 1500            NUMT; with 8192 nothing
+//   m3 NH 2  primary MT exon, secondary B intron               MT under all four
+//   m4 NH 2  primary chrM 1500, secondary A exon               A; with 8192 nothing
+//   m5 NH 3  primary chrM 1500, secondaries A exon, D exon     uncounted, multimap record read (A, D), with and without 8192
+//   m6 NH 3  primary NUMT exon, secondaries MT exon, chrM 1600 MT under all four (kMtPrefer)
 
 #include <unistd.h>
 
@@ -238,6 +247,134 @@ void check_joint(const std::string& dir) {
     std::system(("rm -rf " + dir).c_str());
 }
 
+std::vector<std::string> chrm_records() {
+    return {sam_line("m1", 0, "chrM", 1500, "AAAAAAAAAA", 2), sam_line("m1", 256, "chr5", 150, "AAAAAAAAAA", 2),
+            sam_line("m2", 0, "chr5", 200, "CCCCCCCCCC", 2), sam_line("m2", 256, "chrM", 1500, "CCCCCCCCCC", 2),
+            sam_line("m3", 0, "chrM", 150, "GGGGGGGGGG", 2), sam_line("m3", 256, "chr2", 500, "GGGGGGGGGG", 2),
+            sam_line("m4", 0, "chrM", 1500, "TTTTTTTTTT", 2), sam_line("m4", 256, "chr1", 150, "TTTTTTTTTT", 2),
+            sam_line("m5", 0, "chrM", 1500, "ACACACACAC", 3), sam_line("m5", 256, "chr1", 160, "ACACACACAC", 3),
+            sam_line("m5", 256, "chr4", 150, "ACACACACAC", 3),
+            sam_line("m6", 0, "chr5", 250, "AGAGAGAGAG", 3), sam_line("m6", 256, "chrM", 250, "AGAGAGAGAG", 3),
+            sam_line("m6", 256, "chrM", 1600, "AGAGAGAGAG", 3)};
+}
+
+void check_chrm(const std::string& dir) {
+    const auto recs = chrm_records();
+    if (!write_bam(dir, "m", recs) ||
+        std::system(("samtools sort -o " + dir + "/ms.bam " + dir + "/m.bam 2>/dev/null && samtools index " + dir + "/ms.bam").c_str()) != 0) {
+        CHECK(false, "chrM BAM");
+        return;
+    }
+    for (uint32_t base : {6541u, 7053u}) {
+        for (bool on : {false, true}) {
+            const uint32_t rules = base | (on ? singlet::intron_rule::kChrMPrecedence : 0u);
+            const std::string rt = "chrM rules " + std::to_string(rules);
+            const Result ref = run_case(dir, dir + "/ms.bam", rules, 0);
+            auto g = ref.by_gene;
+            const bool ok = g["NUMT"] == (on ? 0 : 2) && g["A"] == (on ? 0 : 1) && g["MT"] == 2 && g["B"] == 0 && g["D"] == 0;
+            CHECK(g["NUMT"] == (on ? 0 : 2), rt + ": NUMT gets m1 and m2 only without kChrMPrecedence");
+            CHECK(g["A"] == (on ? 0 : 1), rt + ": A gets m4 only without kChrMPrecedence");
+            CHECK(g["MT"] == 2, rt + ": MT gets m3 and m6");
+            CHECK(g["B"] == 0 && g["D"] == 0, rt + ": B and D get nothing");
+            // 8192 leaves m5 uncounted; the multimap record keeps a dropped read whose gene set is exactly two genes
+            const std::vector<std::string> em_all = {"ACACACACAC A D"};
+            CHECK(ref.em == em_all, rt + ": multimap record reads");
+            if (!ok || ref.em != em_all) std::cout << "    " << ref.text() << "\n";
+            const std::vector<std::string> rev(recs.rbegin(), recs.rend());
+            if (write_bam(dir, "mr", rev)) CHECK(run_case(dir, dir + "/mr.bam", rules, 0).text() == ref.text(), rt + ": run(reversed) == run(sorted)");
+            for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ms.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+        }
+    }
+}
+
+// intron_rule::kTxCompat (16384), STARsolo Gene's transcript concordance. chr1, all on +: P (one transcript, exon 101-300) under the readthrough
+// R (one transcript, exons 21-80, 101-250, 501-600). Unique reads (MAPQ 255):
+//   t1 241-260 (20M)                overlaps exons of P and R; inside P's exon, past R's exon end      6541: dropped  with 16384: P
+//   t2 151-170 (20M)                inside the exons of both                                            dropped under both
+//   t3 241-250, 501-510 (10M250N10M) R's junction 250 -> 501; P does not contain it                     6541: dropped  with 16384: R
+//   t4 241-250, 491-500 (10M240N10M) a junction no transcript has                                       dropped under both
+std::string tx_line(const std::string& q, int pos, const std::string& cigar, const std::string& umi) {
+    return q + "\t0\tchr1\t" + std::to_string(pos) + "\t255\t" + cigar + "\t*\t0\t0\t" + std::string(20, 'A') + "\t*\tCB:Z:" + kBC + "\tUB:Z:" + umi +
+           "\tNH:i:1\n";
+}
+
+void check_tx(const std::string& dir) {
+    std::system(("mkdir -p " + dir).c_str());
+    {
+        std::ofstream g(dir + "/mini.gtf");
+        auto gl = [&](const char* feat, int s, int e, const char* gid, const char* tid) {
+            g << "chr1\t.\t" << feat << "\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << gid << "\"; gene_name \"" << gid
+              << "\"; transcript_id \"" << tid << "\";\n";
+        };
+        gl("gene", 101, 300, "P", "P1"); gl("exon", 101, 300, "P", "P1");
+        gl("gene", 21, 600, "R", "R1"); gl("exon", 21, 80, "R", "R1"); gl("exon", 101, 250, "R", "R1"); gl("exon", 501, 600, "R", "R1");
+        std::ofstream b(dir + "/barcodes.tsv");
+        b << kBC << "\n";
+        std::ofstream f(dir + "/t.sam");
+        f << kHeader << tx_line("t1", 241, "20M", "AAAAAAAAAA") << tx_line("t2", 151, "20M", "CCCCCCCCCC")
+          << tx_line("t3", 241, "10M250N10M", "GGGGGGGGGG") << tx_line("t4", 241, "10M240N10M", "TTTTTTTTTT");
+    }
+    if (std::system(("samtools sort -o " + dir + "/ts.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/ts.bam").c_str()) != 0) {
+        CHECK(false, "kTxCompat BAM");
+        return;
+    }
+    for (bool on : {false, true}) {
+        const uint32_t rules = 14733u | (on ? singlet::intron_rule::kTxCompat : 0u);
+        const std::string rt = "kTxCompat rules " + std::to_string(rules);
+        const Result ref = run_case(dir, dir + "/ts.bam", rules, 0);
+        auto g = ref.by_gene;
+        CHECK(g["P"] == (on ? 1 : 0), rt + ": P gets t1 only with kTxCompat");
+        CHECK(g["R"] == (on ? 1 : 0), rt + ": R gets t3 only with kTxCompat");
+        if (g["P"] != (on ? 1 : 0) || g["R"] != (on ? 1 : 0)) std::cout << "    " << ref.text() << "\n";
+        for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ts.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+    }
+    std::system(("rm -rf " + dir).c_str());
+}
+
+// intron_rule::kStarGene (32768), STARsolo Gene's gene set over a multimapper's alignments (STAR classifyAlign: only concordant
+// alignments add a gene). chr1 +: A (exon 101-200). chr2 +: Q (exon 1001-1050), a pseudogene-like copy. Multimappers, NH 2:
+//   m1 primary chr1 111 20M (concordant with A), secondary chr2 1041 20M (Q's exon, runs past its end)     31117: ambiguous  with 32768: A
+//   m2 primary chr2 1041 20M (not concordant), secondary chr1 121 20M (concordant with A)                31117: ambiguous  with 32768: A
+//   m3 primary chr1 191 20M (past A's exon end), secondary chr2 1041 20M: neither concordant              31117: ambiguous  with 32768: nothing
+std::string mm_line(const std::string& q, int flag, const char* chr, int pos, const std::string& umi) {
+    return q + "\t" + std::to_string(flag) + "\t" + chr + "\t" + std::to_string(pos) + "\t3\t20M\t*\t0\t0\t" + std::string(20, 'A') +
+           "\t*\tCB:Z:" + kBC + "\tUB:Z:" + umi + "\tNH:i:2\n";
+}
+
+void check_star(const std::string& dir) {
+    std::system(("mkdir -p " + dir).c_str());
+    {
+        std::ofstream g(dir + "/mini.gtf");
+        auto gl = [&](const char* chr, const char* feat, int s, int e, const char* gid, const char* tid) {
+            g << chr << "\t.\t" << feat << "\t" << s << "\t" << e << "\t.\t+\t.\tgene_id \"" << gid << "\"; gene_name \"" << gid
+              << "\"; transcript_id \"" << tid << "\";\n";
+        };
+        gl("chr1", "gene", 101, 200, "A", "A1"); gl("chr1", "exon", 101, 200, "A", "A1");
+        gl("chr2", "gene", 1001, 1050, "Q", "Q1"); gl("chr2", "exon", 1001, 1050, "Q", "Q1");
+        std::ofstream b(dir + "/barcodes.tsv");
+        b << kBC << "\n";
+        std::ofstream f(dir + "/t.sam");
+        f << kHeader << mm_line("m1", 0, "chr1", 111, "AAAAAAAAAA") << mm_line("m1", 256, "chr2", 1041, "AAAAAAAAAA")
+          << mm_line("m2", 0, "chr2", 1041, "CCCCCCCCCC") << mm_line("m2", 256, "chr1", 121, "CCCCCCCCCC")
+          << mm_line("m3", 0, "chr1", 191, "GGGGGGGGGG") << mm_line("m3", 256, "chr2", 1041, "GGGGGGGGGG");
+    }
+    if (std::system(("samtools sort -o " + dir + "/ts.bam " + dir + "/t.sam 2>/dev/null && samtools index " + dir + "/ts.bam").c_str()) != 0) {
+        CHECK(false, "kStarGene BAM");
+        return;
+    }
+    for (bool on : {false, true}) {
+        const uint32_t rules = 31117u | (on ? singlet::intron_rule::kStarGene : 0u);
+        const std::string rt = "kStarGene rules " + std::to_string(rules);
+        const Result ref = run_case(dir, dir + "/ts.bam", rules, 0);
+        auto g = ref.by_gene;
+        CHECK(g["A"] == (on ? 2 : 0), rt + ": A gets m1 and m2 only with kStarGene");
+        CHECK(g["Q"] == 0, rt + ": Q gets nothing");
+        if (g["A"] != (on ? 2 : 0) || g["Q"] != 0) std::cout << "    " << ref.text() << "\n";
+        for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ts.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
+    }
+    std::system(("rm -rf " + dir).c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -303,7 +440,13 @@ int main() {
         CHECK(a_off["A"] == 1, "397: A gets r1 only");
         CHECK(a_on["A"] == 3, "4493: A gets r1, r2 and r5");
     }
+    std::cout << "\n=== chrM precedence ===\n";
+    check_chrm(dir);
     std::system(("rm -rf " + dir).c_str());
+    std::cout << "\n=== transcript compatibility ===\n";
+    check_tx(dir + "_tx");
+    std::cout << "\n=== STARsolo Gene set over a multimapper ===\n";
+    check_star(dir + "_star");
     std::cout << "\n=== joint reference ===\n";
     check_joint(dir + "_joint");
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";

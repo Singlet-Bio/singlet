@@ -74,7 +74,9 @@ typedef Caps<      160,     8,  128,   128,  50,    4096, 20,  32,   64,    4096
 typedef Caps<      650,    50, 1000, 10000,  50, 1 << 20, 20, 100, 4096, 1 << 20> Heavy;
 // gpu/bold-kern2 (on by default; SINGLET_BOLD_WSHRINK=0 turns it off): lane B with the windows' aligns in a per-batch pool (Work::waP) and smaller NWA / NKEEP.
 // A read that needs more than these capacities ends Overflow and goes to the host lane (STAR's limits), as lane B's own overflows do.
-typedef Caps<      160,     8,  128,   128,  32,    4096, 20,  32,   32,    4096, true> LaneBc;
+// Capacities raised from NW 128, NWA 32, NKEEP 32 (SINGLET_ENGINE_GPU_OVSTAT=1 on pbmc1k_v3: of lane B's 177,686 overflows at STEPS_B 8192,
+// 70,154 were keep, 67,260 wa and 39,995 win; nuclei2k_v2 mostly keep). A read over a capacity is mapped by the host pool, so results do not change.
+typedef Caps<      160,     8,  128,   192,  50,    4096, 20,  32,   64,    4096, true> LaneBc;
 
 // ---- dedup
 __global__ void k_hash(const char* seq, const u64* off, u64 n, u64* h1, u64* h2, uint8_t* hasN) {
@@ -1098,8 +1100,31 @@ __global__ void k_local_rr(const uint32_t* g, u64 n, uint32_t r0, uint32_t r1, u
     const uint32_t v = g[i];
     l[i] = (v != 0xFFFFFFFFu && v >= r0 && v < r1) ? v - r0 : 0xFFFFFFFFu;
 }
+static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
+                            Output& out);
+// An exception out of the body (thrust's temporaries throw std::bad_alloc when the device is full; a host allocation can too) aborted STAR's
+// process with "terminate called after throwing an instance of 'std::bad_alloc'" and the sample failed (pilot item 86, run c10: device OOM on
+// attempts 1 and 2, the throw on attempt 3). It is now a failed attempt like fail()'s: the body's staging buffers, shared-index client and
+// index thread are released by their destructors during the unwinding, then the device is reset, and the caller retries or lets STAR map
+// every read on the CPU (same outputs).
 bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
                  Output& out) {
+    std::string why;
+    try {
+        return mapDistinctBody(P, H, saBytes, saiBytes, in, device, hostThreads, out);
+    } catch (const std::bad_alloc& e) {
+        why = std::string("an allocation failed (") + e.what() + ")";
+    } catch (const std::exception& e) {
+        why = std::string("an exception (") + e.what() + ")";
+    }
+    out.log += "engine_gpu: " + why + "; the device is reset\n";
+    e9::soloKeepRelease(); out.e10.soloKept = false;
+    g_d2h = nullptr;
+    cudaDeviceReset(); g_bud.reset(0, 0);
+    return false;
+}
+static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_t saiBytes, const Input& in, int device, int hostThreads,
+                            Output& out) {
     ::singlet::gpu_ledger::Phase ledger_phase("prefill");
     singlet::ThreadNameScope tnMap("gpu-map");   // mapDistinct's host threads inherit it (per-thread CPU by role)
     singlet::NvtxChain nvch; nvch.next("mapDistinct: setup");   // NVTX ranges of the phases (SINGLET_NVTX=1; the d164b34d ranges, redeveloped)
@@ -1131,7 +1156,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const double tF0 = now();
     double tS = tF0;   // E12: start of the current step
     auto step = [&](const char* k) { const double t = now(); stepAdd(k, t - tS); tS = t; };
-    cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: a waiting host thread sleeps, not spins
+    const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
+    if (initRc != cudaSuccess) cudaGetLastError();
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
     double t0 = now();
     // device memory in use at the phases of the call (logged: what a sample needs when several share a GPU)
@@ -1303,6 +1329,18 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         e10 = false; cudaGetLastError();
         dfree(dEnt); dfree(dQm); dfree(dAux); dEnt = nullptr; dQm = nullptr; dAux = nullptr;
     };
+    // with in.oomFatal an E10 turn-off for lack of device memory fails the call: fail at once, before the lanes, so the retry does not wait
+    // for work that is thrown away (item 88: about 30 s of device time per failed attempt)
+    auto e10OomNow = [&]() { return in.oomFatal && !e10Oom.empty(); };
+    auto e10OomWhy = [&]() { return "E10 ran out of device memory (" + e10Oom + "); the caller runs mapDistinct again"; };
+    // a kernel launch's own error (out of resources, or out of memory when the driver cannot grow the local memory the kernel needs) is
+    // reported only by cudaGetLastError: name the kernel here, before a later check reads the error as its own (item 88: "entries: out of memory")
+    auto launched = [&](const char* what) -> bool {
+        const cudaError_t le = cudaGetLastError();
+        if (le == cudaSuccess) return true;
+        err = std::string(what) + " launch: " + cudaGetErrorString(le);
+        return false;
+    };
     if (in.e10.on && !e10) out.e10.log += "engine_gpu: E10 not used (no shared region or no host decode)\n";
     if (e10 && !RC) {
         const double ta = now();
@@ -1312,6 +1350,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                         : cudaMemcpy(dAux, in.e10.aux.data(), in.e10.aux.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess) e10Off("aux upload");
         out.e10.msUpAux = (now() - ta) * 1e3;
         step("e10.aux.h2d");
+        if (e10OomNow()) return fail(e10OomWhy());
     }
     auto e10Entries = [&](const u64* cs, const u64* cl) {
         e10Done = true;
@@ -1376,6 +1415,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             const unsigned g4 = (unsigned) ((n + 127) / 128);
             if (nq == 30) k_cr4<30><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
             else k_cr4<0><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
+            if (!launched("CellRanger4 clip kernel")) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
             const double tk4 = now() - t4;
             out.cr4info.resize(n);
@@ -1417,9 +1457,11 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         g_bud.at = "clip";
         if (dmal(&dCs, n * 8) || dmal(&dCl, n * 8) || dmal(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
         k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
-        cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
+        if (!launched("clip kernel")) return fail(err);
+        if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()));   // E12: not the device (the index copy stream runs on)
         step("clip.kernel");
         if (e10) e10Entries(dCs, dCl);   // E10: the original reads and their clip
+        if (e10OomNow()) return fail(e10OomWhy());
         cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
         step("e10.entries");
         if (lean || split) { entToRegion(); step("e10.entries.d2h"); }
@@ -1430,7 +1472,8 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (cudaMemcpy(&tot, dOffC + n, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
         if (dmal(&dSeqC, tot + 8)) return fail("out of device memory (clipped reads)");
         k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC);
-        cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
+        if (!launched("clip gather kernel")) return fail(err);
+        if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip gather kernel: ") + cudaGetErrorString(cudaGetLastError()));   // E12: not the device
         step("clip.gather");
         hcs.resize(n); hoffC.resize(n + 1);
         if (g_d2h ? !(g_d2h->copy(hcs.data(), dCs, n * 8) && g_d2h->copy(hoffC.data(), dOffC, (n + 1) * 8))
@@ -1463,6 +1506,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!split) { clipHostFill(); step("clip.host"); }
     }
     if (e10 && !e10Done && !RC) e10Entries(nullptr, nullptr);   // E10: no clipping
+    if (e10OomNow()) return fail(e10OomWhy());
     if ((lean || split) && !RC) entToRegion();
     memMark("reads+clip");
     // a read's (clipped) sequence on the host
@@ -1629,6 +1673,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
         if (!entOff || (in.e10.wantMask && !qmOff)) e10Off("the shared region is full");
         else if (!al(cAux, RCN * strideAux * 8) || !al(cEnt, RCN * sizeof(e6::ReadEntry)) || (in.e10.wantMask && !al(cQm, RCN * qmBytes())))
             e10Off("out of device memory (read chunk)");
+        if (e10OomNow()) return fail(e10OomWhy());
     }
     bool r11On = e10 && in.e10.wl != nullptr && in.e10.nWL > 0;
     std::vector<uint32_t> r11t;
@@ -1660,18 +1705,20 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
             const unsigned g4 = (unsigned) ((m + 127) / 128);
             if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(cSeq, cOff, m, c4, cP5, cP3, cInfo);
             else k_cr4<0><<<g4, 128>>>(cSeq, cOff, m, c4, cP5, cP3, cInfo);
+            if (!launched("CellRanger4 clip kernel")) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
             if (!d2h(out.cr4info.data() + r0, cInfo, m)) return fail("CellRanger4 clip: info copy");
         }
         if (in.clip.on) {
             ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t) in.clip.ad3.size(), in.clip.adMMp, cAd, cP5, cP3};
             k_clip<<<G, 256>>>(cSeq, cOff, m, c, cCs, cCl);
+            if (!launched("clip kernel")) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
         }
         if (e10) {   // E10: the original reads and their clip; i0 = r0 keeps the hook's sample of the whole-sample run
             float ms = 0; std::string w;
             if (!singlet_hostloop_gpu::entries(cSeq, (const uint64_t*) cOff, (const uint64_t*) cCs, (const uint64_t*) cCl, m, cAux, in.e10.nw, in.e10.hook,
-                                               cEnt, cQm, ms, w, r0)) e10Off("entries: " + w);
+                                               cEnt, cQm, ms, w, r0)) { e10Off("entries: " + w); if (e10OomNow()) return fail(e10OomWhy()); }
             else {
                 msEnt += ms;
                 singlet_engine_gpu::E2ERegion& RG = *in.e2e;
@@ -1912,12 +1959,14 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
     const u64 nbM = envU("SINGLET_ENGINE_GPU_NBM", NEW ? 393216 : 262144, 4096);
     const bool nbBset = std::getenv("SINGLET_ENGINE_GPU_NBB") != nullptr;
     const u64 nbB0 = envU("SINGLET_ENGINE_GPU_NBB", NEW ? 131072 : 65536, 1024);
-    // heavy-read split (gpu/bold-split, redeveloped): SINGLET_ENGINE_GPU_STEPS_B sets lane B's stitching step budget (default 2048; a read over it
+    // heavy-read split (gpu/bold-split, redeveloped): SINGLET_ENGINE_GPU_STEPS_B sets lane B's stitching step budget (default 8192; a read over it
     // ends Overflow and the host pool maps it with STAR's limits, so results do not change). "auto": a controller moves the budget between
     // batches (start 2048, bounds 64..8192): idle pool threads with an empty queue halve it, a queue the pool cannot drain before lane B ends doubles it
     const char* sbE = std::getenv("SINGLET_ENGINE_GPU_STEPS_B");
     const bool autoReq = sbE && std::string(sbE) == "auto";
-    const u64 stepsB = autoReq ? 2048 : envU("SINGLET_ENGINE_GPU_STEPS_B", 2048, 1);
+    // default 8192 (was 2048): on pbmc1k_v3 the host pool then maps 177,686 reads instead of 198,643 at 45 instead of 65 core-s per run,
+    // and lane B's kernels take about the same time (most of the rest overflow a capacity, not the budget; 65536 changes nothing more)
+    const u64 stepsB = autoReq ? 2048 : envU("SINGLET_ENGINE_GPU_STEPS_B", 8192, 1);
     struct AutoB { std::atomic<u64> budget{2048}; double t = 0, batch = 0; std::string log; } autoB;
     // sequences per chunk: the lanes' device buffers scale with it (SINGLET_ENGINE_GPU_CHUNK, default 16M; E17: smaller when the budget needs it)
     const char* ceE = std::getenv("SINGLET_ENGINE_GPU_CHUNK");
@@ -2828,7 +2877,7 @@ bool mapDistinct(const Params& P, const GenomeView& H, uint64_t saBytes, uint64_
                       (unsigned long long)nChunks, (unsigned long long)nbA, (unsigned long long)nbMlog, (unsigned long long)nbBlog, b2gb(g_bud.peak), g_bud.peakAt.c_str());
         out.log += bl;
         out.log += "engine_gpu: E17 lanes: " + planLog + "\n";
-        if (autoReq || stepsB != 2048)
+        if (autoReq || stepsB != 8192)
             out.log += "engine_gpu: STEPS_B " + (autoReq ? "auto, changes: " + (autoB.log.empty() ? std::string("none") : autoB.log) : std::to_string(stepsB)) + "\n";
     }
     char line[512];

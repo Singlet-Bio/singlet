@@ -594,7 +594,7 @@ static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const Non
     const double t0 = now();
     try {
         if (reads.size() >= (1ull << 31)) throw std::string("too many reads for this version");
-        cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);   // before the context exists: waiting threads sleep, not spin
+        cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: waiting threads sleep, not spin
         NH_CK(cudaSetDevice(device));
         Arena A;
         // ---- the resident index (viral, bacterial, fungal) and the host Bloom filter
@@ -682,7 +682,7 @@ int nonhostServe(const std::string& sock, int device, int loadThreads, const Non
     Resident R;
     OnDevice D;
     try {
-        cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);
+        cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());
         NH_CK(cudaSetDevice(device));
         NH_CK(cudaFree(nullptr));   // the context, once
         size_t fr = 0, tot = 0;

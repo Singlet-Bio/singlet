@@ -10,7 +10,7 @@ class InOutStreams {
     ofstream logStdOutFile, outSAMfile;
     BGZF *outBAMfileUnsorted, *outBAMfileCoord, *outQuantBAMfile;
 
-    ofstream outChimSAM, outChimJunction, logMain, logProgress, logFinal, outUnmappedReadsStream[MAX_N_MATES];
+    ofstream outChimSAM, outChimJunction, logMain, logProgress, logFinal, outUnmappedReadsStream[MAX_N_MATES], outSoftclipStream[MAX_N_MATES];
     ifstream readIn[MAX_N_MATES];
 
     //compilation-optional streams
