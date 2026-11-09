@@ -8,6 +8,14 @@ python/singlet/data/whitelists/visium-v1.txt, visium-v1_coordinates.tsv, 737K-ar
 International (CC BY 4.0). Source datasets, URLs, checksums and the rebuilding method:
 python/singlet/data/whitelists/ATTRIBUTION.md. 10x Genomics does not endorse this software.
 
+Third-party software
+--------------------
+HLA typing (include/singlet/pipeline/hla_typing.h) runs T1K (Song, Li et al., Genome Research 2023,
+github.com/mourisl/T1K), MIT License, Copyright (c) 2021 Li Song, Bo Li, Heng Li. T1K's extractor and genotyper (allele scoring, the EM
+over alleles, the filtering of ambiguous reads) decide every genotype; Singlet adds a read prefilter in front of them
+and, with the frequency prior, a restricted copy of T1K's IPD-IMGT/HLA index. IPD-IMGT/HLA data: Barker et al.,
+Nucleic Acids Research 2023, CC BY-ND 4.0.
+
 data/fusion/arriba/LICENSE: the chimeric table applies Arriba's blacklist (blacklist_hg38_GRCh38_v2.5.1.tsv.gz, fetched by
 scripts/fetch_arriba_blacklist.sh, not stored in git). Arriba and its database files are MIT-licensed, copyright Deutsches
 Krebsforschungszentrum and Sebastian Uhrig. Uhrig S et al., Genome Research 31:448-460 (2021), doi:10.1101/gr.257246.119.

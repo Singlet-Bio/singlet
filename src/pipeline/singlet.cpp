@@ -61,6 +61,7 @@
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
 #include "singlet/pileup/chimeric_table.h"
+#include "singlet/pipeline/hla_typing.h"   // D-101: HLA typing with T1K from the input reads
 #include "singlet/pileup/species_detect.h"
 #include "singlet/pileup/nonhost/min_sketch.h"
 #include "singlet/pileup/nonhost/host_kmer_filter.h"
@@ -1230,6 +1231,48 @@ static int cmd_encode(int argc, char* argv[]) {
 // ════════════════════════════════════════════════════════════
 // singlet decode — .1fq → FASTQ pair (standalone, no alignment)
 // ════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+// singlet hla / hla-prefilter — D-101 HLA typing on its own (the same code as the --pipeline step)
+// ════════════════════════════════════════════════════════════
+// singlet hla --t1k DIR --out DIR [--donors donor_assignments.tsv] [--threads N] [--cdna-r1] RUN.1fq [RUN2.1fq ...]
+//   types HLA from .1fq input exactly as the pipeline does (private/hla/ under --out)
+// singlet hla-prefilter --t1k DIR -1 R1.fq[.gz] [-2 R2.fq[.gz]] -o PREFIX
+//   the prefilter alone on FASTQ (keeps a pair when either mate shares a 19-mer with the HLA index): PREFIX_1.fq [PREFIX_2.fq]
+static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
+    std::string t1k, out, donors, r1, r2, prefix;
+    std::vector<std::string> inputs;
+    int threads = 8; bool cdna_r1 = false;
+    for (int i = 0; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--t1k" && i + 1 < argc) t1k = argv[++i];
+        else if (a == "--out" && i + 1 < argc) out = argv[++i];
+        else if (a == "--donors" && i + 1 < argc) donors = argv[++i];
+        else if (a == "--threads" && i + 1 < argc) threads = std::atoi(argv[++i]);
+        else if (a == "--cdna-r1") cdna_r1 = true;
+        else if (a == "-1" && i + 1 < argc) r1 = argv[++i];
+        else if (a == "-2" && i + 1 < argc) r2 = argv[++i];
+        else if (a == "-o" && i + 1 < argc) prefix = argv[++i];
+        else if (!a.empty() && a[0] != '-') inputs.push_back(a);
+        else { std::cerr << "singlet hla: unknown argument " << a << "\n"; return 2; }
+    }
+    if (t1k.empty()) { std::cerr << "singlet hla: --t1k DIR is required\n"; return 2; }
+    if (prefilter_only) {
+        if (r1.empty() || prefix.empty()) { std::cerr << "usage: singlet hla-prefilter --t1k DIR -1 R1 [-2 R2] -o PREFIX\n"; return 2; }
+        singlet::hla::KmerSet ks; size_t na = 0;
+        if (!singlet::hla::load_fasta_kmers(t1k + "/hlaidx/hlaidx_rna_seq.fa", ks, na)) { std::cerr << "cannot read the HLA index\n"; return 1; }
+        const auto nk = singlet::hla::prefilter_fastq(ks, r1, r2, prefix);
+        std::cout << "{\"alleles\": " << na << ", \"kmers\": " << ks.size() << ", \"reads_scanned\": " << nk.first << ", \"reads_kept\": " << nk.second << "}" << std::endl;
+        return nk.first > 0 ? 0 : 1;
+    }
+    if (out.empty() || inputs.empty()) { std::cerr << "usage: singlet hla --t1k DIR --out DIR [--donors TSV] [--threads N] RUN.1fq ...\n"; return 2; }
+    singlet::hla::Config hc;
+    hc.t1k_dir = t1k; hc.onefq = inputs; hc.cdna_is_r1 = cdna_r1; hc.out_prefix = out; hc.donor_assignments = donors; hc.threads = threads;
+    mkdir_p(out);
+    const auto hr = singlet::hla::run(hc);
+    std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed << " donors typed\n";
+    return hr.ran ? 0 : 1;
+}
 
 static int cmd_decode(int argc, char* argv[]) {
     std::string input_path;
@@ -2979,6 +3022,8 @@ static void usage(const char* prog) {
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
+        << "  --hla-t1k DIR          T1K install with its IPD-IMGT/HLA index (bin/, hlaidx/, manifest.json); --pipeline on a human\n"
+        << "                         genome uses <ref-base>/hla/t1k (--no-hla: none). Output: private/hla/ (owner-only)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
         << "Output:\n"
         << "  --out-prefix DIR       Output directory [./singlet_out]\n"
@@ -3318,6 +3363,10 @@ static int singlet_main(int argc, char* argv[]) {
                 return cmd_atac(argc - 2, argv + 2);
             if (sub == "decode")
                 return cmd_decode(argc - 2, argv + 2);
+            if (sub == "hla")
+                return cmd_hla(argc - 2, argv + 2, false);
+            if (sub == "hla-prefilter")
+                return cmd_hla(argc - 2, argv + 2, true);
             if (sub == "archive")
                 return cmd_archive(argc - 2, argv + 2);
             if (sub == "genome")
@@ -3437,6 +3486,8 @@ static int singlet_main(int argc, char* argv[]) {
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
     bool no_default_editing = false;     // --no-editing: do not use the default RNA editing panel in --pipeline mode (D-101)
     std::string edit_panel_source = "none";
+    std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
+    bool no_hla = false;                 // --no-hla
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
@@ -3465,6 +3516,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--no-snps") no_default_snps = true;
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
+        else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
+        else if (arg == "--no-hla") no_hla = true;
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -9689,6 +9742,38 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+
+    // ── D-101: HLA typing per sample and per donor (T1K on the input reads; private/hla/) ──
+    // Reads only the input .1fq, so the CPU and GPU engines give the same output. Human genomes only (not the barnyard).
+    {
+        const bool human = (genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos) &&
+                           genome_dir.find("GRCm39") == std::string::npos && genome_dir.find("mm39") == std::string::npos;
+        std::string t1k = hla_t1k_dir;
+        if (t1k.empty() && pipeline_mode && human && !no_hla) {
+            std::string rb = ref_base;
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            if (!rb.empty()) t1k = rb + "/hla/t1k";
+        }
+        if (!no_hla && !t1k.empty() && !is_atac_mode) {
+            if (!onefq_mode) {
+                std::cerr << "[hla] skipped: HLA typing reads a .1fq input\n";
+            } else if (!singlet::hla::file_exists(t1k + "/bin/run-t1k")) {
+                std::cerr << "[hla] skipped: no T1K install at " << t1k << "\n";
+            } else {
+                StopWatch hla_sw;
+                singlet::hla::Config hc;
+                hc.t1k_dir = t1k;
+                hc.onefq = onefq_files.empty() ? std::vector<std::string>{onefq_file} : onefq_files;
+                hc.cdna_is_r1 = reads_inverted;
+                hc.out_prefix = out_prefix;
+                hc.donor_assignments = out_prefix + "/donor_assignments.tsv";
+                hc.threads = export_cfg.threads;
+                const auto hr = singlet::hla::run(hc);
+                std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed
+                          << " donors typed; " << hla_sw.elapsed_s() << " s\n";
+            }
+        }
+    }
 
     // ── chimeric / fusion junction table (opt-in): second STAR pass on the reads the main pass left unmapped ──
     if (chimeric) {
