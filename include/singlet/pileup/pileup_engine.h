@@ -3218,9 +3218,9 @@ public:
     };
 #endif
     bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
-    allsite::Result allsite_;   // D-101 (allsite.h); allsite_ok_ once computed
-    bool allsite_ok_ = false;
-    bool allsite_built_ = false;   // finalize_allsite ran
+    mutable allsite::Result allsite_;   // D-101 (allsite.h); allsite_ok_ once computed
+    mutable bool allsite_ok_ = false;
+    mutable bool allsite_built_ = false;   // finalize_allsite ran
     std::vector<uint32_t> gpu_cell_reads_, gpu_cell_mols_;   // W11 "on": per-cell molecule-store reads and molecules from the GPU
     // W11 "on": the per-cell saturation inputs the molecule store would give (empty when the CPU store was used)
     bool gpu_saturation(std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>>& cells) const {
@@ -3243,7 +3243,7 @@ public:
     bool allsite_ready() const { return allsite_ok_; }
     // Builds the all-site matrices for the barcodes marked in keep (null: every barcode); called once, after cell calling. A false result
     // (the entries do not fit int32 column pointers) turns the member off.
-    bool finalize_allsite(const std::vector<uint8_t>* keep) {
+    bool finalize_allsite(const std::vector<uint8_t>* keep) const {   // export holds the engine by const reference; the build is a one-time lazy step
         if (!allsite_ok_ || allsite_built_) return allsite_ok_;
         allsite_built_ = true;
         const auto t0 = std::chrono::steady_clock::now();
