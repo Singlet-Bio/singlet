@@ -461,3 +461,15 @@ reported whichever way it falls.
 **Rule.** That of Addendum 6, unchanged, applied to the registered setting (floor on). The difference Singlet minus TRUST4 in
 correct pairing must be at least the negative half-width of its paired bootstrap 95% interval, the wrong-lineage rate at most Cell
 Ranger's plus 0.005, and contig F1 above TRUST4's.
+
+**Result (2026-11-09, Slurm 805795, commit c5ef9032): pass.** The barcode whitelist was `737K-august-2016` (all of Cell Ranger's
+cell barcodes are on it). Singlet took 3 minutes and TRUST4 25 minutes on 1,489 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| IG cell floor on (registered) | 0.9765 (0.9684, 0.9839) | 0.9805 | -0.0040 (-0.0114, +0.0040) | 0.0046, 13 of 2,802 (0.0007) | 0.9891 (0.9058) |
+| Floor off | 0.9765 (0.9684, 0.9839) | 0.9805 | -0.0040 (-0.0114, +0.0040) | 0.0096, 27 of 2,817 (0.0007) | 0.9891 (0.9058) |
+
+All three parts of the rule hold for the registered setting. The pairing difference is above the negative half-width (-0.0077),
+wrong-lineage is below its limit of 0.0057, and contig F1 is above TRUST4's. With the floor off, wrong-lineage would have exceeded
+that limit. The library is not run again.
