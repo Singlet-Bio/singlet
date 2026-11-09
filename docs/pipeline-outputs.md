@@ -25,6 +25,7 @@ goes to **`<out>/private/`**:
 | `private/hla/donors/donorK_genotype.tsv` | the same per assigned donor (cells with label `donorK` and prob_max >= 0.9) |
 | `private/hla/hla_candidate_reads.fq.gz` | the reads that reached T1K (k-mer prefilter on the IPD-IMGT/HLA sequences), named `idx_CB`, kept so HLA can be typed again with a newer index |
 | `private/hla/hla_summary.json` | reads scanned and kept, alleles in the index and typed against (`typed_alleles`), donors typed, timings, T1K and IPD-IMGT/HLA versions |
+| `private/hla/pending/` | only with `--hla-defer`, until the CPU step has run: the candidate reads and `manifest.json` for `singlet hla --pending` (`docs/gpu-engine/hla_pending_batch.py` runs a batch). Deleted once `hla_summary.json` has landed; holds reads, owner-only, never public |
 
 ### HLA frequency prior (K=2)
 
@@ -135,7 +136,7 @@ raise a warning.
 | SNP panel in `--pipeline` | none unless `--snps` | `<ref-base>/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz` (human), `mus_musculus.vcf.gz` (mouse), none for mixed or other species; `--no-snps` | donor demux and genotype doublets need it; `provenance.snp_panel` |
 | `--no-adapter-clip` | n/a | new flag: skip STAR `--clip3pAdapterSeq` (the protocol TSO on 5' kits) | see the 5' timing note in the PR |
 | RNA editing panel in `--pipeline` | none | `<ref-base>/pileup_indices/rna_editing_GRCh38.tsv.gz` (REDIportal v3, 15.6 M sites) for human, `rna_editing_GRCm39.tsv.gz` (REDIportal v3 mm10 lifted to GRCm39, 107 k sites) for mouse, none for mixed species; `--editing-sites FILE`, `--no-editing` | D-101; sites are appended to the SNP panel rows and split off before every SNP consumer, so SNP outputs are byte-identical; panel built by `scripts/editing/build_rediportal_panel.py` |
-| HLA typing in `--pipeline` | none | human non-barnyard runs type HLA with T1K v1.0.10 (MIT) and the index at `<ref-base>/hla/t1k` (IPD-IMGT/HLA, `manifest.json`); `--hla-t1k DIR`, `--no-hla`; also `singlet hla` and `singlet hla-prefilter` on a finished run | D-101; reads only the input .1fq, so CPU and GPU runs give the same calls; all outputs owner-only |
+| HLA typing in `--pipeline` | none | the CPU engine types by default; the GPU engine by default writes only the candidate reads (`private/hla/pending/`, typed later on a CPU node with `singlet hla --pending`; `--no-hla`: none). When typing, human non-barnyard runs type HLA with T1K v1.0.10 (MIT) and the index at `<ref-base>/hla/t1k` (IPD-IMGT/HLA, `manifest.json`); `--hla-t1k DIR`; also `singlet hla` and `singlet hla-prefilter` on a finished run | D-101; reads only the input .1fq, so CPU and GPU runs give the same calls; all outputs owner-only |
 
 ## What the v2 packer needs (python/singlet/v2 is unchanged)
 
