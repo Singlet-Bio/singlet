@@ -2508,7 +2508,7 @@ public:
         auto runChunk = [&](int t) {
             HostLocal& L = hls[t];
             const size_t lo = nR * t / nT, hi = nR * (t + 1) / nT;
-            char umi[32];
+            char umiBuf[32];   // one read's UMI text; read only through umiText() below
             for (size_t r = lo; r < hi; ++r) {
             // the reads are in barcode order and their signatures and alignments are not: fetch ahead, a signature 24 reads ahead, its
             // first alignment and that alignment's results 12 ahead, its CIGAR 4 ahead (the hand-off pass does the same)
@@ -2537,14 +2537,16 @@ public:
             if (st & 4) L.st.wrong_strand++;
             if (st & 16) L.st.multigene_reads++;
             if (st & 8) L.st.cross_gene_intron_reads++;
-            bool umiMade = false;   // the UMI's text, made for the reads that record one (a poly(A) site or a V(D)J hit)
-            auto makeUmi = [&]() {
-                if (umiMade) return;
-                umiMade = true;
-                for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
-                umi[std::min(ulen, 21)] = 0;
+            bool umiMade = false;   // the UMI's text, made for the reads that record one (a poly(A) site, a V(D)J hit or a TE read)
+            // the only way to the text: it is decoded on first use, so no site can hash or copy the buffer before it holds this read's UMI
+            auto umiText = [&]() -> const char* {
+                if (!umiMade) {
+                    umiMade = true;
+                    for (int i = 0; i < ulen && i < 21; ++i) umiBuf[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
+                    umiBuf[std::min(ulen, 21)] = 0;
+                }
+                return ulen > 0 ? umiBuf : nullptr;
             };
-            const char* umi_str = ulen > 0 ? umi : nullptr;
             const int umi_len = ulen > 0 ? std::min(ulen, 21) : 0;
             const uint32_t* ops = OPS.at(a.ops_off);
             const uint8_t* rsq = SEQ.at(sg.seq_off);   // the record's sequence (in the part its signature is in)
@@ -2599,7 +2601,7 @@ public:
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) { makeUmi(); L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); }
+                if (ok) L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umiText(), umi_len)});
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2613,9 +2615,9 @@ public:
                     L.ov.clear();
                     vdj_model_.query(a.tid, s0, e0, L.ov);
                     if (!L.ov.empty()) {   // replayed in read order after the chunks (vdj_umi_ and vdj_acc_ are not thread-safe)
-                        makeUmi();
+                        const char* ut = umiText();
                         HostLocal::VdjEv ev; ev.bc = static_cast<uint32_t>(rr.bc); ev.vg = L.ov[0]; ev.gene = nh == 1 ? gene : UINT32_MAX; ev.ulen = umi_len;
-                        std::memcpy(ev.umi, umi, sizeof(ev.umi));
+                        ev.umi[0] = 0; if (ut) std::memcpy(ev.umi, ut, sizeof(ev.umi));
                         L.vdj.push_back(ev);
                     }
                 }
@@ -2631,8 +2633,7 @@ public:
                 }
                 TeRecord tr;
                 if (!L.blocks.empty() && te_record(a.tid, L.blocks, nh, static_cast<uint32_t>(rr.bc), nullptr, 0, L.te_scratch, L.te_exon_scratch, tr)) {
-                    makeUmi();   // the UMI's text is made on demand, as for poly(A) and V(D)J: only for a read a TE takes
-                    tr.umi = polya_umi_hash(umi_str, umi_len);
+                    tr.umi = polya_umi_hash(umiText(), umi_len);   // the text is made on demand: only for a read a TE takes
                     L.te.push_back(tr);
                 }
             }

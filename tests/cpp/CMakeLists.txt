@@ -111,6 +111,14 @@ if(TARGET singlet_engine_gpu)
     target_link_libraries(test_gpu_pileup_labels PRIVATE singlet_engine_gpu)
     target_compile_definitions(test_gpu_pileup_labels PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
+# TE molecules from the GPU route's host pass against the CPU pileup (te_counts, te_locus_counts, the locus table, the totals). Same
+# conditions as the test above: SKIP (77) without a GPU build, a CUDA device or samtools.
+add_pileup_test(test_gpu_pileup_te)
+set_tests_properties(test_gpu_pileup_te PROPERTIES SKIP_RETURN_CODE 77)
+if(TARGET singlet_engine_gpu)
+    target_link_libraries(test_gpu_pileup_te PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_pileup_te PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
 add_pileup_test(test_strand_detect)
 add_pileup_test(test_stream_strand_restart)
 # Gate 800361: the restart on the sorted path must start from main()'s environment (no GPU hand-off), remove the hand-off files and
