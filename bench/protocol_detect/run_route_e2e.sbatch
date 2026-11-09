@@ -8,14 +8,14 @@
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # Routing exit test: one library per non-10x assay goes through the engine twice from the same reads, in auto mode and with the
 # protocol forced, and the two runs are compared. Needs BIN, SRC and an array over the lines of E2E_TSV (id, r1_url, r2_url, forced tag,
-# organism, reads). Each run: `singlet download --r1 --r2` (auto, or --protocol TAG), then the CPU pipeline (--output-format mtx).
+# organism, reads, optional extra arguments of the forced run such as "--swap-reads on" for a barcode read stored second). Each run: `singlet download --r1 --r2` (auto, or --protocol TAG), then the CPU pipeline (--output-format mtx).
 # Compared: the decoded read pairs, the .1fq header minus its provenance fields (file name, protocol source and confidence: a forced call is
 # recorded as confidence 4), and the count matrix files. Output: $W/jobs/detect/e2e-<job>/<id>/.
 set -uo pipefail
 : "${BIN:?}" "${E2E_TSV:?}"
 W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_project/cellarium/reference; T=${SLURM_CPUS_PER_TASK:-16}
 export SINGLET_WHITELIST_DIR=${WLDIR:-$W/pipeline-benchmark/whitelists} SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH
-IFS=$'\t' read -r id r1 r2 tag org nreads < <(sed -n "$((SLURM_ARRAY_TASK_ID + 2))p" $E2E_TSV)
+IFS=$'\t' read -r id r1 r2 tag org nreads extra_forced < <(sed -n "$((SLURM_ARRAY_TASK_ID + 2))p" $E2E_TSV)
 O=$W/jobs/detect/e2e-${SLURM_ARRAY_JOB_ID}/$id; mkdir -p $O; SCR=/tmp/$USER-e2e-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 case $org in *Mus*) G=$REF/GRCm39-2024-A;; *) G=$REF/GRCh38-2024-A;; esac
 echo "$id $tag $org reads=$nreads genome=$G bin=$BIN" | tee $O/summary.txt
@@ -31,7 +31,7 @@ fetch "$r1" $SCR/f1.fastq & fetch "$r2" $SCR/f2.fastq & wait
 cp $SCR/f1.fastq.err $O/fetch1.err 2>/dev/null; cp $SCR/f2.fastq.err $O/fetch2.err 2>/dev/null
 echo "pairs: $(( $(wc -l < $SCR/f1.fastq) / 4 ))" | tee -a $O/summary.txt
 for mode in auto forced; do
-  extra=; [ $mode = forced ] && extra="--protocol $tag"
+  extra=; [ $mode = forced ] && extra="--protocol $tag $extra_forced"
   $BIN download --r1 $SCR/f1.fastq --r2 $SCR/f2.fastq --staging-dir $SCR/st-$mode -o $SCR/$mode.1fq $extra > $O/$mode.download.log 2>&1; echo "$mode download exit $?" | tee -a $O/summary.txt
   grep -a -E "\[singlet-gate\]|Protocol:" $O/$mode.download.log | cut -c1-260 | tee -a $O/summary.txt
   $BIN decode $SCR/$mode.1fq --header 2>&1 | grep -a -v -E "protocol_source|protocol_confidence|protocol_detector|protocol_geo|protocol_evidence|source_label|created|timestamp|commit|input|path|elapsed|File:" | sed -E 's/confidence=[0-9]+/confidence=N/' > $O/$mode.header.txt

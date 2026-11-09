@@ -16,6 +16,19 @@ All notable changes to the singlet project.
 - **The content probe sees the same reads on every decode route.** The ingest route sampled one read per stride, while the
   decode routes offered every read to the content-hash sampler; both now offer every read, so the probe's read set (and
   everything derived from it) matches between routes.
+- **`singlet download` routes non-10x droplet assays to their own spec.** In auto mode the gate used to reject every non-10x call at
+  MEDIUM or higher confidence. It now lets the call run when the probe reads carry evidence beyond read length: barcode reuse, a linker of
+  10 nt or more, or whitelist excess over chance. A call without evidence is rejected with the missing evidence named. `--reject-non10x`
+  restores the earlier rule. On five libraries (BD Rhapsody, Drop-seq, a Seq-Well-geometry Drop-seq library, Quartz-seq2, microwell-seq) and
+  an inDrop library stored with the barcode read second, auto mode and `--protocol` give identical count matrices.
+  - A call below MEDIUM, or a 10x call under the 10% whitelist floor, is retried without whitelists and on swapped reads; the run then goes
+    on as `--protocol TAG` (with `--swap-reads on`).
+  - Short barcode lists report the share of reads beyond what random sequence would hit; the 10x lists are unchanged.
+  - 10x Flex and Singleron GEXSCOPE libraries are named and stopped at the gate (`reason=unsupported_assay_10x_flex` and
+    `unsupported_assay_singleron_gexscope`).
+  - A library with no barcode read logs its assay type before it stops: short-fragment (ATAC, by read-pair overlap), bisulfite, bulk or
+    plate RNA, or a feature-barcode (ADT) library on a 10x chemistry. Calls on 10x libraries are unchanged.
+  - Panel, scripts and results: [bench/protocol_detect](bench/protocol_detect/README.md).
 - **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and
   1 for a local file; `io_threads=1` sends them one at a time.
   - Over a link with a 30 ms round trip, the eight block ranges of a minibatch cost about one round trip instead of

@@ -28,3 +28,31 @@ include/singlet/pileup/tx_compat.h (intron rule 16384) ports alignToTranscript's
 src/star/Transcriptome_classifyAlign.cpp, and intron rule 32768 (kStarGene, pileup_engine.h and the GPU pileup's
 k_annotate / k_resolve) ports Transcriptome::classifyAlign's per-read gene set with SoloReadFeature::record's
 one-gene rule (src/star/SoloReadFeature_record.cpp).
+
+Protocol detection (include/singlet/fq/protocol.h, route_evidence and the single-cell checks of the barcode read) follows the design of
+preflightx (github.com/saketlab/preflightx), MIT License, Copyright (c) 2026 Saket Choudhary: a read pair is called single-cell
+when the first bases of the barcode read repeat across reads, which random or genomic sequence does not, and assays are named from
+their read geometry. The engine's checks are written in C++ and tuned on the libraries of bench/protocol_detect; no preflightx source
+is copied. The license text of preflightx follows.
+
+    MIT License
+
+    Copyright (c) 2026 Saket Choudhary <saketc@iitb.ac.in>
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
