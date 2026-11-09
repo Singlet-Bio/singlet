@@ -303,7 +303,7 @@ bool e11Posterior(Parameters &P, std::string &why) {
 // lines' offsets), with getCBandUMI's padding ('H' past the line's end when the read is shorter than cbumiL, soloBarcodeReadLength 0), on
 // runThreadN threads. Each read's sequence line must give the CR soloRun has for it (packed as e10Barcodes packs it): the qualities are the
 // read's own
-bool e11CbQual(Parameters &P, const uint32_t *idx, const uint64_t *cr3, uint64 n, uint8_t *out, std::string &why) {
+bool e11CbQual(Parameters &P, const uint64_t *idx, const uint64_t *cr3, uint64 n, uint8_t *out, std::string &why) {
     const auto t0 = std::chrono::steady_clock::now();
     const char *m = e10f.m[1];
     const uint64 len = e10f.len[1], nReads = e10f.at[1].size();
@@ -2131,7 +2131,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         std::string &log = sd.log;
         e9::CbQualFn cbQual;   // E15: the per-read posterior reads the barcode FASTQ's quality lines (e11CbQual); e10f is released after this step
         if (g_e10Level == 5 && e11.perRead)
-            cbQual = [&P](const uint32_t *idx, const uint64_t *cr3, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, cr3, n, o, why); };
+            cbQual = [&P](const uint64_t *idx, const uint64_t *cr3, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, cr3, n, o, why); };
         const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
             && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
         singlet_engine_gpu::unlockDevice(lockFd);
