@@ -364,6 +364,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             if (!gsz.count(g)) gsz[g] = genomeIndexBytes(g);
             if (!known || fits(dev, gsz[g])) { ++fitting; rq.indexBytes = std::max(rq.indexBytes, gsz[g]); }
         }
+        if (known && fitting == 0) for (const auto& g : gsz) rq.indexBytes = std::max(rq.indexBytes, g.second);   // the plan line names the index that did not fit
         Plan pl = plan(dev, rq);
         if (known && fitting == 0 && !items.empty()) { pl.gpu = false; pl.why = "no sample's genome index fits the device"; }
         if (!pl.gpu) { pl.slots = std::max(1, rq.slots); pl.sharedIndex = false; pl.screen = Screen::Cpu; }
