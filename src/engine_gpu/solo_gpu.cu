@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <parallel/algorithm>
 #include <stdexcept>
@@ -18,8 +19,42 @@
 namespace e9 {
 namespace {
 
+// a device allocation that failed for lack of memory (soloRunKept then runs the Solo stage on the host instead)
+struct DevOOM : std::runtime_error { using std::runtime_error::runtime_error; };
+thread_local bool g_lastOOM = false;
+
+// the device memory soloRun uses beyond what it found on entry: the lowest free memory seen at its allocations, per stage
+struct DevUse {
+    bool on = false; size_t free0 = 0, minFree = 0;
+    std::vector<std::pair<std::string, size_t>> stage;
+    void begin() { size_t t = 0; on = cudaMemGetInfo(&free0, &t) == cudaSuccess; minFree = free0; stage.clear(); }
+    void note() { size_t f = 0, t = 0; if (on && cudaMemGetInfo(&f, &t) == cudaSuccess && f < minFree) minFree = f; }
+    void lap(const char* name) {
+        if (!on) return;
+        note();
+        stage.push_back({name, free0 > minFree ? free0 - minFree : 0});
+        size_t f = 0, t = 0; minFree = cudaMemGetInfo(&f, &t) == cudaSuccess ? f : minFree;
+    }
+    size_t peak() const { size_t m = 0; for (const auto& s : stage) m = std::max(m, s.second); return m; }
+};
+DevUse g_use;
+std::string devUseLine(const char* head) {
+    std::string u = std::string("soloRun(device): ") + head;
+    char t[64];
+    for (const auto& st : g_use.stage) { snprintf(t, sizeof t, " %s %.2f", st.first.c_str(), st.second / 1073741824.0); u += t; }
+    return u;
+}
+
 inline void ck(cudaError_t e, const char* what, int line) {
-    if (e != cudaSuccess) throw std::runtime_error(std::string("CUDA ") + what + " (solo_gpu.cu:" + std::to_string(line) + "): " + cudaGetErrorString(e));
+    if (e == cudaSuccess) return;
+    std::string m = std::string("CUDA ") + what + " (solo_gpu.cu:" + std::to_string(line) + "): " + cudaGetErrorString(e);
+    if (e == cudaErrorMemoryAllocation) {
+        cudaGetLastError();
+        size_t f = 0, t = 0;
+        if (cudaMemGetInfo(&f, &t) == cudaSuccess) m += " (device free " + std::to_string(f >> 20) + " MiB of " + std::to_string(t >> 20) + " MiB)";
+        throw DevOOM(m);
+    }
+    throw std::runtime_error(m);
 }
 #define CK(x) ck((x), #x, __LINE__)
 
@@ -37,7 +72,7 @@ template <class T> struct Buf {
     void alloc(bool d, u64 cnt) {
         release(); dev = d; n = cnt; own = true;
         const u64 b = std::max<u64>(1, cnt) * sizeof(T);
-        if (dev) CK(cudaMalloc(&p, b));
+        if (dev) { CK(cudaMalloc(&p, b)); g_use.note(); }
         else { p = (T*)malloc(b); if (!p) throw std::runtime_error("host allocation failed"); }
     }
     void zero() { if (!n) return; if (dev) CK(cudaMemset(p, 0, n * sizeof(T))); else memset(p, 0, n * sizeof(T)); }
@@ -78,7 +113,7 @@ template <class F> void each(bool dev, u64 n, F f) {
 struct Tmp {
     void* p = nullptr; size_t n = 0;
     ~Tmp() { if (p) cudaFree(p); }
-    void* need(size_t b) { if (b > n) { if (p) cudaFree(p); p = nullptr; CK(cudaMalloc(&p, std::max<size_t>(b, 1))); n = b; } return p; }
+    void* need(size_t b) { if (b > n) { if (p) cudaFree(p); p = nullptr; CK(cudaMalloc(&p, std::max<size_t>(b, 1))); g_use.note(); n = b; } return p; }
 };
 
 void sortKeys(bool dev, Buf<u64>& k, u64 n, int endBit, Tmp& tmp) {
@@ -149,11 +184,13 @@ template <class T> E9HD inline u64 lowerBound(const T* a, u64 n, T x) {
 
 bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, bool keep, std::string& log) {
     ::singlet::gpu_ledger::Phase ledger_phase("solo");
+    g_lastOOM = false;
     try {
         using clk = std::chrono::steady_clock;
         auto t0 = clk::now();
+        if (dev) g_use.begin();
         auto lap = [&](const char* name) {
-            if (dev) CK(cudaDeviceSynchronize());
+            if (dev) { CK(cudaDeviceSynchronize()); g_use.lap(name); }
             const auto t = clk::now();
             out.ms.push_back({name, std::chrono::duration<double, std::milli>(t - t0).count()});
             t0 = t;
@@ -162,6 +199,8 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
         const u32 W = (u32)M.wl.size();
         S.wlN = W;
         const u64 N = Rd.n, nRec = R.nRec;
+        // CUB's scans, sorts and selects take their item counts as int: past 2^31 - 1 reads the device path would count wrongly
+        if (dev && N > 0x7fffffffULL) throw std::runtime_error("the device path takes at most 2^31 - 1 reads");
         if (W >= (1u << (64 - GENE_BITS - UMI_BITS - 1)) || S.nGe >= (1u << GENE_BITS) || 2 * S.umiL > UMI_BITS)
             throw std::runtime_error("whitelist, genes or UMI length do not fit the (CB, gene, UMI) key");
         if ((R.dev || Rd.dev) && !dev) throw std::runtime_error("device-resident inputs need soloRun(device)");
@@ -525,13 +564,21 @@ bool soloRun(bool dev, const SoloParams& S0, const SoloModel& M, const SoloRecs&
                  (unsigned long long)nCand, (unsigned long long)nK, (unsigned long long)nT, (unsigned long long)nSeg, (unsigned long long)nMM,
                  (unsigned long long)out.nMultiAccepted, out.perReadQual ? "per-read CB qualities" : "one CB quality factor");
         log += b;
+        if (dev && g_use.on) log += "\n" + devUseLine("device memory beyond the inputs, peak per stage (GiB):");
         return true;
+    } catch (const DevOOM& e) {
+        g_lastOOM = true;
+        log += std::string("soloRun failed: ") + e.what() + "\n";
+        if (dev && g_use.on) log += devUseLine("device memory beyond the inputs before the failure, peak per stage (GiB):") + "\n";
+        if (dev) cudaGetLastError();
+        return false;
     } catch (const std::exception& e) {
         log += std::string("soloRun failed: ") + e.what() + "\n";
         if (dev) cudaGetLastError();
         return false;
     }
 }
+bool soloLastFailedOutOfMemory() { return g_lastOOM; }
 
 // ================================================================================================ E11: the engine's keep API
 namespace {
@@ -704,6 +751,22 @@ bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecP
     }
 }
 void soloKeepRecordsEnd(double ms) { g_keep.recs = true; g_keep.msRecs = ms; }
+namespace {
+// What soloRun(device) allocates beyond the kept inputs, as a bound (bytes): per read the largest live set of its stages (the whole-run
+// bound is the stage (c) set: the annotation 8, the distinct-CR array 8 (sized to the reads), the CR index 4, the UMI 4, the match 1, the keys 8,
+// the CellReads row 4; the sort of the keys and the CR sort live 4 to 8 more) plus CUB's scratch, per whitelist entry and per record the small
+// arrays. SINGLET_SOLO_DEV_BYTES_PER_READ overrides the per-read bytes.
+u64 soloDeviceNeed(u64 N, u64 nHost, const SoloModel& M) {
+    double perRead = 39.0;
+    if (const char* e = getenv("SINGLET_SOLO_DEV_BYTES_PER_READ")) { const double v = atof(e); if (v > 0) perRead = v; }
+    const double W = (double)M.wl.size();
+    const double model = 8.0 * (M.trS.size() + M.trE.size() + M.trEmax.size()) + 4.0 * (M.trExI.size() + M.trGene.size() + M.exSE.size())
+                         + 2.0 * M.trExN.size() + M.trStr.size();
+    const double perWl = 8.0 + 4.0 * F_N + 44.0;   // the whitelist, flagRows, exact / cbRC / nRU / pres / pOff / nUMI / nGene, the compacted rows
+    return (u64)(perRead * (double)N + 12.0 * (double)nHost + perWl * W + model + (256.0 * 1048576.0));
+}
+}  // namespace
+
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,
                  std::string& log, const CbQualFn& cbQual) {
     ::singlet::gpu_ledger::Phase ledger_phase("solo");
@@ -712,7 +775,71 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
     if (device >= 0 && cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); log += "soloRunKept: cannot select the device\n"; soloKeepRelease(); return false; }
     if (!K.reads || !K.recs) { log += "soloRunKept: the inputs were not kept on the device\n"; soloKeepRelease(); return false; }
     if (K.nOverflow) { log += "soloRunKept: " + std::to_string(K.nOverflow) + " records with more exons than the port's limit\n"; soloKeepRelease(); return false; }
-    char lb[200];
+    char lb[400];
+    const u64 kN = K.n, kR = K.nRec;
+    const double inBytes = kN * 20.0 + kR * (double)sizeof(RecAnn);
+
+    // Where Solo runs. The device when its working set fits in what is free now (the kept inputs included when they are still on the host);
+    // otherwise, and when the device runs out of memory after all, on the host with the same source (E9: soloRun(false), OpenMP loops and
+    // parallel sorts, the same counts), from the host copies of the kept inputs.
+    std::string hostWhy;
+    {
+        size_t fr = 0, tot = 0;
+        const bool gotFree = cudaMemGetInfo(&fr, &tot) == cudaSuccess;
+        if (!gotFree) cudaGetLastError();
+        const double need = (double)soloDeviceNeed(kN, nHost, M) + (K.onHost ? inBytes : 0.0);
+        const char* fh = getenv("SINGLET_SOLO_HOST");
+        if (fh && fh[0] == '1') hostWhy = "SINGLET_SOLO_HOST=1";
+        else if (kN > 0x7fffffffULL) hostWhy = std::to_string(kN) + " reads are past the device path's 2^31 - 1";
+        else if (gotFree && need > 0.97 * (double)fr) {
+            snprintf(lb, sizeof lb, "the device path needs about %.1f GB and %.1f GB are free (%.0f M reads)", need / 1e9, fr / 1e9, kN / 1e6);
+            hostWhy = lb;
+        }
+    }
+
+    // keep the host copies of the kept inputs for the host path: the page-locked ones, or a copy made from the device ones
+    auto toHostRun = [&](const std::string& why) -> bool {
+        const auto t0 = std::chrono::steady_clock::now();
+        const u64 n = std::max<u64>(1, kN), nR = std::max<u64>(1, kR);
+        u64 *hc = K.hcr3, *hu = K.hur3; u32* hr = K.hrec; RecAnn* ha = K.hrecAnn;
+        std::vector<u64> bc, bu; std::vector<u32> br; std::vector<RecAnn> ba;
+        if (!K.onHost) {   // the arrays are on the device: a host copy, then the device ones go
+            try { bc.resize(n); bu.resize(n); br.resize(n); ba.resize(nR); } catch (const std::exception&) {
+                log += "soloRunKept: Solo needs the host path (" + why + ") and the host cannot hold the copy of the kept inputs\n";
+                soloKeepRelease(); return false;
+            }
+            cudaError_t e = cudaMemcpy(bc.data(), K.cr3, n * 8, cudaMemcpyDeviceToHost);
+            if (e == cudaSuccess) e = cudaMemcpy(bu.data(), K.ur3, n * 8, cudaMemcpyDeviceToHost);
+            if (e == cudaSuccess) e = cudaMemcpy(br.data(), K.rec, n * 4, cudaMemcpyDeviceToHost);
+            if (e == cudaSuccess) e = cudaMemcpy(ba.data(), K.recAnn, nR * sizeof(RecAnn), cudaMemcpyDeviceToHost);
+            if (e != cudaSuccess) {
+                cudaGetLastError();
+                log += std::string("soloRunKept: Solo needs the host path (") + why + ") and the kept inputs could not be copied to the host: " + cudaGetErrorString(e) + "\n";
+                soloKeepRelease(); return false;
+            }
+            hc = bc.data(); hu = bu.data(); hr = br.data(); ha = ba.data();
+        }
+        // free the device copies (put back for a failed device attempt, or kept there) before the host run
+        if (K.cr3) cudaFree(K.cr3);
+        if (K.ur3) cudaFree(K.ur3);
+        if (K.rec) cudaFree(K.rec);
+        if (K.recAnn) cudaFree(K.recAnn);
+        K.cr3 = K.ur3 = nullptr; K.rec = nullptr; K.recAnn = nullptr;
+        out = SoloResult{};
+        SoloRecs R; R.nRec = kR; R.dev = false; R.recAnn = ha;
+        SoloReads Rd; Rd.n = kN; Rd.dev = false; Rd.cr3 = hc; Rd.ur3 = hu; Rd.rec = hr; Rd.nHost = nHost; Rd.hostIdx = hostIdx; Rd.hostAnnS = hostAnn;
+        Rd.cbQual = cbQual;
+        fprintf(stderr, "[engine_gpu] Solo's counting runs on the host (%s): same result as the device path, slower\n", why.c_str());
+        fflush(stderr);
+        const bool ok = soloRun(false, S, M, R, Rd, out, false, log);
+        out.nRecOverflow = K.nOverflow;
+        snprintf(lb, sizeof lb, "soloRunKept: Solo ran on the host (%s) in %.1f s\n", why.c_str(), std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+        log += lb;
+        soloKeepRelease();
+        return ok;
+    };
+    if (!hostWhy.empty()) return toHostRun(hostWhy);
+
     if (K.onHost) {   // E15: back to the device
         const auto t0 = std::chrono::steady_clock::now();
         const u64 n = std::max<u64>(1, K.n), nR = std::max<u64>(1, K.nRec);
@@ -726,19 +853,23 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
         if (e == cudaSuccess) e = cudaMemcpy(K.recAnn, K.hrecAnn, nR * sizeof(RecAnn), cudaMemcpyHostToDevice);
         if (e != cudaSuccess) {
             cudaGetLastError();
+            // K.cr3 ... that were allocated are freed by toHostRun; the host copies are still there
             log += std::string("soloRunKept: the kept inputs could not be put back on the device: ") + cudaGetErrorString(e) + "\n";
-            soloKeepRelease();
-            return false;
+            return toHostRun(std::string("the kept inputs did not fit back on the device: ") + cudaGetErrorString(e));
         }
         K.msToDev = msSince(t0);
         snprintf(lb, sizeof lb, "soloRunKept: the kept inputs (%.2f GB) were in page-locked host memory during STAR's loop: to the host %.1f ms (thread), back %.1f ms\n",
-                 (K.n * 20.0 + K.nRec * 8.0) / 1e9, K.msToHost, K.msToDev);
+                 inBytes / 1e9, K.msToHost, K.msToDev);
         log += lb;
     } else if (!K.hostWhy.empty()) log += "soloRunKept: the kept inputs stayed on the device during STAR's loop (" + K.hostWhy + ")\n";
     SoloRecs R; R.nRec = K.nRec; R.dev = true; R.recAnn = K.recAnn;
     SoloReads Rd; Rd.n = K.n; Rd.dev = true; Rd.cr3 = K.cr3; Rd.ur3 = K.ur3; Rd.rec = K.rec; Rd.nHost = nHost; Rd.hostIdx = hostIdx; Rd.hostAnnS = hostAnn;
     Rd.cbQual = cbQual;
     const bool ok = soloRun(true, S, M, R, Rd, out, false, log);
+    if (!ok && g_lastOOM) {   // the bound was too low for this run: the same stage on the host
+        snprintf(lb, sizeof lb, "the device ran out of memory (estimate %.1f GB, %.0f M reads)", soloDeviceNeed(kN, nHost, M) / 1e9, kN / 1e6);
+        return toHostRun(lb);
+    }
     out.nRecOverflow = K.nOverflow;
     soloKeepRelease();
     return ok;
