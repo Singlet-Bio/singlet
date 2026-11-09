@@ -73,16 +73,22 @@ public:
         keys_.erase(std::unique(keys_.begin(), keys_.end()), keys_.end());
         size_t cap = 1; while (cap < keys_.size() * 2 + 16) cap <<= 1;
         table_.assign(cap, 0); mask_ = cap - 1;
+        bits_.assign(size_t(1) << (kBitsLog2 - 6), 0);
         for (uint64_t k : keys_) {
-            size_t h = hash(k) & mask_;
+            const uint64_t hk = hash(k);
+            size_t h = hk & mask_;
             while (table_[h] != 0) h = (h + 1) & mask_;
             table_[h] = k + 1;
+            bits_[hk >> (64 - kBitsLog2 + 6)] |= uint64_t(1) << ((hk >> (64 - kBitsLog2)) & 63);
         }
         n_ = keys_.size();
         keys_.clear(); keys_.shrink_to_fit();
     }
     bool contains(uint64_t k) const {
-        size_t h = hash(k) & mask_;
+        // the bitset (512 KB, in L2) answers most misses; the table decides the rest, so membership is exact
+        const uint64_t hk = hash(k);
+        if (!((bits_[hk >> (64 - kBitsLog2 + 6)] >> ((hk >> (64 - kBitsLog2)) & 63)) & 1)) return false;
+        size_t h = hk & mask_;
         while (table_[h] != 0) { if (table_[h] == k + 1) return true; h = (h + 1) & mask_; }
         return false;
     }
@@ -110,7 +116,8 @@ public:
     }
 private:
     static uint64_t hash(uint64_t x) { x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ULL; x ^= x >> 33; return x; }
-    std::vector<uint64_t> keys_, table_;
+    static constexpr int kBitsLog2 = 22;   // 2^22-bit membership filter in front of the table (~5% of misses pass it)
+    std::vector<uint64_t> keys_, table_, bits_;
     size_t mask_ = 0, n_ = 0;
 };
 
