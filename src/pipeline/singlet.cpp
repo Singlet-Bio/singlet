@@ -60,6 +60,7 @@
 #include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
+#include "singlet/pileup/chimeric_table.h"
 #include "singlet/pileup/species_detect.h"
 #include "singlet/pileup/nonhost/min_sketch.h"
 #include "singlet/pileup/nonhost/host_kmer_filter.h"
@@ -73,6 +74,7 @@
 #include "singlet/engine_gpu.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14: per-read low-quality mask width
 #include "singlet/engine_gpu_ingest.h"   // E13: the GPU prefill decodes the .1fq itself
+#include "singlet/engine_gpu_ingest_fused.h"
 #endif
 #include "singlet/pileup/tiny_dataset_guard.h"
 #include "singlet/fq/prefix_probe.h"
@@ -750,30 +752,9 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
     ecfg.source_label = source_label;   // FASTQ / BAM inputs: the run they hold (empty for SRA = the accession or path)
-    // $SINGLET_WHITELIST_DIR when the user didn't pass --whitelist-dir (the engine, the stager and the .1fg2 reader read it too). Without it the
-    // protocol gate had no 10x whitelist to score against and rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
-    if (whitelist_dirs.empty()) {
-        if (const char* e = std::getenv("SINGLET_WHITELIST_DIR")) {
-            struct stat st;
-            if (*e && stat(e, &st) == 0 && S_ISDIR(st.st_mode)) whitelist_dirs.push_back(e);
-        }
-    }
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // --whitelist-dir, else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs; singlet encode uses the same order).
+    // Without a 10x whitelist the protocol gate rejected untrimmed 10x barcode reads (R1 151 nt) as split-seq.
+    whitelist_dirs = singlet::fq::resolve_whitelist_dirs(whitelist_dirs);
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim  = no_trim;
@@ -921,11 +902,103 @@ static int cmd_download(int argc, char* argv[]) {
     if (!catalog_protocol.empty())
         std::cerr << "[singlet-download] Catalog protocol (metadata): " << catalog_protocol << "\n";
 
+    // Auto-detection without the 10x whitelists scores chemistries on read lengths alone (B20: a 101-nt 10x v3 R1 became split-seq), so
+    // it stops here, as singlet encode does; an explicit --protocol needs no whitelist.
+    if (ecfg.protocol_tag.empty() && !singlet::fq::autodetect_whitelists_present(ecfg.whitelist_dirs)) {
+        std::cerr << "[singlet-download] ERROR: " << singlet::fq::autodetect_no_whitelist_error(ecfg.whitelist_dirs) << "\n";
+        return 1;
+    }
+
     // Encode
     singlet::fq::SraEncoder encoder;
     auto stats = encoder.encode(sra_input, ecfg);
 
-    if (stats.exit_code != 0) return stats.exit_code;
+    // Metadata JSON (when requested): the catalog fields of the job script's JSON, the final protocol and how it was chosen.
+    auto write_metadata_json = [&]() -> int {
+        if (metadata_json_path.empty()) return 0;
+        // Compute today's date as YYYY-MM-DD
+        std::time_t now = std::time(nullptr);
+        char date_buf[16];
+        std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", std::localtime(&now));
+
+        // Extract SRR accession (strip path+extension for the srr_ids field)
+        std::string srr_acc = input_name;
+        {
+            auto sl = srr_acc.rfind('/');
+            if (sl != std::string::npos) srr_acc = srr_acc.substr(sl + 1);
+            auto dt = srr_acc.rfind('.');
+            if (dt != std::string::npos) srr_acc = srr_acc.substr(0, dt);
+        }
+
+        // Preserve fields from any pre-existing metadata JSON (e.g. written by
+        // the job script before calling singlet download).  Crucially: organism,
+        // taxon_id, gsm_id, gse_id, modality, geo_title, geo_source_name must NOT
+        // be overwritten with empty values — they were populated from the catalog
+        // by the job script and are critical for species auto-detection in the
+        // subsequent singlet process step.
+        std::string pre_organism, pre_taxon_id, pre_gsm, pre_gse;
+        std::string pre_modality, pre_geo_title, pre_geo_source;
+        {
+            std::ifstream pre_mf2(metadata_json_path);
+            if (pre_mf2.is_open()) {
+                std::string pre_json((std::istreambuf_iterator<char>(pre_mf2)), {});
+                // Re-use species_detect's JSON extractor (same simple logic)
+                auto extract = [&](const std::string& key) -> std::string {
+                    auto pos = pre_json.find("\"" + key + "\"");
+                    if (pos == std::string::npos) return "";
+                    pos = pre_json.find(':', pos);
+                    if (pos == std::string::npos) return "";
+                    pos = pre_json.find('"', pos + 1);
+                    if (pos == std::string::npos) return "";
+                    auto end = pre_json.find('"', pos + 1);
+                    if (end == std::string::npos) return "";
+                    return pre_json.substr(pos + 1, end - pos - 1);
+                };
+                pre_organism   = extract("organism");
+                pre_taxon_id   = extract("taxon_id");
+                pre_gsm        = extract("gsm_id");
+                pre_gse        = extract("gse_id");
+                pre_modality   = extract("modality");
+                pre_geo_title  = extract("geo_title");
+                pre_geo_source = extract("geo_source_name");
+            }
+        }
+
+        std::ofstream mf(metadata_json_path);
+        if (!mf.is_open()) {
+            std::cerr << "ERROR: cannot write metadata JSON: " << metadata_json_path << "\n";
+            return 1;
+        }
+        mf << "{\n"
+           << "  \"gsm_id\": \"" << pre_gsm << "\",\n"
+           << "  \"gse_id\": \"" << pre_gse << "\",\n"
+           << "  \"organism\": \"" << pre_organism << "\",\n"
+           << "  \"taxon_id\": " << (pre_taxon_id.empty() ? "0" : pre_taxon_id) << ",\n"
+           << "  \"protocol\": \"" << stats.protocol_tag << "\",\n"
+           << singlet::fq::protocol_provenance_json(stats.decision)
+           << "  \"modality\": \"" << pre_modality << "\",\n"
+           << "  \"srr_ids\": [\"" << srr_acc << "\"],\n"
+           << "  \"read_count\": " << stats.total_reads << ",\n"
+           << "  \"geo_title\": \"" << pre_geo_title << "\",\n"
+           << "  \"geo_source_name\": \"" << pre_geo_source << "\",\n"
+           << "  \"singlet_version\": \"" << singlet::kVersion << "\",\n"
+           << "  \"pipeline_date\": \"" << date_buf << "\"\n"
+           << "}\n";
+        mf.close();
+        if (!pre_organism.empty())
+            std::cerr << "[singlet-download] Metadata JSON preserved organism: "
+                      << pre_organism << " (taxon " << pre_taxon_id << ")\n";
+        std::cerr << "[singlet-download] Metadata JSON: " << metadata_json_path << "\n";
+        return 0;
+    };
+
+    if (stats.exit_code != 0) {
+        if (stats.decision.source == "excluded") {
+            std::cerr << "[singlet-download] Protocol excluded: " << stats.decision.exclusion_reason << "\n";
+            write_metadata_json();
+        }
+        return stats.exit_code;
+    }
 
     if (stg) {
         if (!stg->initialised()) { std::cerr << "[singlet-download] --stage-out: no reads reached the stage encoder\n"; return 2; }
@@ -995,81 +1068,7 @@ static int cmd_download(int argc, char* argv[]) {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // Write metadata JSON if requested
-    if (!metadata_json_path.empty()) {
-        // Compute today's date as YYYY-MM-DD
-        std::time_t now = std::time(nullptr);
-        char date_buf[16];
-        std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", std::localtime(&now));
-
-        // Extract SRR accession (strip path+extension for the srr_ids field)
-        std::string srr_acc = input_name;
-        {
-            auto sl = srr_acc.rfind('/');
-            if (sl != std::string::npos) srr_acc = srr_acc.substr(sl + 1);
-            auto dt = srr_acc.rfind('.');
-            if (dt != std::string::npos) srr_acc = srr_acc.substr(0, dt);
-        }
-
-        // Preserve fields from any pre-existing metadata JSON (e.g. written by
-        // the job script before calling singlet download).  Crucially: organism,
-        // taxon_id, gsm_id, gse_id, modality, geo_title, geo_source_name must NOT
-        // be overwritten with empty values — they were populated from the catalog
-        // by the job script and are critical for species auto-detection in the
-        // subsequent singlet process step.
-        std::string pre_organism, pre_taxon_id, pre_gsm, pre_gse;
-        std::string pre_modality, pre_geo_title, pre_geo_source;
-        {
-            std::ifstream pre_mf2(metadata_json_path);
-            if (pre_mf2.is_open()) {
-                std::string pre_json((std::istreambuf_iterator<char>(pre_mf2)), {});
-                // Re-use species_detect's JSON extractor (same simple logic)
-                auto extract = [&](const std::string& key) -> std::string {
-                    auto pos = pre_json.find("\"" + key + "\"");
-                    if (pos == std::string::npos) return "";
-                    pos = pre_json.find(':', pos);
-                    if (pos == std::string::npos) return "";
-                    pos = pre_json.find('"', pos + 1);
-                    if (pos == std::string::npos) return "";
-                    auto end = pre_json.find('"', pos + 1);
-                    if (end == std::string::npos) return "";
-                    return pre_json.substr(pos + 1, end - pos - 1);
-                };
-                pre_organism   = extract("organism");
-                pre_taxon_id   = extract("taxon_id");
-                pre_gsm        = extract("gsm_id");
-                pre_gse        = extract("gse_id");
-                pre_modality   = extract("modality");
-                pre_geo_title  = extract("geo_title");
-                pre_geo_source = extract("geo_source_name");
-            }
-        }
-
-        std::ofstream mf(metadata_json_path);
-        if (!mf.is_open()) {
-            std::cerr << "ERROR: cannot write metadata JSON: " << metadata_json_path << "\n";
-            return 1;
-        }
-        mf << "{\n"
-           << "  \"gsm_id\": \"" << pre_gsm << "\",\n"
-           << "  \"gse_id\": \"" << pre_gse << "\",\n"
-           << "  \"organism\": \"" << pre_organism << "\",\n"
-           << "  \"taxon_id\": " << (pre_taxon_id.empty() ? "0" : pre_taxon_id) << ",\n"
-           << "  \"protocol\": \"" << stats.protocol_tag << "\",\n"
-           << "  \"modality\": \"" << pre_modality << "\",\n"
-           << "  \"srr_ids\": [\"" << srr_acc << "\"],\n"
-           << "  \"read_count\": " << stats.total_reads << ",\n"
-           << "  \"geo_title\": \"" << pre_geo_title << "\",\n"
-           << "  \"geo_source_name\": \"" << pre_geo_source << "\",\n"
-           << "  \"singlet_version\": \"" << singlet::kVersion << "\",\n"
-           << "  \"pipeline_date\": \"" << date_buf << "\"\n"
-           << "}\n";
-        mf.close();
-        if (!pre_organism.empty())
-            std::cerr << "[singlet-download] Metadata JSON preserved organism: "
-                      << pre_organism << " (taxon " << pre_taxon_id << ")\n";
-        std::cerr << "[singlet-download] Metadata JSON: " << metadata_json_path << "\n";
-    }
+    if (int rc = write_metadata_json(); rc != 0) return rc;
 
     return 0;
 }
@@ -1186,22 +1185,9 @@ static int cmd_encode(int argc, char* argv[]) {
     ecfg.block_size = block_size;
     ecfg.r2_maxlen = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // --whitelist-dir, else $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists, as singlet download (protocol.h resolve_whitelist_dirs).
+    // Auto-detection stops with an error when none holds a 10x whitelist (GSE230239: a 101-nt 10x v3 R1 was encoded as split-seq).
+    whitelist_dirs = singlet::fq::resolve_whitelist_dirs(whitelist_dirs);
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim = no_trim;
@@ -1229,7 +1215,9 @@ static int cmd_encode(int argc, char* argv[]) {
     } else {
         std::cerr << "[singlet-encode] " << reads_r1 << " + " << reads_r2
                   << " → " << output_path << "\n";
-        auto stats = encoder.encode(reads_r1, reads_r2, ecfg);
+        singlet::fq::FastqEncoder::Stats stats;
+        try { stats = encoder.encode(reads_r1, reads_r2, ecfg); }
+        catch (const std::exception& e) { std::cerr << "\n[singlet-encode] ERROR: " << e.what() << "\n"; return 2; }
         std::cerr << "\n[singlet-encode] Done: " << stats.total_reads << " reads"
                   << ", " << stats.blocks_written << " blocks\n";
         std::cerr << "[singlet-encode] Protocol: " << stats.protocol_tag
@@ -1766,12 +1754,13 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         NonHostScreener screener(viral_idx, microbial_idx, 0.05f,
                                  std::move(fungal_species_ids));
 
-        // Helper to look up species names across both indices
-        auto species_name_lookup = [&](uint32_t sid) -> std::string {
-            std::string n = viral_idx.species_name(sid);
-            if (!n.empty()) return n;
-            return microbial_idx.species_name(sid);
+        // Species name of an engine species key (nonhost_em.h): a microbial key names a microbial species, any other key a
+        // viral one, so a virus and a microbe that share an id keep their own names (D-100)
+        auto species_name_lookup = [&](uint32_t key) -> std::string {
+            return singlet::nonhost::is_microbial_key(key) ? microbial_idx.species_name(singlet::nonhost::raw_species_id(key))
+                                                           : viral_idx.species_name(key);
         };
+        using singlet::nonhost::raw_species_id;
 
         // ── NONHOST-HOST-SUBTRACT: try to load host Bloom filter ──────────────
         HostKmerFilter host_filter;
@@ -1893,18 +1882,21 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
 #ifdef SINGLET_HAVE_ENGINE_GPU
         }
 #endif
+        // Key microbial species apart from viral ones before anything counts species (D-100). Outputs write raw ids.
+        if (!singlet::nonhost::tag_microbial_keys(multi_hits))
+            throw std::runtime_error("nonhost: a microbial species id uses bit 31, which the engine reserves for its species key");
 
         // Build kingdom map (FUNGAL correctly labelled via screener.fungal_species())
         auto kingdom_map = build_kingdom_map(multi_hits, screener.fungal_species());
         int  n_em_iter   = 0;
         const uint32_t min_abs_reads = std::max(500u,
             static_cast<uint32_t>(0.005f * static_cast<float>(n_total)));
-        auto em_result = em_deconvolve(multi_hits, kingdom_map,
-                                       /*max_iter=*/500, /*tol=*/1e-6f,
-                                       /*min_abundance=*/1e-4f,
-                                       /*min_prefilter_hr=*/0.05f,
-                                       /*min_report_hr=*/0.30f, &n_em_iter,
-                                       /*min_abs_reads=*/min_abs_reads);
+        // One EM fit serves both reports: the abundance table here and nonhost_candidates.tsv below (the iterations do not depend
+        // on the report thresholds), on the run's threads (bit-identical at any count)
+        const EmFit em_fit_all = em_fit(multi_hits, /*max_iter=*/500, /*tol=*/1e-6f, /*min_prefilter_hr=*/0.05f, std::max(1, n_threads));
+        n_em_iter = em_fit_all.iterations;
+        auto em_result = em_report(em_fit_all, kingdom_map, /*min_abundance=*/1e-4f, /*min_report_hr=*/0.30f,
+                                   /*min_abs_reads=*/min_abs_reads);
 
         std::cerr << "[nonhost] EM converged in " << n_em_iter
                   << " iterations, " << em_result.size() << " species above threshold\n";
@@ -1925,14 +1917,14 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                         sa.kingdom == NonHostCategory::FUNGAL  ? "fungal_genomes"   :
                                                                   "bacterial_genomes";
                     std::string fna = eff_ref_dir + "/nonhost/" + kdir
-                                    + "/species_" + std::to_string(sa.species_id) + ".fna";
+                                    + "/species_" + std::to_string(raw_species_id(sa.species_id)) + ".fna";
                     struct stat fna_st{};
                     if (stat(fna.c_str(), &fna_st) == 0)
-                        std::cerr << "[nonhost] species_id=" << sa.species_id
+                        std::cerr << "[nonhost] species_id=" << raw_species_id(sa.species_id)
                                   << " confirmed (FASTA found)\n";
                     else {
                         nonhost_missing_fasta.push_back(fna);
-                        std::cerr << "[nonhost] WARNING: species_id=" << sa.species_id
+                        std::cerr << "[nonhost] WARNING: species_id=" << raw_species_id(sa.species_id)
                                   << " confirmed by EM but no reference FASTA available"
                                      " for secondary alignment (" << fna << " not found)\n";
                     }
@@ -1952,8 +1944,12 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             const std::string mate2_path = out_prefix + "/star_Unmapped.out.mate2";
             struct stat mate2_st{};
             if (stat(mate2_path.c_str(), &mate2_st) == 0 && mate2_st.st_size > 0) {
-                auto tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                    mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                // Only EM-confirmed species are counted and only they use the reads below, so with none confirmed (most samples)
+                // the table is empty whatever the reads are: the two unmapped files (tens of GB on a deep sample) are not read.
+                std::vector<singlet::nonhost::TaggedRead> tagged;
+                if (!em_result.empty())
+                    tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
+                        mate1_path, mate2_path, cb_len, umi_len, nh_selected);
 
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
@@ -1996,9 +1992,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // and any taxon-specific check of a negative library need the evidence below those thresholds as well)
         {
             std::filesystem::create_directories(out_prefix + "/nonhost");
-            int cand_iter = 0;
-            auto cand = em_deconvolve(multi_hits, kingdom_map, /*max_iter=*/500, /*tol=*/1e-6f, /*min_abundance=*/0.0f,
-                                      /*min_prefilter_hr=*/0.05f, /*min_report_hr=*/0.0f, &cand_iter, /*min_abs_reads=*/10u);
+            auto cand = em_report(em_fit_all, kingdom_map, /*min_abundance=*/0.0f, /*min_report_hr=*/0.0f, /*min_abs_reads=*/10u);
             std::unordered_set<uint32_t> confirmed_ids;
             for (const auto& sa : em_result) confirmed_ids.insert(sa.species_id);
             std::ofstream ctsv(out_prefix + "/nonhost/nonhost_candidates.tsv");
@@ -2006,7 +2000,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             for (const auto& sa : cand) {
                 const char* kname = sa.kingdom == NonHostCategory::VIRAL ? "VIRAL" : sa.kingdom == NonHostCategory::BACTERIAL ? "BACTERIAL"
                                   : sa.kingdom == NonHostCategory::FUNGAL ? "FUNGAL" : "UNKNOWN";
-                ctsv << kname << "\t" << sa.species_id << "\t" << species_name_lookup(sa.species_id) << "\t" << sa.n_reads_assigned << "\t"
+                ctsv << kname << "\t" << raw_species_id(sa.species_id) << "\t" << species_name_lookup(sa.species_id) << "\t" << sa.n_reads_assigned << "\t"
                      << n_total << "\t" << std::fixed << std::setprecision(6) << sa.relative_abundance << "\t" << sa.mean_hit_rate << "\t"
                      << (confirmed_ids.count(sa.species_id) ? 1 : 0) << "\t" << std::setprecision(6)
                      << singlet::nonhost::infection_probability(sa.n_reads_assigned, static_cast<double>(n_total), sa.mean_hit_rate) << "\n";
@@ -2028,7 +2022,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                         case NonHostCategory::FUNGAL:    kname = "FUNGAL";    break;
                         default:                          kname = "UNKNOWN";   break;
                     }
-                    tsv << kname << "\t" << sa.species_id << "\t"
+                    tsv << kname << "\t" << raw_species_id(sa.species_id) << "\t"
                         << species_name_lookup(sa.species_id) << "\t"
                         << std::fixed << std::setprecision(6)
                         << sa.relative_abundance << "\t"
@@ -2102,7 +2096,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                         case NonHostCategory::FUNGAL:    kname = "FUNGAL";    break;
                         default:                          kname = "UNKNOWN";   break;
                     }
-                    jf << "    {\"species_id\": " << sa.species_id
+                    jf << "    {\"species_id\": " << raw_species_id(sa.species_id)
                        << ", \"species_name\": \"" << species_name_lookup(sa.species_id) << "\""
                        << ", \"kingdom\": \"" << kname << "\""
                        << ", \"relative_abundance\": " << sa.relative_abundance
@@ -2758,6 +2752,86 @@ static int cmd_nonhost(int argc, char* argv[]) {
 // ════════════════════════════════════════════════════════════
 // singlet genome — Load/unload genome into System V shared memory
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// singlet whitelists fetch — download the barcode lists that are not bundled (GEM-X), pinned by sha256
+// ════════════════════════════════════════════════════════════
+
+static int cmd_whitelists(int argc, char* argv[]) {
+    std::string action = argc >= 1 ? argv[0] : "";
+    std::string dir;
+    std::vector<std::string> files;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--dir" && i + 1 < argc) dir = argv[++i];
+        else if (!a.empty() && a[0] != '-') files.push_back(a);
+        else { std::cerr << "singlet whitelists: unknown option " << a << "\n"; return 1; }
+    }
+    if (action != "fetch" && action != "list") {
+        std::cerr << "Usage: singlet whitelists fetch [--dir DIR] [FILE ...]   download the lists that are not bundled, checked by sha256\n"
+                     "       singlet whitelists list  [--dir DIR]              show them and whether each is installed\n"
+                     "DIR defaults to $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists.\n";
+        return (action.empty() || action == "-h" || action == "--help") ? 0 : 1;
+    }
+    if (dir.empty()) {
+        const auto dirs = singlet::fq::resolve_whitelist_dirs({});
+        if (!dirs.empty()) {
+            dir = dirs.front();
+        } else {
+            char buf[4096];
+            const ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+            const std::string exe = len > 0 ? std::string(buf, static_cast<size_t>(len)) : std::string();
+            const auto pos = exe.rfind('/');
+            if (pos == std::string::npos) { std::cerr << "singlet whitelists: cannot locate the binary; pass --dir\n"; return 1; }
+            dir = exe.substr(0, pos) + "/../whitelists";
+        }
+    }
+    auto shq = [](const std::string& x) {
+        std::string o = "'";
+        for (char c : x) {
+            if (c == '\'') o += "'\\''";
+            else o += c;
+        }
+        return o + "'";
+    };
+    int bad = 0;
+    for (const auto& f : singlet::fq::fetchable_whitelists()) {
+        if (!files.empty() && std::find(files.begin(), files.end(), std::string(f.file)) == files.end()) continue;
+        const std::string dst = dir + "/" + f.file;
+        const std::string have = singlet::sha256_file(dst);
+        if (action == "list") {
+            std::cout << f.file << "\t" << (have.empty() ? "absent" : have == f.sha256 ? "installed" : "MISMATCH") << "\t"
+                      << f.chemistry << "\t" << f.url << "\n";
+            continue;
+        }
+        if (have == f.sha256) { std::cerr << "[whitelists] " << f.file << ": present, sha256 ok\n"; continue; }
+        if (std::system(("mkdir -p " + shq(dir)).c_str()) != 0) { std::cerr << "[whitelists] cannot create " << dir << "\n"; return 1; }
+        const std::string part = dst + ".part";
+        std::cerr << "[whitelists] " << f.file << ": downloading " << f.url << " (" << f.bytes << " bytes)\n";
+        const std::string cmd = "curl -fsSL --retry 5 --retry-delay 5 -o " + shq(part) + " " + shq(f.url);
+        if (std::system(cmd.c_str()) != 0) {
+            std::cerr << "[whitelists] ERROR: download failed: " << f.url << "\n";
+            std::remove(part.c_str());
+            ++bad;
+            continue;
+        }
+        const std::string got = singlet::sha256_file(part);
+        if (got != f.sha256) {
+            std::cerr << "[whitelists] ERROR: " << f.file << " sha256 " << got << " differs from the pinned " << f.sha256
+                      << "; the file was not installed\n";
+            std::remove(part.c_str());
+            ++bad;
+            continue;
+        }
+        if (std::rename(part.c_str(), dst.c_str()) != 0) {
+            std::cerr << "[whitelists] ERROR: cannot write " << dst << "\n";
+            ++bad;
+            continue;
+        }
+        std::cerr << "[whitelists] " << f.file << ": installed in " << dir << " (sha256 ok)\n";
+    }
+    return bad ? 1 : 0;
+}
+
 static int cmd_genome(int argc, char* argv[]) {
     if (argc < 1) {
         std::cerr
@@ -2882,6 +2956,7 @@ static void usage(const char* prog) {
         << "  " << prog << " <file.1fq> [options]        Process .1fq → .1pz (align + pileup)\n"
         << "  " << prog << " download <SRR> [-o]         Stream SRA → .1fq archive\n"
         << "  " << prog << " encode --reads R1 R2 [-o]   Encode FASTQ pair → .1fq archive\n"
+        << "  " << prog << " whitelists fetch [--dir DIR]  Download the barcode lists that are not bundled (GEM-X), sha256-pinned\n"
         << "  " << prog << " screen-runs RUN1 [RUN2 ...]  Per-run screen (1M reads): chemistry, 5', feature barcodes\n"
         << "  " << prog << " decode <file.1fq> [--r1 R1 --r2 R2]  Decode .1fq → FASTQ\n"
         << "  " << prog << " genome load <genome-dir>    Load genome into shared RAM (~40s, once)\n"
@@ -2895,6 +2970,8 @@ static void usage(const char* prog) {
         << "  --ref-base DIR         Reference root dir for auto-detection (overrides\n"
         << "                         SINGLET_REF_BASE env var)\n"
         << "  --whitelist FILE       Barcode whitelist (for barcode correction)\n"
+        << "  --whitelist-dir DIR    Where the protocol's whitelist is looked up first (then $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists)\n"
+        << "  --barcode-discovery    Discover barcodes when a 10x 3'/5' whitelist is not found (otherwise the run stops)\n"
         << "  --barcodes FILE        Filtered barcode list\n\n"
         << "Feature layers (at least one required):\n"
         << "  --exons FILE           GTF for gene model\n"
@@ -2955,6 +3032,12 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --chimeric             Second STAR pass in chimeric mode on the unmapped reads -> chimeric_junctions.tsv.gz\n"
+        << "  --chimeric-blacklist F Arriba blacklist for the chimeric table (default <ref-base>/pileup_indices/fusion/\n"
+        << "                         blacklist_hg38_GRCh38_v2.5.1.tsv.gz on GRCh38, when present; 'none' = no blacklist)\n"
+        << "  --chimeric-recurrent F Recurrent gene pairs flagged in the table's filter column (default <ref-base>/pileup_indices/\n"
+        << "                         fusion/chimeric_recurrent_GRCh38.tsv on GRCh38, when present; 'none' = no flags)\n"
+        << "  --chimeric-noncanonical  Keep non-canonical-motif junctions in the chimeric table (default: GT/AG only)\n"
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
@@ -3148,10 +3231,57 @@ inline bool usable(std::string& why) {
 
 // E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool` (gpu_pool.cpp) is one resident process per GPU; it forks one process per
 // sample of its queue, which runs singlet_main (the `singlet` command, below) with that sample's arguments.
-int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**));
+int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
+                     std::string (*preload_refs)(const std::vector<std::vector<std::string>>&));
 static int singlet_main(int argc, char* argv[]);
+
+// The default SNP panel of --pipeline for a genome directory (a file under <ref_base>/pileup_indices/), empty for none
+static std::string default_snp_panel(const std::string& genome_dir) {
+    const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+    const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
+    if (human && !mouse) return "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz";
+    if (mouse && !human) return "mus_musculus.vcf.gz";
+    // Barnyard (GRCh38-GRCm39-barnyard, contigs GRCh38___chrN / GRCm39___N): both panels with the contigs renamed
+    // (scripts/build_barnyard_snp_panel.sh), so mixtures of human and mouse lines are demultiplexed in one model.
+    if (human && mouse) return "barnyard_GRCh38_GRCm39.vcf.gz";
+    return "";
+}
+
+// Pool-resident pileup references (PileupEngine::preload_pool_references): the GTF and SNP panel that singlet_main resolves for each
+// queued sample's arguments in the pool's form (--exons or the GTF next to --genome-dir; --snps or --pipeline's default panel), parsed
+// once in the pool before it forks the samples. A sample takes a structure only when its own file is the same file, so a guess here
+// that a sample does not use costs pool memory and nothing else.
+static std::string pool_preload_refs(const std::vector<std::vector<std::string>>& item_args) {
+    auto val = [](const std::vector<std::string>& v, const char* k) {
+        std::string r;
+        for (size_t i = 0; i + 1 < v.size(); ++i) if (v[i] == k) r = v[i + 1];
+        return r;
+    };
+    auto has = [](const std::vector<std::string>& v, const char* k) { return std::find(v.begin(), v.end(), std::string(k)) != v.end(); };
+    std::vector<std::string> snps, gtfs;
+    for (const auto& a : item_args) {
+        const std::string gd = val(a, "--genome-dir");
+        std::string gtf = val(a, "--exons"), snp = val(a, "--snps");
+        if (gtf.empty() && snp.empty() && !gd.empty()) {
+            std::string d = gd;
+            while (d.size() > 1 && d.back() == '/') d.pop_back();
+            const auto sep = d.rfind('/');
+            if (sep != std::string::npos && sep > 0) gtf = d.substr(0, sep) + "/genes/genes.gtf";
+        }
+        if (snp.empty() && has(a, "--pipeline") && !has(a, "--no-snps") && !gd.empty()) {
+            std::string rb = val(a, "--ref-base");
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            const std::string panel = default_snp_panel(gd);
+            if (!rb.empty() && !panel.empty()) snp = rb + "/pileup_indices/" + panel;
+        }
+        if (!gtf.empty() && gtf != "None" && gtf != "none") gtfs.push_back(gtf);
+        if (!snp.empty()) snps.push_back(snp);
+    }
+    return singlet::PileupEngine::preload_pool_references(snps, gtfs);
+}
+
 int main(int argc, char* argv[]) {
-    if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main);
+    if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main, &pool_preload_refs);
     return singlet_main(argc, argv);
 }
 
@@ -3196,6 +3326,8 @@ static int singlet_main(int argc, char* argv[]) {
                 return cmd_nonhost(argc - 2, argv + 2);
             if (sub == "build-nonhost-db")
                 return cmd_build_nonhost_db(argc - 2, argv + 2);
+            if (sub == "whitelists")
+                return cmd_whitelists(argc - 2, argv + 2);
             if (sub == "screen-runs")
                 return singlet::fq::screen_runs_main(argc - 2, argv + 2);
             if (sub == "build-host-filter")
@@ -3228,6 +3360,8 @@ static int singlet_main(int argc, char* argv[]) {
     std::string genome_dir, reads_r2, reads_r1;
     std::string ref_base;
     std::string barcode_file, whitelist_file;
+    std::vector<std::string> run_whitelist_dirs;   // --whitelist-dir (repeatable), resolved with resolve_whitelist_dirs
+    bool barcode_discovery = false;                // --barcode-discovery: a 10x 3'/5' run without its whitelist discovers barcodes
     std::string out_prefix = "./singlet_out";
     std::string output_format = "1pz";
     std::string genome_load = "NoSharedMemory";
@@ -3240,6 +3374,11 @@ static int singlet_main(int argc, char* argv[]) {
     std::string read_source_mode = "chunk";    // --read-source chunk|fifo|file: how decoded reads reach STAR
     if (const char* e = std::getenv("SINGLET_READ_SOURCE"); e && *e) read_source_mode = e;
     std::vector<std::string> star_extra;
+    bool chimeric = false;                  // --chimeric: second STAR pass in chimeric mode on the reads the main pass left unmapped -> chimeric_junctions.tsv.gz (the main pass is not changed)
+    std::string fusion_catalog_path;        // --fusion-catalog: output of scripts/build_fusion_catalog.py
+    std::string chimeric_blacklist_path;    // --chimeric-blacklist: Arriba blacklist ("none" = off; default under <ref-base>/pileup_indices/fusion)
+    std::string chimeric_recurrent_path;    // --chimeric-recurrent: recurrent gene pairs, flagged in the table ("none" = off)
+    bool chimeric_noncanonical = false;     // --chimeric-noncanonical: keep non-canonical-motif junctions in the table
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
     int pileup_threads = 1;  // bgzf not useful for uncompressed pipe from STAR
@@ -3319,6 +3458,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--reads" && i+2 < argc) { reads_r2 = argv[++i]; reads_r1 = argv[++i]; }
         else if (arg == "--barcodes" && i+1 < argc) { barcode_file = argv[++i]; user_provided_barcodes = true; }
         else if (arg == "--whitelist" && i+1 < argc) whitelist_file = argv[++i];
+        else if (arg == "--whitelist-dir" && i+1 < argc) run_whitelist_dirs.push_back(argv[++i]);
+        else if (arg == "--barcode-discovery") barcode_discovery = true;
         else if (arg == "--exons" && i+1 < argc) config.exon_gtf_path = argv[++i];
         else if (arg == "--snps" && i+1 < argc) { config.snp_path = argv[++i]; snp_panel_source = "user"; }
         else if (arg == "--no-snps") no_default_snps = true;
@@ -3434,6 +3575,11 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--read-source" && i+1 < argc) read_source_mode = argv[++i];
         else if (arg == "--memory-tier" && i+1 < argc) memory_tier_cfg = argv[++i];
         else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
+        else if (arg == "--chimeric") { chimeric = true; setenv("SINGLET_CHIM_SOFTCLIP_MIN", "15", 0); }   // soft-clip route on (15 bases) unless set; 0 turns it off
+        else if (arg == "--fusion-catalog" && i+1 < argc) fusion_catalog_path = argv[++i];
+        else if (arg == "--chimeric-blacklist" && i+1 < argc) chimeric_blacklist_path = argv[++i];
+        else if (arg == "--chimeric-recurrent" && i+1 < argc) chimeric_recurrent_path = argv[++i];
+        else if (arg == "--chimeric-noncanonical") chimeric_noncanonical = true;
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -3743,30 +3889,26 @@ static int singlet_main(int argc, char* argv[]) {
                 }
             }
             if (!wl_name.empty()) {
-                // Resolve path: <binary-dir>/../whitelists/<file>
+                // $SINGLET_WHITELIST_DIR, else <binary dir>/../whitelists (protocol.h resolve_whitelist_dirs, the order of singlet
+                // download and encode). The run path read only the install directory, so a binary outside an install tree fell back
+                // to barcode auto-discovery even with the variable set (Kang 10x v1: 285,088 discovered barcodes on one run, 21,727 on another).
+                const auto wl_dirs = singlet::fq::resolve_whitelist_dirs(run_whitelist_dirs);
+                const std::string candidate = singlet::fq::find_whitelist_file(wl_name, wl_dirs);
                 bool resolved = false;
-                char exe_buf[PATH_MAX];
-                ssize_t exe_len = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf)-1);
-                if (exe_len > 0) {
-                    exe_buf[exe_len] = '\0';
-                    std::string bin_dir(exe_buf);
-                    auto slp = bin_dir.rfind('/');
-                    if (slp != std::string::npos) bin_dir.resize(slp);
-                    std::string candidate = bin_dir + "/../whitelists/" + wl_name;
-                    struct stat wl_stat;
-                    if (stat(candidate.c_str(), &wl_stat) == 0) {
-                        whitelist_file = candidate;
-                        whitelist_auto_resolved = true;
-                        resolved = true;
-                        std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag
-                                  << " → " << wl_name << "\n";
-                    }
+                if (!candidate.empty()) {
+                    whitelist_file = candidate;
+                    whitelist_auto_resolved = true;
+                    resolved = true;
+                    std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag << " → " << candidate << "\n";
+                } else if (singlet::fq::whitelist_required(proto_tag) && !barcode_discovery) {
+                    std::cerr << "ERROR: " << singlet::fq::run_no_whitelist_error(proto_tag, wl_name, wl_dirs) << "\n";
+                    return 1;
                 }
                 if (!resolved) {
-                    // Whitelist file not found at install path (or readlink failed)
+                    // not in $SINGLET_WHITELIST_DIR nor <binary dir>/../whitelists
                     std::cerr << "[singlet] Whitelist " << wl_name
                               << " not found for " << proto_tag
-                              << " — using barcode auto-discovery\n";
+                              << " — using barcode auto-discovery (looked in $SINGLET_WHITELIST_DIR, then <binary dir>/../whitelists)\n";
                     whitelist_file = "None";
                     whitelist_auto_resolved = true;
                 }
@@ -3965,7 +4107,7 @@ static int singlet_main(int argc, char* argv[]) {
             if (is_visium_mode)
                 std::cerr << "[singlet] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             // Visium: the spot list (visium-v1.txt, rebuilt from 10x public datasets) is the whitelist when installed,
-            // so STAR corrects spot barcodes. Protocol detection is unchanged: it cannot tell Visium from 3' v3.
+            // so STAR corrects spot barcodes. Detection tells Visium from 3' v3 by the same list.
             if (is_visium_mode && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
                 char exe_buf[PATH_MAX];
                 ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
@@ -4098,6 +4240,12 @@ static int singlet_main(int argc, char* argv[]) {
         config.whitelist_path = whitelist_file;
     config.threads = pileup_threads;
     config.finalize_threads = std::max(1, star_threads);   // --threads: the finalize steps after the stream
+    // the R11 stream's records are decoded and their CBs resolved on a reader thread beside the serial loop (same records, same order,
+    // same CBs); SINGLET_PILEUP_LOOKAHEAD=0 keeps the loop reading the stream itself
+    {
+        const char* la = std::getenv("SINGLET_PILEUP_LOOKAHEAD");
+        config.stream_lookahead = star_threads >= 2 && !(la && la[0] == '0');
+    }
     config.umi_len = umi_len;
     if (pipeline_mode) config.count_mt = true;
     if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
@@ -4108,14 +4256,7 @@ static int singlet_main(int argc, char* argv[]) {
     if (pipeline_mode && config.snp_path.empty() && !no_default_snps && !genome_dir.empty()) {
         std::string rb = ref_base;
         if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
-        const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
-        const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
-        std::string panel;
-        if (human && !mouse) panel = "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz";
-        else if (mouse && !human) panel = "mus_musculus.vcf.gz";
-        // Barnyard (GRCh38-GRCm39-barnyard, contigs GRCh38___chrN / GRCm39___N): both panels with the contigs renamed
-        // (scripts/build_barnyard_snp_panel.sh), so mixtures of human and mouse lines are demultiplexed in one model.
-        else if (human && mouse) panel = "barnyard_GRCh38_GRCm39.vcf.gz";
+        const std::string panel = default_snp_panel(genome_dir);
         if (!rb.empty() && !panel.empty()) {
             std::string cand = rb + "/pileup_indices/" + panel;
             struct stat sst{};
@@ -5003,7 +5144,7 @@ static int singlet_main(int argc, char* argv[]) {
             if (!(gp && std::string(gp) == "on" && singlet_engine_gpu::e2eRequested())) why = "it needs SINGLET_GPU_PILEUP=on and SINGLET_ENGINE_GPU_E2E";
             else if (std::string pw; !e19probe::usable(pw)) why = "no usable GPU (" + pw + "): the GPU pileup will be declined";
             else if (onefq_r2_bound > (int) singlet_qmask::maxBases()) why = "cDNA reads over " + std::to_string(singlet_qmask::maxBases()) + " bases: the GPU pileup will be declined";
-            else if (ir & ~(1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397
+            else if (ir & ~(1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u | 4096u)) why = "intron rules the GPU pileup does not implement";   // the rules of kGpuRules below: campaign added kFlank (8) to the default 397, kExonPrecedence (4096) to 7053
             else if (getenv("SINGLET_GPU_PILEUP_FORCE_DECLINE")) why = "SINGLET_GPU_PILEUP_FORCE_DECLINE is set";
             else if (stream_unsorted == 0 || parallel_pileup == 1 || tagged_bam_enabled || !bam_file.empty() || getenv("SINGLET_KEEP_STAR_BAM"))
                 why = "the sorted-BAM path: no GPU pileup on STAR's stream";
@@ -5032,36 +5173,77 @@ static int singlet_main(int argc, char* argv[]) {
             }
             singlet::fq::RunSet::HeadScanOptions so;
             std::vector<singlet::fq::RunSet::BlockHead> heads;
+            // R11 in the head scan: barcode discovery needs R11's exact counts before STAR is forked, when STAR's prefill has published
+            // none, and the pending corrector below then read every block of the .1fq a second time (27 s on 7 threads for pbmc1k_v3). The
+            // head scan already decompresses each block, so it takes the counts too. They are the same scan's counts over the same blocks
+            // with the same layout; only their time changes. SINGLET_INGEST_R11_EARLY=0: the second pass, as before.
+            const int r11_cb0 = detected_cb_start - 1, r11_cbl = detected_bc_len;
+            const int r11_umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, r11_umil = umi_len;
+            const char* r11_env = std::getenv("SINGLET_INGEST_R11_EARLY");
+            const bool r11_early = needs_barcode_discovery && !(r11_env && r11_env[0] == '0');
+            auto r11_dict = std::make_shared<std::vector<uint64_t>>();
+            auto r11_raws = std::make_shared<std::vector<std::vector<std::string>>>();
             std::vector<uint64_t> freq;
             std::vector<std::string> probe;
             uint64_t stored = 0;
+            bool ingest_fused = false;
             if (why.empty()) {
                 const uint32_t nb = runs->block_count();
                 const uint32_t dict_n = runs->bc_dict_size();
                 freq.assign(static_cast<size_t>(dict_n) + 1, 0);
-                so.probe_per_block = std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(nb, 1u) - 1u) / std::max<uint32_t>(nb, 1u));
+                so.sampler = &probe_sampler;   // the 5' probe: the same ContentProbeSampler and the same records as the decode routes
                 so.bc_freq = freq.data();
-                heads.resize(nb);
-                std::atomic<uint32_t> nxt{0};
-                std::mutex emu;
-                std::string err;
-                auto work = [&]() {
-                    for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
-                        try { runs->scan_head(b, so, heads[b]); }
-                        catch (const std::exception& e) { std::lock_guard<std::mutex> lk(emu); if (err.empty()) err = e.what(); }
-                    }
-                };
-                const int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
-                std::vector<std::thread> pool;
-                for (int t = 1; t < nt; ++t) pool.emplace_back(work);
-                work();
-                for (auto& t : pool) t.join();
-                if (!err.empty()) why = "head scan: " + err;
-                for (auto& h : heads) {
-                    stored += h.n_stored;
-                    for (auto& s : h.probe) { if (probe.size() >= 20000) break; probe.push_back(std::move(s)); }
-                    std::vector<std::string>().swap(h.probe);
+                if (r11_early) {
+                    r11_dict->assign(dict_n, 0);
+                    so.r11 = true; so.cb0 = r11_cb0; so.cbl = r11_cbl; so.umi0 = r11_umi0; so.umil = r11_umil; so.r11_dict = r11_dict->data();
                 }
+                heads.resize(nb);
+                std::string err;
+                const int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
+                // The fused pass (engine_gpu_ingest_fused.h): the head scan and the packed-read decode from one decompression of each block,
+                // where the decode would start right after this scan anyway (the early decode). The head scan's results
+                // are the same; the decode is then done before the reference load instead of beside it. SINGLET_INGEST_FUSED=0: two passes.
+                const auto& h0f = runs->header();
+                const uint32_t r2fixed = h0f.stream_lengths[1];   // the cDNA read length (TRIMMED: before trimming, which only shortens reads); 0: variable
+                const char* fuE = std::getenv("SINGLET_INGEST_FUSED");
+                const char* eaE = std::getenv("SINGLET_ENGINE_GPU_INGEST_EARLY");
+                bool fused = !(fuE && fuE[0] == '0') && !(eaE && eaE[0] == '0');
+                if (fused) {
+                    auto& fpl = singlet_engine_gpu::ingest::plan();
+                    fpl.runs = runs; fpl.nBlocks = nb; fpl.paths = onefq_files;
+                    fpl.r1L = h0f.stream_lengths[0];
+                    std::memcpy(fpl.qualPhred, qphred, 4); fpl.qualCodes = qcodes;
+                    std::string fw;
+                    if (!singlet_engine_gpu::ingest::decodeScan(nt, so, heads, r2fixed, fw)) {
+                        std::cerr << "[1fq-ingest] fused scan and decode not used (" << fw << "): the head scan, then the decode\n";
+                        fused = false;
+                        std::fill(freq.begin(), freq.end(), 0);   // what the fused pass counted before it stopped
+                        if (r11_early) std::fill(r11_dict->begin(), r11_dict->end(), 0);
+                        heads.assign(nb, singlet::fq::RunSet::BlockHead{});
+                    }
+                }
+                if (!fused) {
+                    std::atomic<uint32_t> nxt{0};
+                    std::mutex emu;
+                    auto work = [&]() {
+                        for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
+                            try { runs->scan_head(b, so, heads[b]); }
+                            catch (const std::exception& e) { std::lock_guard<std::mutex> lk(emu); if (err.empty()) err = e.what(); }
+                        }
+                    };
+                    std::vector<std::thread> pool;
+                    for (int t = 1; t < nt; ++t) pool.emplace_back(work);
+                    work();
+                    for (auto& t : pool) t.join();
+                }
+                ingest_fused = fused;
+                if (!err.empty()) why = "head scan: " + err;
+                if (r11_early && err.empty()) {
+                    r11_raws->resize(nb);
+                    for (uint32_t b = 0; b < nb; ++b) (*r11_raws)[b].swap(heads[b].r11_raw);
+                }
+                for (auto& h : heads) stored += h.n_stored;
+                probe = probe_sampler.sequences();   // a fused pass that stopped offered a subset of these records: offers are idempotent
                 // the 5' clip as the sanity check below decides it from the same sample: the prefill gives STAR the reads unclipped
                 int clip = r2_clip5p;
                 if (no_clip5p) clip = 0;
@@ -5069,6 +5251,7 @@ static int singlet_main(int argc, char* argv[]) {
                 if (why.empty() && clip > 0) why = "a constant 5' prefix to clip (" + std::to_string(clip) + " bp)";
             }
             if (!why.empty()) {
+                if (ingest_fused) singlet_engine_gpu::ingest::dropFused();
                 std::cerr << "[1fq-ingest] not used (" << why << "): the .1fq is decoded to FASTQ files\n";
             } else {
                 auto& pl = singlet_engine_gpu::ingest::plan();
@@ -5096,38 +5279,44 @@ static int singlet_main(int argc, char* argv[]) {
                 fifo_first25_r2 = std::move(probe);
                 // R11: the corrector is handed to the pileup now; its exact counts are read on first use (cb_correct.h set_pending): from the
                 // E8 region, where STAR's prefill wrote them right after its decode, or else (no region, no prefill decode) from the .1fq here
-                const int cb0 = detected_cb_start - 1, cbl = detected_bc_len;
-                const int umi0 = (detected_umi_start > 0 ? detected_umi_start : detected_bc_len + 1) - 1, umil = umi_len;
+                const int cb0 = r11_cb0, cbl = r11_cbl, umi0 = r11_umi0, umil = r11_umil;
                 const int nt = std::max(1, star_threads);
-                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack](singlet::CbCorrector& c) {
+                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack, r11_dict, r11_raws](singlet::CbCorrector& c) {
                     StopWatch sw;
                     std::vector<std::pair<uint64_t, uint64_t>> pairs;
                     uint64_t nwl = 0, tot = 0;
                     const int fd = singlet_engine_gpu::ingest::plan().r11Fd;
                     if (singlet_engine_gpu::ingest::fetchR11(fd, pairs, nwl, tot) && nwl == c.size()) {
                         for (const auto& [w, n] : pairs) c.add_exact(static_cast<int64_t>(w), n);
+                        std::vector<uint64_t>().swap(*r11_dict); std::vector<std::vector<std::string>>().swap(*r11_raws);
                         std::cerr << "[1fq-ingest] R11 exact CB histogram from STAR's prefill (E8 region): " << tot << " reads, " << pairs.size()
                                   << " barcodes, read in " << sw.elapsed_s() << "s\n";
                         return;
                     }
-                    singlet::fq::RunSet::HeadScanOptions o;
-                    std::vector<uint64_t> dict(runs->bc_dict_size(), 0);
-                    o.r11 = true; o.cb0 = cb0; o.cbl = cbl; o.umi0 = umi0; o.umil = umil; o.r11_dict = dict.data();
                     const uint32_t nb = runs->block_count();
-                    std::vector<std::vector<std::string>> raws(nb);
-                    std::atomic<uint32_t> nxt{0};
-                    std::atomic<bool> bad{false};
-                    auto work = [&]() {
-                        singlet::fq::RunSet::BlockHead h;
-                        for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
-                            try { runs->scan_head(b, o, h); raws[b].swap(h.r11_raw); } catch (...) { bad = true; }
-                        }
-                    };
-                    std::vector<std::thread> pool;
-                    for (int t = 1; t < std::min<int>(nt, static_cast<int>(std::max<uint32_t>(nb, 1u))); ++t) pool.emplace_back(work);
-                    work();
-                    for (auto& t : pool) t.join();
-                    if (bad) { std::cerr << "[1fq-ingest] ERROR: R11's histogram could not be read from the .1fq\n"; _exit(1); }
+                    std::vector<uint64_t> dict;
+                    std::vector<std::vector<std::string>> raws;
+                    const bool early = r11_raws->size() == nb && r11_dict->size() == runs->bc_dict_size();
+                    if (early) { dict.swap(*r11_dict); raws.swap(*r11_raws); }
+                    else {
+                        singlet::fq::RunSet::HeadScanOptions o;
+                        dict.assign(runs->bc_dict_size(), 0);
+                        raws.resize(nb);
+                        o.r11 = true; o.cb0 = cb0; o.cbl = cbl; o.umi0 = umi0; o.umil = umil; o.r11_dict = dict.data();
+                        std::atomic<uint32_t> nxt{0};
+                        std::atomic<bool> bad{false};
+                        auto work = [&]() {
+                            singlet::fq::RunSet::BlockHead h;
+                            for (uint32_t b; (b = nxt.fetch_add(1)) < nb;) {
+                                try { runs->scan_head(b, o, h); raws[b].swap(h.r11_raw); } catch (...) { bad = true; }
+                            }
+                        };
+                        std::vector<std::thread> pool;
+                        for (int t = 1; t < std::min<int>(nt, static_cast<int>(std::max<uint32_t>(nb, 1u))); ++t) pool.emplace_back(work);
+                        work();
+                        for (auto& t : pool) t.join();
+                        if (bad) { std::cerr << "[1fq-ingest] ERROR: R11's histogram could not be read from the .1fq\n"; _exit(1); }
+                    }
                     static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
                     uint64_t n_exact = 0;
                     const auto& dflat = runs->bc_dict_flat();
@@ -5153,7 +5342,7 @@ static int singlet_main(int argc, char* argv[]) {
                             }
                         }
                     std::cerr << "[1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): " << n_exact << " reads over a "
-                              << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s\n";
+                              << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s" << (early ? " (counted by the head scan)" : "") << "\n";
                 });
                 cb_hist_ready = true;
                 decode_time = ingest_sw.elapsed_s();
@@ -5967,7 +6156,8 @@ static int singlet_main(int argc, char* argv[]) {
     }
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
-    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced; rules 2957)
+    // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced,
+    // kExonPrecedence; rules 7053)
     // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the mixed molecules behind the pre-USA split (mixed_exon / mixed_intron)
     // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
     // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
@@ -5976,7 +6166,7 @@ static int singlet_main(int argc, char* argv[]) {
         unsetenv("SINGLET_GPU_PILEUP");
     }
     if (getenv("SINGLET_GPU_PILEUP")) {
-        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u;
+        constexpr uint32_t kGpuRules = 1u | 4u | 8u | 16u | 128u | 256u | 512u | 1024u | 2048u | 4096u;
         uint32_t rules = config.intron_rules;
         if (const char* r = getenv("SINGLET_INTRON_RULES")) rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (rules & ~kGpuRules) {
@@ -6063,16 +6253,39 @@ static int singlet_main(int argc, char* argv[]) {
         for (size_t w = 0; w < cnt.size(); ++w) cnt[w] = cb_corrector.exact_count(static_cast<int64_t>(w));
         static constexpr char kNtU[5] = {'A', 'C', 'G', 'T', 'N'};
         const int L = cb_corrector.length();
-        uint64_t n_corrected = 0, n_lost = 0;
-        for (const auto& [key, n] : cbx_nonexact) {
-            char raw[32], fixed_bc[40];
-            uint64_t k = key;
-            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
-            raw[L] = '\0';
-            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
-            if (st < 0) { n_lost += n; continue; }
-            const int64_t w = cb_corrector.find(std::string(fixed_bc, L).c_str());
-            if (w >= 0) { cnt[w] += n; n_corrected += n; }
+        // Every distinct non-exact barcode is resolved on its own and only integer counts are summed, so the work is split over the
+        // hash table's buckets on star_threads threads with the same result (a 1.2 G-read sample spent ~86 s here on one thread,
+        // before STAR starts). cnt[] is added to atomically; resolve() is const and thread-safe once settled (exact_count above).
+        std::atomic<uint64_t> n_corrected{0}, n_lost{0};
+        {
+            const size_t nbk = cbx_nonexact.bucket_count();
+            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk, 1024))));
+            std::atomic<size_t> next_bk{0};
+            auto work = [&]() {
+                uint64_t corr = 0, lost = 0;
+                char raw[32], fixed_bc[40];
+                constexpr size_t kChunk = 4096;
+                for (size_t b0; (b0 = next_bk.fetch_add(kChunk)) < nbk;) {
+                    const size_t b1 = std::min(nbk, b0 + kChunk);
+                    for (size_t bk = b0; bk < b1; ++bk)
+                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) {
+                            const uint64_t n = it->second;
+                            uint64_t k = it->first;
+                            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+                            raw[L] = '\0';
+                            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+                            if (st < 0) { lost += n; continue; }
+                            fixed_bc[L] = '\0';
+                            const int64_t w = cb_corrector.find(fixed_bc);
+                            if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
+                        }
+                }
+                n_corrected += corr; n_lost += lost;
+            };
+            std::vector<std::thread> pool;
+            for (int t = 1; t < nt_u; ++t) pool.emplace_back(work);
+            work();
+            for (auto& t : pool) t.join();
         }
         std::vector<char> bc(L + 1);
         for (size_t w = 0; w < cnt.size(); ++w) {
@@ -6082,7 +6295,7 @@ static int singlet_main(int argc, char* argv[]) {
         }
         std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
         std::cerr << "[singlet] barcode universe: " << out.size() << " whitelist barcodes with >= " << bc_min_reads << " reads after R11 correction ("
-                  << n_corrected << " reads corrected onto a barcode, " << n_lost << " uncorrectable)" << std::endl;
+                  << n_corrected.load() << " reads corrected onto a barcode, " << n_lost.load() << " uncorrectable)" << std::endl;
     };
     if (engine_ptr && config.cb_from_cr) {
         std::cerr << "ERROR: pileup engine was built before the BAM source mode was decided" << std::endl;
@@ -8111,7 +8324,7 @@ static int singlet_main(int argc, char* argv[]) {
             // NONHOST-UNMAPPED-CAPTURE: write unmapped reads to FASTQ when any nonhost index is provided.
             // STAR writes: ${out_prefix}star_Unmapped.out.mate1 (cDNA, R2) and .mate2 (barcode, R1).
             // NonHostScreener runs on mate1 (cDNA) after STAR+pileup complete.
-            if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty()) {
+            if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty() || chimeric) {
                 args.push_back("--outReadsUnmapped"); args.push_back("Fastx");
             }
 
@@ -8437,6 +8650,10 @@ static int singlet_main(int argc, char* argv[]) {
             }
 #endif
 
+            if (chimeric) {   // the second (chimeric) pass maps the unmapped reads with the same index and barcode settings
+                std::ofstream af(out_prefix + "/star_args.txt");
+                for (size_t ai = 1; ai + 1 < args.size(); ++ai) af << args[ai] << "\n";
+            }
             // Call bundled STAR directly — no exec, no external binary needed.
             singlet::set_thread_name("star-main");   // STAR's child: its threads inherit it or rename (star-map, star-prefill)
             int rc = star_main_impl(
@@ -9268,6 +9485,23 @@ static int singlet_main(int argc, char* argv[]) {
     export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
     export_cfg.genome_dir = genome_dir;
 
+    // The counted strand decides 3' against 5' for the 10x pairs that share the barcode read and whitelist: the cDNA read aligns sense
+    // in 3' kits and antisense in 5' kits. When the strand probe or the safety net counted the other orientation than the detected
+    // protocol implies, report the sibling so the label matches the counts (a 26-base R1 holds no TSO or poly(T) to tell them apart).
+    if (onefq_mode && engine_ptr && config.stranded && !strand_from_user) {
+        static constexpr uint8_t kSiblings[][2] = {{1, 4}, {2, 5}, {13, 14}};   // 10x 3' / 5' v3, v2, v4
+        const bool rev = engine_ptr->reverse_strand();
+        for (const auto& s : kSiblings) {
+            const uint8_t to = (onefq_protocol_id == s[0] && rev) ? s[1] : (onefq_protocol_id == s[1] && !rev) ? s[0] : 0;
+            if (to) {
+                std::cerr << "[singlet] Protocol relabeled by strand: id " << static_cast<int>(onefq_protocol_id) << " -> "
+                          << static_cast<int>(to) << " (cDNA read counted " << (rev ? "antisense, 5'" : "sense, 3'") << ")\n";
+                onefq_protocol_id = to;
+                break;
+            }
+        }
+    }
+
     // ── §3.6 fields for summary.json ──
     {
         auto get_proto_name = [](uint8_t id) -> const char* {
@@ -9455,6 +9689,114 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+
+    // ── chimeric / fusion junction table (opt-in): second STAR pass on the reads the main pass left unmapped ──
+    if (chimeric) {
+        const std::string unm1 = out_prefix + "/star_Unmapped.out.mate1", unm2 = out_prefix + "/star_Unmapped.out.mate2";
+        const std::string sc1 = out_prefix + "/star_Softclip.out.mate1", sc2 = out_prefix + "/star_Softclip.out.mate2";
+        std::error_code sc_ec;
+        const bool softclip = std::filesystem::exists(sc1) && std::filesystem::exists(sc2) && std::filesystem::file_size(sc1, sc_ec) > 0;
+        std::vector<std::string> base_args;
+        {
+            std::ifstream af(out_prefix + "/star_args.txt");
+            for (std::string l; std::getline(af, l);) base_args.push_back(l);
+        }
+        bool solo_fastq = false;
+        for (size_t k = 0; k + 1 < base_args.size(); ++k)
+            if (base_args[k] == "--soloType" && (base_args[k + 1] == "CB_UMI_Simple" || base_args[k + 1] == "CB_UMI_Complex")) solo_fastq = true;
+        if (base_args.empty() || !solo_fastq || !std::filesystem::exists(unm1) || !std::filesystem::exists(unm2)) {
+            std::cerr << "[singlet] chimeric: skipped (needs a FASTQ barcode run with unmapped reads written)\n";
+        } else {
+            StopWatch chim_sw;
+            uint64_t chim_in = 0;   // reads going into the second pass (FASTQ records of the cDNA mate)
+            uint64_t chim_sc = 0;   // of which mapped reads routed by their unaligned part (Softclip.out)
+            { std::ifstream uf(unm1); std::string l; while (std::getline(uf, l)) ++chim_in; chim_in /= 4; }
+            if (softclip) { std::ifstream uf(sc1); std::string l; while (std::getline(uf, l)) ++chim_sc; chim_sc /= 4; }
+            std::cerr << "[singlet] chimeric: " << chim_in + chim_sc << " reads into the second pass (" << chim_in << " unmapped, " << chim_sc
+                      << " mapped with >= " << (getenv("SINGLET_CHIM_SOFTCLIP_MIN") ? getenv("SINGLET_CHIM_SOFTCLIP_MIN") : "0") << " unaligned bases)\n";
+            static const std::set<std::string> drop = {
+                "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
+                "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
+                "--readFilesIn", "--readFilesCommand", "--readFilesType", "--soloFeatures", "--soloOutFileNames", "--soloMultiMappers"};
+            std::vector<std::string> pa;
+            bool skipping = false;
+            for (const auto& s : base_args) {
+                if (s.rfind("--", 0) == 0) skipping = drop.count(s) > 0;
+                if (!skipping) pa.push_back(s);
+            }
+            const std::string prefix = out_prefix + "/chim_";
+            for (const char* s : {"--readFilesIn"}) pa.push_back(s);
+            pa.push_back(softclip ? unm1 + "," + sc1 : unm1); pa.push_back(softclip ? unm2 + "," + sc2 : unm2);
+            for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
+            pa.push_back(prefix);
+            // Arriba's published chimeric settings (Uhrig et al. 2021): short segments (10 bases), unaligned tails up to 30 points and
+            // read gaps up to 3 bases, which droplet reads of 90 bases need (B6: the 15-base settings lost RUNX1-RUNX1T1 reads)
+            for (const char* s : {"--chimSegmentMin", "10", "--chimJunctionOverhangMin", "10", "--chimScoreMin", "1", "--chimScoreDropMax", "30",
+                                  "--chimScoreJunctionNonGTAG", "0", "--chimScoreSeparation", "1", "--alignSJstitchMismatchNmax", "5", "-1", "5", "5",
+                                  "--chimSegmentReadGapMax", "3", "--chimMultimapNmax", "50", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1"})
+                pa.push_back(s);
+            std::vector<char*> pv;
+            pv.push_back(const_cast<char*>("STAR"));
+            for (auto& s : pa) pv.push_back(const_cast<char*>(s.c_str()));
+            pv.push_back(nullptr);
+            pid_t pp = fork();
+            if (pp == 0) {
+                int dn = open("/dev/null", O_WRONLY);
+                if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
+                unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF"); unsetenv("SINGLET_GPU_PILEUP");   // the second pass is a CPU STAR run
+                unsetenv("SINGLET_CHIM_SOFTCLIP_MIN");   // that writes no Softclip.out of its own
+                _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
+            }
+            int ws = 0;
+            const bool ran = pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+            std::error_code ec;
+            std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
+            std::filesystem::remove(sc1, ec); std::filesystem::remove(sc2, ec);
+            std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
+            if (!ran) {
+                std::cerr << "[singlet] chimeric: the second STAR pass failed\n";
+            } else {
+                singlet::chimeric::Config cc;
+                cc.junction_path = prefix + "Chimeric.out.junction";
+                cc.gtf_path = config.exon_gtf_path;
+                cc.catalog_path = fusion_catalog_path;
+                cc.out_path = out_prefix + "/chimeric_junctions.tsv.gz";
+                cc.reverse_strand = engine_ptr->reverse_strand();   // the strand probe's verdict orients non-canonical lines
+                cc.canonical_only = !chimeric_noncanonical;
+                {   // default annotation files on GRCh38: <ref-base>/pileup_indices/fusion/ (scripts/fetch_arriba_blacklist.sh, data/fusion/)
+                    std::string rb = ref_base;
+                    if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+                    const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+                    auto pick = [&](const std::string& given, const char* file) -> std::string {
+                        if (given == "none") return "";
+                        if (!given.empty()) return given;
+                        if (rb.empty() || !human) return "";
+                        const std::string cand = rb + "/pileup_indices/fusion/" + file;
+                        return std::filesystem::exists(cand) ? cand : "";
+                    };
+                    cc.blacklist_path = pick(chimeric_blacklist_path, "blacklist_hg38_GRCh38_v2.5.1.tsv.gz");
+                    cc.recurrent_path = pick(chimeric_recurrent_path, "chimeric_recurrent_GRCh38.tsv");
+                }
+                const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+                std::cerr << "[singlet] chimeric: second pass " << chim_sw.elapsed_s() << " s; " << cs.lines << " junction lines, " << cs.kept_lines << " kept, "
+                          << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous, "
+                          << cs.noncanonical << " non-canonical, " << cs.reoriented << " turned to transcript orientation (library "
+                          << (cc.reverse_strand ? "antisense" : "sense") << "); blacklist " << (cc.blacklist_path.empty() ? std::string("none") : cc.blacklist_path)
+                          << ": " << cs.blacklisted_junctions << " junctions, " << cs.blacklisted_rows << " rows dropped; " << cs.rows
+                          << " rows in " << cs.cells << " cells, " << cs.recurrent_rows << " flagged recurrent, " << cs.annotated << " in the catalogue"
+                          << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
+            }
+            // the second pass's own files: logs carry timings and paths (they differ between runs), the junction file is the table's input
+            const char* keep = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");
+            for (const char* f : {"Log.out", "Log.final.out", "Log.progress.out", "Log.std.out", "SJ.out.tab", "Chimeric.out.junction"}) {
+                if (keep && *keep == '1' && std::string(f) == "Chimeric.out.junction") continue;
+                std::filesystem::remove(prefix + f, ec);
+            }
+            std::filesystem::remove_all(prefix + "_STARtmp", ec);
+        }
+        std::error_code ec2;
+        std::filesystem::remove(out_prefix + "/star_args.txt", ec2);
+    }
 
     // ── T4: CITE-seq ADT/HTO processing ──────────────────────────────────────
     // After GEX export, do a second pass through the .1fq to match ADT tags.

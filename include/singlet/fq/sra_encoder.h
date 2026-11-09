@@ -113,7 +113,8 @@ class SraEncoder {
         Confidence confidence = Confidence::NONE;
         AssayType assay_type = AssayType::UNKNOWN;
         double wl_match_rate = 0.0;
-        int exit_code = 0;  // 0 = success, 2 = data_incomplete (barcode-stripped)
+        int exit_code = 0;  // 0 = success, 2 = data_incomplete (barcode-stripped) or protocol excluded (decision.source)
+        ProtocolDecision decision;   // how the protocol was chosen (detector / geo / excluded / forced), with the evidence
         ProfileTimers profile;
     };
 
@@ -768,6 +769,9 @@ class SraEncoder {
                 {
                     std::unordered_map<std::string, uint16_t> seen_wls;
                     for (const auto& spec : known_protocols()) {
+                        // A spec without a barcode in the read (10x-atac: bc_len 0, barcode in the index read) has nothing to
+                        // scan for: hashing an empty barcode "matched" every read and replaced low-confidence calls.
+                        if (spec.bc_len < 8) continue;
                         if (!spec.whitelist_file.empty() &&
                             !seen_wls.count(spec.whitelist_file)) {
                             seen_wls[spec.whitelist_file] = spec.bc_len;
@@ -1102,49 +1106,62 @@ class SraEncoder {
             }
         }
 
-        // ── AUTOFIX-PROTOCOL-CONFIDENCE-OVERRIDE ──────────────────────────────
-        // When a catalog-trusted protocol is available via EncoderConfig::metadata_protocol
-        // and auto-detection produced a low-confidence (≤ LOW = 1) result that disagrees,
-        // prefer the metadata protocol.  This prevents mis-classifications like
-        // "seqwell → 10x-visium (c=1)" from reaching STAR with wrong CBlen/UMIlen.
-        //
-        // Rules:
-        //  - Only applies when --protocol was NOT set (cfg.protocol_tag.empty()).
-        //  - Applies at ANY confidence level (NONE/LOW/MEDIUM/HIGH): the processing
-        //    catalog is curated by domain experts and always wins over VDB auto-detection.
-        //  - If metadata_protocol is not in the known_protocols registry, emit a
-        //    warning and keep the detected values (never silently corrupt the header).
+        // ── Detector vs GEO chemistry (cfg.metadata_protocol) ──────────────────
+        // A confident call (MEDIUM/HIGH) stands. A low-confidence call that disagrees with GEO is tested against the GEO chemistry on
+        // these probe reads (whitelist floor + 3'/5' strand check, protocol.h resolve_protocol_call); the call that passes is taken, and
+        // when both or neither pass the run is excluded with the reason recorded in stats.decision.
         if (!cfg.protocol_tag.empty()) {
-            // Explicit --protocol flag already committed; do not second-guess it.
-        } else if (!cfg.metadata_protocol.empty()) {
-            const CandidateSpec* meta_spec = find_protocol_spec(cfg.metadata_protocol);
-            if (meta_spec) {
-                if (meta_spec->tag != protocol_tag) {
-                    std::cerr << "[protocol_detect] VDB detection=" << protocol_tag
-                              << " (c=" << static_cast<int>(confidence)
-                              << ") overridden by catalog metadata.protocol="
-                              << cfg.metadata_protocol << "\n";
-                    protocol_tag = meta_spec->tag;
-                    protocol_id  = meta_spec->protocol_id;
-                    confidence   = Confidence::MEDIUM;  // catalog-trusted, verified against registry
-                    // Rebuild detected_proto from the spec so downstream code
-                    // (re-segment, R1-trim checks) uses the correct geometry.
-                    detected_proto.tag         = meta_spec->tag;
-                    detected_proto.protocol_id = meta_spec->protocol_id;
-                    detected_proto.bc_offset   = meta_spec->bc_offset;
-                    detected_proto.bc_length   = meta_spec->bc_len;
-                    detected_proto.umi_offset  = meta_spec->umi_offset;
-                    detected_proto.umi_length  = meta_spec->umi_len;
-                    detected_proto.r1_length   = meta_spec->r1_len;
-                    detected_proto.confidence  = Confidence::MEDIUM;
-                }
-                // else: same protocol — no message needed.
-            } else {
-                std::cerr << "[protocol_detect] WARNING: metadata.protocol='"
-                          << cfg.metadata_protocol
-                          << "' is not in the known_protocols registry; "
-                          << "keeping auto-detected=" << protocol_tag << "\n";
+            stats.decision.source = "forced";
+            stats.decision.tag = protocol_tag;
+            stats.decision.detector_confidence = confidence;
+        } else {
+            if (!cfg.metadata_protocol.empty() && !find_protocol_spec(cfg.metadata_protocol))
+                std::cerr << "[protocol_detect] WARNING: metadata.protocol='" << cfg.metadata_protocol
+                          << "' is not in the known_protocols registry; it is recorded and not tested\n";
+            stats.decision = resolve_protocol_call(protocol_tag, confidence, cfg.metadata_protocol, probe_spots, cfg.whitelist_dirs);
+            const auto& dec = stats.decision;
+            auto pct = [](double r) {
+                if (r < 0) return std::string("-");
+                char b[24];
+                std::snprintf(b, sizeof b, "%.1f%%", r * 100.0);
+                return std::string(b);
+            };
+            std::cerr << "[protocol_detect] call: source=" << dec.source << " detector=" << (dec.detector_tag.empty() ? "-" : dec.detector_tag)
+                      << " (c=" << static_cast<int>(dec.detector_confidence) << ", wl " << pct(dec.detector_test.wl_rate)
+                      << ") geo=" << (dec.geo_raw.empty() ? "-" : dec.geo_raw) << " (wl " << pct(dec.geo_test.wl_rate)
+                      << (dec.geo_test.why.empty() ? "" : ", " + dec.geo_test.why) << ")\n";
+            if (dec.source == "excluded") {
+                std::cerr << "[protocol_detect] EXCLUDED: " << dec.exclusion_reason << "\n";
+                stats.protocol_tag = "";
+                stats.confidence = confidence;
+                stats.exit_code = 2;
+                return stats;
             }
+            if (dec.source == "geo") {
+                const CandidateSpec* meta_spec = find_protocol_spec(dec.tag);
+                std::cerr << "[protocol_detect] low-confidence detection " << protocol_tag << " (c=" << static_cast<int>(confidence)
+                          << ") fails and GEO chemistry " << dec.tag << " passes: using " << dec.tag << "\n";
+                protocol_tag = meta_spec->tag;
+                protocol_id  = meta_spec->protocol_id;
+                confidence   = Confidence::MEDIUM;  // passed the whitelist floor (and strand check) on these reads
+                // Rebuild detected_proto from the spec so downstream code (re-segment, R1-trim checks) uses its geometry.
+                detected_proto.tag         = meta_spec->tag;
+                detected_proto.protocol_id = meta_spec->protocol_id;
+                detected_proto.bc_offset   = meta_spec->bc_offset;
+                detected_proto.bc_length   = meta_spec->bc_len;
+                detected_proto.umi_offset  = meta_spec->umi_offset;
+                detected_proto.umi_length  = meta_spec->umi_len;
+                detected_proto.r1_length   = meta_spec->r1_len;
+                detected_proto.confidence  = Confidence::MEDIUM;
+                stats.wl_match_rate = dec.geo_test.wl_rate;
+            }
+        }
+        // A GEM-X call needs its fetched list; there is no substitute list.
+        if (const std::string ferr = fetched_whitelist_missing_error(protocol_tag, cfg.whitelist_dirs); !ferr.empty()) {
+            std::cerr << "[1fq-encode] ERROR: " << ferr << "\n";
+            stats.protocol_tag = protocol_tag;
+            stats.exit_code = 1;
+            return stats;
         }
         // ─────────────────────────────────────────────────────────────────────
 
@@ -1169,8 +1186,10 @@ class SraEncoder {
         // resegment guard (confidence >= MEDIUM) silently suppresses splitting and
         // every read ends up with r2_len=0 → "R2 is empty for all reads" fatal.
         // Metadata-provided protocols are catalog-trusted; splitting is safe.
-        bool metadata_protocol_known = (!cfg.metadata_protocol.empty() &&
-                                        split_r1 > 0);
+        // Only when the final call is the GEO chemistry (agreement, or GEO's call passed the tests above).
+        bool metadata_protocol_known = (!cfg.metadata_protocol.empty() && split_r1 > 0 &&
+                                        find_protocol_spec(cfg.metadata_protocol) &&
+                                        find_protocol_spec(cfg.metadata_protocol)->tag == protocol_tag);
         bool resegment = ((confidence >= Confidence::MEDIUM || metadata_protocol_known) &&
                           split_r1 > 0 && split_r1 < r1_len && r2_len == 0);
         if (resegment) {

@@ -40,3 +40,9 @@ Gapdh 123k / 203k / 203k; Rps10 1.3k / 52.9k / 39.6k; Rpl24 0.8k / 52k / 41k; Bc
 3. Option (2), fallback: apply the rule only for protocol `10x-visium` (zero blast radius; fixes the 3 spatial rows, leaves neuron1k).
 4. First step Thursday: confirm the mechanism with a molecule dump on a small Visium subset (reads of Eef1a1 with NH > 1), then
    implement.
+
+## Implemented (2026-11-07)
+Branch `gpu/exon-rule`: option (1) as `intron_rule::kExonPrecedence` (4096), on by default (rules 7053), CPU serial, CPU parallel and the GPU
+`k_resolve` together (`gpu-pileup-order-free.md`, last section). The rule applies to the whole multimapper decision, so total, exon and intron
+counts change together for reads with an exonic alignment; reads without one keep GeneFull behaviour. The evidence steps of the plan (gate
+datasets, spatial rows, neuron1k_v3) are still to run.

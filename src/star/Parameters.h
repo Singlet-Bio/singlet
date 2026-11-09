@@ -215,6 +215,7 @@ class Parameters {
         } peOverlap;
 
         string outReadsUnmapped;
+        int singletSoftclipMin = 0; //singlet --chimeric: SINGLET_CHIM_SOFTCLIP_MIN, mapped unique reads with >= this many unaligned bases also go to Softclip.out.mate*
         int outQSconversionAdd;
         string outFileTmp;
 

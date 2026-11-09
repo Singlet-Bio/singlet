@@ -2,7 +2,7 @@
 // path with the per-sample fixed costs paid once.
 //
 //   singlet gpu-pool --device D --queue FILE [--slots 2] [--workers 8] [--threads 7] [--args "<pipeline arguments>"] [--report DIR]
-//                    [--nonhost-server on|off] [--genome-preload on|off] [--timeout S]
+//                    [--nonhost-server on|off] [--genome-preload on|off] [--shared-index on|off] [--timeout S]
 //
 // The queue file has one sample per line: `<sample.1fq> <out dir> [extra pipeline arguments]` (blank lines and # comments skipped; quotes
 // group words). Sample i runs `singlet <sample.1fq> <--args ...> --out-prefix <out dir> --threads T <extra ...>` exactly as on its own,
@@ -22,6 +22,8 @@
 // (the fields of /usr/bin/time -v). A sample that crashes or is killed is recorded and the stream goes on; the pool exits when the queue
 // is drained, with status 0 if every sample exited 0, else 1, after a summary: per sample wall, core-s, peak RSS, and the pool's pairs/s.
 // <report>/pids.tsv lists pid, label and start time of the pool, the server and each sample's process (for a sampler).
+// --shared-index on (the default) exports SINGLET_GPU_SHARED_INDEX=1 to every sample unless the variable is already set: one holder per
+// device and genome keeps G, SA and SAi on the device and every slot maps them, so no sample uploads the index (outputs are the same).
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -46,6 +48,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -259,11 +262,13 @@ void close_fds_from(int lo, int keep = -1) {
 }   // namespace
 
 // The pool. argv: the arguments after `gpu-pool`. pipeline: the `singlet` command's main (singlet.cpp), run in each sample's process.
-int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
+// preload_refs (singlet.cpp, may be null): parses the pileup references of the samples' arguments once, in the pool, before any fork.
+int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
+                     std::string (*preload_refs)(const std::vector<std::vector<std::string>>&)) {
     int device = -1, slots = 2, workers = 8, threads = 7, preloadThreads = 8;
     double timeout = 0;
     std::string queue, args, report;
-    bool server = true, preload = true;
+    bool server = true, preload = true, sharedIdx = true;
     for (int i = 0; i < argc; ++i) {
         const std::string a = argv[i];
         auto val = [&]() -> std::string {
@@ -281,9 +286,11 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
         else if (a == "--preload-threads") preloadThreads = std::atoi(val().c_str());
         else if (a == "--nonhost-server") server = val() != "off";
         else if (a == "--genome-preload") preload = val() != "off";
+        else if (a == "--shared-index") sharedIdx = val() != "off";
         else if (a == "-h" || a == "--help") {
             std::cout << "singlet gpu-pool --device D --queue FILE [--slots 2] [--workers 8] [--threads 7] [--args \"<pipeline arguments>\"]\n"
-                         "                 [--report DIR] [--nonhost-server on|off] [--genome-preload on|off] [--timeout S] [--preload-threads 8]\n"
+                         "                 [--report DIR] [--nonhost-server on|off] [--genome-preload on|off] [--shared-index on|off]\n"
+                         "                 [--timeout S] [--preload-threads 8]\n"
                          "Queue lines: <sample.1fq> <out dir> [extra pipeline arguments]. docs/gpu-engine/fable/GPU-PATH.md, E21-pool.md.\n";
             return 0;
         } else { std::cerr << "gpu-pool: unknown option " << a << " (--help)\n"; return 2; }
@@ -331,6 +338,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
          items.size(), workers, threads, slots, report.c_str(), args.c_str());
     setenv("SINGLET_ENGINE_GPU_SLOTS", std::to_string(slots).c_str(), 1);
     setenv("SINGLET_ENGINE_GPU_DEVICE", std::to_string(device).c_str(), 1);
+    if (sharedIdx && std::getenv("SINGLET_GPU_SHARED_INDEX") == nullptr) setenv("SINGLET_GPU_SHARED_INDEX", "1", 1);
+    { const char* si = std::getenv("SINGLET_GPU_SHARED_INDEX"); plog("shared device index: SINGLET_GPU_SHARED_INDEX=%s", si ? si : "(unset)"); }
     unsetenv("SINGLET_NONHOST_SERVER");
     struct sigaction sa{};
     sa.sa_handler = on_stop;
@@ -388,6 +397,24 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
     if (server) plog("non-host server: not built (no CUDA engine)");
 #endif
 
+    // ---- the pileup references (each genome's GTF and SNP panel), once, on a thread beside the genome preload
+    std::thread refsTh;
+    std::string refsLog;
+    double refsSec = 0;
+    if (preload_refs) {
+        std::vector<std::vector<std::string>> itemArgs;
+        for (const Item& it : items) {
+            std::vector<std::string> all = base;
+            all.insert(all.end(), it.extra.begin(), it.extra.end());
+            itemArgs.push_back(std::move(all));
+        }
+        refsTh = std::thread([&refsLog, &refsSec, preload_refs, itemArgs = std::move(itemArgs)]() {
+            const double t0 = wall_now();
+            refsLog = preload_refs(itemArgs);
+            refsSec = wall_now() - t0;
+        });
+    }
+
     // ---- the genomes, once
     const char* gpe = std::getenv("SINGLET_GENOME_PRELOAD");
     const std::string gload = arg_value(base, "--genome-load");
@@ -403,6 +430,10 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**)) {
             plog("genome %s: %s%s", it.genome.c_str(), ok ? "resident, " : "not preloaded: ", lg.c_str());
         }
     } else plog("genome preload off: every sample reads its own");
+    if (refsTh.joinable()) {
+        refsTh.join();
+        plog("pileup references (%.1f s): %s", refsSec, refsLog.c_str());
+    }
     const double tReady = wall_now();
     plog("ready in %.2f s", tReady - tStart);
 

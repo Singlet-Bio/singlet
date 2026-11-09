@@ -25,6 +25,8 @@
 #include <map>
 #include <tuple>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
@@ -36,6 +38,8 @@
 #include <string>
 #include <thread>
 #include <sched.h>
+#include <sys/stat.h>
+#include <cstdlib>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -122,6 +126,9 @@ struct PileupConfig {
     std::string out_chrm_bam;       // Output: chrM BAM
     int threads = 4;
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
+    // R11 stream (cb_from_cr with a cb_corrector): a reader thread decodes the records and resolves their CB and barcode index ahead of
+    // the serial loop (PileupEngine::LookAhead). The loop sees the same records in the same order with the same CBs.
+    bool stream_lookahead = false;
     int min_mapq = 20;              // Minimum mapping quality
     int min_baseq = 10;             // Minimum base quality for the SNP pileup (and the D-101 editing sites in it)
     // D-101/D-109: minimum base quality at the editing sites only (REDItools2's -bq rule; -1 = min_baseq). The SNP panel keeps
@@ -163,7 +170,10 @@ struct PileupConfig {
     // kUnique stays on: without it (908) intronic multimappers add wrong-species UMIs that STARsolo does not count.
     // 2957 = 909 + kUmiGeneSpliced (2048): a UMI in two genes of a cell keeps its winner only when the winner is spliced. hgmm5k_v3 had
     // fewer wrong-species molecules than STARsolo but a 0.8% smaller denominator, so its X fraction sat just above; this closes it.
-    uint32_t intron_rules = 2957;
+    // 7053 = 2957 + kExonPrecedence (4096): a multimapper with an exonic alignment is judged on its exonic alignments only, as STARsolo
+    // Gene, Space Ranger and Cell Ranger count it. Highly expressed genes with unannotated retrocopies in other genes' introns (Eef1a1,
+    // Gapdh, Rps10, Rpl24, Bc1) lost most of their reads to gene ambiguity (docs/research-beta/spatial-exon-multimapper.md).
+    uint32_t intron_rules = 7053;
 };
 
 namespace intron_rule {
@@ -179,6 +189,16 @@ constexpr uint32_t kNoExonPriority  = 16;   ///< an exonic read of gene A inside
 // such gene is not counted. It implies kNoExonPriority on the primary, makes an intron-only secondary in another gene, or a primary in the
 // introns of two genes, mark a multimapper gene-ambiguous, and otherwise leaves the assignment (gene, exon / intron, labels) unchanged.
 constexpr uint32_t kGeneFullSet     = 512;
+// Exonic alignments take precedence over intronic-only ones (STARsolo Gene, Space Ranger, Cell Ranger with introns). A multimapper (NH > 1)
+// with at least one alignment that overlaps an exon is judged on those alignments alone: alignments without an exon overlap (intron or
+// gene-body hits only) neither make it gene-ambiguous nor give it their gene. It is ambiguous only when its exonic alignments name more than
+// one gene, or one exonic alignment is itself multi-gene (exons of two genes; under kGeneFullSet also an exon of one gene in another gene's
+// intron). The counted features follow R7 over the exonic alignments (the primary's when it is exonic and kept, else the smallest secondary
+// exon), the EM pair is the two smallest exonic genes, and kMtPrefer's tie is decided on the exonic genes and an exonic chrM alignment.
+// A multimapper without any exonic alignment is judged as before. On a joint reference (contigs <genome>___<contig>) the rule decides only
+// when all alignments lie in one genome; across genomes the read is judged on all of them (hgmm1k_v3: a human rRNA read whose only exonic
+// alignment is the mouse 18S pseudogene Rn18s-rs5 stays ambiguous). A single-genome reference is unaffected.
+constexpr uint32_t kExonPrecedence  = 4096;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
@@ -331,6 +351,11 @@ struct ProfileCounters {
     uint64_t t_mt_pileup = 0;        // chrM base pileup
     uint64_t t_mm_buffer = 0;        // multi-mapper buffer management
     uint64_t t_chrm_buf = 0;         // chrM bam_dup1 buffering
+    uint64_t t_rrna = 0;             // the 1/64 rRNA sample
+    uint64_t t_ei_query = 0;         // within exon/intron: CIGAR blocks, exon and intron queries, strand filter, gene uniqueness
+    uint64_t t_ei_classify = 0;      // within exon/intron: classify_read + refine_read
+    uint64_t t_ei_count = 0;         // within exon/intron: count_read (unique) or the multimapper buffer (NH > 1)
+    uint64_t t_loop = 0;             // the stream loop, first record to the end of the stream
     uint64_t n_samples = 0;          // number of reads where timing was active
 
     static inline uint64_t rdtsc() {
@@ -358,10 +383,15 @@ struct ProfileCounters {
                   << "  mt base pileup:       " << sec(t_mt_pileup) << "s (" << pct(t_mt_pileup) << "%)\n"
                   << "  Multi-mapper buffer:  " << sec(t_mm_buffer) << "s (" << pct(t_mm_buffer) << "%)\n"
                   << "  chrM buffering:       " << sec(t_chrm_buf) << "s (" << pct(t_chrm_buf) << "%)\n"
+                  << "  rRNA sample:          " << sec(t_rrna) << "s (" << pct(t_rrna) << "%)\n"
+                  << "    exon/intron: queries " << sec(t_ei_query) << "s, classify " << sec(t_ei_classify) << "s, count/mm "
+                  << sec(t_ei_count) << "s\n"
+                  << "  Stream loop (first record to end): " << sec(t_loop) << "s\n"
                   << "  Samples: " << n_samples << " reads\n";
         double accounted = sec(t_bam_io + t_secondary + t_barcode + t_nh_mapq_umi +
                                t_exon_intron + t_sj + t_variant + t_mt_pileup +
-                               t_mm_buffer + t_chrm_buf);
+                               t_mm_buffer + t_chrm_buf + t_rrna);
+        std::cerr << "  Stream loop not in a section: " << (sec(t_loop) - accounted) << "s\n";
         std::cerr << "  Accounted: " << accounted << "s (" << (accounted / total_wall_s * 100.0)
                   << "%), Unaccounted: " << (total_wall_s - accounted)
                   << "s (" << ((total_wall_s - accounted) / total_wall_s * 100.0) << "%)\n\n";
@@ -491,11 +521,15 @@ public:
         std::thread snp_thread;
         std::thread gtf_thread;
 
-        if (need_snps) {
+        // Pool-resident references (take_pool_snps / take_pool_gtf below): the structures `singlet gpu-pool` parsed from the same files
+        const bool snp_pooled = need_snps && take_pool_snps();
+        const bool gtf_pooled = need_exons && take_pool_gtf(gtf_ok);
+
+        if (need_snps && !snp_pooled) {
             snp_thread = std::thread([&]() { snp_ok = load_snps(); });
         }
 
-        if (need_exons) {
+        if (need_exons && !gtf_pooled) {
             gtf_thread = std::thread([&]() {
                 const auto& path = config_.exon_gtf_path;
                 bool is_bed = (path.find(".bed") != std::string::npos);
@@ -685,9 +719,21 @@ public:
             uint32_t first_gene  = UINT32_MAX;   // the smallest gene any alignment touched (note_gene: not the first one met)
             uint32_t second_gene = UINT32_MAX;   // the second smallest distinct gene, for EM rescue
             bool has_nuc = false;                // some alignment touched a non-chrM gene (intron_rule::kMtPrefer)
+            bool partial = false;                // multimap record: the read's gene set is not {first_gene, second_gene} (multimap_record.h)
+            uint32_t body_a = UINT32_MAX, body_b = UINT32_MAX;   // multimap record only: a gene-ambiguous primary's gene-body set (record_set)
+            bool body_more = false;              // ... with more than two genes (never read by the counting)
+            bool ex_partial = false, body_ex = false;   // multimap record under kExonPrecedence: the exonic gene set is not {ex_first, ex_second};
+                                                 // the primary is exonic, so its body set joins the exonic set
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
+            bool mt_ex = false;                  // that alignment overlaps an exon (intron_rule::kExonPrecedence)
+            // intron_rule::kExonPrecedence: the same state over the exonic alignments only (note_ex_gene, note_*_exonic)
+            bool ex_seen = false, ex_ambiguous = false, ex_has_nuc = false, xa_primary = false;
+            uint32_t ex_first = UINT32_MAX, ex_second = UINT32_MAX;
+            uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
+            uint8_t xa_flags = 0, xa_diag = 0;
+            uint8_t sp_mask = 0;                 // species of the alignments' contigs (species_bit; joint references only)
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
         mm_buffer.reserve(500000);
@@ -695,31 +741,20 @@ public:
         // Lambda to resolve a completed multi-hit entry
         auto resolve_mm = [&](MultiHitEntry& e, PileupStats& st) {
             if (e.bc_idx < 0) return;
-            if (mt_numt_tie(e)) {   // chrM gene vs. its nuclear copy: count the chrM gene (see mt_numt_tie)
+            const MmVerdict v = mm_verdict(e);   // shared with resolve_mm_parallel and the cross-worker merge
+            if (v.kind == MmVerdict::kMt) {      // chrM gene vs. its nuclear copy: count the chrM gene
                 count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
-                           mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                           v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
                 st.mt_numt_rescued++;
-                return;
-            }
-            if (e.gene_ambiguous) {
+            } else if (v.kind == MmVerdict::kAmbig) {
                 // G-EM: collect for post-pileup EM rescue
-                if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
-                    em_rescue::AmbigRead ar;
-                    ar.bc_idx  = e.bc_idx;
-                    ar.umi_len = e.umi_len;
-                    std::memcpy(ar.umi, e.umi, e.umi_len);
-                    ar.gene_a  = e.first_gene;
-                    ar.gene_b  = e.second_gene;
-                    ambig_reads_.push_back(ar);
-                }
-                return;
+                record_mm(e, v, ambig_reads_);   // multimap record: the verdict decides (no double count with kCount)
+            } else if (v.kind == MmVerdict::kCount) {
+                count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
+                           v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+            } else {
+                record_mm(e, v, ambig_reads_);   // gene-ambiguous without a G-EM pair (kNone): uncounted, the record may hold it
             }
-            // Gene-unique: first_gene is the only gene (or all intergenic)
-            if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-            ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
-                            static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
-            count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
-                       rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
         };
 
         // ── Strand probe ──
@@ -739,6 +774,7 @@ public:
         double tsc_ghz = calibrate_tsc_ghz();
         std::cerr << "[PROFILE] TSC frequency: " << tsc_ghz << " GHz\n";
         uint64_t _bam_io_start = ProfileCounters::rdtsc();
+        uint64_t _loop_start = 0;
 #endif
 
         gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
@@ -751,8 +787,30 @@ public:
 #endif
         singlet_tail::mark("parent: stream loop starts");
         bool e16_first = singlet_tail::on();
-        while (sam_read1(fp, hdr, b) >= 0) {
+        bam1_t* const b_own = b;
+        std::unique_ptr<LookAhead> look;
+        if (config_.stream_lookahead && config_.cb_from_cr && config_.cb_corrector) {
+            ei_ahead_ = has_gene_model_ && !gpu_covers_;
+            post_ahead_ = !gpu_covers_;
+            look.reset(new LookAhead(*this, fp, hdr));
+            std::cerr << "[singlet-pileup] stream look-ahead: records decoded and CBs resolved on a reader thread"
+                      << (ei_ahead_ ? ", exon and intron overlaps taken there too" : "") << "\n";
+        }
+        auto next_record = [&]() -> bool {
+            if (!look) return sam_read1(fp, hdr, b) >= 0;
+            if (look->next(b, look_cur_, look_ei_, post_cur_)) return true;
+            look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
+            return false;
+        };
+        mol_store_.set_staging(true);   // the loop's molecules go to the store's staging table (DirectionalUmiStore::seal())
+        while (next_record()) {
             if (e16_first) { e16_first = false; singlet_tail::mark("parent: first BAM record"); }
+#ifdef SINGLET_PROFILE
+            if (!_loop_start) {
+                _loop_start = ProfileCounters::rdtsc();
+                _bam_io_start = _loop_start;   // the wait for STAR's first record is not BAM I/O
+            }
+#endif
             tee.write(hdr, b);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_col_) {
@@ -790,6 +848,7 @@ public:
             // (order-free-rules R4)
             if (b->core.l_qseq >= 21 && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))
                 && (hash_qname(bam_get_qname(b)) & 63) == 0) {
+                PROF_START(rrna);
                 ++stats.rrna_reads_sampled;
                 const uint8_t* qseq = bam_get_seq(b);
                 if (qseq) {
@@ -798,6 +857,7 @@ public:
                         _rrna_seq[static_cast<size_t>(_qi)] = seq_nt16_str[bam_seqi(qseq, _qi)];
                     if (rrna_detector_.detect(_rrna_seq)) ++stats.rrna_reads;
                 }
+                PROF_END(prof, rrna);
             }
 
             // Always skip supplementary alignments
@@ -817,7 +877,7 @@ public:
                     // Inline CB scanner — same as primary path, avoids htslib call overhead
                     const char* cb_sec_str = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
                     if (cb_sec_str && cb_sec_str[0] != '-') {
-                        int32_t bc_check = bc_index_.lookup(cb_sec_str);
+                        int32_t bc_check = look_cur_ ? look_cur_->bc : bc_index_.lookup(cb_sec_str);
 
                         // All alignments of the same read share the same barcode.
                         // If barcode is invalid, no entry exists in mm_buffer.
@@ -836,6 +896,7 @@ public:
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                        it->second.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -849,8 +910,9 @@ public:
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
                                         }
-                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(it->second, hit, tid);
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm(it->second, stats);
                                         mm_buffer.erase(it);
@@ -863,6 +925,7 @@ public:
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                        entry.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -870,8 +933,9 @@ public:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(entry, hit, tid);
                                 }
                             }
                         }
@@ -901,7 +965,7 @@ public:
                 PROF_BAM_IO_RESTART;
                 continue;
             }
-            int32_t bc_idx = bc_index_.lookup(cb_str);
+            int32_t bc_idx = look_cur_ ? look_cur_->bc : bc_index_.lookup(cb_str);
             cur_read_gene_ = UINT32_MAX;
             if (bc_idx < 0) {
                 // N22: WL ambient profiling — accumulate gene hits from WL-only barcodes
@@ -987,10 +1051,28 @@ public:
             if (has_gene_model_) {
                 PROF_START(exon_intron);
                 if (!gpu_covers_) {   // W11 "on": classification and everything that uses it comes from the GPU (gpu_pileup_apply)
-                // Extract aligned blocks from CIGAR
+                PROF_START(ei_query);
+                // Extract aligned blocks from CIGAR (or take the reader's walk and queries, LookRec::ei)
+                const LookRec* const ahead = (look_cur_ && look_cur_->ei) ? look_cur_ : nullptr;
                 aligned_blocks_.clear();
                 bool read_has_n = false;
-                {
+                if (ahead) {
+                    const auto* bb = look_ei_->blocks.data() + ahead->blk_off;
+                    aligned_blocks_.assign(bb, bb + ahead->blk_n);
+                    read_has_n = ahead->has_n != 0;
+                }
+                // Block k's exon (intron) overlaps, before the strand filter: the reader's, or the gene model's
+                auto block_exons = [&](size_t k, int32_t bs, int32_t be) {
+                    if (!ahead) { gene_model_.query_exons(tid, bs, be, block_overlaps_); return; }
+                    const BlockOvl& o = look_ei_->bov[ahead->blk_off + k];
+                    block_overlaps_.assign(look_ei_->ovl.data() + o.e_off, look_ei_->ovl.data() + o.e_off + o.e_n);
+                };
+                auto block_introns = [&](size_t k, int32_t bs, int32_t be) {
+                    if (!ahead) { gene_model_.query_introns(tid, bs, be, block_overlaps_); return; }
+                    const BlockOvl& o = look_ei_->bov[ahead->blk_off + k];
+                    block_overlaps_.assign(look_ei_->ovl.data() + o.i_off, look_ei_->ovl.data() + o.i_off + o.i_n);
+                };
+                if (!ahead) {
                     const uint32_t* cigar = bam_get_cigar(b);
                     int32_t rpos = b->core.pos;
                     for (int ci = 0; ci < b->core.n_cigar; ++ci) {
@@ -1025,8 +1107,8 @@ public:
                 bool had_strand_reject = false;
 
                 bool vote_sense = false, vote_anti = false;
-                for (const auto& [bstart, bend] : aligned_blocks_) {
-                    gene_model_.query_exons(tid, bstart, bend, block_overlaps_);
+                for (size_t bk = 0; bk < aligned_blocks_.size(); ++bk) {
+                    block_exons(bk, aligned_blocks_[bk].first, aligned_blocks_[bk].second);
                     strand_vote(block_overlaps_, read_reverse, vote_sense, vote_anti);
                     size_t n_before = exon_overlaps.size();
                     for (uint32_t idx : block_overlaps_) {
@@ -1090,8 +1172,8 @@ public:
                 uint32_t first_intron_idx = UINT32_MAX;
                 if (config_.count_introns) {
                     intron_overlaps.clear();
-                    for (const auto& [bstart, bend] : aligned_blocks_) {
-                        gene_model_.query_introns(tid, bstart, bend, block_overlaps_);
+                    for (size_t bk = 0; bk < aligned_blocks_.size(); ++bk) {
+                        block_introns(bk, aligned_blocks_[bk].first, aligned_blocks_[bk].second);
                         for (uint32_t idx : block_overlaps_) {
                             if (config_.stranded) {
                                 uint32_t g = gene_model_.intron_to_gene(idx);
@@ -1121,10 +1203,14 @@ public:
                     }
                 }
 
+                PROF_END(prof, ei_query);
+                PROF_START(ei_classify);
                 ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                                 intron_overlaps, intron_gene, first_intron_idx,
                                                 stats);
                 refine_read(rf, aligned_blocks_, read_has_n, nh, tid, read_reverse, block_overlaps_);
+                PROF_END(prof, ei_classify);
+                PROF_START(ei_count);
                 if (nh == 1) cur_read_gene_ = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
                 if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                     uint64_t pk;
@@ -1136,6 +1222,8 @@ public:
                     // ── Unique read: count (molecules are labelled at finalize) ──
                     count_read(mol_store_, exon_acc_, intron_acc_, stats,
                                static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
+                    if (primary_multigene || gene_full_multi(exon_gene, primary_multigene, intron_overlaps))
+                        note_unique_multigene(ambig_reads_, exon_overlaps, intron_overlaps, bc_idx, umi_str, umi_len);
                 } else {
                     // ── Multi-mapped primary: buffer for cross-alignment resolution ──
                     uint64_t qh = hash_qname(bam_get_qname(b));
@@ -1151,7 +1239,7 @@ public:
                         entry.intron_idx = rf.intron_idx;
                         entry.read_flags = rf.flags;
                         entry.read_diag = rf.diag;
-                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
+                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag, exon_gene != UINT32_MAX);
                     }
                     if (umi_str && umi_len > 0) {
                         int clen = std::min(umi_len, 15);
@@ -1159,26 +1247,30 @@ public:
                         entry.umi[clen] = '\0';
                         entry.umi_len = static_cast<uint8_t>(umi_len);
                     }
+                    const bool gf_multi = gene_full_multi(exon_gene, primary_multigene, intron_overlaps);
+                    note_primary_exonic(entry, exon_overlaps, exon_gene, primary_multigene, gf_multi, rf, tid);
 
                     // If primary position overlaps multiple genes, mark as ambiguous
                     if (primary_multigene) {
                         entry.gene_ambiguous = true;
                         // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from exon_overlaps
                         if (!exon_overlaps.empty()) {
-                            uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+                            uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]), gb = UINT32_MAX;
                             if (ga != UINT32_MAX) {
                                 note_gene(entry, ga);
-                                for (size_t _i = 1; _i < exon_overlaps.size(); ++_i) {
-                                    uint32_t gb = gene_model_.exon_to_gene(exon_overlaps[_i]);
-                                    if (gb != UINT32_MAX && gb != ga) {
-                                        note_gene(entry, gb); break;
-                                    }
-                                }
+                                gb = second_exon_gene(exon_overlaps, ga);
+                                if (gb != UINT32_MAX) note_gene(entry, gb);
                             }
+                            if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(exon_overlaps, ga, gb)) entry.partial = true;
                         }
                     }
 
-                    if (gene_full_multi(exon_gene, primary_multigene, intron_overlaps)) entry.gene_ambiguous = true;
+                    if (gf_multi) entry.gene_ambiguous = true;
+                    if (primary_multigene || gf_multi) {   // multimap record: the primary's gene-body set
+                        const RecSet bs = record_set(exon_overlaps, intron_overlaps);
+                        note_body(entry, bs.a); note_body(entry, bs.b);
+                        if (bs.more) entry.body_more = true;
+                    }
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                     note_gene(entry, aln_gene);
@@ -1190,6 +1282,7 @@ public:
                     }
                 }
 
+                PROF_END(prof, ei_count);
                 // N17: VDJ gene usage counting
                 if (has_vdj_ && !aligned_blocks_.empty()) {
                     vdj_overlaps_.clear();
@@ -1213,7 +1306,10 @@ public:
                 // Splice junction extraction (always for primary alignments)
                 if (config_.count_sj) {
                     PROF_START(sj);
-                    if (!gpu_covers_) extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats);
+                    if (!gpu_covers_) {
+                        if (post_cur_) post_set(kPostSj, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);
+                        else extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats, cur_read_gene_);
+                    }
                     PROF_END(prof, sj);
                 }
             }
@@ -1222,10 +1318,14 @@ public:
             // Only use high-MAPQ reads for variant calling accuracy
             if (high_mapq) {
                 PROF_START(variant);
-                int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
-                if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
-                    pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
-                                         umi_str, umi_len, stats);
+                if (post_cur_ && !gpu_covers_) {
+                    post_set(kPostVariant, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);   // the overlap search too
+                } else {
+                    int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
+                    if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
+                        pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
+                                             umi_str, umi_len, stats, cur_read_gene_);
+                    }
                 }
                 PROF_END(prof, variant);
             }
@@ -1234,12 +1334,28 @@ public:
             // MAPQ gate: multimapped reads (NH>1, low MAPQ; e.g. NUMT-derived) reach this point, so require high_mapq here.
             if (config_.count_mt && high_mapq && is_chrm(tid)) {
                 PROF_START(mt_pileup);
-                if (!gpu_covers_) pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                if (!gpu_covers_) {
+                    if (post_cur_) post_set(kPostMt, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);
+                    else pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                }
                 PROF_END(prof, mt_pileup);
             }
             PROF_BAM_IO_RESTART;
         }
         PROF_BAM_IO_ACCUM;  // account for last failed sam_read1
+#ifdef SINGLET_PROFILE
+        if (_loop_start) prof.t_loop = ProfileCounters::rdtsc() - _loop_start;
+#endif
+        look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
+        if (look) {   // the post stage's steps are complete once finish() returns
+            look->finish();
+            stats.sj_hits += post_stats_.sj_hits;
+            stats.snp_hits += post_stats_.snp_hits;
+            stats.mt_pileup_bases += post_stats_.mt_pileup_bases;
+            post_stats_ = PileupStats{};
+        }
+        b = b_own;
+        look.reset();   // stops and joins the reader (after a strand abort it may hold up to one more batch, unread)
 
         if (gpu_covers_) std::cerr << "[gpu_pileup] stream drained\n";   // S8: log timestamps place the post-stream steps
         singlet_tail::mark("parent: stream drained (%llu records)", (unsigned long long) stats.total_reads);
@@ -1255,6 +1371,7 @@ public:
             std::cerr << "[singlet-pileup] Flushed " << mm_flushed
                       << " incomplete multi-mapped entries\n";
         }
+        mol_store_.set_staging(false);   // seals: the groups as record_read() would have built them, before anything reads them
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpu_covers_ && !gpu_handoff_pass(stats)) {
@@ -1430,9 +1547,20 @@ public:
             uint32_t first_gene  = UINT32_MAX;
             uint32_t second_gene = UINT32_MAX;  // the second smallest distinct gene, for EM rescue (note_gene)
             bool has_nuc = false;
+            bool partial = false;               // multimap record: the gene set is not {first_gene, second_gene}
+            uint32_t body_a = UINT32_MAX, body_b = UINT32_MAX;   // multimap record only (record_set)
+            bool body_more = false;
+            bool ex_partial = false, body_ex = false;   // multimap record under kExonPrecedence
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
+            bool mt_ex = false;                  // that alignment overlaps an exon (intron_rule::kExonPrecedence)
+            // intron_rule::kExonPrecedence: the same state over the exonic alignments only (note_ex_gene, note_*_exonic)
+            bool ex_seen = false, ex_ambiguous = false, ex_has_nuc = false, xa_primary = false;
+            uint32_t ex_first = UINT32_MAX, ex_second = UINT32_MAX;
+            uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
+            uint8_t xa_flags = 0, xa_diag = 0;
+            uint8_t sp_mask = 0;                 // species of the alignments' contigs (species_bit; joint references only)
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
 
@@ -1664,8 +1792,9 @@ public:
                     if (m.bc_idx < 0 && wentry.bc_idx >= 0) m.bc_idx = wentry.bc_idx;
                     if (wentry.mt_gene != UINT32_MAX) {
                         m.mt_gene = wentry.mt_gene; m.mt_exon = wentry.mt_exon; m.mt_intron = wentry.mt_intron;
-                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag;
+                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag; m.mt_ex = wentry.mt_ex;
                     }
+                    merge_exonic(m, wentry);   // intron_rule::kExonPrecedence: the exonic genes and R7 over the exonic alignments
                     if (m.umi_len == 0 && wentry.umi_len > 0) {
                         m.umi_len = wentry.umi_len;
                         std::memcpy(m.umi, wentry.umi, wentry.umi_len);
@@ -1674,6 +1803,9 @@ public:
                     note_gene(m, wentry.first_gene);
                     note_gene(m, wentry.second_gene);
                     if (wentry.has_nuc) m.has_nuc = true;
+                    if (wentry.partial) m.partial = true;
+                    note_body(m, wentry.body_a); note_body(m, wentry.body_b);
+                    if (wentry.body_more) m.body_more = true;
                     if (wentry.gene_ambiguous) {
                         m.gene_ambiguous = true;
                     } else {
@@ -1704,46 +1836,24 @@ public:
 
             PileupStats xw_stats;
             for (auto& [qh, m] : global_mm) {
-                // intron_rule::kMtPrefer (see resolve_mm_parallel): chrM gene vs. its nuclear copy
-                if (m.bc_idx >= 0 && mt_numt_tie(m)) {
-                    const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
-                    int target = 0;
-                    for (int w = 0; w < n_workers; ++w)
-                        if (workers[w].mol_store.has_group(bc, m.mt_gene)) { target = w; break; }
-                    auto& tw = workers[target];
-                    ReadFeatures rf{m.mt_gene, m.mt_exon, m.mt_intron, m.mt_flags,
-                                    static_cast<uint8_t>(m.mt_diag | DirectionalUmiStore::kDiagMulti)};
-                    count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
-                               m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
-                    xw_mt++;
-                    continue;
-                }
-                if (m.gene_ambiguous || m.bc_idx < 0) {
+                if (m.bc_idx < 0) continue;
+                // the same verdict as resolve_mm_parallel: intron_rule::kMtPrefer's chrM tie, gene ambiguity (G-EM pair) or the counted features
+                const MmVerdict v = mm_verdict(m);
+                if (v.kind == MmVerdict::kAmbig) {
                     // G-EM: collect cross-worker ambiguous reads for rescue
-                    if (m.gene_ambiguous && m.bc_idx >= 0 &&
-                        m.first_gene != UINT32_MAX && m.second_gene != UINT32_MAX) {
-                        em_rescue::AmbigRead ar;
-                        ar.bc_idx  = m.bc_idx;
-                        ar.umi_len = m.umi_len;
-                        std::memcpy(ar.umi, m.umi, m.umi_len);
-                        ar.gene_a  = m.first_gene;
-                        ar.gene_b  = m.second_gene;
-                        ambig_reads_.push_back(ar);
-                    }
+                    record_mm(m, v, ambig_reads_);   // multimap record: the verdict decides
                     continue;
                 }
-                if (m.first_gene == UINT32_MAX || m.gene_idx == UINT32_MAX) continue;
+                if (v.kind == MmVerdict::kNone) { record_mm(m, v, ambig_reads_); continue; }
 
                 const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
                 int target = 0;  // no store has this (bc, gene) yet: any store is the only one
                 for (int w = 0; w < n_workers; ++w)
-                    if (workers[w].mol_store.has_group(bc, m.gene_idx)) { target = w; break; }
+                    if (workers[w].mol_store.has_group(bc, v.rf.gene)) { target = w; break; }
                 auto& tw = workers[target];
-                ReadFeatures rf{m.gene_idx, m.exon_idx, m.intron_idx, m.read_flags,
-                                static_cast<uint8_t>(m.read_diag | DirectionalUmiStore::kDiagMulti)};
-                count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
+                count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, v.rf,
                            m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
-                xw_exon++;
+                (v.kind == MmVerdict::kMt ? xw_mt : xw_exon)++;
             }
             workers[0].stats.exon_hits += xw_stats.exon_hits;
             workers[0].stats.mt_numt_rescued += xw_mt;
@@ -2072,6 +2182,7 @@ public:
         in.intronRules = config_.intron_rules;
         in.geneIsMt.assign(gene_model_.n_genes(), 0);
         for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
+        in.tidSpecies = tid_species_;   // kExonPrecedence within one species (empty: single-genome reference)
         if (config_.intron_rules & intron_rule::kFlank) {   // refine_read's intronic-base count: gene bodies and their merged exons
             const auto& genes = gene_model_.genes();
             in.geneStart.reserve(genes.size()); in.geneEnd.reserve(genes.size()); in.geneExonOff.assign(1, 0);
@@ -2085,6 +2196,7 @@ public:
             for (uint32_t e = 0; e < ne; ++e) { in.exonStart[e] = gene_model_.exon_start(e); in.exonEnd[e] = gene_model_.exon_end(e); }
         }
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
+        in.wantUmiKeys = (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) ? 1 : 0;   // the multimap record's counted UMIs
         in.wantReads = reads_matrix_on() ? 1 : 0;   // reads per molecule (exon_reads / intron_reads / histogram)
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
@@ -2154,6 +2266,21 @@ public:
             const bool ok_in = g == c; all = all && ok_in;
             std::cerr << "[gpu_pileup] mt_indels " << (ok_in ? "identical" : "DIFFERENT") << " (gpu " << g.size() << ", cpu " << c.size() << ")\n";
         }
+        {   // multimap record: the ambiguous reads as a multiset of (cell, gene pair, UMI)
+            std::vector<em_rescue::AmbigRead> g;
+            gpu_ambig_reads(out.ambig, in.umiLen, g);
+            typedef std::tuple<int32_t, uint32_t, uint32_t, std::string> K;
+            auto key = [](const em_rescue::AmbigRead& a) {
+                return K(a.bc_idx, std::min(a.gene_a, a.gene_b), std::max(a.gene_a, a.gene_b), std::string(a.umi, std::min<int>(a.umi_len, 15)));
+            };
+            std::vector<K> kc, kg;
+            for (const auto& a : ambig_reads_) kc.push_back(key(a));
+            for (const auto& a : g) kg.push_back(key(a));
+            std::sort(kc.begin(), kc.end()); std::sort(kg.begin(), kg.end());
+            const bool same = kc == kg;
+            all = all && same;
+            std::cerr << "[gpu_pileup] multimap reads: CPU " << kc.size() << ", GPU " << kg.size() << (same ? " identical" : " DIFFERENT") << "\n";
+        }
         std::cerr << "[gpu_pileup] RESULT " << (all ? "IDENTICAL" : "DIFFERENT") << "\n";
     }
 
@@ -2161,6 +2288,18 @@ public:
     // intron and ambiguous accumulators (molecules), junctions (rows in (contig, donor, acceptor) order, the R7 order), SNP AD/DP (R1),
     // chrM allele counts and indels, and the counters those steps keep. The molecule label counts are applied after the CPU finalize.
     DirectionalUmiStore::MoleculeStats gpu_ms_{};
+    // multimap record: the GPU's ambiguous reads as the CPU engine collects them (em_rescue::AmbigRead, UMI characters from the 3-bit code)
+    static void gpu_ambig_reads(const std::vector<singlet_engine_gpu::PileupAmbig>& v, int umi_len, std::vector<em_rescue::AmbigRead>& out) {
+        static const char UMI_CH[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+        const int ul = std::max(0, std::min(umi_len, 15));
+        out.reserve(out.size() + v.size());
+        for (const auto& a : v) {
+            em_rescue::AmbigRead ar;
+            ar.bc_idx = a.bc; ar.gene_a = a.geneA; ar.gene_b = a.geneB; ar.umi_len = static_cast<uint8_t>(ul);
+            for (int i = 0; i < ul; ++i) ar.umi[i] = UMI_CH[(a.umi3 >> (3 * i)) & 7];
+            out.push_back(ar);
+        }
+    }
     std::vector<uint32_t> gpu_clip_;   // per read of the GPU pileup's input: its hand-off clip flags (0: not clipped)
     template <typename V>
     static void gpu_put(SparseAccumulator<V>& acc, const std::vector<singlet_engine_gpu::PileupTriplet>& v) {
@@ -2198,6 +2337,17 @@ public:
             const size_t lo = nR * t / nT, hi = nR * (t + 1) / nT;
             char umi[32];
             for (size_t r = lo; r < hi; ++r) {
+            // the reads are in barcode order and their signatures and alignments are not: fetch ahead, a signature 24 reads ahead, its
+            // first alignment and that alignment's results 12 ahead, its CIGAR 4 ahead (the hand-off pass does the same)
+            if (r + 24 < hi) __builtin_prefetch(S.at(R[r + 24].sig));
+            if (r + 12 < hi) {
+                const uint64_t o = S[R[r + 12].sig].aln_off;
+                if (o < A.size()) { __builtin_prefetch(A.at(o)); __builtin_prefetch(out.alnStat.data() + o); __builtin_prefetch(out.alnGene.data() + o); }
+            }
+            if (r + 4 < hi) {
+                const uint64_t o = S[R[r + 4].sig].aln_off;
+                if (o < A.size()) __builtin_prefetch(OPS.at(A[o].ops_off));
+            }
             const ReadRec& rr = R[r];
             const SigRec& sg = S[rr.sig];
             int p = -1;
@@ -2214,8 +2364,13 @@ public:
             if (st & 4) L.st.wrong_strand++;
             if (st & 16) L.st.multigene_reads++;
             if (st & 8) L.st.cross_gene_intron_reads++;
-            for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
-            umi[std::min(ulen, 21)] = 0;
+            bool umiMade = false;   // the UMI's text, made for the reads that record one (a poly(A) site or a V(D)J hit)
+            auto makeUmi = [&]() {
+                if (umiMade) return;
+                umiMade = true;
+                for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
+                umi[std::min(ulen, 21)] = 0;
+            };
             const char* umi_str = ulen > 0 ? umi : nullptr;
             const int umi_len = ulen > 0 ? std::min(ulen, 21) : 0;
             const uint32_t* ops = OPS.at(a.ops_off);
@@ -2271,7 +2426,7 @@ public:
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) { L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); }
+                if (ok) { makeUmi(); L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); }
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2285,6 +2440,7 @@ public:
                     L.ov.clear();
                     vdj_model_.query(a.tid, s0, e0, L.ov);
                     if (!L.ov.empty()) {   // replayed in read order after the chunks (vdj_umi_ and vdj_acc_ are not thread-safe)
+                        makeUmi();
                         HostLocal::VdjEv ev; ev.bc = static_cast<uint32_t>(rr.bc); ev.vg = L.ov[0]; ev.gene = nh == 1 ? gene : UINT32_MAX; ev.ulen = umi_len;
                         std::memcpy(ev.umi, umi, sizeof(ev.umi));
                         L.vdj.push_back(ev);
@@ -2914,6 +3070,8 @@ public:
                     if (out.cellMixed[c]) mixed_bc_[c].fetch_add(out.cellMixed[c], std::memory_order_relaxed);
             }
             gpu_merges_.swap(out.geneMerges);
+            gpu_ambig_reads(out.ambig, in.umiLen, ambig_reads_);   // the multimap record's reads (the CPU steps that collect them were skipped)
+            counted_umis_.swap(out.umiKeys);                        // ... and the UMIs it leaves out (finalize_all's keys on the CPU)
             stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
             if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
                 const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
@@ -3051,6 +3209,8 @@ public:
     bool reverse_strand() const { return config_.reverse_strand; }
     /// Per-molecule dump path (diagnostics; "" = none). Defaults to SINGLET_MOLECULE_DUMP.
     void set_molecule_dump(const std::string& path) { molecule_dump_ = path; }
+    /// Sorted (cell << 32 | 2-bit packed UMI) of every exact UMI with a read in the gene counts (multimap::build drops these UMIs).
+    const std::vector<uint64_t>& counted_umis() const { return counted_umis_; }
     /// Carry the probe record of an earlier pass over to this (retry) engine.
     void keep_strand_probe(const PileupEngine& prev) {
         strand_probed_ = prev.strand_probed_;
@@ -3094,6 +3254,7 @@ private:
         h[std::min<uint32_t>(reads, kReadsHistBins) - 1]++;
     }
     std::string molecule_dump_;     // SINGLET_MOLECULE_DUMP: per-molecule TSV (gz) for diagnostics
+    mutable std::vector<uint64_t> counted_umis_;   // sorted (cell << 32 | packed UMI) of the gene counts' reads (finalize_all)
     bool strand_probed_ = false;    // Auto-strand probe reached a decision
     bool strand_flipped_ = false;   // ... and changed reverse_strand
     StrandEvidence strand_probe_;
@@ -3299,6 +3460,10 @@ private:
 
     // Per-chromosome sorted SNP data (binary search, cache-friendly)
     std::vector<std::vector<ChrSNP>> chrom_snps_;      // indexed by tid
+    // Per tid, bucket k holds the index of the first SNP at or after position k << kSnpBucketShift, plus one bucket past the last SNP
+    // (= the SNP count). snp_lower_bound() searches one bucket instead of the whole chromosome and returns std::lower_bound's answer.
+    static constexpr int kSnpBucketShift = 10;
+    std::vector<std::vector<uint32_t>> chrom_snp_bucket_;
     std::vector<std::string> snp_names_;
     uint32_t n_snps_loaded_ = 0;
     uint32_t aim_snp_start_ = UINT32_MAX;   // N13: first AIM index in snp matrices
@@ -3317,6 +3482,7 @@ private:
     std::vector<std::string> tid_to_chrom_;  // Reverse map: tid → chrom name
     int32_t chrm_tid_ = -1;
     std::vector<char> mito_tid_;  // per tid: mitochondrial contig (excluded from strand evidence)
+    std::vector<uint8_t> tid_species_;   // per tid: one bit per genome of a joint reference (empty for a single-genome reference)
 
     // Accumulators
     SparseAccumulator<uint16_t> snp_ad_;
@@ -3365,6 +3531,7 @@ private:
         uint32_t exon_idx = UINT32_MAX;
         bool multi_gene = false;  // true if overlaps 2+ genes (vs intergenic)
         uint32_t body_gene = UINT32_MAX;  // intron_rule::kGeneFullSet: the one gene whose introns an exon-free alignment lies in
+        bool exonic = false;              // some same-strand exon overlap (intron_rule::kExonPrecedence: an exonic alignment)
     };
 
     // ── Hash functions for zero-allocation lookups ──
@@ -3384,6 +3551,10 @@ private:
     char cb_buf_[40] = {};
     uint64_t cb_status_[8] = {};   // index status + 4: -4 rejected, -3 bad UMI, -2 two N, -1 no match, 0 exact, 1 one, 2 posterior
     const char* stream_cb(const bam1_t* b, bool count) {
+        if (look_cur_) {   // resolved ahead by the stream reader (LookAhead): the same function of the same record
+            if (count) ++cb_status_[look_cur_->st_idx];
+            return look_cur_->ok ? look_cur_->cb : nullptr;
+        }
         const CbCorrector* cc = config_.cb_corrector;
         const char* cr = inline_scan_cb_from_cr(b, cc == nullptr);
         if (!cc) return cr;
@@ -3395,6 +3566,204 @@ private:
         cb_buf_[cc->length()] = '\0';
         return cb_buf_;
     }
+    // stream_cb()'s work for one record, done ahead of the loop: its tally slot, its CB, and that CB's barcode index.
+    // ei = 1: the reader also took the record's aligned blocks (blk_n of them from blk_off in LookEI::blocks) and every exon and
+    // intron interval that overlaps each block, before any strand filter (the filter stays in the loop, whose strand can change
+    // at the inline probe). The loop reads them instead of querying the gene model: the same function of the same record.
+    struct LookRec { int32_t bc; int8_t st_idx; int8_t ok; int8_t ei; int8_t has_n; uint16_t blk_n; uint32_t blk_off; char cb[40]; };
+    struct BlockOvl { uint32_t e_off, e_n, i_off, i_n; };   // per block: its exon and intron overlaps in LookEI::ovl
+    struct LookEI {
+        std::vector<std::pair<int32_t, int32_t>> blocks;
+        std::vector<BlockOvl> bov;   // parallel to blocks
+        std::vector<uint32_t> ovl;
+        std::vector<uint32_t> scratch;
+        void clear() { blocks.clear(); bov.clear(); ovl.clear(); }
+    };
+    // Steps the loop defers to the post stage (LookAhead::post) for one record: its splice junctions, its SNP bases and its chrM
+    // bases, with the barcode, UMI and gene the loop had for it. While the stream runs, the state these steps fill (sj_*, snp_cons_,
+    // mt_*) is touched by the post stage alone, and it sees the records in stream order, as the loop would have.
+    enum : uint8_t { kPostSj = 1, kPostVariant = 2, kPostMt = 4 };
+    struct PostRec { uint8_t steps; int umi_len; int32_t tid; uint32_t bc; uint32_t gene; const char* umi; };
+    PostRec* post_cur_ = nullptr;       // look_cur_'s post-stage slot (null without a post stage)
+    bool post_ahead_ = false;           // set before the reader starts: a post stage runs (CPU path, look-ahead on)
+    PileupStats post_stats_;            // the post stage's counts (sj_hits, snp_hits, mt_pileup_bases), added to the run's after finish()
+    void post_set(uint8_t step, int32_t tid, uint32_t bc, const char* umi, int umi_len) {
+        PostRec& p = *post_cur_;
+        p.steps |= step; p.tid = tid; p.bc = bc; p.umi = umi; p.umi_len = umi_len; p.gene = cur_read_gene_;
+    }
+    void run_post(bam1_t* b, const PostRec& p) {
+        if (p.steps & kPostSj) extract_splice_junctions(b, p.tid, p.bc, p.umi, p.umi_len, post_stats_, p.gene);
+        if ((p.steps & kPostVariant) && has_variant_overlap(p.tid, b->core.pos, bam_endpos(b)))
+            pileup_aligned_bases(b, p.tid, p.bc, p.umi, p.umi_len, post_stats_, p.gene);
+        if (p.steps & kPostMt) pileup_mt_bases(b, p.bc, post_stats_);
+    }
+    const LookRec* look_cur_ = nullptr;
+    const LookEI* look_ei_ = nullptr;   // the batch of look_cur_
+    bool ei_ahead_ = false;             // set before the reader starts: the exon/intron section runs on the CPU (gene model, no W11 "on")
+    void look_resolve(const bam1_t* b, LookRec& r, LookEI& ei) const {
+        const CbCorrector* cc = config_.cb_corrector;
+        r.ok = 0; r.bc = -1; r.ei = 0;
+        const char* cr = inline_scan_cb_from_cr(b, false);
+        if (!cr) { r.st_idx = 1; return; }
+        if (static_cast<int>(std::strlen(cr)) != cc->length()) { r.st_idx = 3; return; }
+        const int st = cc->resolve(cr, nullptr, r.cb);
+        r.st_idx = static_cast<int8_t>(st + 4);
+        if (st < 0) return;
+        r.cb[cc->length()] = '\0';
+        r.ok = 1;
+        r.bc = bc_index_.lookup(r.cb);
+        if (ei_ahead_ && r.bc >= 0 && !(b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FSUPPLEMENTARY))) look_ei(b, r, ei);
+    }
+    // The exon/intron section's CIGAR walk and gene-model queries for one primary record (see LookRec::ei).
+    void look_ei(const bam1_t* b, LookRec& r, LookEI& ei) const {
+        const int32_t tid = b->core.tid;
+        r.blk_off = static_cast<uint32_t>(ei.blocks.size());
+        r.has_n = 0;
+        const uint32_t* cigar = bam_get_cigar(b);
+        int32_t rpos = b->core.pos;
+        for (int ci = 0; ci < b->core.n_cigar; ++ci) {
+            const int op = bam_cigar_op(cigar[ci]);
+            const int len = bam_cigar_oplen(cigar[ci]);
+            switch (op) {
+                case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF:
+                    ei.blocks.push_back({rpos, rpos + len}); rpos += len; break;
+                case BAM_CREF_SKIP: r.has_n = 1; rpos += len; break;
+                case BAM_CDEL: rpos += len; break;
+                default: break;
+            }
+        }
+        const size_t nb = ei.blocks.size() - r.blk_off;
+        if (nb > 0xFFFF) { ei.blocks.resize(r.blk_off); return; }   // the loop queries such a record itself
+        r.blk_n = static_cast<uint16_t>(nb);
+        for (size_t k = r.blk_off; k < ei.blocks.size(); ++k) {
+            BlockOvl o{};
+            gene_model_.query_exons(tid, ei.blocks[k].first, ei.blocks[k].second, ei.scratch);
+            o.e_off = static_cast<uint32_t>(ei.ovl.size()); o.e_n = static_cast<uint32_t>(ei.scratch.size());
+            ei.ovl.insert(ei.ovl.end(), ei.scratch.begin(), ei.scratch.end());
+            if (config_.count_introns) {
+                gene_model_.query_introns(tid, ei.blocks[k].first, ei.blocks[k].second, ei.scratch);
+                o.i_off = static_cast<uint32_t>(ei.ovl.size()); o.i_n = static_cast<uint32_t>(ei.scratch.size());
+                ei.ovl.insert(ei.ovl.end(), ei.scratch.begin(), ei.scratch.end());
+            }
+            ei.bov.push_back(o);
+        }
+        r.ei = 1;
+    }
+    // The stream reader: decodes records into a ring of batches and resolves each one (look_resolve) on its own thread; next()
+    // hands the loop the records in stream order. With a post stage (post_ahead_), a batch the loop is done with goes to a third
+    // thread, which runs the loop's deferred per-record steps (PostRec, run_post) in stream order before the reader reuses the
+    // batch. finish() hands over the loop's last batch and joins the post stage; stop() (or the destructor) joins the reader.
+    struct LookAhead {
+        static constexpr size_t kBatches = 8, kRecs = 2048;
+        enum : int { kFree = 0, kFull = 1, kDone = 2 };   // kFull: read, for the loop; kDone: the loop is done, for the post stage
+        struct Batch {
+            std::vector<bam1_t*> rec; std::vector<LookRec> look; std::vector<PostRec> post; LookEI ei;
+            size_t n = 0, n_post = 0; bool last = false; int state = kFree;
+        };
+        PileupEngine& eng; htsFile* fp; sam_hdr_t* hdr;
+        Batch ring[kBatches];
+        std::mutex mu; std::condition_variable cv_full, cv_free, cv_post;
+        bool stop_ = false, finished_ = false;
+        const bool post_on;
+        std::thread th, th_post;
+        uint64_t seq = 0; size_t pos = 0; Batch* cur = nullptr;
+        LookAhead(PileupEngine& e, htsFile* f, sam_hdr_t* h) : eng(e), fp(f), hdr(h), post_on(e.post_ahead_) {
+            for (auto& B : ring) {
+                B.rec.resize(kRecs); B.look.resize(kRecs);
+                if (post_on) B.post.resize(kRecs);
+                for (auto& r : B.rec) r = bam_init1();
+            }
+            th = std::thread([this] { read(); });
+            if (post_on) th_post = std::thread([this] { post(); });
+        }
+        ~LookAhead() {
+            finish();
+            stop();
+            for (auto& B : ring) for (auto* r : B.rec) bam_destroy1(r);
+        }
+        void read() {
+            for (uint64_t k = 0;; ++k) {
+                Batch& B = ring[k % kBatches];
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_free.wait(lk, [&] { return B.state == kFree || stop_; });
+                    if (stop_) return;
+                }
+                B.n = 0; B.last = false; B.ei.clear();
+                while (B.n < kRecs) {
+                    if (sam_read1(fp, hdr, B.rec[B.n]) < 0) { B.last = true; break; }
+                    eng.look_resolve(B.rec[B.n], B.look[B.n], B.ei);
+                    ++B.n;
+                }
+                { std::lock_guard<std::mutex> lk(mu); B.state = kFull; }
+                cv_full.notify_one();
+                if (B.last) return;
+            }
+        }
+        // The post stage: the batches the loop is done with, in stream order, each record's deferred steps.
+        void post() {
+            for (uint64_t k = 0;; ++k) {
+                Batch& B = ring[k % kBatches];
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_post.wait(lk, [&] { return B.state == kDone || finished_; });
+                    if (B.state != kDone) return;   // finished, and every batch handed over is done
+                }
+                for (size_t i = 0; i < B.n_post; ++i)
+                    if (B.post[i].steps) eng.run_post(B.rec[i], B.post[i]);
+                { std::lock_guard<std::mutex> lk(mu); B.state = kFree; }
+                cv_free.notify_one();
+            }
+        }
+        // The loop is done with records [0, n) of the current batch: to the post stage, or straight back to the reader.
+        void release(size_t n) {
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                cur->n_post = n;
+                cur->state = post_on ? kDone : kFree;
+            }
+            if (post_on) cv_post.notify_one(); else cv_free.notify_one();
+            cur = nullptr;
+        }
+        // The next record, its resolved CB, its batch's look-ahead data, and its post-stage slot (null without a post stage).
+        // False at the end of the stream.
+        bool next(bam1_t*& b, const LookRec*& lr, const LookEI*& ei, PostRec*& pr) {
+            for (;;) {
+                if (cur && pos < cur->n) {
+                    b = cur->rec[pos]; lr = &cur->look[pos]; ei = &cur->ei;
+                    pr = post_on ? &cur->post[pos] : nullptr;
+                    if (pr) pr->steps = 0;
+                    ++pos;
+                    return true;
+                }
+                if (cur) {
+                    const bool last = cur->last;
+                    release(cur->n);
+                    if (last) return false;
+                    ++seq;
+                }
+                Batch& B = ring[seq % kBatches];
+                std::unique_lock<std::mutex> lk(mu);
+                cv_full.wait(lk, [&] { return B.state == kFull; });
+                cur = &B; pos = 0;
+            }
+        }
+        // After the loop: the records it took from the current batch go to the post stage (after a strand abort the batch is
+        // partly read), then the post stage drains and is joined. The deferred steps' results are complete when this returns.
+        void finish() {
+            if (cur) release(pos);
+            if (!th_post.joinable()) return;
+            { std::lock_guard<std::mutex> lk(mu); finished_ = true; }
+            cv_post.notify_all();
+            th_post.join();
+        }
+        void stop() {
+            if (!th.joinable()) return;
+            { std::lock_guard<std::mutex> lk(mu); stop_ = true; }
+            cv_free.notify_all();
+            th.join();
+        }
+    };
     void report_cb_status() const {
         if (!config_.cb_corrector) return;
         std::cerr << "[cb-correct] primary records: exact=" << cb_status_[4] << " one_candidate=" << cb_status_[5]
@@ -3498,6 +3867,7 @@ private:
             if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
             return result;
         }
+        result.exonic = true;
 
         // Check single-gene (any-overlap-based)
         uint32_t gene = gene_model_.exon_to_gene(mm_overlaps_[0]);
@@ -3536,7 +3906,7 @@ private:
                     }
                 }
                 if (g0 == UINT32_MAX) g0 = g;
-                else if (g != g0) { r = GeneHit{}; r.multi_gene = true; return; }
+                else if (g != g0) { const bool ex = r.exonic; r = GeneHit{}; r.multi_gene = true; r.exonic = ex; return; }
             }
         }
         if (r.gene_idx == UINT32_MAX) r.body_gene = g0;
@@ -3547,6 +3917,8 @@ private:
     }
 
     bool is_chrm(int32_t tid) const { return tid == chrm_tid_; }
+    uint8_t species_bit(int32_t tid) const {
+        return (tid >= 0 && static_cast<size_t>(tid) < tid_species_.size()) ? tid_species_[static_cast<size_t>(tid)] : 0; }
 
     // ── RAII gzip-aware line reader ──
     class LineReader {
@@ -3592,6 +3964,17 @@ private:
         int n = sam_hdr_nref(hdr);
         tid_to_chrom_.resize(n);
         mito_tid_.assign(n, 0);
+        tid_species_.assign(n, 0);
+        std::vector<std::string> prefixes;   // joint references name contigs <genome>___<contig> (GRCh38___chr1, GRCm39___1)
+        for (int i = 0; i < n; ++i) {
+            const std::string nm = sam_hdr_tid2name(hdr, i);
+            const size_t u = nm.find("___");
+            const std::string pfx = u == std::string::npos ? std::string() : nm.substr(0, u);
+            size_t k = 0; while (k < prefixes.size() && prefixes[k] != pfx) ++k;
+            if (k == prefixes.size()) prefixes.push_back(pfx);
+            tid_species_[i] = static_cast<uint8_t>(1u << std::min<size_t>(k, 7));
+        }
+        if (prefixes.size() < 2) tid_species_.clear();   // one genome: species_bit is 0 everywhere and nothing changes
         for (int i = 0; i < n; ++i) {
             std::string name = sam_hdr_tid2name(hdr, i);
             chrom_to_tid_[name] = i;
@@ -3853,6 +4236,130 @@ private:
     };
     std::vector<PendingSNP> snp_pending_;
 
+public:
+    // ── Pool-resident references ──
+    // `singlet gpu-pool` parses each genome's GTF and SNP panel once, before it forks the samples (preload_pool_references), with the
+    // loaders below on the same bytes. A sample's load_references takes those structures when its file is the same file (device, inode,
+    // size and modification time): they are moved out of the sample's copy-on-write copy of the pool's memory, so nothing is parsed or
+    // copied, and the outputs are the loaders' own. Each is taken once per process; a second engine, a changed file or a failed parse in
+    // the pool parses as before. SINGLET_POOL_REFS=0 (in the pool or in a sample): every sample parses its own.
+    struct PoolFileId {
+        dev_t dev = 0; ino_t ino = 0; off_t size = 0; time_t mtime = 0; long mtime_ns = 0;
+        bool operator==(const PoolFileId& o) const {
+            return dev == o.dev && ino == o.ino && size == o.size && mtime == o.mtime && mtime_ns == o.mtime_ns;
+        }
+    };
+    static bool pool_file_id(const std::string& path, PoolFileId& id) {
+        struct stat st{};
+        if (path.empty() || ::stat(path.c_str(), &st) != 0) return false;
+        id.dev = st.st_dev; id.ino = st.st_ino; id.size = st.st_size; id.mtime = st.st_mtim.tv_sec; id.mtime_ns = st.st_mtim.tv_nsec;
+        return true;
+    }
+    static bool pool_refs_enabled() { const char* e = std::getenv("SINGLET_POOL_REFS"); return !(e && e[0] == '0'); }
+    struct PoolSnps {
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        std::vector<PendingSNP> pending; std::vector<std::string> names; uint32_t n = 0; double sec = 0;
+    };
+    struct PoolGtf {
+        PoolFileId id; std::string path; bool is_bed = false, ok = false, vdj_ok = false, taken = false;
+        GeneModel gm; VdjModel vdj; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolSnps>>& pool_snps() { static std::vector<std::unique_ptr<PoolSnps>> v; return v; }
+    static std::vector<std::unique_ptr<PoolGtf>>& pool_gtfs() { static std::vector<std::unique_ptr<PoolGtf>> v; return v; }
+
+    // In the pool, before any sample is forked: parse each distinct file of `snp_paths` and `gtf_paths` once (each file on a thread of its
+    // own, as load_references runs its two loaders). Returns a log line.
+    static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths) {
+        std::string log;
+        if (!pool_refs_enabled()) return "off (SINGLET_POOL_REFS=0)";
+        std::vector<std::thread> th;
+        for (const std::string& p : snp_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "SNP panel " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_snps()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_snps().push_back(std::make_unique<PoolSnps>());
+            PoolSnps* e = pool_snps().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                PileupConfig c; c.snp_path = e->path;
+                auto eng = std::make_unique<PileupEngine>(c);
+                e->ok = eng->load_snps();
+                e->pending = std::move(eng->snp_pending_); e->names = std::move(eng->snp_names_); e->n = eng->n_snps_loaded_;
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (const std::string& p : gtf_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "GTF " + p + ": not found; "; continue; }
+            const bool is_bed = p.find(".bed") != std::string::npos;
+            bool seen = false;
+            for (const auto& e : pool_gtfs()) seen = seen || (e->id == id && e->is_bed == is_bed);
+            if (seen) continue;
+            pool_gtfs().push_back(std::make_unique<PoolGtf>());
+            PoolGtf* e = pool_gtfs().back().get();
+            e->id = id; e->path = p; e->is_bed = is_bed;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                e->ok = e->is_bed ? e->gm.load_bed(e->path) : e->gm.load_gtf(e->path);
+                if (e->ok && !e->is_bed) e->vdj_ok = e->vdj.load_gtf(e->path);   // load_references reads it when config.count_vdj
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (auto& t : th) t.join();
+        char b[64];
+        for (const auto& e : pool_snps()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "SNP panel " + e->path + ": " + (e->ok ? std::to_string(e->n) + " sites" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_gtfs()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "GTF " + e->path + ": " +
+                   (e->ok ? std::to_string(e->gm.n_exons()) + " exons, " + std::to_string(e->gm.n_genes()) + " genes" : std::string("failed")) + b;
+        }
+        return log.empty() ? "no reference files" : log;
+    }
+
+private:
+    // load_snps' result from the pool, for config_.snp_path (false: load_snps runs)
+    bool take_pool_snps() {
+        if (pool_snps().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.snp_path, id)) return false;
+        for (auto& e : pool_snps()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            snp_pending_ = std::move(e->pending); snp_names_ = std::move(e->names); n_snps_loaded_ = e->n;
+            e->taken = true;
+            std::cerr << "[singlet-pileup] Loaded " << n_snps_loaded_ << " SNP sites (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // the GTF thread's result from the pool, for config_.exon_gtf_path (false: the thread runs); ok: the parse's result
+    bool take_pool_gtf(bool& ok) {
+        if (pool_gtfs().empty() || !pool_refs_enabled()) return false;
+        const auto& path = config_.exon_gtf_path;
+        const bool is_bed = (path.find(".bed") != std::string::npos);
+        PoolFileId id;
+        if (!pool_file_id(path, id)) return false;
+        for (auto& e : pool_gtfs()) {
+            if (!(e->id == id) || e->is_bed != is_bed || !e->ok || e->taken) continue;
+            gene_model_ = std::move(e->gm);
+            if (!is_bed && config_.count_vdj) {
+                vdj_model_ = std::move(e->vdj);
+                if (e->vdj_ok && !vdj_model_.empty()) has_vdj_ = true;
+            }
+            e->taken = true;
+            ok = true;
+            std::cerr << "[singlet-pileup] Gene model of " << path << " parsed once by the pool: " << gene_model_.n_exons() << " exons, "
+                      << gene_model_.n_genes() << " genes\n";
+            return true;
+        }
+        return false;
+    }
+
     void resolve_pending_snps() {
         // Determine max tid for vector sizing
         int32_t max_tid = -1;
@@ -3896,10 +4403,37 @@ private:
             std::sort(snps.begin(), snps.end(),
                 [](const ChrSNP& a, const ChrSNP& b) { return a.pos < b.pos; });
         }
+        chrom_snp_bucket_.assign(chrom_snps_.size(), {});
+        for (size_t t = 0; t < chrom_snps_.size(); ++t) {
+            const auto& snps = chrom_snps_[t];
+            if (snps.empty()) continue;
+            const size_t nb = (static_cast<size_t>(std::max(snps.back().pos, 0)) >> kSnpBucketShift) + 2;
+            auto& bk = chrom_snp_bucket_[t];
+            bk.resize(nb);
+            size_t i = 0;
+            for (size_t k = 0; k < nb; ++k) {
+                const int64_t start = static_cast<int64_t>(k) << kSnpBucketShift;
+                while (i < snps.size() && snps[i].pos < start) ++i;
+                bk[k] = static_cast<uint32_t>(i);
+            }
+        }
         snp_pending_.clear();
         snp_pending_.shrink_to_fit();
         std::cerr << "[singlet-pileup] Resolved " << n_resolved
                   << " SNPs to BAM chromosome IDs\n";
+    }
+
+    // std::lower_bound over chrom_snps_[tid] by position (the first SNP at or after pos), searched within pos's bucket: every SNP
+    // before bucket k lies before k's start, and the SNP at the next bucket's index lies past pos, so the answer is in [bk[k], bk[k+1]].
+    // chrom_snps_[tid] must be non-empty.
+    std::vector<ChrSNP>::const_iterator snp_lower_bound(int32_t tid, int32_t pos) const {
+        const auto& snps = chrom_snps_[tid];
+        const auto& bk = chrom_snp_bucket_[tid];
+        auto cmp = [](const ChrSNP& s, int32_t p) { return s.pos < p; };
+        if (pos < 0) return std::lower_bound(snps.begin(), snps.end(), pos, cmp);
+        const size_t k = static_cast<size_t>(pos) >> kSnpBucketShift;
+        if (k + 1 >= bk.size()) return snps.end();
+        return std::lower_bound(snps.begin() + bk[k], snps.begin() + bk[k + 1], pos, cmp);
     }
 
     // ── Fast variant overlap check ──
@@ -3908,8 +4442,7 @@ private:
     bool has_variant_overlap(int32_t tid, int32_t start, int32_t end) const {
         if (static_cast<size_t>(tid) < chrom_snps_.size() && !chrom_snps_[tid].empty()) {
             const auto& snps = chrom_snps_[tid];
-            auto lb = std::lower_bound(snps.begin(), snps.end(), start,
-                [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+            auto lb = snp_lower_bound(tid, start);
             if (lb != snps.end() && lb->pos < end) return true;
         }
         return false;
@@ -3926,7 +4459,7 @@ private:
     // For each N op: donor = ref_pos (last exonic base + 1), acceptor = ref_pos + len
     void extract_splice_junctions(bam1_t* b, int32_t tid, uint32_t bc_idx,
                                   const char* umi_str, int umi_len,
-                                  PileupStats& stats) {
+                                  PileupStats& stats, uint32_t read_gene) {
         if (config_.sj_unique_only && alignment_is_multimapped(b)) return;
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
@@ -3978,7 +4511,7 @@ private:
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
                     // R9: molecules are counted at finalize, after UMI correction
                     if (config_.umi_dedup) {
-                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, cur_read_gene_);
+                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, read_gene);
                     } else {
                         sj_acc_.increment(sj_idx, bc_idx);
                         stats.sj_hits++;
@@ -4001,7 +4534,7 @@ private:
 
     void pileup_aligned_bases(bam1_t* b, int32_t tid, uint32_t bc_idx,
                               const char* umi_str, int umi_len,
-                              PileupStats& stats) {
+                              PileupStats& stats, uint32_t read_gene) {
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
         int32_t query_pos = 0;
@@ -4025,8 +4558,7 @@ private:
 
                     // Binary search for SNPs in [ref_pos, block_end)
                     if (snps) {
-                        auto it = std::lower_bound(snps->begin(), snps->end(), ref_pos,
-                            [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+                        auto it = snp_lower_bound(tid, ref_pos);
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
                             if (qual[0] != 0xff && qual[query_pos + offset] < (it->index >= edit_snp_start_ ? edit_baseq_ : config_.min_baseq))
@@ -4035,7 +4567,7 @@ private:
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
                             snp_cons_.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
                                           SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
-                                          cur_read_gene_);
+                                          read_gene);
                             stats.snp_hits++;
                         }
                     }
@@ -4219,6 +4751,7 @@ private:
             if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
             return result;
         }
+        result.exonic = true;
 
         uint32_t gene = gene_model_.exon_to_gene(wc.mm_overlaps[0]);
         for (size_t i = 1; i < wc.mm_overlaps.size(); ++i) {
@@ -4242,33 +4775,20 @@ private:
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
-        // A read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a
-        // pseudogene) comes from the mitochondrial genome (hundreds of copies per cell vs. one nuclear
-        // copy): count it for the chrM gene instead of dropping it as gene-ambiguous.
-        if (mt_numt_tie(e)) {
+        const MmVerdict v = mm_verdict(e);
+        if (v.kind == MmVerdict::kMt) {   // chrM gene vs. its nuclear copy (NUMT): count the chrM gene (mm_verdict)
             count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                       mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                       v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
             wc.stats.mt_numt_rescued++;
-            return;
-        }
-        if (e.gene_ambiguous) {
+        } else if (v.kind == MmVerdict::kAmbig) {
             // G-EM: collect for post-pileup EM rescue
-            if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
-                em_rescue::AmbigRead ar;
-                ar.bc_idx  = e.bc_idx;
-                ar.umi_len = e.umi_len;
-                std::memcpy(ar.umi, e.umi, e.umi_len);
-                ar.gene_a  = e.first_gene;
-                ar.gene_b  = e.second_gene;
-                wc.ambig_reads.push_back(ar);
-            }
-            return;
+            record_mm(e, v, wc.ambig_reads);   // multimap record: the verdict decides (no double count with kCount)
+        } else if (v.kind == MmVerdict::kCount) {
+            count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
+                       v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+        } else {
+            record_mm(e, v, wc.ambig_reads);   // gene-ambiguous without a G-EM pair (kNone)
         }
-        if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-        ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
-                        static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
-        count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                   rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
     }
 
     // ── Read → (gene, spliced/unspliced evidence) ──────────────────────────
@@ -4289,10 +4809,11 @@ private:
 
     // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
     // remember the alignment that lies in a chrM gene ...
+    // `exonic`: the alignment overlaps an exon of the gene (intron_rule::kExonPrecedence decides the tie on exonic alignments only).
     template <class E>
-    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
+    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag, bool exonic) const {
         if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
-        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
+        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag; e.mt_ex = exonic;
     }
     // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
     // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
@@ -4301,24 +4822,226 @@ private:
     // order of the sorted BAM, worker order of the cross-worker merge): first_gene and second_gene are the two smallest distinct genes, has_nuc says that
     // some alignment touched a non-chrM gene, and more than one distinct gene makes the read gene-ambiguous. The tie and the EM candidates then do not
     // depend on how the work was split. (Before: the first two genes met; for three or more alignments the chrM tie and the EM pair depended on the order.)
-    template <class E>
-    void note_gene(E& e, uint32_t g) const {
+    void note_gene_set(uint32_t& first, uint32_t& second, bool& ambiguous, bool& has_nuc, uint32_t g) const {
         if (g == UINT32_MAX) return;
-        if (!is_mt_gene(g)) e.has_nuc = true;
-        if (g == e.first_gene || g == e.second_gene) return;
-        if (e.first_gene == UINT32_MAX) { e.first_gene = g; return; }
-        e.gene_ambiguous = true;
-        if (g < e.first_gene) { e.second_gene = e.first_gene; e.first_gene = g; }
-        else if (e.second_gene == UINT32_MAX || g < e.second_gene) e.second_gene = g;
+        if (!is_mt_gene(g)) has_nuc = true;
+        if (g == first || g == second) return;
+        if (first == UINT32_MAX) { first = g; return; }
+        ambiguous = true;
+        if (g < first) { second = first; first = g; }
+        else if (second == UINT32_MAX || g < second) second = g;
+    }
+    // multimap record (multimap_record.h): the second and a third distinct gene among a primary's strand-filtered exon overlaps, in
+    // overlap order (the GPU's ExonCb::second_gene and ExonCb::more)
+    uint32_t second_exon_gene(const std::vector<uint32_t>& ov, uint32_t ga) const {
+        for (size_t i = 1; i < ov.size(); ++i) { const uint32_t g = gene_model_.exon_to_gene(ov[i]); if (g != UINT32_MAX && g != ga) return g; }
+        return UINT32_MAX;
+    }
+    bool third_exon_gene(const std::vector<uint32_t>& ov, uint32_t ga, uint32_t gb) const {
+        for (size_t i = 1; i < ov.size(); ++i) { const uint32_t g = gene_model_.exon_to_gene(ov[i]); if (g != UINT32_MAX && g != ga && g != gb) return true; }
+        return false;
+    }
+    // multimap record: a gene set of up to two genes (more = a third). record_set is a primary alignment's same-strand gene-body set, STARsolo
+    // GeneFull's: the genes of its exon overlaps, and with intron_rule::kGeneFullSet the genes of its intron overlaps (the GPU's AA::ba / bb / pmore)
+    struct RecSet {
+        uint32_t a = UINT32_MAX, b = UINT32_MAX; bool more = false;
+        void add(uint32_t g) {
+            if (g == UINT32_MAX || g == a || g == b) return;
+            if (a == UINT32_MAX) a = g; else if (b == UINT32_MAX) b = g; else more = true;
+        }
+    };
+    RecSet record_set(const std::vector<uint32_t>& ex, const std::vector<uint32_t>& in) const {
+        RecSet r;
+        for (uint32_t idx : ex) { const uint32_t g = gene_model_.exon_to_gene(idx); if (g == UINT32_MAX) r.more = true; else r.add(g); }
+        if ((config_.intron_rules & intron_rule::kGeneFullSet) && config_.count_introns)
+            for (uint32_t idx : in) r.add(gene_model_.intron_to_gene(idx));
+        return r;
     }
     template <class E>
-    bool mt_numt_tie(const E& e) const {
-        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.has_nuc;
+    static void note_body(E& e, uint32_t g) {   // record-only: never touches the fields the counting reads (has_nuc, gene_ambiguous)
+        if (g == UINT32_MAX || g == e.body_a || g == e.body_b) return;
+        if (e.body_a == UINT32_MAX) e.body_a = g; else if (e.body_b == UINT32_MAX) e.body_b = g; else e.body_more = true;
+    }
+    // Whether a completed multimapper entry is judged on its exonic alignments (intron_rule::kExonPrecedence with an exonic alignment) or on
+    // all of them. kExonPrecedence decides only within one species: on a joint reference (barnyard) a read whose alignments span species stays
+    // judged on all of them, as at 2957 (a human rRNA read whose one exonic alignment is a mouse 18S pseudogene is not mouse). mm_verdict,
+    // record_mm and rec_pair share it, as the GPU's k_resolve shares its X.
+    template <class E>
+    bool judged_on_exonic(const E& e) const {
+        return (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen && (e.sp_mask & (e.sp_mask - 1)) == 0;
+    }
+    // the record pair of a gene-ambiguous multimapper, exactly two genes: the genes its alignments touched (note_gene) and its primary's body
+    // set; under intron_rule::kExonPrecedence (the gene set mm_verdict judges) the exonic alignments' genes and, when the primary is exonic,
+    // its body set
+    template <class E>
+    bool rec_pair(const E& e, uint32_t& ga, uint32_t& gb) const {
+        RecSet r;
+        if (judged_on_exonic(e)) {
+            if (e.ex_partial || (e.body_ex && e.body_more)) return false;
+            r.add(e.ex_first); r.add(e.ex_second);
+            if (e.body_ex) { r.add(e.body_a); r.add(e.body_b); }
+        } else {
+            if (e.partial || e.body_more) return false;
+            r.add(e.first_gene); r.add(e.second_gene); r.add(e.body_a); r.add(e.body_b);
+        }
+        if (r.more || r.b == UINT32_MAX) return false;
+        ga = std::min(r.a, r.b); gb = std::max(r.a, r.b);
+        return true;
+    }
+    // a uniquely mapped read that is gene-ambiguous (exons of two genes, or with kGeneFullSet a gene-body set of two genes) is one record read
+    // (STARsolo counts it as a multi-gene read)
+    void note_unique_multigene(std::vector<em_rescue::AmbigRead>& out, const std::vector<uint32_t>& ex, const std::vector<uint32_t>& in,
+                               int32_t bc_idx, const char* umi, int umi_len) const {
+        if (bc_idx < 0) return;
+        const RecSet r = record_set(ex, in);
+        if (r.more || r.b == UINT32_MAX) return;
+        em_rescue::AmbigRead ar;
+        ar.bc_idx = bc_idx;
+        const int clen = umi ? std::min(umi_len, 15) : 0;
+        if (clen > 0) std::memcpy(ar.umi, umi, clen);
+        ar.umi_len = static_cast<uint8_t>(clen);
+        ar.gene_a = std::min(r.a, r.b);
+        ar.gene_b = std::max(r.a, r.b);
+        out.push_back(ar);
+    }
+    template <class E>
+    void note_gene(E& e, uint32_t g) const {
+        if (g != UINT32_MAX && g != e.first_gene && g != e.second_gene && e.second_gene != UINT32_MAX)
+            e.partial = true;   // multimap record: a third distinct gene, the two smallest are not the read's gene set
+        note_gene_set(e.first_gene, e.second_gene, e.gene_ambiguous, e.has_nuc, g);
     }
     template <class E>
     static ReadFeatures mt_rescue_features(const E& e) {
         return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
                             static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+    }
+
+    // intron_rule::kExonPrecedence. Every multimapper entry also keeps, over its exonic alignments only (an alignment whose same-strand
+    // exon overlaps are not empty), what note_gene keeps over all of them (ex_first / ex_second / ex_ambiguous / ex_has_nuc, order-free
+    // in the same way) and the R7 assignment restricted to them (xa_*: the primary's features when the primary is exonic and kept by the
+    // read-level rules, else the smallest secondary exon). The state is kept whatever the rules; only mm_verdict reads it, under the rule.
+    template <class E>
+    void note_ex_gene(E& e, uint32_t g) const {
+        if (g != UINT32_MAX && g != e.ex_first && g != e.ex_second && e.ex_second != UINT32_MAX) e.ex_partial = true;   // multimap record
+        note_gene_set(e.ex_first, e.ex_second, e.ex_ambiguous, e.ex_has_nuc, g);
+    }
+    // the primary alignment: exon_gene / exon_multigene as the primary path computed them, gf_multi = gene_full_multi (kGeneFullSet's
+    // single-alignment rule: an exon of one gene inside another gene's intron stays ambiguous), rf after classify_read and refine_read
+    template <class E>
+    void note_primary_exonic(E& e, const std::vector<uint32_t>& exon_overlaps, uint32_t exon_gene, bool exon_multigene, bool gf_multi,
+                             const ReadFeatures& rf, int32_t tid) const {
+        e.sp_mask |= species_bit(tid);       // every alignment, exonic or not
+        if (exon_overlaps.empty()) return;   // intron-only or intergenic: not an exonic alignment
+        e.ex_seen = true;
+        e.body_ex = true;                    // multimap record: the primary's body set belongs to the exonic gene set
+        if (exon_multigene) {
+            e.ex_ambiguous = true;
+            // its first two exon genes, as the all-alignment set takes them (G-EM candidates)
+            const uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+            uint32_t gb = UINT32_MAX;
+            if (ga != UINT32_MAX) {
+                note_ex_gene(e, ga);
+                gb = second_exon_gene(exon_overlaps, ga);
+                if (gb != UINT32_MAX) note_ex_gene(e, gb);
+            }
+            if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(exon_overlaps, ga, gb)) e.ex_partial = true;   // multimap record
+            return;
+        }
+        if (gf_multi) e.ex_ambiguous = true;
+        note_ex_gene(e, exon_gene);
+        if (rf.gene != UINT32_MAX) {
+            e.xa_primary = true;
+            e.xa_gene = rf.gene; e.xa_exon = rf.exon_idx; e.xa_intron = rf.intron_idx; e.xa_flags = rf.flags; e.xa_diag = rf.diag;
+        }
+    }
+    // a secondary alignment (determine_exon_gene*'s hit; multi_gene of an exonic hit = exons of two genes, or under kGeneFullSet an exon
+    // and another gene's intron)
+    template <class E>
+    void note_secondary_exonic(E& e, const GeneHit& hit, int32_t tid) const {
+        e.sp_mask |= species_bit(tid);
+        if (!hit.exonic) return;
+        e.ex_seen = true;
+        if (hit.multi_gene) { e.ex_ambiguous = true; e.ex_partial = true; return; }   // ex_partial: its genes are not noted (multimap record)
+        note_ex_gene(e, hit.gene_idx);
+        if (hit.gene_idx != UINT32_MAX && !e.xa_primary && (e.xa_gene == UINT32_MAX || hit.exon_idx < e.xa_exon)) {
+            e.xa_gene = hit.gene_idx; e.xa_exon = hit.exon_idx; e.xa_intron = UINT32_MAX; e.xa_flags = kExonicReadFlags; e.xa_diag = 0;
+        }
+    }
+    // the cross-worker merge of two partial entries of one read (order-free: the union of the gene sets, the primary's or the smallest exon)
+    template <class E>
+    void merge_exonic(E& m, const E& w) const {
+        m.sp_mask |= w.sp_mask;
+        if (!w.ex_seen) return;
+        m.ex_seen = true;
+        if (w.ex_ambiguous) m.ex_ambiguous = true;
+        if (w.ex_has_nuc) m.ex_has_nuc = true;
+        if (w.ex_partial) m.ex_partial = true;   // multimap record
+        if (w.body_ex) m.body_ex = true;
+        note_ex_gene(m, w.ex_first);
+        note_ex_gene(m, w.ex_second);
+        if (w.xa_gene != UINT32_MAX && !m.xa_primary && (w.xa_primary || m.xa_gene == UINT32_MAX || w.xa_exon < m.xa_exon)) {
+            m.xa_primary = w.xa_primary;
+            m.xa_gene = w.xa_gene; m.xa_exon = w.xa_exon; m.xa_intron = w.xa_intron; m.xa_flags = w.xa_flags; m.xa_diag = w.xa_diag;
+        }
+    }
+
+    // What a completed multimapper entry yields (the serial resolve_mm, resolve_mm_parallel and the cross-worker merge share it):
+    // kMt  intron_rule::kMtPrefer: gene-ambiguous between a chrM gene and a nuclear gene (NUMT); counted for the chrM gene (rf)
+    // kAmbig  gene-ambiguous with two candidate genes for G-EM (gene_a < gene_b); kCount  counted with rf; kNone  nothing.
+    // The gene set it is judged on: all alignments (note_gene), or under intron_rule::kExonPrecedence the exonic alignments when there are any.
+    struct MmVerdict {
+        enum Kind { kNone, kMt, kAmbig, kCount } kind = kNone;
+        ReadFeatures rf;
+        uint32_t gene_a = UINT32_MAX, gene_b = UINT32_MAX;
+    };
+    template <class E>
+    MmVerdict mm_verdict(const E& e) const {
+        MmVerdict v;
+        const bool ex = judged_on_exonic(e);
+        const bool ambiguous = ex ? e.ex_ambiguous : e.gene_ambiguous;
+        // a read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a pseudogene) comes from the mitochondrial
+        // genome (hundreds of copies per cell vs. one nuclear copy): count it for the chrM gene instead of dropping it as gene-ambiguous
+        if (ambiguous && e.mt_gene != UINT32_MAX && (ex ? (e.ex_has_nuc && e.mt_ex) : e.has_nuc)) {
+            v.kind = MmVerdict::kMt;
+            v.rf = mt_rescue_features(e);
+            return v;
+        }
+        if (ambiguous) {
+            v.gene_a = ex ? e.ex_first : e.first_gene;
+            v.gene_b = ex ? e.ex_second : e.second_gene;
+            if (v.gene_a != UINT32_MAX && v.gene_b != UINT32_MAX) v.kind = MmVerdict::kAmbig;
+            return v;
+        }
+        if (ex) {
+            if (e.ex_first == UINT32_MAX || e.xa_gene == UINT32_MAX) return v;
+            v.rf = ReadFeatures{e.xa_gene, e.xa_exon, e.xa_intron, e.xa_flags, e.xa_diag};
+        } else {
+            // gene-unique: first_gene is the only gene (or all intergenic)
+            if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return v;
+            v.rf = ReadFeatures{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags, e.read_diag};
+        }
+        v.rf.diag = static_cast<uint8_t>(v.rf.diag | DirectionalUmiStore::kDiagMulti);
+        v.kind = MmVerdict::kCount;
+        return v;
+    }
+
+    // multimap record: a completed multimapper the verdict leaves uncounted and gene-ambiguous (kAmbig, or kNone without a G-EM pair) is one
+    // record read when its gene set (rec_pair) is exactly two genes. Counted verdicts (kCount, kMt) never reach the record, so a read rescued
+    // by intron_rule::kExonPrecedence is counted once.
+    template <class E>
+    void record_mm(const E& e, const MmVerdict& v, std::vector<em_rescue::AmbigRead>& out) const {
+        if (e.bc_idx < 0 || v.kind == MmVerdict::kCount || v.kind == MmVerdict::kMt) return;
+        const bool ex = judged_on_exonic(e);   // the gene set mm_verdict judged
+        if (!(ex ? e.ex_ambiguous : e.gene_ambiguous)) return;
+        uint32_t ra, rb;
+        if (!rec_pair(e, ra, rb)) return;
+        em_rescue::AmbigRead ar;
+        ar.bc_idx  = e.bc_idx;
+        ar.umi_len = e.umi_len;
+        std::memcpy(ar.umi, e.umi, e.umi_len);
+        ar.gene_a  = ra;
+        ar.gene_b  = rb;
+        out.push_back(ar);
     }
 
     // intron_rule::kGeneFullSet on a primary alignment: more than one gene in its same-strand body set (exons of two genes, an exon of one
@@ -4525,6 +5248,16 @@ private:
             mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]());
         }
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
+        // The multimap record's counted-UMI keys (multimap::build): every exact (cell, UMI) with a read in the gene counts' store,
+        // taken before the stores are consumed. STARsolo pools a UMI's reads, so one uniquely assigned read makes the UMI unique.
+        // (After the GPU pileup the stores are empty and its keys, PileupOutput::umiKeys, stay.)
+        if (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) {
+            std::vector<uint64_t> keys;
+            for (const auto& t : targets) t.store->append_umi_keys(keys);
+            std::sort(keys.begin(), keys.end());
+            keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+            if (!keys.empty()) counted_umis_.swap(keys);
+        }
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
             for (const auto& t : targets) st += finalize_store(*t.store, *t.exon, *t.intron, *t.amb, t.mixed_exon, t.mixed_intron);
@@ -4534,7 +5267,8 @@ private:
         std::vector<std::vector<D::Molecule>> mols(targets.size());
         for (size_t i = 0; i < targets.size(); ++i)
         {
-            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i],
+                                                                        config_.finalize_threads);
             else targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
         }
         fin_mark("molecules collapsed");
@@ -4717,8 +5451,7 @@ private:
                 case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF: {
                     int32_t block_end = ref_pos + len;
                     if (snps) {
-                        auto it = std::lower_bound(snps->begin(), snps->end(), ref_pos,
-                            [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+                        auto it = snp_lower_bound(tid, ref_pos);
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
                             if (qual[0] != 0xff && qual[query_pos + offset] < (it->index >= edit_snp_start_ ? edit_baseq_ : config_.min_baseq))
@@ -4791,11 +5524,12 @@ private:
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                        it->second.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(it->second, hit.gene_idx);
-                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
                                         if (!it->second.primary_assigned &&
@@ -4806,6 +5540,7 @@ private:
                                             it->second.read_flags = kExonicReadFlags;
                                         }
                                     }
+                                    note_secondary_exonic(it->second, hit, tid);
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm_parallel(wc, it->second);
                                         wc.mm_buffer.erase(it);
@@ -4817,6 +5552,7 @@ private:
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                        entry.partial = true;   // this alignment's genes are not noted
                                     } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
                                         note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
@@ -4824,8 +5560,9 @@ private:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(entry, hit, tid);
                                 }
                             }
                         }
@@ -5051,6 +5788,8 @@ private:
             if (nh == 1) {
                 count_read(wc.mol_store, wc.exon, wc.intron, wc.stats,
                            static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
+                if (primary_multigene || gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps))
+                    note_unique_multigene(wc.ambig_reads, wc.exon_overlaps, wc.intron_overlaps, bc_idx, umi_str, umi_len);
             } else {
                 uint64_t qh = hash_qname(bam_get_qname(b));
                 auto& entry = wc.mm_buffer[qh];
@@ -5064,7 +5803,7 @@ private:
                     entry.intron_idx = rf.intron_idx;
                     entry.read_flags = rf.flags;
                     entry.read_diag = rf.diag;
-                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
+                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag, exon_gene != UINT32_MAX);
                 }
                 if (umi_str && umi_len > 0) {
                     int clen = std::min(umi_len, 15);
@@ -5072,24 +5811,28 @@ private:
                     entry.umi[clen] = '\0';
                     entry.umi_len = static_cast<uint8_t>(umi_len);
                 }
+                const bool gf_multi = gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps);
+                note_primary_exonic(entry, wc.exon_overlaps, exon_gene, primary_multigene, gf_multi, rf, tid);
                 if (primary_multigene) {
                     entry.gene_ambiguous = true;
                     // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from wc.exon_overlaps
                     if (!wc.exon_overlaps.empty()) {
-                        uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]);
+                        uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]), gb = UINT32_MAX;
                         if (ga != UINT32_MAX) {
                             note_gene(entry, ga);
-                            for (size_t _i = 1; _i < wc.exon_overlaps.size(); ++_i) {
-                                uint32_t gb = gene_model_.exon_to_gene(wc.exon_overlaps[_i]);
-                                if (gb != UINT32_MAX && gb != ga) {
-                                    note_gene(entry, gb); break;
-                                }
-                            }
+                            gb = second_exon_gene(wc.exon_overlaps, ga);
+                            if (gb != UINT32_MAX) note_gene(entry, gb);
                         }
+                        if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(wc.exon_overlaps, ga, gb)) entry.partial = true;
                     }
                 }
 
-                if (gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps)) entry.gene_ambiguous = true;
+                if (gf_multi) entry.gene_ambiguous = true;
+                if (primary_multigene || gf_multi) {   // multimap record: the primary's gene-body set
+                    const RecSet bs = record_set(wc.exon_overlaps, wc.intron_overlaps);
+                    note_body(entry, bs.a); note_body(entry, bs.b);
+                    if (bs.more) entry.body_more = true;
+                }
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                 note_gene(entry, aln_gene);
 
