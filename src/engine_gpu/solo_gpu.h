@@ -137,6 +137,8 @@ void soloKeepRecordsEnd(double ms);
 void soloKeepRelease();   // joins soloKeepToHost's thread first
 // E15: start the thread that moves the kept arrays to page-locked host memory (on `device`); when a step fails they stay on the device
 void soloKeepToHost(int device);
+// gpu-idle: joins soloKeepToHost's thread (call before taking the device slot); soloRunKept leaves the page-locked host copies to soloKeepRelease
+void soloKeepWait();
 // soloRun(device) on the kept arrays (on `device`, selected for the calling thread; back from the host first after soloKeepToHost) plus the
 // annotation of the reads the host mapped (sparse, host memory, ascending read index); cbQual: SoloReads::cbQual (E15); releases the kept arrays
 bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost, const u32* hostIdx, const RecAnn* hostAnn, SoloResult& out,

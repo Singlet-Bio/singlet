@@ -2124,6 +2124,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         std::vector<std::pair<uint64, uint64>>().swap(ha);
         sd.sGather = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         int lockFd = -1;
+        e9::soloKeepWait();   // gpu-idle: the copy of the kept inputs to the host is waited for before the slot is taken, not under it
         sd.tw = std::chrono::steady_clock::now();
         singlet_engine_gpu::lockDeviceSlot(e11.device, &lockFd);
         sd.tl = std::chrono::steady_clock::now();
@@ -2136,6 +2137,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
             && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
         singlet_engine_gpu::unlockDevice(lockFd);
         sd.tr = std::chrono::steady_clock::now();
+        e9::soloKeepRelease();   // gpu-idle: the page-locked host copies unpinned after the unlock
         if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
                                P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         sd.done = true;

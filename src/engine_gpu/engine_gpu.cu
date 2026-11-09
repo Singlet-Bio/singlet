@@ -44,6 +44,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <spawn.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -2815,6 +2816,23 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (cap && budDefault && !RC && singlet_engine_gpu::admitOn() && out.seqOff.size() > 1) {
             const u64 need = recNeed();
             if (need > cap) want = (int) std::min<u64>((u64) singlet_engine_gpu::gpuSlots(), (need + cap - 1) / cap);
+        }
+        if (in.e2e != nullptr && in.e2e->base != nullptr && !std::getenv("SINGLET_ENGINE_GPU_NO_PREFAULT")) {
+            // gpu-idle: the region's pages that the records' phase writes (the staged copy from the device, under the second hold) are faulted in
+            // here, on the host threads, while the slot is still to be taken. The estimate is a floor (one alignment, one CIGAR word and the
+            // nibble-packed sequence per record), so a page the copy needs and this did not touch is faulted in by the copy as before.
+            singlet_engine_gpu::E2ERegion& RGp = *in.e2e;
+            const u64 nRecP = out.seqOff.size() > 0 ? out.seqOff.size() - 1 : 0;
+            const u64 est = nRecP * (sizeof(SigRec) + sizeof(AlnRec) + 2 + 4) + out.seq.size() / 2;
+            const u64 lo = (RGp.hdr()->used + 63) & ~63ull, p0 = (lo + 4095) & ~4095ull, p1 = std::min<u64>(RGp.cap, lo + est) & ~4095ull;
+            if (p1 > p0) {
+                const u64 np = (p1 - p0) >> 12;
+                parallelFor(np, std::max(1, std::min(hostThreads, 16)), [&](u64 a, u64 b) {
+                    if (madvise(RGp.base + p0 + (a << 12), (b - a) << 12, 23 /* MADV_POPULATE_WRITE */) == 0) return;
+                    for (u64 q = a; q < b; q++) { volatile uint8_t* x = RGp.base + p0 + (q << 12); *x = *x; }
+                });
+            }
+            stepAdd("region.prefault", now() - tS); tS = now();
         }
         recSlots = in.reacquire(want);
         if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select the device again");

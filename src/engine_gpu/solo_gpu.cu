@@ -552,6 +552,21 @@ void soloKeepRelease() {
     if (K.hrecAnn) cudaFreeHost(K.hrecAnn);
     K = SoloKeep{};
 }
+// gpu-idle: the copy thread joined before the caller takes the device slot (soloRunKept used to wait for it under the lock)
+void soloKeepWait() {
+    SoloKeep& K = g_keep;
+    if (K.toHost.joinable()) K.toHost.join();
+}
+// gpu-idle: the device arrays of the keep freed under the lock; the page-locked host copies (their unpinning is host work) stay for soloKeepRelease,
+// which the caller runs after the unlock
+static void soloKeepReleaseDevice() {
+    SoloKeep& K = g_keep;
+    if (K.cr3) cudaFree(K.cr3);
+    if (K.ur3) cudaFree(K.ur3);
+    if (K.rec) cudaFree(K.rec);
+    if (K.recAnn) cudaFree(K.recAnn);
+    K.cr3 = K.ur3 = nullptr; K.rec = nullptr; K.recAnn = nullptr;
+}
 // E15 (E11 §5.3): the four kept arrays to page-locked host memory on a thread (STAR's loop runs meanwhile); the device copies are freed only
 // when every copy succeeded, otherwise the arrays stay on the device (hostWhy says why)
 void soloKeepToHost(int device) {
@@ -708,7 +723,9 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
                  std::string& log, const CbQualFn& cbQual) {
     ::singlet::gpu_ledger::Phase ledger_phase("solo");
     SoloKeep& K = g_keep;
+    const auto tK0 = std::chrono::steady_clock::now();
     if (K.toHost.joinable()) K.toHost.join();   // E15: the copy to the host is done (or failed: the arrays are still on the device)
+    const double msJoin = msSince(tK0);
     if (device >= 0 && cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); log += "soloRunKept: cannot select the device\n"; soloKeepRelease(); return false; }
     if (!K.reads || !K.recs) { log += "soloRunKept: the inputs were not kept on the device\n"; soloKeepRelease(); return false; }
     if (K.nOverflow) { log += "soloRunKept: " + std::to_string(K.nOverflow) + " records with more exons than the port's limit\n"; soloKeepRelease(); return false; }
@@ -738,9 +755,16 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
     SoloRecs R; R.nRec = K.nRec; R.dev = true; R.recAnn = K.recAnn;
     SoloReads Rd; Rd.n = K.n; Rd.dev = true; Rd.cr3 = K.cr3; Rd.ur3 = K.ur3; Rd.rec = K.rec; Rd.nHost = nHost; Rd.hostIdx = hostIdx; Rd.hostAnnS = hostAnn;
     Rd.cbQual = cbQual;
+    const double msPre = msSince(tK0);
+    const auto tK1 = std::chrono::steady_clock::now();
     const bool ok = soloRun(true, S, M, R, Rd, out, false, log);
+    const double msRun = msSince(tK1);
     out.nRecOverflow = K.nOverflow;
-    soloKeepRelease();
+    soloKeepReleaseDevice();   // the page-locked host copies are freed by the caller after the unlock (soloKeepRelease)
+    snprintf(lb, sizeof lb, "soloRunKept: join %.0f ms, before soloRun %.0f ms (back to the device included), soloRun %.0f ms, device release %.0f ms
+",
+             msJoin, msPre, msRun, msSince(tK1) - msRun);
+    log += lb;
     return ok;
 }
 
