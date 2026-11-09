@@ -27,7 +27,7 @@
 //   m2 NH 2  primary NUMT exon, secondary chrM 1500            NUMT; with 8192 nothing
 //   m3 NH 2  primary MT exon, secondary B intron               MT under all four
 //   m4 NH 2  primary chrM 1500, secondary A exon               A; with 8192 nothing
-//   m5 NH 3  primary chrM 1500, secondaries A exon, D exon     G-EM pair (A, D); with 8192 neither counted nor an EM pair
+//   m5 NH 3  primary chrM 1500, secondaries A exon, D exon     uncounted, multimap record read (A, D), with and without 8192
 //   m6 NH 3  primary NUMT exon, secondaries MT exon, chrM 1600 MT under all four (kMtPrefer)
 
 #include <unistd.h>
@@ -276,9 +276,10 @@ void check_chrm(const std::string& dir) {
             CHECK(g["A"] == (on ? 0 : 1), rt + ": A gets m4 only without kChrMPrecedence");
             CHECK(g["MT"] == 2, rt + ": MT gets m3 and m6");
             CHECK(g["B"] == 0 && g["D"] == 0, rt + ": B and D get nothing");
-            const std::vector<std::string> em_off = {"ACACACACAC A D"}, em_on = {};
-            CHECK(ref.em == (on ? em_on : em_off), rt + ": G-EM pairs");
-            if (!ok || ref.em != (on ? em_on : em_off)) std::cout << "    " << ref.text() << "\n";
+            // 8192 leaves m5 uncounted; the multimap record keeps a dropped read whose gene set is exactly two genes
+            const std::vector<std::string> em_all = {"ACACACACAC A D"};
+            CHECK(ref.em == em_all, rt + ": multimap record reads");
+            if (!ok || ref.em != em_all) std::cout << "    " << ref.text() << "\n";
             const std::vector<std::string> rev(recs.rbegin(), recs.rend());
             if (write_bam(dir, "mr", rev)) CHECK(run_case(dir, dir + "/mr.bam", rules, 0).text() == ref.text(), rt + ": run(reversed) == run(sorted)");
             for (int w : {1, 2, 3}) CHECK(run_case(dir, dir + "/ms.bam", rules, w).text() == ref.text(), rt + ": run_parallel(" + std::to_string(w) + ")");
