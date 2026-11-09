@@ -113,6 +113,11 @@ class Params:
     # True: a junction ending at the J anchor codon in place of Phe/Trp (a somatic substitution of the germline Phe/Trp118
     # codon, which asm_fw_relax assembles) is productive when the rest of the productivity checks hold
     fw_mut_productive: bool = True
+    # > 0: a barcode is a B cell only with >= this many UMIs over its IG contigs, productive or not (the documented V(D)J
+    # cell rule of Cell Ranger: a T cell or other droplet holds a few ambient IG molecules, a B cell tens to thousands)
+    ig_cell_min_umis: int = 3
+    # > 0: a barcode whose only kept productive IG contig has fewer junction UMIs than this is not a B cell
+    ig_lone_min_junction_umis: int = 2
     threads: int = 8
 
 
@@ -867,6 +872,17 @@ def filter_contigs(df, params: Params):
         lone = ig & ((df["chain"] == "IGH") & ~light | df["chain"].isin(("IGK", "IGL")) & ~heavy)
         drop = df["kept"] & lone & (n_bc >= params.ig_lone_spread)
         df["ig_lone"] = drop
+        df.loc[drop, "kept"] = False
+    if params.ig_cell_min_umis > 0 or params.ig_lone_min_junction_umis > 0:
+        ig = df["chain"].isin(("IGH", "IGK", "IGL"))
+        drop = np.zeros(len(df), bool)
+        if params.ig_cell_min_umis > 0:
+            tot = df["umis"].where(ig, 0).groupby(df["bcix"]).transform("sum")
+            drop |= (ig & (tot < params.ig_cell_min_umis)).to_numpy()
+        if params.ig_lone_min_junction_umis > 0:
+            kp = df["kept"] & df["productive"].astype(bool) & ig
+            n_kp = kp.groupby(df["bcix"]).transform("sum")
+            drop |= (kp & (n_kp == 1) & (df["junction_umis"] < params.ig_lone_min_junction_umis)).to_numpy()
         df.loc[drop, "kept"] = False
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)
