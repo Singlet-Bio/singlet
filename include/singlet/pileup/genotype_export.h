@@ -17,11 +17,13 @@
 // run's private/snp_{ad,dp}.1pz + cell_calls.tsv + donor_assignments.tsv; keep the two in step.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <zlib.h>
@@ -282,6 +284,155 @@ inline long long write_donors_vcf(const std::string& path, const DemuxResult& de
         }
         line += '\n';
         f.put(line);
+    }
+    return static_cast<long long>(rows.size());
+}
+
+/// The donor genotype of call_donor_genotype / donor_fields as an index: 0 = 0/0, 1 = 0/1, 2 = 1/1, -1 = no call (no depth or posterior
+/// below kGenoPost). Same expressions as donor_fields, so the two never disagree.
+inline int donor_gt_index(uint32_t ad, uint32_t dp)
+{
+    if (dp == 0) return -1;
+    if (ad > dp) ad = dp;
+    const double err = kGenoErr, a = static_cast<double>(ad), r = static_cast<double>(dp - ad);
+    const double l[3] = {r * std::log1p(-err) + a * std::log(err), static_cast<double>(dp) * std::log(0.5), a * std::log1p(-err) + r * std::log(err)};
+    const double m = std::max(l[0], std::max(l[1], l[2]));
+    const double e[3] = {std::exp(l[0] - m), std::exp(l[1] - m), std::exp(l[2] - m)};
+    int best = 0;
+    for (int g = 1; g < 3; ++g) if (e[g] > e[best]) best = g;
+    return e[best] / (e[0] + e[1] + e[2]) >= kGenoPost ? best : -1;
+}
+
+/// One site set of the per-cell VCF: a SNPs x barcodes AD / DP pair with its "chrom:pos:REF>ALT" names (the panel's snp_ad / snp_dp, or the
+/// all-site member's allele_ad / allele_dp).
+template <class CSC>
+struct SiteSet { const CSC* ad; const CSC* dp; const std::vector<std::string>* names; const char* label; };   // label: INFO SRC
+
+/// private/genotype/cells.vcf.gz (D-101): each cell's alleles against its donor's genotype. Rows: the sites of every set at which some
+/// donor's genotype (summed over its cells, the rule of write_donors_vcf) is 0/1 or 1/1; a site present in two sets with the same ALT is
+/// written once, from the first set. Rows are in contig order (contig_order: contig names in the reference's order), then position.
+/// Columns: the cells write_donors_vcf counts (called, one donor with prob_max >= 0.9), named by barcode, in barcode order.
+/// FORMAT GT:AD:DP:DC per cell with depth there: GT the donor's genotype (./. when it is not called), AD ref,alt UMIs of the cell, DP, and
+/// DC the UMIs that contradict the donor genotype (ALT at 0/0, REF at 1/1, 0 at 0/1, . without a donor call). A cell without depth: ".".
+/// INFO DGT: the donors' genotypes in donor order. Everything comes from stored counts and the donor assignments.
+/// Returns the number of rows, -1 on a write failure, 0 when there is no donor.
+template <class CSC>
+inline long long write_cells_vcf(const std::string& path, const DemuxResult& demux, const std::vector<SiteSet<CSC>>& sets,
+                                 const std::vector<uint32_t>& called, const std::vector<std::string>& barcodes,
+                                 const std::vector<std::string>& contig_order)
+{
+    const int K = demux.n_donors_k;
+    if (K <= 0 || sets.empty()) return 0;
+    const auto cells = sorted_cells(called);
+    std::vector<int> donor_of;   // per column
+    std::vector<uint32_t> cols;  // barcode index per column
+    for (uint32_t c : cells) {
+        if (c >= demux.assignments.size() || c >= barcodes.size()) continue;
+        const auto& a = demux.assignments[c];
+        if (a.cell_status != "cell" || a.donor_id < 0 || a.donor_id >= K || a.prob_max < kDonorMinProb) continue;
+        if (a.label != "donor" + std::to_string(a.donor_id)) continue;
+        cols.push_back(c); donor_of.push_back(a.donor_id);
+    }
+    const uint32_t nb = static_cast<uint32_t>(std::max<size_t>(barcodes.size(), 1));
+    std::vector<int32_t> col_of(nb, -1);
+    for (size_t j = 0; j < cols.size(); ++j) col_of[cols[j]] = static_cast<int32_t>(j);
+    std::unordered_map<std::string, int> contig_rank;
+    for (size_t i = 0; i < contig_order.size(); ++i) contig_rank.emplace(contig_order[i], static_cast<int>(i));
+
+    struct Row { int contig; int32_t pos; char ref, alt; int set; uint32_t snp; std::string chrom; std::vector<int8_t> gt; };
+    std::vector<Row> rows;
+    for (size_t si = 0; si < sets.size(); ++si) {
+        const CSC& ad = *sets[si].ad; const CSC& dp = *sets[si].dp; const auto& names = *sets[si].names;
+        const uint32_t n = dp.nrows;
+        std::vector<uint32_t> sdp(static_cast<size_t>(n) * K, 0), sad(static_cast<size_t>(n) * K, 0);
+        for (size_t j = 0; j < cols.size(); ++j) {
+            const uint32_t c = cols[j]; const int k = donor_of[j];
+            if (c >= dp.ncols) continue;
+            for (int64_t i = dp.indptr[c]; i < dp.indptr[c + 1]; ++i) sdp[static_cast<size_t>(dp.indices[i]) * K + k] += dp.data[i];
+            if (c < ad.ncols) for (int64_t i = ad.indptr[c]; i < ad.indptr[c + 1]; ++i) sad[static_cast<size_t>(ad.indices[i]) * K + k] += ad.data[i];
+        }
+        for (uint32_t s = 0; s < n && s < names.size(); ++s) {
+            std::vector<int8_t> gt(K, -1); bool var = false;
+            for (int k = 0; k < K; ++k) { const int g = donor_gt_index(sad[static_cast<size_t>(s) * K + k], sdp[static_cast<size_t>(s) * K + k]); gt[k] = static_cast<int8_t>(g); var |= g >= 1; }
+            if (!var) continue;
+            Row r; parse_snp_name(names[s], r.chrom, r.pos, r.ref, r.alt);
+            auto it = contig_rank.find(r.chrom); r.contig = it == contig_rank.end() ? static_cast<int>(contig_order.size()) : it->second;
+            r.set = static_cast<int>(si); r.snp = s; r.gt = std::move(gt);
+            rows.push_back(std::move(r));
+        }
+    }
+    std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) {
+        if (a.contig != b.contig) return a.contig < b.contig;
+        if (a.contig == b.contig && a.chrom != b.chrom) return a.chrom < b.chrom;   // contigs outside the order: by name
+        if (a.pos != b.pos) return a.pos < b.pos;
+        if (a.alt != b.alt) return a.alt < b.alt;
+        return a.set < b.set; });
+    { std::vector<Row> u; u.reserve(rows.size());
+      for (auto& r : rows) if (u.empty() || u.back().chrom != r.chrom || u.back().pos != r.pos || u.back().alt != r.alt) u.push_back(std::move(r));
+      rows.swap(u); }
+
+    // per row, the (column, ad, dp) entries: transpose each set's columns once
+    std::vector<std::vector<std::array<uint32_t, 3>>> ent(rows.size());
+    for (size_t si = 0; si < sets.size(); ++si) {
+        const CSC& ad = *sets[si].ad; const CSC& dp = *sets[si].dp;
+        std::vector<int64_t> row_of(dp.nrows, -1);
+        for (size_t ri = 0; ri < rows.size(); ++ri) if (rows[ri].set == static_cast<int>(si)) row_of[rows[ri].snp] = static_cast<int64_t>(ri);
+        for (size_t j = 0; j < cols.size(); ++j) {
+            const uint32_t c = cols[j];
+            if (c >= dp.ncols) continue;
+            int64_t ia = c < ad.ncols ? ad.indptr[c] : 0; const int64_t ea = c < ad.ncols ? ad.indptr[c + 1] : 0;
+            for (int64_t i = dp.indptr[c]; i < dp.indptr[c + 1]; ++i) {
+                const int64_t ri = row_of[dp.indices[i]];
+                if (ri < 0 || dp.data[i] == 0) continue;
+                while (ia < ea && ad.indices[ia] < dp.indices[i]) ++ia;   // CSC rows ascend within a column
+                const uint32_t a = (ia < ea && ad.indices[ia] == dp.indices[i]) ? ad.data[ia] : 0;
+                ent[static_cast<size_t>(ri)].push_back({static_cast<uint32_t>(j), a, dp.data[i]});
+            }
+        }
+    }
+
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+    GzOut f(path);
+    if (!f.ok()) return -1;
+    f.put("##fileformat=VCFv4.2\n##source=singlet genotype_export (D-101 per-cell VCF)\n"
+          "##singlet_genotype_model=donor genotype: binomial on donor-summed UMI counts, error 0.01, flat prior; GT when the posterior >= 0.99\n"
+          "##singlet_cells=called cells (cell_status cell) with one donor at prob_max >= 0.9; rows: sites where some donor is 0/1 or 1/1\n");
+    { std::vector<std::string> seen; for (const auto& r : rows) if (seen.empty() || seen.back() != r.chrom) { seen.push_back(r.chrom); f.put("##contig=<ID=" + r.chrom + ">\n"); } }
+    f.put("##FILTER=<ID=PASS,Description=\"All filters passed\">\n"
+          "##INFO=<ID=DGT,Number=.,Type=String,Description=\"Genotype of each donor (donor0, donor1, ...) from its cells' summed counts\">\n"
+          "##INFO=<ID=SRC,Number=1,Type=String,Description=\"Site set: panel (fixed SNP panel) or allsite (sites with ALT evidence in this sample)\">\n"
+          "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype of the cell's donor; ./. when the donor genotype is not called\">\n"
+          "##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Ref and alt UMI counts of the cell\">\n"
+          "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Ref + alt UMI count of the cell\">\n"
+          "##FORMAT=<ID=DC,Number=1,Type=Integer,Description=\"UMIs contradicting the donor genotype: ALT at 0/0, REF at 1/1, 0 at 0/1\">\n"
+          "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
+    for (uint32_t c : cols) { f.put("\t"); f.put(barcodes[c]); }
+    f.put("\n");
+    static const char* kGt[3] = {"0/0", "0/1", "1/1"};
+    std::string line;
+    for (size_t ri = 0; ri < rows.size(); ++ri) {
+        const Row& r = rows[ri];
+        const std::string& id = (*sets[static_cast<size_t>(r.set)].names)[r.snp];
+        line = r.chrom; line += '\t'; line += std::to_string(r.pos); line += '\t'; line += id; line += '\t'; line += r.ref; line += '\t'; line += r.alt;
+        line += "\t.\tPASS\tDGT=";
+        for (int k = 0; k < K; ++k) { if (k) line += ','; line += r.gt[k] < 0 ? "./." : kGt[r.gt[k]]; }
+        line += ";SRC="; line += sets[static_cast<size_t>(r.set)].label;
+        line += "\tGT:AD:DP:DC";
+        size_t e = 0; auto& v = ent[ri];
+        std::sort(v.begin(), v.end());
+        for (uint32_t j = 0; j < cols.size(); ++j) {
+            line += '\t';
+            if (e < v.size() && v[e][0] == j) {
+                const uint32_t a = std::min(v[e][1], v[e][2]), d = v[e][2]; ++e;
+                const int g = r.gt[donor_of[j]];
+                line += g < 0 ? "./." : kGt[g]; line += ':'; line += std::to_string(d - a); line += ','; line += std::to_string(a);
+                line += ':'; line += std::to_string(d); line += ':';
+                line += g < 0 ? std::string(".") : std::to_string(g == 0 ? a : g == 2 ? d - a : 0u);
+            } else line += '.';
+        }
+        line += '\n';
+        f.put(line);
+        std::vector<std::array<uint32_t, 3>>().swap(v);
     }
     return static_cast<long long>(rows.size());
 }

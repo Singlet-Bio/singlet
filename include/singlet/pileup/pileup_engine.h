@@ -61,6 +61,7 @@
 #include "../tail_trace.h"      // E16: marks of the level-5 tail (stderr; nothing at other levels)
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 #include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
+#include "allsite.h"           // D-101: per-cell allele counts at every site with alternate-allele evidence
 
 namespace singlet {
 // Timing and memory milestones of the end-of-stream finalize (stderr only, no effect on any output).
@@ -118,6 +119,11 @@ struct PileupConfig {
     // whose strand probe handles any chemistry; the stats come back with strand_contradiction set. Serial run() only.
     bool strand_early_abort = false;
     std::string snp_path;           // VCF/TSV of SNP positions
+    // D-101 all-site allele counts (allsite.h): STAR genome dir for the reference bases; empty = off. GPU builds only (the member is
+    // computed from the alignment records the GPU pileup reads; a CPU-only build writes no all-site member).
+    std::string allsite_genome_dir;
+    int allsite_min_alt_molecules = 2;   // a site's alternate base: >= this many distinct (barcode, UMI) molecules ...
+    int allsite_min_alt_cells = 2;       // ... in >= this many distinct barcodes
     // D-101: known RNA editing sites (REDIportal A-to-I), TSV(.gz) CHROM POS(1-based) REF ALT on the genome strand (A>G for a
     // + strand site, T>C for a - strand site). The sites join the SNP pileup after the AIM block (same molecule consensus, same
     // CPU and GPU kernels); export splits those rows off before any SNP consumer, so the SNP matrices are unchanged.
@@ -816,7 +822,7 @@ public:
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpupileup::enabled() && config_.edit_baseq() != config_.min_baseq && edit_snp_start_ != UINT32_MAX)
             std::cerr << "[gpu_pileup] off: editing_min_baseq " << config_.edit_baseq() << " differs from min_baseq " << config_.min_baseq << "\n";
-        else if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
+        else if (gpupileup::enabled() || allsite_on()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end; D-101: the all-site member reads the same records
         gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
         e16_early_start();   // E16 (level 5): the hand-off pass's device part as soon as STAR's prefill completed the shared region
 #endif
@@ -1534,6 +1540,7 @@ public:
         gpudump_write(static_cast<uint32_t>(tid_to_chrom_.size()));   // W11 debug (SINGLET_PILEUP_DUMP); hdr is already freed here
 #ifdef SINGLET_HAVE_ENGINE_GPU
         gpu_pileup_compare();   // W11 (SINGLET_GPU_PILEUP=compare)
+        allsite_cpu_mode();     // D-101 with SINGLET_GPU_PILEUP unset: the records were collected for the all-site member only
 #endif
         return stats;
     }
@@ -1823,6 +1830,9 @@ public:
         }
 
         for (auto& t : threads) t.join();
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        allsite_parallel_pass(bam_path, n_workers);   // D-101: the region workers keep no records, so one more pass over the BAM collects them
+#endif
 
         auto proc_t1 = std::chrono::high_resolution_clock::now();
         double proc_s = std::chrono::duration<double>(proc_t1 - proc_t0).count();
@@ -2149,6 +2159,7 @@ public:
     // W11: runs the GPU pileup on the records collected from this pass and compares each covered output with this engine's accumulators
     // (exon, intron, ambiguous, junctions by contig/donor/acceptor, SNP AD/DP, chrM total/reverse, chrM indels, R1 molecule counters).
     std::unique_ptr<gpupileup::Collector> gpu_col_;
+    bool allsite_done_ = false;
     PileupStats* gpu_stats_ = nullptr;
     // E16 (docs/gpu-engine/fable/E16-tail.md; level 5, SINGLET_E16=0 turns it off): the hand-off pass's device part (e2ePass + rRNA detector) on a
     // thread that waits for STAR's prefill to complete the shared region (its magic), so it runs while STAR maps the reads without a record and
@@ -2278,8 +2289,83 @@ public:
         std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups)\n";
         return true;
     }
+    // D-101: the all-site member from this pass's records (allsite.h), one host implementation for every mode
+    struct AllSiteView {
+        singlet_engine_gpu::PileupCat<SigRec> S; singlet_engine_gpu::PileupCat<AlnRec> A; singlet_engine_gpu::PileupCat<ReadRec> Rd;
+        singlet_engine_gpu::PileupCat<uint32_t> O; singlet_engine_gpu::PileupCat<uint8_t> Q; singlet_engine_gpu::PileupCat<uint64_t> L;
+        explicit AllSiteView(const singlet_engine_gpu::PileupInput& in)
+            : S(singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size())),
+              A(singlet_engine_gpu::pileupCat<AlnRec>(in.preAlns, in.alns.data(), in.alns.size())),
+              Rd(singlet_engine_gpu::pileupCat<ReadRec>(in.preReads, in.reads.data(), in.reads.size())),
+              O(singlet_engine_gpu::pileupCat<uint32_t>(in.preOps, in.ops.data(), in.ops.size() * sizeof(uint32_t))),
+              Q(singlet_engine_gpu::pileupCat<uint8_t>(in.preSeq, in.seq.data(), in.seq.size())),
+              L(singlet_engine_gpu::pileupCat<uint64_t>(in.preLowq, in.lowq.data(), in.lowq.size())) {}
+        uint64_t n_sigs() const { return S.size(); }
+        uint64_t n_reads() const { return Rd.size(); }
+        const SigRec& sig(uint64_t i) const { return S[i]; }
+        const AlnRec& aln(uint64_t i) const { return A[i]; }
+        const ReadRec& read(uint64_t i) const { return Rd[i]; }
+        const uint32_t* ops_at(uint64_t off) const { return O.at(off); }
+        const uint8_t* seq_at(uint64_t off) const { return Q.at(off); }
+        uint64_t lowq_word(uint64_t i) const { return L[i]; }
+    };
+    void allsite_from_input(const singlet_engine_gpu::PileupInput& in) {
+        if (!allsite_on() || allsite_done_) return;
+        allsite_done_ = true;
+        const auto t0 = std::chrono::steady_clock::now();
+        if (in.snpSkipN < 0 && !in.useQual) { std::cerr << "[allsite] not run: base qualities neither constant nor tied to N, and no masks\n"; return; }
+        allsite::Genome G; std::string err;
+        if (!G.open(config_.allsite_genome_dir, tid_to_chrom_, &err)) { std::cerr << "[allsite] not run: cannot read the reference (" << err << ")\n"; return; }
+        allsite::Params P;
+        P.min_mapq = in.minMapq; P.min_alt_molecules = config_.allsite_min_alt_molecules; P.min_alt_cells = config_.allsite_min_alt_cells;
+        P.skip_tid = chrm_tid_; P.use_qual = in.useQual; P.qwords = static_cast<int>(singlet_qmask::words()); P.skip_n = in.snpSkipN > 0;
+        P.umi_dedup = in.umiDedup; P.directional = in.directional; P.umi_len = in.umiLen;
+        P.threads = static_cast<unsigned>(std::max(1, std::max(config_.finalize_threads, config_.threads)));
+        P.progress = [] { singlet::rearm_stall_watchdog("allsite pass"); };
+        P.defer_build = true;   // finalize_allsite builds the matrices for the called cells once they are known
+        AllSiteView v(in);
+        allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
+        allsite_ok_ = true;
+        std::cerr << "[allsite] " << allsite_.sites.size() << " sites (>= " << P.min_alt_molecules << " ALT molecules in >= " << P.min_alt_cells
+                  << " barcodes), DP records " << allsite_.dp_records << ", AD records " << allsite_.ad_records << "; reads " << allsite_.reads_used
+                  << ", mismatch observations " << allsite_.mismatch_obs << ", molecules " << allsite_.molecules << " (ambiguous " << allsite_.ambiguous
+                  << ", other " << allsite_.other << ") in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+    }
+    void allsite_cpu_mode() {
+        if (!gpu_col_ || gpupileup::enabled() || !allsite_on()) return;
+        singlet_engine_gpu::PileupInput in;
+        if (!gpu_build_input(in)) { std::cerr << "[allsite] not run: records not reproducible\n"; return; }
+        allsite_from_input(in);
+    }
+    // D-101 on the region-parallel path (run_parallel): the workers keep no alignment records, so the member reads the sorted BAM once
+    // more, in file order, into a collector, with the barcode column the stream gives (the CB, or the corrected CR when cb_from_cr).
+    // Every all-site count is a function of the set of reads (allsite.h), so the sorted order gives what the stream order gives.
+    void allsite_parallel_pass(const std::string& bam_path, int n_threads) {
+        if (!allsite_on() || allsite_done_) return;
+        const auto t0 = std::chrono::steady_clock::now();
+        htsFile* fp = hts_open(bam_path.c_str(), "r");
+        if (!fp) { std::cerr << "[allsite] not run: cannot open " << bam_path << "\n"; return; }
+        if (n_threads > 1) hts_set_threads(fp, n_threads);
+        sam_hdr_t* hdr = sam_hdr_read(fp);
+        if (!hdr) { hts_close(fp); std::cerr << "[allsite] not run: no BAM header\n"; return; }
+        gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));
+        gpu_col_->prefer_raw_umi(true);   // UB in the sorted BAM is the corrected UMI and merges molecules the serial pass keeps apart
+        bam1_t* b = bam_init1();
+        uint64_t n = 0;
+        while (sam_read1(fp, hdr, b) >= 0) {
+            const char* cb = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
+            gpu_col_->add(b, (cb && cb[0] != '-') ? bc_index_.lookup(cb) : -1);
+            if ((++n % 50000000) == 0) singlet::rearm_stall_watchdog("allsite pass");
+        }
+        bam_destroy1(b); sam_hdr_destroy(hdr); hts_close(fp);
+        std::cerr << "[allsite] parallel path: " << n << " records re-read in "
+                  << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+        singlet_engine_gpu::PileupInput in;
+        if (!gpu_build_input(in)) { std::cerr << "[allsite] not run: records not reproducible\n"; return; }
+        allsite_from_input(in);
+    }
     void gpu_pileup_compare() {
-        if (!gpu_col_) return;
+        if (!gpu_col_ || gpupileup::mode() != 1) return;
         { PileupStats dummy; if (gpu_col_->handoff()) gpu_handoff_pass(dummy, true); }
         using namespace singlet_engine_gpu;
         PileupInput in;
@@ -2290,6 +2376,7 @@ public:
         PileupOutput out;
         const bool ok = pileupRun(in, device, out);
         unlockDevice(lock_fd);
+        allsite_from_input(in);   // D-101
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return; }
         std::cerr << "[gpu_pileup] GPU " << out.msGpu
                   << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; R1 molecules " << out.snpMolecules << ", ambiguous "
@@ -3083,6 +3170,7 @@ public:
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
+        allsite_from_input(in);   // D-101: host pass over the same records (the input lives until this function returns)
         // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
         // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
         auto applyOut = [&]() {
@@ -3209,6 +3297,9 @@ public:
     };
 #endif
     bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
+    mutable allsite::Result allsite_;   // D-101 (allsite.h); allsite_ok_ once computed
+    mutable bool allsite_ok_ = false;
+    mutable bool allsite_built_ = false;   // finalize_allsite ran
     std::vector<uint32_t> gpu_cell_reads_, gpu_cell_mols_;   // W11 "on": per-cell molecule-store reads and molecules from the GPU
     // W11 "on": the per-cell saturation inputs the molecule store would give (empty when the CPU store was used)
     bool gpu_saturation(std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>>& cells) const {
@@ -3220,6 +3311,30 @@ public:
     }
     // Get accumulators for export
     const SparseAccumulator<uint16_t>& snp_ad() const { return snp_ad_; }
+    // D-101 all-site member: on when a genome dir is set (GPU builds); allsite() is valid when allsite_ready()
+    bool allsite_on() const {
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        return !config_.allsite_genome_dir.empty();
+#else
+        return false;
+#endif
+    }
+    bool allsite_ready() const { return allsite_ok_; }
+    // Builds the all-site matrices once, after cell calling and demux: build(result) applies the storage rule (allsite_store.h). A false
+    // result (the entries do not fit int32 column pointers) turns the member off.
+    bool finalize_allsite(const std::function<bool(allsite::Result&)>& build) const {   // export holds the engine by const reference; the build is a one-time lazy step
+        if (!allsite_ok_ || allsite_built_) return allsite_ok_;
+        allsite_built_ = true;
+        if (!build(allsite_)) { allsite_ok_ = false; return false; }
+        return true;
+    }
+    const allsite::Result& allsite() const { return allsite_; }
+    std::vector<std::string> allsite_names() const {
+        std::vector<std::string> v; v.reserve(allsite_.sites.size());
+        for (const auto& x : allsite_.sites) v.push_back(allsite::site_name(x, tid_to_chrom_));
+        return v;
+    }
+    const std::vector<std::string>& contig_names() const { return tid_to_chrom_; }
     const SparseAccumulator<uint16_t>& snp_dp() const { return snp_dp_; }
     const SparseAccumulator<uint16_t>& exons() const { return exon_acc_; }
     const SparseAccumulator<uint16_t>& introns() const { return intron_acc_; }
