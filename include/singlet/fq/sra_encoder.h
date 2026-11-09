@@ -1413,8 +1413,7 @@ class SraEncoder {
                                 {
                                     const AssayType nb = classify_assay(std::string(), Confidence::NONE, probe_spots, r1_len, r2_len);
                                     stats.assay_type = nb;
-                                    std::cerr << "[1fq-encode] Assay: " << assay_type_name(nb) << " (no barcode read; excluded as data_incomplete)
-";
+                                    std::cerr << "[1fq-encode] Assay: " << assay_type_name(nb) << " (no barcode read; excluded as data_incomplete)\n";
                                 }
                                 stats.exit_code = 2;
                                 return stats;

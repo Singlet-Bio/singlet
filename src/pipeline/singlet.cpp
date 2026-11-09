@@ -327,8 +327,7 @@ static int pre_gate(const std::string& sra_path,
     // An assay that has no spec but a recognizable layout is named and stopped before any protocol call is made on it.
     if (const auto* named = singlet::fq::match_named_assay(gate_spots)) {
         std::cerr << "[singlet-gate] REJECT " << sra_path << " reason=unsupported_assay_" << named->name
-                  << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp: " << named->reason << "
-";
+                  << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp: " << named->reason << "\n";
         return 2;
     }
 
@@ -343,8 +342,7 @@ static int pre_gate(const std::string& sra_path,
         if (alt.confidence >= singlet::fq::Confidence::MEDIUM && non10x_reject_tags.count(alt.tag) > 0 &&
             singlet::fq::route_evidence(alt, swapped, whitelist_dirs).ok) {
             std::cerr << "[singlet-gate] swapped reads: " << alt.tag << " at confidence " << static_cast<int>(alt.confidence)
-                      << " (as given: " << detected.tag << " at " << static_cast<int>(detected.confidence) << ")
-";
+                      << " (as given: " << detected.tag << " at " << static_cast<int>(detected.confidence) << ")\n";
             detected = alt;
             gate_spots = std::move(swapped);
             std::swap(gate_r1, gate_r2);
@@ -386,13 +384,11 @@ static int pre_gate(const std::string& sra_path,
                               << " bc_reuse=" << ev.bc_reuse << " linker_rate=" << ev.linker_rate << " wl_excess=" << ev.wl_excess
                               << " exact_len=" << ev.exact_len
                               << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp"
-                              << " gate_s=" << gate_s << " — runs under its own spec
-";
+                              << " gate_s=" << gate_s << " — runs under its own spec\n";
                     return 0;
                 }
                 reason = "non10x_route_evidence_missing";
-                std::cerr << "[singlet-gate] evidence for " << detected.tag << ": " << ev.why << "
-";
+                std::cerr << "[singlet-gate] evidence for " << detected.tag << ": " << ev.why << "\n";
             }
         } else if (detected.confidence == singlet::fq::Confidence::LOW
                    && detected.wl_match_rate < 0.01
