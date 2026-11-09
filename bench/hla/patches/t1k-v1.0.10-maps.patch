@@ -1,0 +1,119 @@
+diff --git a/Genotyper.hpp b/Genotyper.hpp
+index 93ab81e..e5050b9 100644
+--- a/Genotyper.hpp
++++ b/Genotyper.hpp
+@@ -1379,17 +1379,18 @@ public:
+ 		SimpleVector<int> minStarts ;
+ 		SimpleVector<int> maxEnds ;
+ 		SimpleVector<double> likelihoods ;
+-		std::map<int, int> alleleIdxToIdx ;
++		// singlet: alleleIdx -> position in the class in a dense array (-1: not in the class) in place of a std::map,
++		// set for each class and cleared after it; only looked up, so the result is the same
++		std::vector<int> alleleIdxToIdx( refSet.Size(), -1 ) ;
+ 		for (i = 0 ; i < ecCnt ; ++i)
+ 		{
+-			keptAlleles.clear() ; 
++			keptAlleles.clear() ;
+ 			int size = equivalentClassToAlleles[i].size() ;
+ 			likelihoods.ExpandTo(size) ;
+ 			likelihoods.SetZero(0, size) ;
+ 			minStarts.ExpandTo(size) ;
+ 			maxEnds.ExpandTo(size) ;
+-			alleleIdxToIdx.clear() ;
+-			
++
+ 			for (j = 0 ; j < size ; ++j)
+ 			{
+ 				int alleleIdx = equivalentClassToAlleles[i][j] ;
+@@ -1408,9 +1409,9 @@ public:
+ 				for (k = 0 ; k < readToAllelesCnt ; ++k)
+ 				{
+ 					struct _readAssignment &assign = readAssignments[readIdx][k] ;
+-					if (alleleIdxToIdx.find(assign.alleleIdx) == alleleIdxToIdx.end())
+-						continue ;
+ 					int idx = alleleIdxToIdx[assign.alleleIdx] ;
++					if (idx < 0)
++						continue ;
+ 					if (assign.start < minStarts[idx])
+ 						minStarts[idx] = assign.start ;
+ 					if (assign.end > maxEnds[idx])
+@@ -1458,6 +1459,8 @@ public:
+ 							likelihoods[j], maxLikelihood);
+ 				}*/
+ 			}
++			for (j = 0 ; j < size ; ++j)
++				alleleIdxToIdx[ equivalentClassToAlleles[i][j] ] = -1 ;
+ 			equivalentClassToAlleles[i] = keptAlleles ;
+ 		}
+ 	}
+diff --git a/SeqSet.hpp b/SeqSet.hpp
+index 2c858da..fc5bdb6 100644
+--- a/SeqSet.hpp
++++ b/SeqSet.hpp
+@@ -2394,7 +2394,13 @@ public:
+ 		} // else for paired-end reds
+ 		// For each seq idx, keep the best fragment
+ 		int fragmentCnt = fragments.Size() ;
+-		std::map<int, int> seqIdxToOverlapIdx ;
++		// singlet: seqIdx -> position in assign in a reused dense array (-1: none) in place of a std::map per read;
++		// it is only looked up, and the entries set here (seqIdxTouched) are cleared again before the return
++		static thread_local std::vector<int> seqIdxToOverlapIdx ;
++		static thread_local std::vector<int> seqIdxTouched ;
++		if ( seqIdxToOverlapIdx.size() < seqs.size() )
++			seqIdxToOverlapIdx.assign( seqs.size(), -1 ) ;
++		seqIdxTouched.clear() ;
+ 		for (i = 0 ; i < fragmentCnt ; ++i)
+ 		{
+ 			struct _fragmentOverlap fragmentOverlap ;
+@@ -2452,19 +2458,20 @@ public:
+ 				fragmentOverlap.overlap1 = o ;
+ 			}
+ 
+-			if (seqIdxToOverlapIdx.find(fragmentOverlap.seqIdx) != seqIdxToOverlapIdx.end())
++			if (seqIdxToOverlapIdx[fragmentOverlap.seqIdx] >= 0)
+ 			{
+ 				// Note < here is for ranking, so smaller has higher rank
+ 				if (fragmentOverlap < assign[seqIdxToOverlapIdx[fragmentOverlap.seqIdx]])
+ 				{
+-					assign[seqIdxToOverlapIdx[fragmentOverlap.seqIdx]] = fragmentOverlap ; 
+-				}	
++					assign[seqIdxToOverlapIdx[fragmentOverlap.seqIdx]] = fragmentOverlap ;
++				}
+ 			}
+ 			else
+ 			{
+ 				assign.push_back( fragmentOverlap ) ;
+ 				seqIdxToOverlapIdx[fragmentOverlap.seqIdx] = assign.size() - 1;
+-			}	
++				seqIdxTouched.push_back( fragmentOverlap.seqIdx ) ;
++			}
+ 		}
+ 
+ 		/*std::sort(assign.begin(), assign.end()) ;
+@@ -2619,7 +2626,7 @@ public:
+ 							&& GetSeqWeight(overlaps[i].seqIdx) > GetSeqWeight(representative.seqIdx) + 20
+ 							&& GetSeqWeight(representative.seqIdx) == 1)*/
+ 							)
+-						&& seqIdxToOverlapIdx.find(overlaps[i].seqIdx) == seqIdxToOverlapIdx.end()))
++						&& seqIdxToOverlapIdx[overlaps[i].seqIdx] < 0))
+ 				{
+ 					//printf("1 %d %d\n", GetSeqWeight(overlaps[i].seqIdx), GetSeqWeight(representative.seqIdx));
+ 					if (TruncatedMatePairOverlap(overlaps[i], 
+@@ -2645,7 +2652,7 @@ public:
+ 							&& GetSeqWeight(overlaps2[i].seqIdx) > GetSeqWeight(representative.seqIdx) + 20
+ 							&& GetSeqWeight(representative.seqIdx) == 1)*/
+ 							)
+-						&& seqIdxToOverlapIdx.find(overlaps2[i].seqIdx) == seqIdxToOverlapIdx.end()))
++						&& seqIdxToOverlapIdx[overlaps2[i].seqIdx] < 0))
+ 				{
+ 					//printf("2 %d %d\n", GetSeqWeight(overlaps2[i].seqIdx), GetSeqWeight(representative.seqIdx));
+ 					if (TruncatedMatePairOverlap(overlaps2[i], 
+@@ -2664,6 +2671,8 @@ public:
+ 			if (filter)
+ 				assign.clear() ;
+ 		}
++		for (i = 0 ; i < (int)seqIdxTouched.size() ; ++i)
++			seqIdxToOverlapIdx[ seqIdxTouched[i] ] = -1 ;
+ 		return assign.size() ;
+ 	}
+ 
