@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include "singlet/nvtx.h"
@@ -168,10 +169,37 @@ struct Clip {
 
 // an allocator that default-initializes (resize does not zero-fill): the decode's large per-read arrays are first touched by the parsing
 // threads that write every element, instead of a serial fill first (E11 step 4)
+// Large arrays (64 MB and up) also ask for transparent hugepages on their 2 MB-aligned interior: with THP in "madvise" mode (as on
+// Clipper) they otherwise fault in 4 KB at a time, and the parallel first touches of many threads contend on the process's page tables
+// (the mapper's record copies, the decode's arrays). Placement only: the bytes are the same. SINGLET_NOINIT_HUGEPAGE=0 turns it off.
+// cudaInitDevice's third argument: deviceFlags (cudaDeviceScheduleBlockingSync: a host thread waiting on the device sleeps) are applied
+// only with cudaInitDeviceFlagsAreValid (0x01) there. Every call passed 0 before, so the contexts ran with schedule "auto", which spins a
+// waiting thread while the process has fewer contexts than cores (the lane-driving thread burned about the lanes' kernel time in CPU).
+// SINGLET_GPU_SCHEDULE_AUTO=1 restores that (0).
+inline unsigned gpuInitFlags() {
+    static const unsigned f = [] { const char* e = std::getenv("SINGLET_GPU_SCHEDULE_AUTO"); return (e && e[0] == '1') ? 0u : 0x01u; }();
+    return f;
+}
+inline bool noinitHugepage() {
+    static const bool on = [] { const char* e = std::getenv("SINGLET_NOINIT_HUGEPAGE"); return !(e && e[0] == '0'); }();
+    return on;
+}
 template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U> struct rebind { using other = NoInitAlloc<U>; };
     NoInitAlloc() = default;
     template <class U> NoInitAlloc(const NoInitAlloc<U>&) noexcept {}
+    T* allocate(std::size_t n) {
+        T* p = std::allocator<T>::allocate(n);
+#if defined(__linux__)
+        const std::size_t b = n * sizeof(T);
+        constexpr std::uintptr_t H = std::uintptr_t(2) << 20;
+        if (b >= (std::size_t(64) << 20) && noinitHugepage()) {
+            const std::uintptr_t a = (reinterpret_cast<std::uintptr_t>(p) + H - 1) & ~(H - 1), e = (reinterpret_cast<std::uintptr_t>(p) + b) & ~(H - 1);
+            if (e > a) madvise(reinterpret_cast<void*>(a), e - a, MADV_HUGEPAGE);
+        }
+#endif
+        return p;
+    }
     template <class U> void construct(U* p) noexcept(std::is_nothrow_default_constructible<U>::value) { ::new ((void*) p) U; }
     template <class U, class... A> void construct(U* p, A&&... a) { ::new ((void*) p) U(std::forward<A>(a)...); }
 };
@@ -186,8 +214,9 @@ struct Input {
     std::function<void()> release;      // called by mapDistinct once its last device work is done (the caller's device lock); the host assembly of the records runs after it
     // E20: with e2e, mapDistinct releases the device (release) once the lanes are done and calls reacquire for the records' device phase (E8's
     // buildRecords, E10's products, E11's keep) after the host lane and the host assembly; reacquire takes the same device again. Unset (or
-    // SINGLET_ENGINE_GPU_SPLIT=0): one hold, as before
-    std::function<void()> reacquire;
+    // SINGLET_ENGINE_GPU_SPLIT=0): one hold, as before. Its argument is the number of slots the records' phase asks for (SL step 2, admitOn: more
+    // than 1 when it needs more than one slot's share); it returns the number it holds
+    std::function<int(int)> reacquire;
     // IDEAS.md item 11: E10 turning itself off for lack of device memory fails mapDistinct instead (the caller retries the whole call, and after
     // its last attempt STAR maps every read); unset with SINGLET_ENGINE_GPU_OOM_TRIES=1, where the run goes on without E10 as before
     bool oomFatal = false;
@@ -242,7 +271,7 @@ struct Output {
         uint64_t nSJ = 0, nSJentries = 0;
         int sjGapBits = 32;                         // E17: the junction sort key's gap bits (start << sjGapBits | gap; 31 on genomes above 2^32 bases)
         std::vector<uint32_t> unmappedReads;        // reads whose record is unmapped (STAR writes them to Unmapped.out.mate1/2), read order
-        std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped
+        std::vector<uint8_t> recMapped;             // per record: 1 if its reads replay a summary (mapped), 0 if unmapped; 3: mapped, and its reads take the --chimeric soft-clip route
         double msEntries = 0, msUpAux = 0, msProducts = 0, msD2H = 0;
         // R11: per whitelist entry the reads with that exact CB and a UMI without N that is not a homopolymer (empty: not computed)
         std::vector<uint32_t> r11;
@@ -298,7 +327,60 @@ inline uint64_t memBudget(uint64_t total) {
 // NVTX: the wait for the lock and its hold (from lockDevice to unlockDevice, which may run in another thread) are ranges of their own
 inline std::map<int, unsigned long long>& lockRanges() { static std::map<int, unsigned long long> m; return m; }
 inline std::mutex& lockRangesMutex() { static std::mutex m; return m; }
-inline int lockDeviceImpl(int* lockFd) {
+// SL step 2 (bench/gpu/cards/SL-more-slots.md): SINGLET_ENGINE_GPU_ADMIT=1 lets a sample whose records' phase needs more than one slot's share
+// of the device take several slots of that device at the E20 relock (lockDeviceSlots below), so the records are built on the device where the
+// fixed share would have stopped them. It holds no slot while it waits for them, and while it collects them it holds the device's admission gate
+// exclusively; every other acquirer passes the gate (shared, then let go) before it tries a slot, so the slots that come free go to the
+// collector. The extra slots are released with the first (unlockDevice).
+inline bool admitOn() { const char* a = std::getenv("SINGLET_ENGINE_GPU_ADMIT"); return a != nullptr && a[0] == '1'; }
+inline int gpuSlots() { const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS"); return sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1; }
+inline std::map<int, std::vector<int>>& extraLocks() { static std::map<int, std::vector<int>> m; return m; }
+inline std::mutex& extraLocksMutex() { static std::mutex m; return m; }
+inline std::string admitPath(int device) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + ".admit"; }
+inline void admitTurnstile(int device) {
+    if (!admitOn()) return;
+    const int fd = open(admitPath(device).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+    if (fd < 0) return;
+    flock(fd, LOCK_SH); flock(fd, LOCK_UN); close(fd);
+}
+// Waiting for a slot (gpu/anyslot): every slot of the candidate devices is polled every 10 ms with a non-blocking flock, so a waiter takes
+// whichever slot frees first instead of queuing on slot (pid mod slots) while another slot sits idle. A short holder (all but the prefill's
+// mapping: the E20 relock, Solo, the pileup, the non-host screen; 1 to 8 s) holds the device's ".prio" file shared while it waits, and a long
+// holder (the prefill, ~26 s) leaves a free slot to it, so the short phases stop queuing behind whole prefills. Which process holds the device
+// when changes no output. SINGLET_ENGINE_GPU_LOCKWAIT=fixed: the blocking wait on slot (pid mod slots) as before.
+inline bool lockWaitFixed() { const char* e = std::getenv("SINGLET_ENGINE_GPU_LOCKWAIT"); return e != nullptr && std::string(e) == "fixed"; }
+inline std::string slotLockPath(int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; }
+inline std::string prioPath(int d) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + ".prio"; }
+// polls the slots of `devs` (slot-major, as the first-free scan) until one is free; returns its fd (-1 when no lock file opens) and sets *device
+inline int pollSlots(const std::vector<int>& devs, int slots, bool longHold, int* device) {
+    struct Cand { int d, k, fd; };
+    std::vector<Cand> c;
+    for (int k = 0; k < slots; k++)
+        for (int d : devs) c.push_back({d, k, open(slotLockPath(d, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666)});
+    std::vector<std::pair<int, int>> prio;   // (device, fd of its .prio file)
+    for (int d : devs) prio.push_back({d, open(prioPath(d).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666)});
+    if (!longHold) for (auto& p : prio) if (p.second >= 0) flock(p.second, LOCK_SH);
+    bool any = false;
+    for (auto& x : c) any = any || x.fd >= 0;
+    int got = -1;
+    for (int round = 0; any && got < 0; round++) {
+        if (round > 0) usleep(10000);
+        for (int d : devs) admitTurnstile(d);
+        for (auto& x : c) {
+            if (x.fd < 0) continue;
+            if (longHold) {   // a short holder waits on this device: the free slot is its
+                int pf = -1;
+                for (auto& p : prio) if (p.first == x.d) pf = p.second;
+                if (pf >= 0) { if (flock(pf, LOCK_EX | LOCK_NB) != 0) continue; flock(pf, LOCK_UN); }
+            }
+            if (flock(x.fd, LOCK_EX | LOCK_NB) == 0) { got = x.fd; *device = x.d; x.fd = -1; break; }
+        }
+    }
+    for (auto& x : c) if (x.fd >= 0) close(x.fd);
+    for (auto& p : prio) if (p.second >= 0) close(p.second);   // closing drops the shared lock
+    return got;
+}
+inline int lockDeviceImpl(int* lockFd, bool longHold) {
     auto lockPath = [](int d, int k) { return "/tmp/singlet_engine_gpu_" + deviceId(d) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
     const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
@@ -306,8 +388,17 @@ inline int lockDeviceImpl(int* lockFd) {
     const int nDev = deviceCount() > 0 ? deviceCount() : 1;
     int device = -1;
     *lockFd = -1;
+    if (!lockWaitFixed()) {
+        std::vector<int> devs;
+        if (dv != nullptr) devs.push_back(std::atoi(dv));
+        else for (int d = 0; d < nDev; d++) devs.push_back(d);
+        device = devs[0];
+        *lockFd = pollSlots(devs, slots, longHold, &device);
+        return device;
+    }
     if (dv != nullptr) {
         device = std::atoi(dv);
+        admitTurnstile(device);
         for (int k = 0; k < slots; k++) {
             int fd = open(lockPath(device, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return device; }
@@ -319,18 +410,21 @@ inline int lockDeviceImpl(int* lockFd) {
     }
     for (int k = 0; k < slots; k++)
         for (int d = 0; d < nDev; d++) {
+            admitTurnstile(d);
             int fd = open(lockPath(d, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
             if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return d; }
             if (fd >= 0) close(fd);
         }
     device = (int) (getpid() % nDev);
+    admitTurnstile(device);
     *lockFd = open(lockPath(device, (int) ((getpid() / nDev) % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
     return device;
 }
-inline int lockDevice(int* lockFd) {
+// longHold: the prefill's mapping (see pollSlots); every other phase is a short holder
+inline int lockDevice(int* lockFd, bool longHold = false) {
     int d;
-    { singlet::NvtxRange nvWait("device lock: wait"); d = lockDeviceImpl(lockFd); }
+    { singlet::NvtxRange nvWait("device lock: wait"); d = lockDeviceImpl(lockFd, longHold); }
     if (*lockFd >= 0) {
         const unsigned long long id = singlet::nvtx_start("device lock: held");
         if (id) { std::lock_guard<std::mutex> g(lockRangesMutex()); lockRanges()[*lockFd] = id; }
@@ -342,6 +436,9 @@ inline void unlockDevice(int lockFd) {
         unsigned long long id = 0;
         { std::lock_guard<std::mutex> g(lockRangesMutex()); auto it = lockRanges().find(lockFd); if (it != lockRanges().end()) { id = it->second; lockRanges().erase(it); } }
         singlet::nvtx_end(id);
+        std::vector<int> extra;
+        { std::lock_guard<std::mutex> g(extraLocksMutex()); auto it = extraLocks().find(lockFd); if (it != extraLocks().end()) { extra.swap(it->second); extraLocks().erase(it); } }
+        for (int fd : extra) { flock(fd, LOCK_UN); close(fd); }
         flock(lockFd, LOCK_UN);
         close(lockFd);
     }
@@ -353,6 +450,8 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
     *lockFd = -1;
+    if (!lockWaitFixed()) { int d = device; *lockFd = pollSlots({device}, slots, false, &d); return; }
+    admitTurnstile(device);
     for (int k = 0; k < slots; k++) {
         int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
         if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { *lockFd = fd; return; }
@@ -360,6 +459,35 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     }
     *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
+}
+// SL step 2: `want` slots of `device` (see admitOn above): the first free slots, collected under the device's admission gate; after waitS
+// seconds with at least one slot it keeps what it has. Returns the number of slots held (*lockFd is the first; unlockDevice releases them all).
+// Without SINGLET_ENGINE_GPU_ADMIT=1, or for one slot, it is lockDeviceSlot.
+inline int lockDeviceSlots(int device, int want, double waitS, int* lockFd) {
+    const int slots = gpuSlots();
+    want = std::max(1, std::min(want, slots));
+    if (want == 1 || !admitOn()) { lockDeviceSlot(device, lockFd); return 1; }
+    auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
+    const int gate = open(admitPath(device).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+    if (gate >= 0) flock(gate, LOCK_EX);
+    std::vector<int> got;
+    std::vector<char> mine(slots, 0);
+    const auto t0 = std::chrono::steady_clock::now();
+    for (;;) {
+        for (int k = 0; k < slots && (int) got.size() < want; k++) {
+            if (mine[k]) continue;
+            const int fd = open(lockPath(k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+            if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { got.push_back(fd); mine[k] = 1; }
+            else if (fd >= 0) close(fd);
+        }
+        if ((int) got.size() >= want) break;
+        if (!got.empty() && std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() >= waitS) break;
+        usleep(20000);
+    }
+    if (gate >= 0) { flock(gate, LOCK_UN); close(gate); }
+    *lockFd = got[0];
+    if (got.size() > 1) { std::lock_guard<std::mutex> g(extraLocksMutex()); extraLocks()[got[0]] = std::vector<int>(got.begin() + 1, got.end()); }
+    return (int) got.size();
 }
 
 // ---- non-host screen (nonhost_gpu.cu): Phases A-C of NonHostScreener::classify_multi_batch_filtered on the GPU
@@ -402,13 +530,15 @@ struct PileupInput {
     // (same order as `reads`): bit i = base i of the record sequence, in the record's (original read) orientation, has quality < minBaseq
     int useQual = 0;
     std::vector<uint8_t> lowq;
-    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer
+    uint32_t intronRules = 0;               // intron_rule::k* bits of the engine (pileup_engine.h); the GPU implements kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneVelo, kUmiGeneSpliced, kExonPrecedence
     std::vector<uint8_t> geneIsMt;          // per gene: on chrM (kMtPrefer)
+    std::vector<uint8_t> tidSpecies;        // per tid: one bit per genome of a joint reference; empty for one genome (kExonPrecedence within one species)
     // kFlank (only when intronRules has it): per gene its body [geneStart, geneEnd) and its merged exons geneExons[geneExonOff[g] .. geneExonOff[g + 1])
     // (GeneRecord::exon_indices, sorted by start), exon coordinates by exon index
     std::vector<int32_t> geneStart, geneEnd, exonStart, exonEnd;
     std::vector<uint32_t> geneExonOff, geneExons;
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
+    int wantUmiKeys = 0;      // return PileupOutput::umiKeys (the multimap record leaves out the UMIs the gene counts hold)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
@@ -434,8 +564,12 @@ template <class T> struct PileupCat {
 template <class T> PileupCat<T> pileupCat(const PileupInput::Pre& pre, const void* v, uint64_t vBytes) {
     return PileupCat<T>{(const T*) pre.p, pre.n / sizeof(T), (const T*) v, vBytes / sizeof(T)};
 }
+// multimap record (include/singlet/pileup/multimap_record.h): one read the engine collects as ambiguous (em_rescue::AmbigRead): barcode
+// column, its two genes (geneA < geneB) and its raw UMI (3 bits per character, A0 C1 G2 T3 N4, PileupInput's ReadRec::umi3)
+struct PileupAmbig { int32_t bc; uint32_t geneA, geneB; uint64_t umi3; };
 struct PileupOutput {
     std::vector<PileupTriplet> exon, intron, amb, sj, snpAd, snpDp, mt, mtRev;
+    std::vector<PileupAmbig> ambig;   // the multimap record's reads, in read order
     // wantReads: reads per emitted molecule summed per (cell, row) (val = reads, uint32, same rows as exon / intron), and per cell with
     // molecules (histCell, ascending) its histBins-bin histogram of reads per molecule in hist: k reads -> bin k-1, last bin = histBins or more
     static constexpr int histBins = 16;
@@ -444,6 +578,7 @@ struct PileupOutput {
     std::vector<std::array<uint32_t, 3>> sjtab;      // junction id -> (tid, donor, acceptor), ids in (tid, donor, acceptor) order
     std::vector<std::array<uint32_t, 4>> indels;     // (cell, pos, len, is_ins)
     std::vector<PileupGeneMerge> geneMerges;         // only when wantGeneMerges; sorted by (cell, gene, umi)
+    std::vector<uint64_t> umiKeys;                   // only when wantUmiKeys: every exact (cell << 32 | 2-bit UMI) of the gene store, sorted, distinct
     uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
     // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
     // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)

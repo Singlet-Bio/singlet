@@ -1,0 +1,14 @@
+id	touch	geo_chemistry	expect	fastq_r1	fastq_r2	srr
+hgmm1k_v2	bench	10x 3' v2	^10x-3p-v2$	bench-public/data/hgmm1k_v2/hgmm_1k_v2_fastqs/hgmm_1k_v2_S1_L001_R1_001.fastq.gz	bench-public/data/hgmm1k_v2/hgmm_1k_v2_fastqs/hgmm_1k_v2_S1_L001_R2_001.fastq.gz	-
+hgmm10k_v3	bench	10x 3' v3	^10x-3p-v3$	bench-public/data/hgmm10k_v3/hgmm_10k_v3_fastqs/hgmm_10k_v3_S1_L001_R1_001.fastq.gz	bench-public/data/hgmm10k_v3/hgmm_10k_v3_fastqs/hgmm_10k_v3_S1_L001_R2_001.fastq.gz	-
+lcl_hg00362	dev	10x 3' v3 (R1 101 nt)	^10x-3p-v3$	bpub/data/lcl_gse230239/SRR24236333/SRR24236333_S1_L001_R1_001.fastq.gz	bpub/data/lcl_gse230239/SRR24236333/SRR24236333_S1_L001_R2_001.fastq.gz	SRR24236333
+maester_k562_3p	bench	10x 3' v3	^10x-3p-v3$	data/maester/k562_3p/k562_3p_R1.fastq.gz	data/maester/k562_3p/k562_3p_R2.fastq.gz	-
+pilot_GSM4987148	pilot	10x 3' v3	^10x-3p-v3$	-	-	SRR13296309
+pilot_GSM9038586	pilot	10x 3'	^10x-3p-	-	-	SRR33927221
+pilot_GSM4987144	pilot	10x 5' v1	^10x-5p-	-	-	SRR13296299
+pilot_GSM5171610	pilot	10x 5'	^10x-5p-	-	-	SRR13960338
+pilot_GSM5682562	pilot	10x 5' (HTO)	^10x-5p-	-	-	SRR16868328
+bcr_pbmc3_b	bench	10x 5' v1 (BCR-enriched, 26x91)	^10x-5p-	data/vdjc/pbmc3_b/fastqs/vdj_v1_hs_pbmc3_b_26x91_fastqs/vdj_v1_hs_pbmc3_b_26x91_S1_L001_R1_001.fastq.gz	data/vdjc/pbmc3_b/fastqs/vdj_v1_hs_pbmc3_b_26x91_fastqs/vdj_v1_hs_pbmc3_b_26x91_S1_L001_R2_001.fastq.gz	-
+bcr_nextgem_pbmc3_b	bench	10x 5' v1.1 Next GEM (BCR-enriched, 26x91)	^10x-5p-	data/vdjc/ngpbmc3_b/fastqs/vdj_nextgem_hs_pbmc3_b_26x91_fastqs/vdj_nextgem_hs_pbmc3_b_26x91_S1_L001_R1_001.fastq.gz	data/vdjc/ngpbmc3_b/fastqs/vdj_nextgem_hs_pbmc3_b_26x91_fastqs/vdj_nextgem_hs_pbmc3_b_26x91_S1_L001_R2_001.fastq.gz	-
+pbmc10k_5p_v2_b	bench	10x 5' v2 (BCR-enriched)	^10x-5p-	data/vdjc/pbmc10k_b/fastqs/sc5p_v2_hs_PBMC_10k_b_fastqs/sc5p_v2_hs_PBMC_10k_b_S1_L001_R1_001.fastq.gz	data/vdjc/pbmc10k_b/fastqs/sc5p_v2_hs_PBMC_10k_b_fastqs/sc5p_v2_hs_PBMC_10k_b_S1_L001_R2_001.fastq.gz	-
+pbmc5p_v1	dev	10x 5' v1 (gate set, gene expression)	^10x-5p-	pipeline-benchmark/data/pbmc5p_v1/sub/sub_S1_L001_R1_001.fastq.gz	pipeline-benchmark/data/pbmc5p_v1/sub/sub_S1_L001_R2_001.fastq.gz	-

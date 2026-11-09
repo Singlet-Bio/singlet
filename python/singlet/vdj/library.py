@@ -57,18 +57,12 @@ def process_library(
     qc = Q.library_qc(
         contigs, cells, res.stats, gex_called=list(called), gex_columns=list(gex_columns)
     )
-    ref_path = os.path.join(
-        os.path.dirname(os.path.abspath(A.R.__file__)), "data", f"vdj_{species}.tsv.gz"
-    )
+    ref_path = A.R.data_path(species)
     ref_info = {"name": f"vdj_{species}", "segments": len(ref.segs)}
     if os.path.exists(ref_path):
         ref_info["sha256"] = hashlib.sha256(open(ref_path, "rb").read()).hexdigest()
     counting = {"libraries": list(libraries), "stats": res.stats, "umi_len": umi_len}
-    members = (
-        ST.build_members(contigs, gex_columns, qc, counting, ref_info)
-        if qc["verdict"] != "fail"
-        else None
-    )
+    members = ST.build_members(contigs, gex_columns, qc, counting, ref_info)   # also for a failed library: the verdict is in the summary
     labels = ST.cell_labels(cells, gex_columns) if len(cells) else None
     return {
         "contigs": contigs,

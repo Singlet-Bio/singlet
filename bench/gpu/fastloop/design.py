@@ -112,6 +112,8 @@ def main():
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--tag', default=None, help='override the tier\'s point shape, e.g. k1t8s1r4')
     ap.add_argument('--sample', default=None, help='override the tier\'s sample')
+    ap.add_argument('--tpgc', default='tp_gc.sbatch',
+                    help='harness file under $FL; a versioned copy (tp_gc-<commit>.sbatch) leaves the items that run the old one alone')
     o = ap.parse_args()
     names = [x for x in o.ideas.split(',') if x]
     k = len(names)
@@ -159,7 +161,7 @@ def main():
                     'echo "$other"; exit 3; }\n')
             f.write('fi\n')
         f.write('export POINTS="%s"\n' % ' '.join(points))
-        f.write('bash $FL/tp_gc.sbatch; rc=$?\n')
+        f.write('bash $FL/%s; rc=$?\n' % o.tpgc)
         f.write('RES=$W/jobs/gpu-integ/results/tp-${RUNID:-$SLURM_JOB_ID}\n')
         f.write('$W/envs/pbench/bin/python3 $FL/analyze.py --res $RES --ideas %s --drop-first %d --metric %s --theta %s > $RES/fastloop.md 2>&1\n' % (
             ','.join(names), T['drop_first'], o.metric, o.theta))

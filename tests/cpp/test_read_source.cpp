@@ -5,6 +5,7 @@
 //   - StarChunkSourceT = the bytes STAR's FASTQ branch builds from those FASTQ records, with STAR's chunk boundaries
 //   - OrderedBlocks delivers blocks in order whatever the worker timing
 //   - binned qualities survive the round trip
+//   - DecodedBlock::keep_packed_qual: the quality column as stored, equal to the unpacked one
 
 #include <chrono>
 #include <cstdio>
@@ -202,6 +203,48 @@ int main() {
         }
     }
 
+    // keep_packed_qual: the quality column copied as stored unpacks to the Phred values of the usual decode, the other columns unchanged
+    // (ILLUMINA4 and BINNED4, variable lengths with empty reads); a run without quality leaves it empty
+    {
+        const std::string b4 = dir + "/b4.1fq";
+        write_file(b4, 700, 3, QualMode::BINNED4);
+        for (int f = 0; f < 3; ++f) {
+            RunSet rs;
+            if (f == 0) rs.open({files[0]});
+            else if (f == 1) rs.open({b4});
+            else rs.open({files[1]});
+            bool ok = true, copied = false;
+            DecodedBlock plain, packed;
+            packed.keep_packed_qual = true;
+            for (uint32_t g = 0; ok && g < rs.block_count(); ++g) {
+                rs.decode(g, plain);
+                rs.decode(g, packed);
+                ok = packed.keep_packed_qual && packed.n_reads == plain.n_reads && packed.r2_lengths == plain.r2_lengths &&
+                     packed.r2_data == plain.r2_data && packed.r1_data == plain.r1_data && packed.trim_lengths == plain.trim_lengths &&
+                     packed.dup_counts == plain.dup_counts;
+                if (!ok) break;
+                if (packed.r2_qual_packed.empty()) { ok = f == 2 ? plain.r2_qual.empty() : packed.r2_qual == plain.r2_qual; continue; }
+                copied = true;
+                ok = packed.r2_qual.empty() && packed.r2_qual_packed_phred != nullptr;
+                size_t o = 0;
+                std::vector<uint8_t> back;
+                for (uint32_t i = 0; ok && i < packed.n_reads; ++i) {
+                    const uint16_t len = packed.r2_len(i);
+                    back.assign(len, 0);
+                    ok = o + pack::packed_bytes(len) <= packed.r2_qual_packed.size();
+                    if (!ok) break;
+                    pack::unpack_qual_4level(packed.r2_qual_packed.data() + o, len, back.data(), packed.r2_qual_packed_phred);
+                    o += pack::packed_bytes(len);
+                    const uint8_t* q = plain.r2_quality(i);
+                    ok = len == 0 || (q && std::memcmp(q, back.data(), len) == 0);
+                }
+                ok = ok && o == packed.r2_qual_packed.size();
+            }
+            CHECK(ok, f == 0 ? "packed_qual_ilmn4" : f == 1 ? "packed_qual_binned4" : "packed_qual_none");
+            CHECK(f == 2 ? !copied : copied, "packed_qual_copied_when_stored");
+        }
+    }
+
     // OrderedBlocks: in order under random worker delays
     {
         std::vector<uint32_t> got;
@@ -234,6 +277,77 @@ int main() {
             threw = true;
         }
         CHECK(threw, "runset_rejects_other_layout");
+    }
+
+    // The 5' probe's read set is the same on every route: the decode routes offer decode()'s reads, E13's head scan (scan_head, and
+    // the fused decode_scan) offers its own reconstruction of the same reads. 10x 3' v3 with variable (poly(A)-trimmed) and fixed cDNA
+    // lengths, and split-seq (barcode after the UMI); dictionary and raw barcodes, N in barcode, UMI and cDNA, empty cDNA reads.
+    // With a barcode dictionary the file holds R1 as barcode + UMI (the reader's UMI length is R1 length minus barcode length), so the
+    // split-seq layout's R1 is its 10 UMI bases and 8 barcode bases.
+    {
+        struct Layout { const char* name; uint8_t protocol; uint16_t r1, bc_off, bc_len, umi_off, umi_len, r2_fixed; bool trim; };
+        const Layout lays[] = {{"10x-v3 variable", 1, 28, 0, 16, 16, 12, 0, true},
+                               {"10x-v3 fixed", 1, 28, 0, 16, 16, 12, 91, false},
+                               {"splitseq", 11, 18, 10, 8, 0, 10, 0, false}};
+        for (const Layout& L : lays) {
+            const std::string path = dir + "/probe_" + std::to_string(L.protocol) + "_" + std::to_string(L.r2_fixed) + ".1fq";
+            std::mt19937 rng(7u + L.protocol + L.r2_fixed);
+            WriterConfig cfg;
+            cfg.block_size = 997;
+            cfg.r1_length = L.r1;
+            cfg.r2_length = L.r2_fixed;
+            cfg.protocol_id = L.protocol;
+            cfg.bc_offset = L.bc_off; cfg.bc_length = L.bc_len; cfg.umi_offset = L.umi_off; cfg.umi_length = L.umi_len;
+            cfg.polya_trim = L.trim;
+            for (int k = 0; k < 300; ++k) {
+                std::vector<uint8_t> bc(L.bc_len);
+                for (auto& x : bc) x = static_cast<uint8_t>(rng() % 4);
+                cfg.bc_dict.push_back(bc);
+            }
+            Writer w;
+            w.open(path.c_str(), cfg);
+            std::vector<uint8_t> r1(L.r1), r2(130), q(130, 30);
+            for (uint32_t i = 0; i < 40000; ++i) {
+                for (auto& x : r1) x = static_cast<uint8_t>(rng() % 4);
+                if (rng() % 100 < 85) std::memcpy(r1.data() + L.bc_off, cfg.bc_dict[rng() % 300].data(), L.bc_len);
+                else if (rng() % 4 == 0) r1[L.bc_off + rng() % L.bc_len] = 4;   // N in a raw barcode
+                if (rng() % 20 == 0) r1[L.umi_off + rng() % L.umi_len] = 4;      // N in the UMI
+                uint16_t l2 = L.r2_fixed ? L.r2_fixed : static_cast<uint16_t>(40 + rng() % 80);
+                if (!L.r2_fixed && i % 53 == 5) l2 = 0;                            // not given to STAR
+                for (uint16_t j = 0; j < l2; ++j) r2[j] = static_cast<uint8_t>(rng() % 4);
+                if (l2 && rng() % 30 == 0) r2[rng() % l2] = 4;                     // N in the cDNA
+                if (L.trim && l2 > 60 && rng() % 3 == 0) std::fill(r2.begin() + (l2 - 25), r2.begin() + l2, 0);   // a poly(A) tail to trim
+                w.add_read(r2.data(), l2, q.data(), r1.data(), L.r1, nullptr);
+            }
+            w.finish();
+
+            RunSet rs;
+            rs.open({path});
+            CHECK(rs.head_scan_supported(), "probe_route_head_scan_supported");
+            ContentProbeSampler dec, scan, fused;
+            for (uint32_t g = 0; g < rs.block_count(); ++g) {
+                DecodedBlock blk;
+                rs.decode(g, blk);
+                for (uint32_t i = 0; i < blk.n_reads; ++i)
+                    if (blk.r1_len(i) > 0 && blk.r2_len(i) > 0) dec.offer(blk.r1_seq(i), blk.r1_len(i), blk.r2_seq(i), blk.r2_len(i));
+            }
+            RunSet::HeadScanOptions so;
+            so.sampler = &scan;
+            for (uint32_t g = rs.block_count(); g-- > 0;) {   // any block order
+                RunSet::BlockHead h;
+                rs.scan_head(g, so, h);
+            }
+            so.sampler = &fused;
+            for (uint32_t g = 0; g < rs.block_count(); ++g) {
+                DecodedBlock blk;
+                RunSet::BlockHead h;
+                rs.decode_scan(g, blk, so, h);
+            }
+            const auto a = dec.sequences(), b = scan.sequences(), c = fused.sequences();
+            const bool same = a.size() == kProbeReads && a == b && a == c;
+            if (!same) std::fprintf(stderr, "  %s: decode %zu, scan %zu, fused %zu reads\n", L.name, a.size(), b.size(), c.size());
+            CHECK(same, "probe_route_same_read_set");
+        }
     }
 
     std::error_code ec;

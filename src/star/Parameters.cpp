@@ -840,6 +840,12 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                 ostringstream ff;
                 ff << outFileNamePrefix << "Unmapped.out.mate" << imate+1;
                 inOut->outUnmappedReadsStream[imate].open(ff.str().c_str());
+                singletSoftclipMin = getenv("SINGLET_CHIM_SOFTCLIP_MIN") ? atoi(getenv("SINGLET_CHIM_SOFTCLIP_MIN")) : 0;
+                if (singletSoftclipMin > 0) {//singlet --chimeric soft-clip route
+                    ostringstream fs;
+                    fs << outFileNamePrefix << "Softclip.out.mate" << imate+1;
+                    inOut->outSoftclipStream[imate].open(fs.str().c_str());
+                };
             };
         };
     };

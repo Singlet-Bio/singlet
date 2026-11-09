@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "compress.h"
+#include "prefix_probe.h"
 #include "reader.h"
 #include "types.h"
 
@@ -113,34 +114,22 @@ class RunSet {
         const uint64_t off = r.block_offset(bi);
         const uint32_t comp_size = r.block_comp_size(bi);
         BlockHeader bh;
-        if (::pread(fd, &bh, sizeof(bh), static_cast<off_t>(off)) != static_cast<ssize_t>(sizeof(bh)))
-            throw std::runtime_error("RunSet: short read of a block header");
-        std::vector<uint8_t> comp(comp_size);
-        if (::pread(fd, comp.data(), comp_size, static_cast<off_t>(off + sizeof(bh))) !=
-            static_cast<ssize_t>(comp_size))
-            throw std::runtime_error("RunSet: short read of a block");
-        const auto codec = static_cast<Codec>(r.header().codec);
-        size_t est_raw = static_cast<size_t>(bh.n_reads) * 200;
-        std::vector<uint8_t> raw(est_raw);
-        size_t raw_size;
-        try {
-            raw_size = compress::decompress_block(codec, comp.data(), comp_size, raw.data(), raw.size());
-        } catch (...) {
-            raw.resize(est_raw * 4);
-            raw_size = compress::decompress_block(codec, comp.data(), comp_size, raw.data(), raw.size());
-        }
+        BlockScratch& sc = scratch();
+        const size_t raw_size = read_block(r, fd, off, comp_size, bh, sc);
         blk.clear();
-        r.decode_payload(raw.data(), raw_size, bh, blk);
+        r.decode_payload(sc.raw.data(), raw_size, bh, blk);
     }
 
     // E13 (singlet/engine_gpu_ingest.h): the head of block g without the full decode: the barcode-dictionary column, the UMI column and the
     // cDNA column's lengths (the quality and later columns are not read), for the pipeline's work before STAR when STAR's prefill decodes
     // the reads itself. Counts what file mode's decode counts from the same reads: the dictionary slots of every stored read (bc_freq,
     // idx <= dictionary size), and, for the reads given to STAR (both mates non-empty), their number, bases and the longest cDNA read; the
-    // 5' prefix probe's sample as FIFO pass 1 takes it; with r11, R11's exact CB counts (by dictionary slot, or the CB of a read outside
-    // the dictionary). A .1fq with a barcode dictionary and 2-bit sequences only (head_scan_supported). Thread-safe like decode().
+    // 5' prefix probe's reads, offered to the same ContentProbeSampler as the decode routes offer them (every read given to STAR, with
+    // its barcode read as decode_payload builds it and its cDNA codes), so the probe holds the same records on every route; with r11,
+    // R11's exact CB counts (by dictionary slot, or the CB of a read outside the dictionary). A .1fq with a barcode dictionary and 2-bit
+    // sequences only (head_scan_supported). Thread-safe like decode().
     struct HeadScanOptions {
-        uint32_t probe_per_block = 0;            // 0: no probe sample
+        ContentProbeSampler* sampler = nullptr;  // nullptr: no probe sample
         uint64_t* bc_freq = nullptr;             // dictionary size + 1 counters, added atomically
         bool r11 = false;
         int cb0 = 0, cbl = 0, umi0 = 0, umil = 0;   // R11: the barcode read's layout (0-based)
@@ -149,8 +138,7 @@ class RunSet {
     struct BlockHead {
         uint32_t n_stored = 0, n_out = 0, max_r2 = 0;
         uint64_t bases_out = 0;
-        std::vector<std::string> probe;                // cDNA reads, ACGTN
-        std::vector<std::string> r11_raw;              // R11: the CB of each counted read outside the dictionary (ACGTN)
+        std::vector<std::string> r11_raw;             // R11: the CB of each counted read outside the dictionary (ACGTN)
     };
     bool head_scan_supported(std::string* why = nullptr) const {
         const char* w = nullptr;
@@ -166,26 +154,52 @@ class RunSet {
                                        first_block_.begin()) - 1;
         const Reader& r = *readers_[f];
         const uint32_t bi = g - first_block_[f];
-        const uint64_t off = r.block_offset(bi);
-        const uint32_t comp_size = r.block_comp_size(bi);
         BlockHeader bh;
-        if (::pread(r.file_descriptor(), &bh, sizeof(bh), static_cast<off_t>(off)) != static_cast<ssize_t>(sizeof(bh)))
+        BlockScratch& sc = scratch();
+        const size_t raw_size = read_block(r, r.file_descriptor(), r.block_offset(bi), r.block_comp_size(bi), bh, sc);
+        scan_payload(r, sc.raw.data(), raw_size, bh, o, h, sc);
+    }
+    // scan_head and decode of block g from one read and one decompression (the pipeline's fused head scan and packed-read decode)
+    void decode_scan(uint32_t g, DecodedBlock& blk, const HeadScanOptions& o, BlockHead& h) const {
+        size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
+                                       first_block_.begin()) - 1;
+        const Reader& r = *readers_[f];
+        const uint32_t bi = g - first_block_[f];
+        BlockHeader bh;
+        BlockScratch& sc = scratch();
+        const size_t raw_size = read_block(r, r.file_descriptor(), r.block_offset(bi), r.block_comp_size(bi), bh, sc);
+        scan_payload(r, sc.raw.data(), raw_size, bh, o, h, sc);
+        blk.clear();
+        r.decode_payload(sc.raw.data(), raw_size, bh, blk);
+    }
+    // the decompressed payload size of block g from its ZSTD frame header (0: not recorded there, or another codec); no decompression
+    uint64_t block_raw_size(uint32_t g) const {
+        size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
+                                       first_block_.begin()) - 1;
+        const Reader& r = *readers_[f];
+        if (static_cast<Codec>(r.header().codec) != Codec::ZSTD) return 0;
+        const uint32_t bi = g - first_block_[f];
+        uint8_t fh[32];
+        const size_t n = std::min<size_t>(sizeof fh, r.block_comp_size(bi));
+        if (::pread(r.file_descriptor(), fh, n, static_cast<off_t>(r.block_offset(bi) + sizeof(BlockHeader))) != static_cast<ssize_t>(n)) return 0;
+        const unsigned long long c = ZSTD_getFrameContentSize(fh, n);
+        return (c == ZSTD_CONTENTSIZE_UNKNOWN || c == ZSTD_CONTENTSIZE_ERROR) ? 0 : static_cast<uint64_t>(c);
+    }
+    // the reads stored in block g, from its header alone
+    uint32_t block_reads(uint32_t g) const {
+        size_t f = static_cast<size_t>(std::upper_bound(first_block_.begin(), first_block_.end(), g) -
+                                       first_block_.begin()) - 1;
+        const Reader& r = *readers_[f];
+        BlockHeader bh;
+        if (::pread(r.file_descriptor(), &bh, sizeof(bh), static_cast<off_t>(r.block_offset(g - first_block_[f]))) != static_cast<ssize_t>(sizeof(bh)))
             throw std::runtime_error("RunSet: short read of a block header");
-        std::vector<uint8_t> comp(comp_size);
-        if (::pread(r.file_descriptor(), comp.data(), comp_size, static_cast<off_t>(off + sizeof(bh))) !=
-            static_cast<ssize_t>(comp_size))
-            throw std::runtime_error("RunSet: short read of a block");
-        const auto codec = static_cast<Codec>(r.header().codec);
-        size_t est_raw = static_cast<size_t>(bh.n_reads) * 200;
-        std::vector<uint8_t> raw(est_raw);
-        size_t raw_size;
-        try {
-            raw_size = compress::decompress_block(codec, comp.data(), comp_size, raw.data(), raw.size());
-        } catch (...) {
-            raw.resize(est_raw * 4);
-            raw_size = compress::decompress_block(codec, comp.data(), comp_size, raw.data(), raw.size());
-        }
-        const uint8_t* p = raw.data();
+        return bh.n_reads;
+    }
+
+   private:
+    struct BlockScratch;
+    static void scan_payload(const Reader& r, const uint8_t* p, size_t raw_size, const BlockHeader& bh, const HeadScanOptions& o, BlockHead& h,
+                             BlockScratch& sc) {
         const uint8_t* end = p + raw_size;
         const uint32_t n = bh.n_reads;
         const uint32_t dict_n = r.bc_dict_size();
@@ -200,8 +214,11 @@ class RunSet {
         const bool n_miss = std::getenv("SINGLET_TEST_N_MISS_BARCODES") != nullptr;   // as Reader::open
         h = BlockHead{};
         h.n_stored = n;
-        std::vector<uint32_t> idx(n);
-        std::vector<const uint8_t*> raw_bc(o.r11 ? n : 0, nullptr);
+        std::vector<uint32_t>& idx = sc.idx;
+        grow(idx, n);
+        std::vector<const uint8_t*>& raw_bc = sc.raw_bc;
+        const bool probe = o.sampler != nullptr;
+        if (o.r11 || probe) { grow(raw_bc, n); std::fill(raw_bc.begin(), raw_bc.begin() + n, nullptr); }
         uint32_t last = UINT32_MAX;
         uint64_t run = 0;
         auto flush = [&]() { if (run && o.bc_freq) __atomic_fetch_add(&o.bc_freq[last], run, __ATOMIC_RELAXED); run = 0; };
@@ -209,13 +226,21 @@ class RunSet {
             uint64_t v;
             p += pack::decode_varint(p, v);
             idx[i] = static_cast<uint32_t>(v);
-            if (v == dict_n) { if (o.r11) raw_bc[i] = p; p += bcl; }
+            if (v == dict_n) { if (o.r11 || probe) raw_bc[i] = p; p += bcl; }
             if (idx[i] <= dict_n) { if (idx[i] != last) { flush(); last = idx[i]; } ++run; }
         }
         flush();
         // the UMI column (decode_seq_column's layout: fixed length, or a varint length per read; has-N byte, 2-bit bases, N bitmap)
-        std::vector<uint8_t> umi(o.r11 ? static_cast<size_t>(n) * 64 : 0);
-        std::vector<uint16_t> umi_len(o.r11 ? n : 0);
+        std::vector<uint8_t>& umi = sc.umi;               // read only within each read's own length (umi_len)
+        std::vector<uint16_t>& umi_len = sc.umi_len;
+        if (o.r11) { grow(umi, static_cast<size_t>(n) * 64); grow(umi_len, n); std::fill(umi_len.begin(), umi_len.begin() + n, 0); }
+        // the probe: where each read's UMI and cDNA codes are, unpacked only for the reads given to STAR (below)
+        std::vector<const uint8_t*>& umi_p = sc.umi_p;
+        std::vector<const uint8_t*>& r2_p = sc.r2_p;
+        std::vector<uint16_t>& umi_l = sc.umi_l;
+        std::vector<uint8_t>& umi_hn = sc.umi_hn;
+        std::vector<uint8_t>& r2_hn = sc.r2_hn;
+        if (probe) { grow(umi_p, n); grow(r2_p, n); grow(umi_l, n); grow(umi_hn, n); grow(r2_hn, n); }
         for (uint32_t i = 0; i < n; ++i) {
             uint64_t len = umi_fixed;
             if (umi_fixed == 0) p += pack::decode_varint(p, len);
@@ -226,13 +251,14 @@ class RunSet {
                 if (has_n) pack::apply_n_bitmap(p + pb, static_cast<uint32_t>(len), umi.data() + static_cast<size_t>(i) * 64);
                 umi_len[i] = static_cast<uint16_t>(len);
             }
+            if (probe) { umi_p[i] = p; umi_l[i] = static_cast<uint16_t>(len); umi_hn[i] = has_n; }
             p += pb;
             if (has_n) p += pack::n_bitmap_bytes(static_cast<uint32_t>(len));
         }
-        // the cDNA column: lengths, and the sampled reads' bases
-        const uint32_t stride = o.probe_per_block ? std::max<uint32_t>(1u, n / o.probe_per_block) : 0;
-        std::vector<uint16_t> r2len(n, 0);
-        std::vector<uint8_t> tmp;
+        // the cDNA column: lengths (and, for the probe, where each read's codes are)
+        std::vector<uint16_t>& r2len = sc.r2len;
+        grow(r2len, n);
+        std::fill(r2len.begin(), r2len.begin() + n, 0);
         static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
         for (uint32_t i = 0; i < n && p < end; ++i) {
             uint64_t len = r2_fixed;
@@ -241,18 +267,11 @@ class RunSet {
             const uint8_t has_n = *p++;
             const uint32_t pb = pack::packed_bytes(static_cast<uint32_t>(len));
             r2len[i] = static_cast<uint16_t>(len);
-            if (stride && len > 0 && (i % stride) == 0 && h.probe.size() < 20000) {
-                tmp.resize(len);
-                pack::unpack_2bit(p, static_cast<uint32_t>(len), tmp.data());
-                if (has_n) pack::apply_n_bitmap(p + pb, static_cast<uint32_t>(len), tmp.data());
-                std::string s(len, ' ');
-                for (uint64_t j = 0; j < len; ++j) s[j] = kNt[std::min<uint8_t>(tmp[j], 4)];
-                h.probe.push_back(std::move(s));
-            }
+            if (probe) { r2_p[i] = p; r2_hn[i] = has_n; }
             p += pb;
             if (has_n) p += pack::n_bitmap_bytes(static_cast<uint32_t>(len));
         }
-        std::vector<uint8_t> r1(r1_len);
+        std::vector<uint8_t> r1(r1_len), pr1(probe ? r1_len : 0), pumi, pr2;
         last = UINT32_MAX;
         run = 0;
         auto flush11 = [&]() { if (run && o.r11_dict) __atomic_fetch_add(&o.r11_dict[last], run, __ATOMIC_RELAXED); run = 0; };
@@ -261,6 +280,31 @@ class RunSet {
             ++h.n_out;
             h.bases_out += r2len[i];
             h.max_r2 = std::max<uint32_t>(h.max_r2, r2len[i]);
+            if (probe) {   // the probe's offer, with the bytes decode_payload gives the decode routes' offer
+                std::fill(pr1.begin(), pr1.end(), 0);
+                const uint16_t ul = umi_l[i];
+                if (pumi.size() < ul + 8u) pumi.resize(ul + 8u);
+                if (ul > 0) {
+                    pack::unpack_2bit(umi_p[i], ul, pumi.data());
+                    if (umi_hn[i]) pack::apply_n_bitmap(umi_p[i] + pack::packed_bytes(ul), ul, pumi.data());
+                }
+                if (bc_start > 0 && ul > 0) std::memcpy(pr1.data(), pumi.data(), std::min<size_t>(std::min(bc_start, ul), r1_len));
+                if (bc_start < r1_len) {
+                    uint8_t* bcd = pr1.data() + bc_start;
+                    const size_t bcw = std::min<size_t>(bcl, r1_len - bc_start);
+                    if (idx[i] < dict_n) std::memcpy(bcd, r.bc_dict_flat().data() + static_cast<size_t>(idx[i]) * bcl, bcw);
+                    else if (raw_bc[i] && !n_miss) std::memcpy(bcd, raw_bc[i], bcw);
+                    else std::memset(bcd, 4, bcw);
+                }
+                const uint16_t sfx_dst = bc_start + bcl;
+                if (sfx_dst < r1_len && bc_start < ul)
+                    std::memcpy(pr1.data() + sfx_dst, pumi.data() + bc_start, std::min<size_t>(ul - bc_start, r1_len - sfx_dst));
+                const uint16_t l2 = r2len[i];
+                if (pr2.size() < l2 + 8u) pr2.resize(l2 + 8u);
+                pack::unpack_2bit(r2_p[i], l2, pr2.data());
+                if (r2_hn[i]) pack::apply_n_bitmap(r2_p[i] + pack::packed_bytes(l2), l2, pr2.data());
+                o.sampler->offer(pr1.data(), r1_len, pr2.data(), l2);
+            }
             if (!o.r11) continue;
             // the barcode read as decode_payload builds it: UMI prefix, the dictionary (or raw, or N) barcode, UMI suffix
             std::fill(r1.begin(), r1.end(), 0);
@@ -296,6 +340,47 @@ class RunSet {
     }
 
    private:
+    // Per-thread scratch of decode and scan_head, reused from block to block: a fresh zero-filled buffer per block (100 MB of raw payload
+    // for 500k reads, 32 MB of UMI codes) cost as much CPU as ZSTD itself. The bytes decoded are the same; so are the capacities each
+    // decompression is given (n_reads x 200, then x 800), so a block that does not fit fails as before.
+    struct BlockScratch {
+        std::vector<uint8_t> comp, raw, umi;
+        std::vector<uint32_t> idx;
+        std::vector<const uint8_t*> raw_bc;
+        std::vector<uint16_t> umi_len, r2len;
+        std::vector<const uint8_t*> umi_p, r2_p;   // scan_head's probe: each read's packed UMI and cDNA codes
+        std::vector<uint16_t> umi_l;
+        std::vector<uint8_t> umi_hn, r2_hn;
+        ZSTD_DCtx* z = nullptr;
+        ~BlockScratch() { if (z) ZSTD_freeDCtx(z); }
+    };
+    static BlockScratch& scratch() { thread_local BlockScratch s; return s; }
+    template <class T> static void grow(std::vector<T>& v, size_t n) { if (v.size() < n) { std::vector<T>().swap(v); v.resize(n); } }
+    static size_t inflate(Codec codec, const uint8_t* src, size_t n, uint8_t* dst, size_t cap, BlockScratch& s) {
+        if (codec != Codec::ZSTD) return compress::decompress_block(codec, src, n, dst, cap);
+        if (!s.z && !(s.z = ZSTD_createDCtx())) throw std::runtime_error("ZSTD decompress: no context");
+        const size_t r = ZSTD_decompressDCtx(s.z, dst, cap, src, n);
+        if (ZSTD_isError(r)) throw std::runtime_error(std::string("ZSTD decompress: ") + ZSTD_getErrorName(r));
+        return r;
+    }
+    // block bi of reader r: its header into bh, its payload into s.raw (the decompressed size is returned)
+    static size_t read_block(const Reader& r, int fd, uint64_t off, uint32_t comp_size, BlockHeader& bh, BlockScratch& s) {
+        if (::pread(fd, &bh, sizeof(bh), static_cast<off_t>(off)) != static_cast<ssize_t>(sizeof(bh)))
+            throw std::runtime_error("RunSet: short read of a block header");
+        grow(s.comp, comp_size);
+        if (::pread(fd, s.comp.data(), comp_size, static_cast<off_t>(off + sizeof(bh))) != static_cast<ssize_t>(comp_size))
+            throw std::runtime_error("RunSet: short read of a block");
+        const auto codec = static_cast<Codec>(r.header().codec);
+        const size_t est_raw = static_cast<size_t>(bh.n_reads) * 200;
+        grow(s.raw, est_raw);
+        try {
+            return inflate(codec, s.comp.data(), comp_size, s.raw.data(), est_raw, s);
+        } catch (...) {
+            grow(s.raw, est_raw * 4);
+            return inflate(codec, s.comp.data(), comp_size, s.raw.data(), est_raw * 4, s);
+        }
+    }
+
     // Pooled runs must decode to the same read layout and the same barcode dictionary (dictionary indices are summed
     // across runs by pass 1). Quality may differ: a run without stored quality gets 'F'.
     static void check_compatible(const Reader& a, const Reader& b, const std::string& path) {

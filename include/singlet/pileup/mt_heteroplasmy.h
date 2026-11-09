@@ -36,6 +36,9 @@
 
 #include "nucleotide_encoding.h"
 
+// lgamma without the global signgam (lgamma_r: same values; see donor_demux.h)
+static inline double lgamma_r_mt(double x) { int sg; return ::lgamma_r(x, &sg); }
+
 namespace singlet {
 namespace mt {
 
@@ -346,10 +349,10 @@ inline double binom_tail(uint32_t n, uint32_t k, double p) {
     if (p <= 0.0) return 0.0;
     if (p >= 1.0) return 1.0;
     const double lp = std::log(p), lq = std::log1p(-p);
-    const double ln_fact_n = std::lgamma(n + 1.0);
+    const double ln_fact_n = ::lgamma_r_mt(n + 1.0);
     double tot = 0.0;
     for (uint32_t j = k; j <= n; ++j) {
-        const double lt = ln_fact_n - std::lgamma(j + 1.0) - std::lgamma(n - j + 1.0) + j * lp + (n - j) * lq;
+        const double lt = ln_fact_n - ::lgamma_r_mt(j + 1.0) - ::lgamma_r_mt(n - j + 1.0) + j * lp + (n - j) * lq;
         const double t = std::exp(lt);
         tot += t;
         if (j > k && t < tot * 1e-12) break;

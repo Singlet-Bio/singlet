@@ -121,6 +121,11 @@ struct DonorAssignment {
     float doublet_llr = 0.0f;       // log-lik(best pair) - log-lik(best single donor), reads only
 };
 
+// lgamma without the global signgam: std::lgamma (glibc lgamma, lgammaf) stores the sign in one global that every thread of the fit
+// writes on every call; lgamma_r / lgammaf_r return the same values and keep the sign local.
+static inline float demux_lgamma(float x) { int sg; return ::lgammaf_r(x, &sg); }
+static inline double demux_lgamma(double x) { int sg; return ::lgamma_r(x, &sg); }
+
 // ============================================================================
 // Digamma approximation — asymptotic series, accurate for x > 0.5
 // ============================================================================
@@ -492,8 +497,8 @@ static void run_vb_inplace(
 
     float prev_elbo = static_cast<float>(result.elbo);
     const float log_inv_k  = -std::log(static_cast<float>(K));
-    const float lgamma_prior = std::lgamma(s1_prior + s2_prior)
-                             - std::lgamma(s1_prior) - std::lgamma(s2_prior);
+    const float lgamma_prior = demux_lgamma(s1_prior + s2_prior)
+                             - demux_lgamma(s1_prior) - demux_lgamma(s2_prior);
 
     for (int iter = 0; iter < max_iter; ++iter) {
 
@@ -649,7 +654,7 @@ static void run_vb_inplace(
                 const float* d12j = d12.data() + j * K;
                 for (int k = 0; k < K; ++k) {
                     const float a = s1j[k], b = s2j[k];
-                    e -= std::lgamma(a + b) - std::lgamma(a) - std::lgamma(b)
+                    e -= demux_lgamma(a + b) - demux_lgamma(a) - demux_lgamma(b)
                          - lgamma_prior
                          + (a - s1_prior) * d1j[k] + (b - s2_prior) * d2j[k]
                          - (a + b - s1_prior - s2_prior) * d12j[k];
@@ -1074,11 +1079,11 @@ static VBResult init_vb_pca_seeded(
     return result;
 }
 
-// Run VB from scratch (random initialisation), single-threaded.
+// Run VB from scratch (random initialisation) on nthreads threads (the result does not depend on the count: parallel_det_chunks).
 // Called from run_batch() which runs restarts in parallel.
 static VBResult run_vb(
     const CoveredSNPData& data, int K,
-    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter)
+    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter, int nthreads = 1)
 {
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
@@ -1101,7 +1106,7 @@ static VBResult run_vb(
         for (int k = 0; k < K; ++k) result.id_prob[c][k] *= inv;
     }
 
-    run_vb_inplace(data, K, cfg, result, max_iter, /*nthreads=*/1);
+    run_vb_inplace(data, K, cfg, result, max_iter, nthreads);
     return result;
 }
 
@@ -1120,6 +1125,9 @@ static VBResult fit_vb_k(
     const int n_inits = std::max(1, static_cast<int>(kinds.size()));
     std::vector<VBResult> init_results(n_inits);
     const int nw = std::max(1, std::min(threads, n_inits));
+    // Each restart runs on its share of the threads: one restart (every K=1 fit) used to run its pre-iterations on one thread while
+    // the others sat idle. The fit does not depend on the thread count (parallel_det_chunks), so outputs are unchanged.
+    const int per_t = std::max(1, threads / nw);
 
     auto run_batch = [&](int start, int end) {
         for (int i = start; i < end; ++i) {
@@ -1130,9 +1138,9 @@ static VBResult fit_vb_k(
             if (K > 1 && kind > 0) {
                 // PCA-seeded restart: prevents symmetric-init cluster collapse
                 init_results[i] = init_vb_pca_seeded(cov, K, cfg, init_seed, pca, quiet || i > 0, kind);
-                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, /*nthreads=*/1);
+                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, per_t);
             } else {
-                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre);
+                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre, per_t);
             }
         }
     };
@@ -1337,7 +1345,7 @@ static AlleleTables build_allele_tables(
             a[2] = (1.0 - eps) * c_hom; b[2] = eps * c_hom;
             for (int g = 0; g < 3; ++g) {
                 c[g] = a[g] + b[g];
-                ln[g] = std::lgamma(a[g]) + std::lgamma(b[g]) - std::lgamma(c[g]);
+                ln[g] = demux_lgamma(a[g]) + demux_lgamma(b[g]) - demux_lgamma(c[g]);
             }
         }
     };
@@ -1347,8 +1355,8 @@ static AlleleTables build_allele_tables(
         double l[3] = {lpr0[j], lpr1[j], lpr2[j]};
         if (dpt > 0.0)
             for (int g = 0; g < 3; ++g)
-                l[g] += std::lgamma(st.a[g] + a) + std::lgamma(st.b[g] + bb)
-                      - std::lgamma(st.c[g] + dpt) - st.ln[g];
+                l[g] += demux_lgamma(st.a[g] + a) + demux_lgamma(st.b[g] + bb)
+                      - demux_lgamma(st.c[g] + dpt) - st.ln[g];
         const double mx = std::max(l[0], std::max(l[1], l[2]));
         double sum = 0.0;
         for (int g = 0; g < 3; ++g) { pg[g] = std::exp(l[g] - mx); sum += pg[g]; }
@@ -1854,7 +1862,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
-        if (K >= 2 && cfg.threads >= 2) {
+        if (cfg.threads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
             do_fold(0);
             t1.join();

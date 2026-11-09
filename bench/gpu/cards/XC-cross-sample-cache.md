@@ -13,4 +13,4 @@
 
 **Falsifier.** Hold falls under 15% on pbmc1k_v3, core-s per M pairs rises more than 2%, or any output changes.
 
-**Result.** Pending.
+**Result.** Part (a), the resident non-host index, works at one run in flight and not under concurrency. The fast loop's item 63 (`singlet gpu-nhsrv`, one server per point, first run dropped) cut held time by 27 % and core-s/M by 20 % at k1 on an H100. Campaign item 33 then ran a sequential A/B at k8, T7, 2 slots on one H100 (ee7fa54d). The server made 1.72 and 1.60 M pairs/s against 1.57 and 1.85 for base, at 9.5 to 9.9 core-s/M in both, and seqstop called it inconclusive after one block. At eight in flight the screen's index upload overlaps other runs' device work, so keeping it resident saves little, and the server stays off. Part (b), the resident pileup references, is not built.
