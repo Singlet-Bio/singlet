@@ -3007,8 +3007,8 @@ public:
         const auto tA1 = std::chrono::steady_clock::now();
         singlet_tail::mark("parent: pileupRun starts");
         // #136: pileupRun releases the device when its device work is done (the host post-processing of the results needs no GPU)
-        bool lockReleased = false; double sHeld = 0;
-        in.release = [&]() { if (!lockReleased) { lockReleased = true; sHeld = since(tA1); unlockDevice(lock_fd); } };
+        bool lockReleased = false; double sHeld = 0; std::chrono::steady_clock::time_point tRel = tA1;
+        in.release = [&]() { if (!lockReleased) { lockReleased = true; sHeld = since(tA1); tRel = std::chrono::steady_clock::now(); unlockDevice(lock_fd); } };
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
         // E16 resetbg: the context (with the input's page-locked memory) is reset on a thread at the end, which then unlocks the device.
@@ -3021,11 +3021,12 @@ public:
         std::chrono::steady_clock::time_point tUnl = std::chrono::steady_clock::now(); double sReset = 0;
         struct RstJoin { std::thread t; ~RstJoin() { if (t.joinable()) t.join(); } } e20rst;   // joined before `in` goes, on every return
         if (!e16rb) in.release();
-        else if (e20ul) e20rst.t = std::thread([device, lock_fd, &tUnl, &sReset] {
+        else if (e20ul) e20rst.t = std::thread([device, lock_fd, e24early = out.unlockedEarly, tRel, &tUnl, &sReset] {
+            // E24 "lockpost": pileupRun unlocked the device itself before its host half (PileupOutput::unlockedEarly); this thread only resets
             // pileupRun freed its arena: what the reset still does is host work (the context's teardown, unpinning the input), so the
             // device is unlocked first (SINGLET_GPU_PILEUP_UNLOCK=reset: the reset first, then the unlock)
             static const bool resetFirst = [] { const char* e = std::getenv("SINGLET_GPU_PILEUP_UNLOCK"); return e != nullptr && std::string(e) == "reset"; }();
-            if (!resetFirst) { unlockDevice(lock_fd); tUnl = std::chrono::steady_clock::now(); }
+            if (!resetFirst) { if (e24early) tUnl = tRel; else { unlockDevice(lock_fd); tUnl = std::chrono::steady_clock::now(); } }
             const auto r0 = std::chrono::steady_clock::now();
             pileupRelease(device);
             sReset = std::chrono::duration<double>(std::chrono::steady_clock::now() - r0).count();
