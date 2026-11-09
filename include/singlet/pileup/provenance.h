@@ -49,7 +49,6 @@ struct ProvenanceConfig {
     // D-101: the storage rule of the private all-site member and demux's donor count (allsite_store.h); no genotype information
     std::string allsite_store_rule;                ///< empty: no all-site member
     int         allsite_n_donors    = 0;
-    std::string allsite_dropped_reason;            ///< the member was computed but could not be stored: why
 };
 
 /// Write {out_prefix}/provenance.json.
@@ -199,8 +198,6 @@ inline void write_provenance_json(
     f << "  \"cell_caller\": \""       << esc(prov.cell_caller) << "\",\n";
     if (!prov.allsite_store_rule.empty())
         f << "  \"allsite_store\": {\"rule\": \"" << esc(prov.allsite_store_rule) << "\", \"n_donors\": " << prov.allsite_n_donors << "},\n";
-    else if (!prov.allsite_dropped_reason.empty())
-        f << "  \"allsite_store\": {\"rule\": \"none\", \"dropped\": \"" << esc(prov.allsite_dropped_reason) << "\"},\n";
 
     // output block
     f << "  \"output\": {\n"

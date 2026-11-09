@@ -60,8 +60,8 @@ du -b $O/out/private/allsite/* $O/out/private/genotype/*.vcf.gz $O/out/private/s
 # PARCHECK=1: the tagged-BAM run takes the region-parallel pileup; its all-site member must equal the serial run's entry for entry
 if [ "${PARCHECK:-0}" = 1 ]; then
   grep -a -E "^\[allsite\]" $O/engine_bam.log | cut -c1-300 | tee $R/parallel_lines.txt
-  for f in allele_ad.mtx.gz allele_dp.mtx.gz allele_ad_features.tsv.gz allele_ad_barcodes.tsv.gz sites.tsv.gz; do
-    a=$(zcat $O/out/private/allsite/$f 2>/dev/null | md5sum | cut -c1-32); b=$(zcat $O/bam/private/allsite/$f 2>/dev/null | md5sum | cut -c1-32)
+  for f in allele_delta.bin cells.tsv.gz sites.tsv.gz; do
+    a=$(zcat -f $O/out/private/allsite/$f 2>/dev/null | md5sum | cut -c1-32); b=$(zcat -f $O/bam/private/allsite/$f 2>/dev/null | md5sum | cut -c1-32)
     [ -n "$a" ] && [ "$a" = "$b" ] && [ -s $O/bam/private/allsite/$f ] && echo "parallel=serial $f" || echo "parallel!=serial $f ($a $b)"
   done | tee $R/parallel_check.txt
 fi

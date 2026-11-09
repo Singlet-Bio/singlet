@@ -16,7 +16,6 @@
 #include "singlet/pileup/allsite_store.h"
 
 namespace A = singlet::allsite;
-namespace AS = singlet::allsite;
 static int n_fail = 0;
 #define CHECK(cond, msg) do { if (!(cond)) { std::cout << "FAIL " << msg << "\n"; ++n_fail; } } while (0)
 
@@ -148,47 +147,56 @@ int main() {
           && r4.ad.data == r3.ad.data && r4.ad.indices == r3.ad.indices && r4.ambiguous == r3.ambiguous && r4.other == r3.other,
           "site blocks do not change the result");
     P.block_hits = 8000000;
-    // Deferred build with the storage rule (allsite_store.h): barcodes 0-2 are the called cells; sites at 1/1 are chr1:11 (ALT in the cells) and
-    // chr1:21 (ALT only in uncalled barcode 3), so with the rule applied first the second row is not variant.
+    // The delta store (allsite_store.h) on the same records, 1/1 thresholds: two sites, chr1:11 (ALT in the called cells) and chr1:21. Barcodes
+    // 0-2 are the called cells; 0 and 1 belong to donor 0, 2 has no donor (stored against the reference), 3 is not called.
     {
         A::Params Q = P; Q.defer_build = true;
+        const std::vector<uint32_t> cells = {0, 1, 2};
+        const std::vector<int32_t> donor_of = {0, 0, -1, -1};
         const std::vector<uint8_t> keep = {1, 1, 1, 0};
-        auto fresh = [&]() { return A::run(R, G, 3, 4, Q); };
-        auto nnz = [](const singlet::SparseAccumulator<uint16_t>::CSCMatrix& m) { return static_cast<uint64_t>(m.data.size()); };
-        CHECK(fresh().dp.data.empty(), "defer_build leaves the matrices empty");
-        // no limit: two donors keep every site; the entries are the merged ones of the called cells
-        A::Result a = fresh(); AS::BuildReport rep;
-        CHECK(AS::build_member(a, &keep, 2, rep) && rep.built && !rep.alt_rule, "two donors: every site, built");
-        CHECK(a.kept_dp.size() == 2 && a.site_dp.size() == 2 && a.kept_dp[1] > 0 && a.site_dp[1] > a.kept_dp[1], "per-site sums: all barcodes beside the called cells");
-        const uint64_t E = nnz(a.dp);
-        CHECK(E == rep.dp_entries && E >= 4, "entries counted after the merge: " + std::to_string(E));
-        CHECK(a.dp.indptr[3] == a.dp.indptr[4], "the uncalled barcode has no entries");
-        CHECK(at(a, a.dp, 0, 0) == 2 && at(a, a.ad, 0, 0) == 1 && at(a, a.dp, 1, 1) > 0, "merged values as the immediate build");
-        // the limit applies to merged entries: E fails, E + 1 passes (every record of a (barcode, site) counts once)
-        A::Result b = fresh(); b.max_entries = E + 1;
-        CHECK(AS::build_member(b, &keep, 2, rep) && !rep.alt_rule && nnz(b.dp) == E, "a limit one above the merged entries builds every site");
-        // at the limit, the multi-donor member falls back to the ALT-evidence sites and says so
-        A::Result c = fresh(); c.max_entries = E;
-        CHECK(AS::build_member(c, &keep, 2, rep) && rep.built && rep.alt_rule && nnz(c.dp) < E, "at the limit, the ALT-evidence sites are stored instead");
-        bool row1 = false; for (int32_t i : c.dp.indices) row1 = row1 || i == 1;
-        CHECK(!row1 && c.dp.nrows == 2, "no per-cell entry at the non-variant site; the shape is kept");
-        const auto plan = AS::plan_store(c.ad, c.dp, {0, 1, 2}, 2, rep.alt_rule);
-        CHECK(plan.rule == "multi-donor-alt-sites" && plan.sites_per_cell == 1, "the plan names the fallback rule: " + plan.rule);
-        CHECK(AS::plan_store(c.ad, c.dp, {0, 1, 2}, 0, true).rule == "no-demux-alt-sites", "no demux fallback rule");
-        // one donor: the rule is applied before the build, whatever the limit
-        A::Result d = fresh();
-        CHECK(AS::build_member(d, &keep, 1, rep) && rep.alt_rule && nnz(d.dp) < E, "one donor: ALT-evidence sites only");
-        CHECK(d.site_dp[1] == a.site_dp[1] && d.site_ad.size() == 2, "the per-site sums still cover every site and barcode");
-        // nothing fits: the member is dropped with a reason and no matrices
-        A::Result e = fresh(); e.max_entries = 1;
-        CHECK(!AS::build_member(e, &keep, 2, rep) && !rep.built && !rep.reason.empty() && e.dp.data.empty() && e.ad.data.empty(), "dropped with a reason: " + rep.reason);
-        A::Result f2 = fresh(); f2.max_entries = std::max<uint64_t>(nnz(a.ad) + 1, nnz(d.dp));   // AD fits, DP does not even at the ALT sites
-        CHECK(nnz(d.dp) > nnz(a.ad), "fixture: more DP than AD entries at the ALT site");
-        CHECK(!AS::build_member(f2, &keep, 2, rep) && rep.reason.find("ALT-evidence") != std::string::npos, "DP over the limit at the ALT sites: " + rep.reason);
-        // the immediate build and the deferred one over every barcode agree
-        A::Params Q0 = P; Q0.defer_build = true; A::Result g0 = A::run(R, G, 3, 4, Q0);
-        CHECK(g0.finalize(nullptr) && g0.dp.data == r3.dp.data && g0.dp.indices == r3.dp.indices && g0.dp.indptr == r3.dp.indptr && g0.ad.data == r3.ad.data,
-              "finalize over every barcode equals the immediate build");
+        auto fresh = [&]() { A::Result x = A::run(R, G, 3, 4, Q); x.prepare(&keep); return x; };
+        CHECK(A::run(R, G, 3, 4, Q).dp.data.empty(), "defer_build leaves the matrices empty");
+        const A::Result a = fresh();
+        CHECK(a.sites.size() == 2 && a.site_dp[1] > a.kept_dp[1], "per-site sums cover every barcode, the kept sums the called cells");
+        uint64_t n_pairs = 0, pair_dp = 0;
+        a.for_each_pair([&](uint32_t c, uint32_t row, uint32_t ad, uint32_t dp) {
+            ++n_pairs; pair_dp += dp;
+            CHECK(c < 3 && ad <= dp && ad == at(r3, r3.ad, row, c) && dp == at(r3, r3.dp, row, c), "merged entry equals the full matrix");
+        });
+        CHECK(n_pairs >= 4 && pair_dp > 0, "merged entries of the called cells: " + std::to_string(n_pairs));
+        // synthetic genotype calls: row 0 heterozygous, row 1 homozygous reference
+        A::DonorCalls fixed; fixed.K = 1; fixed.sites = 2; fixed.gt = {1, 0}; fixed.differs = {0, 0}; fixed.variant = {1, 0}; fixed.sad = {0, 0}; fixed.sdp = {0, 0}; fixed.sites_variant = 1;
+        // computed calls from the donor's cells; with so little depth they may be no-calls, which keep every covered entry
+        const A::DonorCalls computed = A::donor_calls(a, donor_of, 1);
+        CHECK(computed.gt.size() == 2 && computed.differs.size() == 2, "computed calls cover both sites");
+        for (const A::DonorCalls* dc : {&fixed, &computed}) {
+            A::DeltaStore st; A::build_store(a, 4, cells, donor_of, *dc, st);
+            CHECK(st.n_cells() == 3 && st.full_entries == n_pairs, "store columns and full entries");
+            uint64_t stored = 0;
+            for (uint32_t j = 0; j < 3; ++j) {
+                for (uint64_t k = st.off[j]; k < st.off[j + 1]; ++k) {   // stored entries equal the full matrix
+                    ++stored;
+                    CHECK(st.dp[k] == at(r3, r3.dp, st.row[k], cells[j]) && st.ad[k] == at(r3, r3.ad, st.row[k], cells[j]), "stored entry equals the full matrix");
+                    CHECK(k == st.off[j] || st.row[k] > st.row[k - 1], "rows ascend within a cell");
+                }
+                for (uint32_t row = 0; row < 2; ++row) {   // every dropped entry is concordant with the call
+                    const uint32_t ad = at(r3, r3.ad, row, cells[j]), dpv = at(r3, r3.dp, row, cells[j]);
+                    bool in = false; for (uint64_t k = st.off[j]; k < st.off[j + 1]; ++k) in = in || st.row[k] == row;
+                    if (dpv == 0 || in) continue;
+                    const int g = dc->g_of(row, donor_of[cells[j]]);
+                    CHECK(!dc->differs[row] && ((g == 0 || g == A::kRef) ? ad == 0 : g == 2 ? ad == dpv : false), "dropped entry is concordant with the donor call");
+                }
+            }
+            CHECK(stored == st.n_entries(), "entry count");
+            const std::string p = (dir / "allele_delta.bin").string();
+            const uint64_t bytes = A::write_store(p, st);
+            A::DeltaStore back;
+            CHECK(bytes > 64 && A::read_store(p, back) && back.off == st.off && back.row == st.row && back.ad == st.ad && back.dp == st.dp && back.n_sites == 2, "round trip");
+        }
+        {   // the fixed calls: het row 0 keeps both donor cells; the reference cell and the hom-ref row keep nothing
+            A::DeltaStore st; A::build_store(a, 4, cells, donor_of, fixed, st);
+            CHECK(st.n_entries() == 2 && st.off[1] - st.off[0] == 1 && st.off[2] - st.off[1] == 1 && st.off[3] == st.off[2], "het site: both donor cells; the reference cell has no ALT");
+        }
     }
     // sites.tsv
     const std::string tsv = (dir / "sites.tsv.gz").string();

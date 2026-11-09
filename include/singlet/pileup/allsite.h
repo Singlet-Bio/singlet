@@ -119,7 +119,11 @@ struct Result {
     std::function<void()> release_fn;
     void prepare(const std::vector<uint8_t>* keep_cols) { if (prepare_fn) prepare_fn(*this, keep_cols); }
     bool emit(bool is_ad, const std::vector<uint8_t>* keep_rows, uint64_t& entries) { entries = 0; return emit_fn ? emit_fn(*this, is_ad, keep_rows, entries) : true; }
-    void release() { if (release_fn) release_fn(); }
+    void release() const { if (release_fn) release_fn(); }
+    // After prepare: every merged (barcode, site) entry as f(barcode, row, ad, dp) with ad <= dp, contig by contig (rows ascend across
+    // contigs) and by barcode then row within one. The delta store (allsite_store.h) reads the member through this.
+    std::function<void(const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>&)> pairs_fn;
+    void for_each_pair(const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>& f) const { if (pairs_fn) pairs_fn(f); }
     // Both matrices over every site for the barcodes marked in keep (null: all); false when either does not fit.
     bool finalize(const std::vector<uint8_t>* keep) {
         if (!prepare_fn) return true;
@@ -377,6 +381,17 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
         for (uint32_t t = 0; t < n_tid; ++t)   // contigs hold ascending row ranges and each is sorted, so rows ascend within a column
             for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { const int32_t k = pos[x.cell]++; m.indices[k] = static_cast<int32_t>(x.row); m.data[k] = static_cast<uint16_t>(x.val); }
         return true;
+    };
+    res.pairs_fn = [out_sp, n_tid](const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>& f) {
+        const auto& out = *out_sp;
+        for (uint32_t t = 0; t < n_tid; ++t) {
+            const auto& ad = out[t].ad; const auto& dp = out[t].dp; size_t ia = 0;
+            for (const auto& d : dp) {   // every AD key has a DP key (a molecule that shows the ALT is a molecule that covers the site)
+                while (ia < ad.size() && (ad[ia].cell < d.cell || (ad[ia].cell == d.cell && ad[ia].row < d.row))) ++ia;
+                const uint32_t a = (ia < ad.size() && ad[ia].cell == d.cell && ad[ia].row == d.row) ? ad[ia].val : 0;
+                f(d.cell, d.row, std::min(a, d.val), d.val);
+            }
+        }
     };
     res.release_fn = [out_sp, n_tid]() { auto& out = *out_sp; for (uint32_t t = 0; t < n_tid; ++t) { std::vector<Tri>().swap(out[t].ad); std::vector<Tri>().swap(out[t].dp); } };
     if (!P.defer_build) res.finalize(nullptr);

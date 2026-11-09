@@ -1857,11 +1857,10 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
     const bool demux_thread_ran = demux_thread.joinable();
-    // D-101: build the all-site matrices once the cells are called and demux has given the donor count, under the storage rule
-    // (allsite_store.h): called cells; one donor, its ALT-evidence sites. An LCL's millions of near-empty droplets hold over 2^31 entries
-    // together, which the int32 column pointers cannot index, so the rule is applied before the entries are counted.
-    allsite::BuildReport allsite_report;
-    auto build_allsite = [&](int n_donors) {
+    // The all-site member (allsite_store.h): once the cells are called and demux has assigned them, its merged records are prepared for the
+    // called cells (every barcode when no cell call ran). The per-cell delta against the donor genotype is built from them below; no CSC
+    // matrix with int32 column pointers is built, so a deep library has no entry limit.
+    auto build_allsite = [&]() {
         if (!engine.allsite_ready()) return;
         std::vector<uint8_t> keep_cells;
         if (export_cfg.run_cell_calling) {
@@ -1869,16 +1868,12 @@ inline ExportStats export_results(const PileupEngine& engine,
             for (uint32_t c : cc_result.cell_indices) if (c < keep_cells.size()) keep_cells[c] = 1;
         }
         const std::vector<uint8_t>* keep = export_cfg.run_cell_calling ? &keep_cells : nullptr;
-        const char* env_max = std::getenv("SINGLET_ALLSITE_MAX_ENTRIES");   // test hook: a small limit exercises the fallback on a small library
-        if (!engine.finalize_allsite([&](allsite::Result& r) {
-                if (env_max && *env_max) r.max_entries = std::strtoull(env_max, nullptr, 10);
-                return allsite::build_member(r, keep, n_donors, allsite_report); }))
-            std::cerr << "[allsite] member dropped: " << allsite_report.reason << "\n";
+        engine.finalize_allsite([&](allsite::Result& r) { r.prepare(keep); return true; });
     };
-    if (!demux_thread.joinable()) build_allsite(0);
+    if (!demux_thread.joinable()) build_allsite();
     if (demux_thread.joinable()) {
         demux_thread.join();
-        build_allsite(demux_result.n_donors_k);
+        build_allsite();
         write_donor_assignments(out_prefix + "/donor/donor_assignments.tsv",
                                 demux_result.assignments, barcodes);
         // The top-level donor_assignments.tsv (a required output) was a header-only stub; it now holds the same
@@ -1905,20 +1900,11 @@ inline ExportStats export_results(const PileupEngine& engine,
             if (n < 0) { record_failed_write("private/genotype/donors.vcf.gz"); result.failed_writes = failed_writes; }
             else std::cerr << "[genotype] donors.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
         }
-        // D-101: the donor genotypes at the all-site member's sites, and each cell's alleles against its donor's genotype (panel and
-        // all-site sites), private. Both come from the stored counts and the donor assignments only.
+        // The panel's per-cell VCF (the all-site member's donor genotypes and per-cell VCF are written with its store below).
         if (demux_result.n_donors_k > 0) {
             using CSC16 = SparseAccumulator<uint16_t>::CSCMatrix;
-            const std::vector<std::string> as_names = engine.allsite_ready() ? engine.allsite_names() : std::vector<std::string>();
-            if (engine.allsite_ready()) {
-                const long long n = genotype::write_donors_vcf(out_prefix + "/private/genotype/donors_allsite.vcf.gz", demux_result,
-                                                               engine.allsite().ad, engine.allsite().dp, cc_result.cell_indices, as_names);
-                if (n < 0) { record_failed_write("private/genotype/donors_allsite.vcf.gz"); result.failed_writes = failed_writes; }
-                else std::cerr << "[genotype] donors_allsite.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
-            }
             std::vector<genotype::SiteSet<CSC16>> sets;
             if (snp_dp_csc.ncols > 0) sets.push_back({&snp_ad_csc, &snp_dp_csc, &engine.snp_names(), "panel"});
-            if (engine.allsite_ready()) sets.push_back({&engine.allsite().ad, &engine.allsite().dp, &as_names, "allsite"});
             if (!sets.empty()) {
                 const long long n = genotype::write_cells_vcf(out_prefix + "/private/genotype/cells.vcf.gz", demux_result, sets,
                                                               cc_result.cell_indices, barcodes, engine.contig_names());
@@ -1954,34 +1940,51 @@ inline ExportStats export_results(const PileupEngine& engine,
         { auto _unused2 = std::move(snp_dp_csc); }
     }
 
-    // D-101: the all-site member under the storage rule (allsite_store.h): called cells; one donor, its ALT-evidence sites; private.
+    // The all-site member (allsite_store.h): the donor genotypes at its sites and, per called cell, the entries informative against the
+    // cell's donor (a cell without a donor is stored against the reference genome); private.
     std::string allsite_rule; int allsite_donors = 0;   // mirrored in provenance.json (no genotype information)
-    std::string allsite_dropped = engine.allsite_on() && !engine.allsite_ready() && !allsite_report.reason.empty() ? allsite_report.reason : "";
     if (engine.allsite_ready()) {
-        std::filesystem::create_directories(out_prefix + "/private/allsite");
-        // without a cell call (--barcodes and no --cell-calling) every barcode is kept, as in the mt allele members
-        std::vector<uint32_t> all_cols;
-        if (!export_cfg.run_cell_calling) {
-            all_cols.resize(engine.allsite().dp.ncols);
-            for (uint32_t c = 0; c < all_cols.size(); ++c) all_cols[c] = c;
-            std::cerr << "[allsite] no cell call ran: every barcode is kept\n";
+        const std::string adir = out_prefix + "/private/allsite";
+        std::filesystem::create_directories(adir);
+        const uint32_t nb = static_cast<uint32_t>(barcodes.size());
+        std::vector<uint32_t> cells;   // sorted, unique called barcodes (every barcode when no cell call ran)
+        if (export_cfg.run_cell_calling) { cells = cc_result.cell_indices; std::sort(cells.begin(), cells.end()); cells.erase(std::unique(cells.begin(), cells.end()), cells.end()); }
+        else { cells.resize(nb); for (uint32_t c = 0; c < nb; ++c) cells[c] = c; std::cerr << "[allsite] no cell call ran: every barcode is kept\n"; }
+        const int K = demux_thread_ran ? demux_result.n_donors_k : 0;
+        std::vector<int32_t> donor_of(nb, -1);   // the cells that count for the donor genotypes (the rule of donors.vcf.gz)
+        std::vector<std::string> assignment(cells.size(), "none");
+        for (size_t j = 0; j < cells.size(); ++j) {
+            const uint32_t c = cells[j];
+            if (K <= 0 || c >= demux_result.assignments.size()) continue;
+            const auto& a = demux_result.assignments[c];
+            if (a.cell_status == "cell" && a.donor_id >= 0 && a.donor_id < K && a.prob_max >= genotype::kDonorMinProb && a.label == "donor" + std::to_string(a.donor_id)) {
+                donor_of[c] = a.donor_id; assignment[j] = a.label;
+            } else assignment[j] = a.label == "doublet" ? "doublet" : "unassigned";
         }
-        const auto plan = allsite::plan_store(engine.allsite().ad, engine.allsite().dp,
-                                              export_cfg.run_cell_calling ? cc_result.cell_indices : all_cols,
-                                              demux_thread_ran ? demux_result.n_donors_k : 0, allsite_report.alt_rule);
-        auto ad = allsite::restrict_store(engine.allsite().ad, plan);
-        auto dp = allsite::restrict_store(engine.allsite().dp, plan);
-        const auto names = engine.allsite_names();
-        write_matrix("private/allsite/allele_ad", ad, names);
-        write_matrix("private/allsite/allele_dp", dp, names);
-        if (!allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names(), &plan.keep_row))
+        const auto calls = allsite::donor_calls(engine.allsite(), donor_of, K);
+        allsite::DeltaStore store;
+        allsite::build_store(engine.allsite(), nb, cells, donor_of, calls, store);
+        const uint64_t bytes = allsite::write_store(adir + "/allele_delta.bin", store);
+        if (bytes == 0) record_failed_write("private/allsite/allele_delta.bin");
+        if (!allsite::write_cells_tsv(adir + "/cells.tsv.gz", barcodes, cells, assignment, store)) record_failed_write("private/allsite/cells.tsv.gz");
+        if (!allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names()))
             record_failed_write("private/allsite/sites.tsv.gz");
-        if (!allsite::write_store_json(out_prefix + "/private/allsite/store.json", plan, ad.data.size(), dp.data.size()))
-            record_failed_write("private/allsite/store.json");
-        allsite_rule = plan.rule; allsite_donors = plan.n_donors;
-        std::cerr << "[allsite] stored " << plan.rule << ": " << plan.cells << " called cells, " << plan.sites_per_cell << " of " << plan.sites
-                  << " sites with per-cell entries; AD " << ad.data.size() << " of " << engine.allsite().ad.data.size() << ", DP " << dp.data.size()
-                  << " of " << engine.allsite().dp.data.size() << " entries\n";
+        const auto stats = allsite::store_stats(store, calls, donor_of, cells, bytes);
+        if (!allsite::write_store_json(adir + "/store.json", stats)) record_failed_write("private/allsite/store.json");
+        if (K > 0) {
+            const long long n = allsite::write_donors_vcf(out_prefix + "/private/genotype/donors_allsite.vcf.gz", engine.allsite(), engine.contig_names(), calls);
+            if (n < 0) record_failed_write("private/genotype/donors_allsite.vcf.gz");
+            else std::cerr << "[genotype] donors_allsite.vcf.gz: " << n << " sites x " << K << " donors\n";
+            const long long m = allsite::write_cells_vcf(out_prefix + "/private/genotype/cells_allsite.vcf.gz", store, engine.allsite(), engine.contig_names(), barcodes, cells, donor_of, calls);
+            if (m == -1) record_failed_write("private/genotype/cells_allsite.vcf.gz");
+            else if (m == -2) std::cerr << "[genotype] cells_allsite.vcf.gz skipped: too many sites x cells (the store holds every entry)\n";
+            else std::cerr << "[genotype] cells_allsite.vcf.gz: " << m << " variant sites\n";
+        }
+        allsite_rule = allsite::kStoreRule; allsite_donors = K;
+        std::cerr << "[allsite] stored " << allsite::kStoreRule << ": " << stats.cells << " called cells (" << stats.assigned << " with a donor), " << stats.sites
+                  << " sites; entries " << stats.entries << " of " << stats.full_entries << ", " << stats.bytes << " bytes, " << (stats.cells ? stats.bytes / stats.cells : 0)
+                  << " bytes per cell; per-cell coverage blocks would add about " << stats.coverage_block_bytes_est << " bytes\n";
+        engine.allsite().release();
         result.failed_writes = failed_writes;
     }
 
@@ -2020,7 +2023,6 @@ inline ExportStats export_results(const PileupEngine& engine,
         ProvenanceConfig prov_with_caller = export_cfg.provenance;
         prov_with_caller.allsite_store_rule = allsite_rule;
         prov_with_caller.allsite_n_donors = allsite_donors;
-        prov_with_caller.allsite_dropped_reason = allsite_dropped;
         if (!cell_caller_method.empty())
             prov_with_caller.cell_caller = cell_caller_method;
         else if (!export_cfg.provenance.cell_caller.empty())

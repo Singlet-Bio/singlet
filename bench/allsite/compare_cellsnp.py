@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """D-101 allele counts against cellsnp-lite on the same reads (counts only; no site, genotype or count leaves this script).
 
-  compare_cellsnp.py <singlet out dir (--output-format mtx)> <cellsnp-lite dir> <out.json>
+  compare_cellsnp.py <singlet out dir> <cellsnp-lite dir> <out.json>
 
 The cellsnp-lite run is mode 1 on the engine's own tagged BAM, at the engine's all-site sites (private/allsite/sites.tsv.gz as -R),
 over the engine's called cells (-b), with --minCOUNT 0 --minMAF 0 so every given site is reported, --cellTAG CB --UMItag UB.
-Matched on (chrom, pos, alt) and barcode. Reports per-entry and per-site agreement of DP (ref + alt UMIs) and AD (alt UMIs).
+Matched on (chrom, pos, alt) and barcode. The engine's entries are the stored ones (informative against the donor genotype), so cellsnp-lite
+entries the store dropped are counted apart and the per-site sums cover stored entries only. Reports per-entry and per-site agreement of DP (ref + alt UMIs) and AD (alt UMIs).
 """
 import gzip, json, os, sys
 import numpy as np
 import scipy.io, scipy.sparse as sp
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from delta_reader import read_delta
 
 
 def lines(p):
@@ -19,10 +22,11 @@ def lines(p):
 
 
 def main(sdir, cdir, out):
-    feats = lines(os.path.join(sdir, "private/allsite/allele_ad_features.tsv.gz"))
-    bcs = lines(os.path.join(sdir, "private/allsite/allele_ad_barcodes.tsv.gz"))
-    sad = scipy.io.mmread(os.path.join(sdir, "private/allsite/allele_ad.mtx.gz")).tocsr()   # sites x barcodes
-    sdp = scipy.io.mmread(os.path.join(sdir, "private/allsite/allele_dp.mtx.gz")).tocsr()
+    barcodes, sites, er, ec, ead, edp = read_delta(os.path.join(sdir, "private/allsite"))
+    feats = [f"{c}:{p}:{r}>{a}" for c, p, r, a in sites]
+    bcs = barcodes
+    sad = sp.coo_matrix((ead, (er, ec)), shape=(len(feats), len(bcs))).tocsr()   # sites x barcodes, the stored entries
+    sdp = sp.coo_matrix((edp, (er, ec)), shape=(len(feats), len(bcs))).tocsr()
     key = {}
     for i, n in enumerate(feats):
         c, p, ra = n.split(":"); key[(c, int(p), ra[2])] = i
@@ -56,6 +60,10 @@ def main(sdir, cdir, out):
         "entries_ad_equal": float(np.mean(as_ == ac)) if len(ds) else None,
         "entries_both_equal": float(np.mean((ds == dc) & (as_ == ac))) if len(ds) else None,
         "entries_engine_only": int(np.sum((ds > 0) & (dc == 0))), "entries_cellsnp_only": int(np.sum((ds == 0) & (dc > 0))),
+        "stored_entries": int(len(ead)),
+        "entries_dp_equal_where_stored": float(np.mean((ds == dc)[ds > 0])) if np.any(ds > 0) else None,
+        "entries_ad_equal_where_stored": float(np.mean((as_ == ac)[ds > 0])) if np.any(ds > 0) else None,
+        "cellsnp_entries_not_stored": int(np.sum((ds == 0) & (dc > 0))), "cellsnp_entries_not_stored_with_alt": int(np.sum((ds == 0) & (dc > 0) & (ac > 0))),
         "r_entry_dp": r(ds, dc), "r_entry_ad": r(as_, ac),
         "r_site_dp": r(psd, pcd), "r_site_ad": r(psa, pca),
         "sum_dp_engine": int(psd.sum()), "sum_dp_cellsnp": int(pcd.sum()),
