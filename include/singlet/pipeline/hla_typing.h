@@ -354,8 +354,7 @@ inline Result run(const Config& cfg) {
         if (kept > 0) { tref = tmp + "/hlaidx.prior.fa"; res.n_alleles_typed = kept; }
         std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "\n";
     } else if (cfg.min_cells > 0) {
-        std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx
-";
+        std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx\n";
     }
     auto t1k = [&](const std::string& in, const std::string& prefix, bool no_extract) {
         const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(tref) + " -t " + T + " -o " + shq(prefix) +
