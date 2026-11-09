@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -324,6 +325,11 @@ struct Session {
     bool made = false;         // the temporary directory exists (the input checks passed)
     bool stopped = false;      // a prefilter error after it was made: finish_stage returns res as it is
     double t1k_sample_s = 0;   // the sample's T1K (with the index prior), part of seconds_t1k
+    // hla_candidate_reads.fq.gz (level 6, one deflate stream, so it cannot be split) is compressed on one thread beside T1K, which
+    // leaves a core idle for most of its serial stretches; finish_stage moves the file in. A failed or absent compression is redone there.
+    std::future<bool> gz;
+    std::string gz_tmp;
+    bool wait_gz() { return gz.valid() ? gz.get() : false; }
 };
 
 /// Move a file, across file systems too (Config::tmp_dir may be on another one than the run directory).
@@ -440,6 +446,11 @@ inline void type_sample(Session& s) {
         std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "\n";
     } else if (cfg.min_cells > 0) {
         std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx\n";
+    }
+    if (res.reads_kept > 0 && !s.gz.valid()) {
+        s.gz_tmp = s.tmp + "/hla_candidate_reads.fq.gz";
+        const std::string from = s.kept_fq, to = s.gz_tmp;
+        s.gz = std::async(std::launch::async, [from, to] { return gzip_file(from, to, "wb6"); });
     }
     if (res.reads_kept == 0) { res.why_not = "no read shares a k-mer with the HLA index"; }
     else if (!t1k_call(s, s.kept_fq, "sample", false)) { res.why_not = "run-t1k failed (" + s.log + ")"; }
@@ -609,11 +620,9 @@ inline Result finish_stage(Session& s) {
 
     // keep the prefiltered reads (owner-only) so HLA can be typed again once the reads are gone
     if (res.reads_kept > 0) {
-        gzFile g = gzopen((dir + "/hla_candidate_reads.fq.gz").c_str(), "wb6");
-        std::ifstream kf(s.kept_fq, std::ios::binary);
-        std::vector<char> b(1 << 20);
-        while (g && kf) { kf.read(b.data(), b.size()); if (kf.gcount() > 0) gzwrite(g, b.data(), static_cast<unsigned>(kf.gcount())); }
-        if (g) gzclose(g);
+        const std::string gzout = dir + "/hla_candidate_reads.fq.gz";
+        if (s.gz.valid() && s.wait_gz()) move_file(s.gz_tmp, gzout);
+        else gzip_file(s.kept_fq, gzout, "wb6");
     }
     std::string manifest = slurp(cfg.t1k_dir + "/manifest.json");
     while (!manifest.empty() && (manifest.back() == '\n' || manifest.back() == ' ')) manifest.pop_back();
@@ -676,7 +685,7 @@ inline Result run_pending(const std::string& pending_dir, const std::string& t1k
     s.tmp = tmp_dir.empty() ? s.dir + "/.t1k" : tmp_dir;
     if (!file_exists(cfg.t1k_dir + "/hlaidx/hlaidx_rna_seq.fa") || !file_exists(cfg.t1k_dir + "/bin/run-t1k")) { bad.why_not = "T1K or its HLA index not found in " + cfg.t1k_dir; return bad; }
     run_sh(("mkdir -p " + shq(s.tmp)).c_str());
-    auto clean = [&]() { if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str()); };
+    auto clean = [&]() { if (s.gz.valid()) s.gz.wait(); if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str()); };
     s.kept_fq = s.tmp + "/prefilter.fq";
     if (kept > 0) {   // the reads as the prefilter wrote them, checked against the manifest
         gzFile g = gzopen((pend + "/" + kPendingReads).c_str(), "rb");
