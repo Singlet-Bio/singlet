@@ -135,7 +135,7 @@ raise a warning.
 | SNP panel in `--pipeline` | none unless `--snps` | `<ref-base>/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz` (human), `mus_musculus.vcf.gz` (mouse), none for mixed or other species; `--no-snps` | donor demux and genotype doublets need it; `provenance.snp_panel` |
 | `--no-adapter-clip` | n/a | new flag: skip STAR `--clip3pAdapterSeq` (the protocol TSO on 5' kits) | see the 5' timing note in the PR |
 | RNA editing panel in `--pipeline` | none | `<ref-base>/pileup_indices/rna_editing_GRCh38.tsv.gz` (REDIportal v3, 15.6 M sites) for human, `rna_editing_GRCm39.tsv.gz` (REDIportal v3 mm10 lifted to GRCm39, 107 k sites) for mouse, none for mixed species; `--editing-sites FILE`, `--no-editing` | D-101; sites are appended to the SNP panel rows and split off before every SNP consumer, so SNP outputs are byte-identical; panel built by `scripts/editing/build_rediportal_panel.py` |
-| HLA typing in `--pipeline` | none | human non-barnyard runs type HLA with T1K v1.0.10 (MIT) and the index at `<ref-base>/hla/t1k` (IPD-IMGT/HLA, `manifest.json`); `--hla-t1k DIR`, `--no-hla`; also `singlet hla` and `singlet hla-prefilter` on a finished run | D-101; reads only the input .1fq, so CPU and GPU runs give the same calls; all outputs owner-only |
+| HLA typing in `--pipeline` | none | off by default; with `--hla`, human non-barnyard runs type HLA with T1K v1.0.10 (MIT) and the index at `<ref-base>/hla/t1k` (IPD-IMGT/HLA, `manifest.json`); `--hla-t1k DIR`; also `singlet hla` and `singlet hla-prefilter` on a finished run | D-101; reads only the input .1fq, so CPU and GPU runs give the same calls; all outputs owner-only |
 
 ## What the v2 packer needs (python/singlet/v2 is unchanged)
 
