@@ -35,6 +35,7 @@ target_include_directories(singlet_star PUBLIC
 # own directory. Ensure the source dir is on the include path.
 target_include_directories(singlet_star PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/opal
     ${HTSLIB_INCLUDE_DIRS}
 )

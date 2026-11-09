@@ -95,6 +95,9 @@ ReadAlignChunk::ReadAlignChunk(Parameters& Pin, Genome &genomeIn, Transcriptome 
     if (P.outReadsUnmapped=="Fastx" ) {
         for (uint32 imate=0; imate < P.readNends; imate++) 
             chunkFstreamOpen(P.outFileTmp + "/Unmapped.out.mate"+ to_string(imate) +".thread",iChunk, RA->chunkOutUnmappedReadsStream[imate]);
+        if (P.singletSoftclipMin > 0)
+            for (uint32 imate=0; imate < P.readNends; imate++)
+                chunkFstreamOpen(P.outFileTmp + "/Softclip.out.mate"+ to_string(imate) +".thread",iChunk, RA->chunkOutSoftclipStream[imate]);
     };
 
     if (P.outFilterType=="BySJout") {

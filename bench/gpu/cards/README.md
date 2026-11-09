@@ -8,3 +8,4 @@ One card per hypothesis, each with the same five parts: hypothesis, change, meas
 | [E2](E2-heavy-read-pruning.md) | capping the window search for heavy reads gains 1.3x in the kernels and passes the truth gate | gate settled; next the replay window-cap flavor |
 | [SL](SL-more-slots.md) | need-based admission and the shared index make 3 slots pay for deep samples | first point queued |
 | [XC](XC-cross-sample-cache.md) | keeping per-genome state resident across runs cuts device hold by 15% | design |
+| [HP](HP-host-phases.md) | the host phases after STAR (non-host EM, export, demux) shrink without changing outputs | three changes in the gate |

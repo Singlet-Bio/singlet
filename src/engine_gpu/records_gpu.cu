@@ -377,7 +377,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         return false;
     };
 #define EP_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) return fail(#x, e_); } while (0)
-    cudaInitDevice(device, cudaDeviceScheduleBlockingSync, 0);
+    cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());
     if (cudaSetDevice(device) != cudaSuccess) { out.log += "cannot select device; "; return false; }
     cudaFree(0);   // E16: the context now, timed on its own
     const double e16ctx = now() - t0;
