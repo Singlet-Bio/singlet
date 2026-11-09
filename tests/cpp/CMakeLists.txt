@@ -119,6 +119,14 @@ if(TARGET singlet_engine_gpu)
     target_link_libraries(test_gpu_pileup_te PRIVATE singlet_engine_gpu)
     target_compile_definitions(test_gpu_pileup_te PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
+# Solo's two-pass counting (read chunks, key buckets; e9::soloRunTwoPass) against the one-shot device path on synthetic reads, field by field.
+# Built where the GPU engine library exists (a pipeline build with a CUDA compiler); prints SKIP and exits 77 without a usable CUDA device.
+if(TARGET singlet_engine_gpu)
+    add_pileup_test(test_gpu_solo_twopass)
+    set_tests_properties(test_gpu_solo_twopass PROPERTIES SKIP_RETURN_CODE 77)
+    target_link_libraries(test_gpu_solo_twopass PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_solo_twopass PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
 add_pileup_test(test_strand_detect)
 add_pileup_test(test_stream_strand_restart)
 # Gate 800361: the restart on the sorted path must start from main()'s environment (no GPU hand-off), remove the hand-off files and

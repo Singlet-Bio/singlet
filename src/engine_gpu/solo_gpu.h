@@ -19,10 +19,11 @@
 namespace e9 {
 
 // E15: the CB quality characters of the reads whose CR matches several whitelist entries with one mismatch (after the UMI check), which the
-// posterior takes per read. Called once, after the CB stage, with those reads (idx ascending; cr3[k]: read idx[k]'s CR as soloRun has it; host
+// posterior takes per read. Called after the CB stage with those reads (idx ascending; cr3[k]: read idx[k]'s CR as soloRun has it; host
 // memory): writes cbL characters per read to out[k * cbL ..] (what STAR's getCBandUMI has in cbQual: the barcode read's quality line, 'H' past
-// its end) and returns true, or false with why (the caller checks that the line it read has the read's CR)
-using CbQualFn = std::function<bool(const u32* idx, const u64* cr3, u64 n, uint8_t* out, std::string& why)>;
+// its end) and returns true, or false with why (the caller checks that the line it read has the read's CR). The one-shot path calls it once with
+// all of them, the two-pass path in batches of at most 2^24 reads, in ascending order. Read indices are 64-bit.
+using CbQualFn = std::function<bool(const u64* idx, const u64* cr3, u64 n, uint8_t* out, std::string& why)>;
 
 struct SoloModel {                       // host arrays (Transcriptome.cpp, ParametersSolo.cpp)
     std::vector<u64> wl;                 // sorted, deduplicated whitelist (2 bits per base, first base highest)
@@ -68,6 +69,8 @@ struct SoloResult {
     std::vector<i32> readCb0;                                  // per read first whitelist match (-1 none) (keepPerRead)
     u64 nDistinctCR = 0, nCand = 0, nKeys = 0, nTuples = 0, nSeg = 0, nRecOverflow = 0;
     u64 nMulti = 0, nMultiAccepted = 0;                        // E15: reads with several matches; their posterior chose a CB
+    u64 nChunks = 1, nBuckets = 1;                             // read chunks of pass 1 and key buckets of pass 2 (the one-shot path: 1 and 1);
+                                                               // with chunks, nDistinctCR and nCand are sums over the chunks
     bool perReadQual = false;                                  // E15: their posterior took the reads' own CB qualities (SoloReads::cbQual)
     std::vector<i32> readCb;                                   // E15, per read (keepPerRead): the CB the read gets (single match or posterior), -1 none
     std::vector<std::pair<std::string, double>> ms;            // stage timings (ms)
@@ -76,6 +79,22 @@ constexpr u32 CBV = 4 + F_N;
 enum : u32 { CV_cbReadCount, CV_nUMI, CV_nGene, CV_nReadUnique, CV_flags };
 bool soloRun(bool device, const SoloParams& S, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, bool keepPerRead,
              std::string& log);
+// Solo's counting in two passes over read chunks, so that the device memory of the stage does not grow with the number of reads (the same
+// counts, byte for byte, as soloRun(device)). Pass 1 per chunk: annotation, CB match, UMI check, the additive counters, each counted read's
+// 8-byte key to host memory; reads with several matches are stored compactly. Pass 2: their posterior from the complete exact-match
+// histogram, then the keys by whitelist-index range (buckets): sort, unique and collapse each on the device, in bucket order.
+// Needs R.recAnn (the records' annotations; device pointers when R.dev) and no keepPerRead. Reads, records and the annotations may be in host
+// memory (Rd.dev false) or on the device. A chunk or bucket count that CUB cannot take as int fails loudly. Returns false with g_lastOOM
+// set (soloLastFailedOutOfMemory) when the device ran out of memory.
+struct SoloTwoPass {
+    u64 chunkReads = 0;       // reads per chunk; 0: from the free device memory (SINGLET_SOLO_CHUNK overrides in soloRunKept)
+    u64 bucketKeys = 0;       // most keys per bucket; 0: from the free device memory (SINGLET_SOLO_BUCKET)
+    u64 bucketTarget = 0;     // about this many buckets (the bucket size is then the keys / bucketTarget, at least the largest CB; SINGLET_SOLO_BUCKETS)
+    bool recAnnHost = false;  // the per-record annotations stay in host memory (the chunk's annotation is gathered there; SINGLET_SOLO_RECANN_HOST=1)
+};
+bool soloRunTwoPass(const SoloParams& S, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, std::string& log,
+                    const SoloTwoPass& opt = {});
+bool soloLastFailedOutOfMemory();   // the last soloRun / soloRunTwoPass on this thread failed for lack of device memory
 
 // record-time flag of a read (SoloReadFeature_record.cpp:26-60, :95-118): what STAR writes to its Solo file (or counts as CBnotInPasslist)
 E9HD inline u32 recordFlag(const RecAnn& a, i32 cbm) {
