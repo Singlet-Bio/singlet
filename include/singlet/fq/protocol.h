@@ -1157,6 +1157,99 @@ ProtocolCandidate detect_protocol(
     return best;
 }
 
+// ── Evidence for routing a non-10x call ──
+// A non-10x call made at MEDIUM or HIGH confidence runs under its own spec only when the probe reads carry evidence beyond read length:
+//   * barcode reuse: a droplet library shows the same barcode on many reads (cells), random or genomic sequence does not. Measured on
+//     the first bc_len bases of the barcode segment, only for bc_len >= 8 (below that every 4^bc_len value recurs by chance);
+//   * linker: a fixed linker of at least 10 nt found at its offset in half of the reads;
+//   * whitelist excess: the share of barcode segments in the whitelist beyond what a random sequence would hit (a list of n barcodes of
+//     length L with one mismatch allowed catches about n(1+3L)/4^L of random reads), at least 0.3 of the remaining share.
+// Specs with none of these (CEL-seq2, MARS-seq, STRT-seq: 6-7 nt barcodes, no linker, no list) cannot be confirmed from reads and are
+// not routed; the gate names them in its rejection.
+struct RouteEvidence {
+    bool ok = false;
+    double bc_reuse = -1.0;     // share of probe reads whose barcode segment occurs on at least two reads; -1 when bc_len < 8
+    double linker_rate = -1.0;  // -1 when the spec has no linker of 10 nt or more
+    double wl_excess = -1.0;    // -1 when the spec has no whitelist or its barcode is shorter than 8 nt
+    double exact_len = 0.0;     // share of probe reads whose barcode read has exactly the spec's R1 length
+    std::string why;
+};
+
+constexpr double kRouteMinBarcodeReuse = 0.20;
+constexpr double kRouteMinLinkerRate = 0.50;
+constexpr double kRouteMinWlExcess = 0.30;
+
+template<typename SpotT>
+RouteEvidence route_evidence(const ProtocolCandidate& det, const std::vector<SpotT>& spots,
+                             const std::vector<std::string>& whitelist_dirs) {
+    RouteEvidence ev;
+    const CandidateSpec* spec = find_protocol_spec(det.tag);
+    if (!spec) { ev.why = "no protocol spec"; return ev; }
+    const bool use_r2 = det.reads_swapped || spec->barcode_in_r2;
+    const uint32_t n = static_cast<uint32_t>(std::min<size_t>(5000, spots.size()));
+    auto seq = [&](uint32_t i) -> const uint8_t* { return use_r2 ? spots[i].r2_seq.data() : spots[i].r1_seq.data(); };
+    auto len = [&](uint32_t i) -> uint16_t { return use_r2 ? spots[i].r2_len : spots[i].r1_len; };
+    if (spec->bc_len >= 8 && spec->bc_len <= 32 && n > 0) {
+        std::unordered_map<uint64_t, uint32_t> seen;
+        uint32_t valid = 0;
+        for (uint32_t i = 0; i < n; ++i) {
+            if (len(i) < spec->bc_offset + spec->bc_len) continue;
+            uint64_t h = 0;
+            bool has_n = false;
+            for (uint16_t j = 0; j < spec->bc_len; ++j) {
+                const uint8_t b = seq(i)[spec->bc_offset + j];
+                if (b > 3) { has_n = true; break; }
+                h = (h << 2) | b;
+            }
+            if (has_n) continue;
+            ++seen[h];
+            ++valid;
+        }
+        uint32_t reused = 0;
+        for (const auto& kv : seen) if (kv.second >= 2) reused += kv.second;
+        ev.bc_reuse = valid ? static_cast<double>(reused) / valid : 0.0;
+    }
+    if (spec->linker.size() >= 10 && n > 0) {
+        std::vector<const uint8_t*> ptrs(n);
+        std::vector<uint16_t> lens(n);
+        for (uint32_t i = 0; i < n; ++i) { ptrs[i] = seq(i); lens[i] = len(i); }
+        ev.linker_rate = linker_match_rate(spec->linker, spec->linker_offset, ptrs.data(), lens.data(), n);
+    }
+    if (!spec->whitelist_file.empty() && spec->bc_len >= 8 && det.wl_match_rate >= 0.0) {
+        size_t wl_size = 0;
+        for (const auto& d : whitelist_dirs) {
+            wl_size = load_whitelist_hashes(d + "/" + spec->whitelist_file, spec->bc_len).size();
+            if (wl_size) break;
+        }
+        if (wl_size) {
+            // one-mismatch matching below 100,000 entries (as detect_protocol), exact above
+            const double space = std::pow(4.0, spec->bc_len);
+            const double chance = std::min(1.0, wl_size * (wl_size >= 100000 ? 1.0 : 1.0 + 3.0 * spec->bc_len) / space);
+            ev.wl_excess = chance >= 1.0 ? 0.0 : std::max(0.0, (det.wl_match_rate - chance) / (1.0 - chance));
+        }
+    }
+    {
+        uint32_t exact = 0;
+        for (uint32_t i = 0; i < n; ++i) if (len(i) == spec->r1_len) ++exact;
+        ev.exact_len = n ? static_cast<double>(exact) / n : 0.0;
+    }
+    ev.ok = (ev.bc_reuse >= kRouteMinBarcodeReuse) || (ev.linker_rate >= kRouteMinLinkerRate) || (ev.wl_excess >= kRouteMinWlExcess);
+    // A spec with neither linker nor whitelist rests on read length and barcode reuse alone: the length must be the spec's own.
+    if (ev.ok && spec->linker.empty() && spec->whitelist_file.empty() && ev.exact_len < 0.9) {
+        ev.ok = false;
+        ev.why = "no linker or whitelist to confirm " + spec->tag + " and only " + std::to_string(static_cast<int>(ev.exact_len * 100)) +
+                 "% of barcode reads have its length of " + std::to_string(spec->r1_len) + " nt";
+        return ev;
+    }
+    if (!ev.ok) {
+        char buf[200];
+        std::snprintf(buf, sizeof buf, "barcode reuse %.2f (needs %.2f), linker %.2f (needs %.2f), whitelist excess %.2f (needs %.2f); -1 means not measurable for %s",
+                      ev.bc_reuse, kRouteMinBarcodeReuse, ev.linker_rate, kRouteMinLinkerRate, ev.wl_excess, kRouteMinWlExcess, spec->tag.c_str());
+        ev.why = buf;
+    }
+    return ev;
+}
+
 // Error text if an auto-detected protocol fails the whitelist floor, "" otherwise. Not applied to a forced/manual protocol, to protocols
 // without a whitelist, or to short barcodes (bc_len < 14: chance hits).
 // Whitelist directories of a command, in the order singlet download and singlet encode both use: the --whitelist-dir values when given,

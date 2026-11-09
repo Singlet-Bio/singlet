@@ -164,7 +164,8 @@ static bool mkdir_p(const std::string& path) {
 // ════════════════════════════════════════════════════════════
 
 static int pre_gate(const std::string& sra_path,
-                    const std::vector<std::string>& whitelist_dirs) {
+                    const std::vector<std::string>& whitelist_dirs,
+                    bool reject_non10x = false) {
 
     // ── In-scope 10x protocol tags (auto-detect PASS targets) ──
     // Any of these tags returned by detect_protocol() at MEDIUM+ confidence
@@ -347,9 +348,27 @@ static int pre_gate(const std::string& sra_path,
         std::string reason;
 
         if (detected.confidence >= singlet::fq::Confidence::MEDIUM) {
-            // MEDIUM or HIGH confidence non-10x → REJECT
+            // MEDIUM or HIGH confidence non-10x → ROUTE when the reads confirm the spec, else REJECT
             reject = true;
             reason = "non10x_protocol_detected_medium_conf";
+            if (!reject_non10x) {
+                const auto ev = singlet::fq::route_evidence(detected, gate_spots, whitelist_dirs);
+                if (ev.ok) {
+                    std::cerr << "[singlet-gate] ROUTE " << sra_path
+                              << " tag=" << detected.tag
+                              << " confidence=" << static_cast<int>(detected.confidence)
+                              << " wl_match_rate=" << detected.wl_match_rate
+                              << " bc_reuse=" << ev.bc_reuse << " linker_rate=" << ev.linker_rate << " wl_excess=" << ev.wl_excess
+                              << " exact_len=" << ev.exact_len
+                              << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp"
+                              << " gate_s=" << gate_s << " — runs under its own spec
+";
+                    return 0;
+                }
+                reason = "non10x_route_evidence_missing";
+                std::cerr << "[singlet-gate] evidence for " << detected.tag << ": " << ev.why << "
+";
+            }
         } else if (detected.confidence == singlet::fq::Confidence::LOW
                    && detected.wl_match_rate < 0.01
                    && !either_read_in_10x_range) {
@@ -475,6 +494,7 @@ static int cmd_download(int argc, char* argv[]) {
     std::string sra_input;    // .sra path or SRR accession
     std::string output_path;
     std::string protocol_tag;
+    bool reject_non10x = false;   // --reject-non10x: the gate rejects every non-10x call instead of routing it
     std::string qual_str  = "binned";   // ILLUMINA4: STAR's adapter clip and the SNP / mtDNA callers use it
     std::string codec_str = "zstd";
     int    codec_level = 4;
@@ -552,6 +572,8 @@ static int cmd_download(int argc, char* argv[]) {
             output_path = argv[++i];
         else if (arg == "--protocol" && i+1 < argc)
             protocol_tag = argv[++i];
+        else if (arg == "--reject-non10x")
+            reject_non10x = true;
         else if (arg == "--quality" && i+1 < argc)
             qual_str = argv[++i];
         else if (arg == "--codec" && i+1 < argc)
@@ -810,7 +832,7 @@ static int cmd_download(int argc, char* argv[]) {
     // SAFETY: UNCERTAIN → pass through; only REJECT on confirmed non-10x.
     // Exit code 2 maps to .rejected in run_one.sbatch (DL_EXIT!=0 path).
     if (protocol_tag.empty()) {
-        int gate_result = pre_gate(sra_input, whitelist_dirs);
+        int gate_result = pre_gate(sra_input, whitelist_dirs, reject_non10x);
         if (gate_result != 0) return gate_result;
     }
 
