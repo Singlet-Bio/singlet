@@ -177,6 +177,58 @@ __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, co
         }
     }
 }
+// the same keys from the compact hit array of the streamed index (hs[lo + t] is the species id of the t-th entry of the run, in file order)
+__global__ void k_write_hs(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* lo, const uint32_t* len, const uint32_t* hs,
+                           uint32_t n, const uint64_t* hoff, uint64_t* keys, uint32_t* vals) {
+    for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += gridDim.x * blockDim.x) {
+        if (!np[i] || hoff[i + 1] == hoff[i]) continue;
+        uint64_t pos = hoff[i];
+        const uint64_t q0 = qoff[i], q1 = q0 + np[i], rd = (uint64_t)i << 33;
+        for (uint64_t q = q0; q < q1; ++q)
+            for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | hs[lo[q] + t]; vals[pos] = (uint32_t)pos; }
+        for (uint64_t q = q0; q < q1; ++q) {
+            for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | hs[lo[Q + q] + t]; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | hs[lo[2 * Q + q] + t]; vals[pos] = (uint32_t)pos; }
+        }
+    }
+}
+// ---- streamed index (slot-memory): the index is read in slabs of whole hash runs, and each slab answers the queries whose hash falls in it.
+// What the resident path's probe finds (a run of equal hashes, in file order) is copied to a compact array, so the device holds one slab and
+// the hits instead of the 25 GB index and its directory.
+__global__ void k_iota(uint32_t* v, uint64_t n) { for (uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; i < n; i += (uint64_t)gridDim.x * blockDim.x) v[i] = (uint32_t)i; }
+__global__ void k_unsorted(const Entry* e, uint64_t cnt, unsigned long long* bad) {
+    for (uint64_t i = 1 + blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; i < cnt; i += (uint64_t)gridDim.x * blockDim.x)
+        if (e[i].h < e[i - 1].h) atomicAdd(bad, 1ULL);
+}
+// queries sorted ascending in sk[0, Q): out[0] = first index with sk >= lo, out[1] = first index with sk > hi
+__global__ void k_range(const uint64_t* sk, uint64_t Q, uint64_t lo, uint64_t hi, uint64_t* out) {
+    if (threadIdx.x > 1) return;
+    uint64_t a = 0, b = Q;
+    if (threadIdx.x == 0) { while (a < b) { const uint64_t m = (a + b) >> 1; if (sk[m] < lo) a = m + 1; else b = m; } }
+    else { while (a < b) { const uint64_t m = (a + b) >> 1; if (sk[m] <= hi) a = m + 1; else b = m; } }
+    out[threadIdx.x] = a;
+}
+// per query of the slab's range: the run [loc, loc + len) of its hash among the slab's entries
+__global__ void k_probe_slab(const uint64_t* sk, uint64_t qa, uint64_t m, const Entry* e, uint32_t cnt, uint32_t* loc, uint64_t* len64) {
+    for (uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; i < m; i += (uint64_t)gridDim.x * blockDim.x) {
+        const uint64_t h = sk[qa + i];
+        uint32_t a = 0, b = cnt;
+        while (a < b) { const uint32_t mid = a + ((b - a) >> 1); if (e[mid].h < h) a = mid + 1; else b = mid; }
+        uint32_t j = a;
+        while (j < cnt && e[j].h == h) ++j;
+        loc[i] = a; len64[i] = j - a;
+    }
+}
+// copy the runs' species ids to hs at hbase + off64[i] and publish (lo, len) of each query, by the query's own index
+__global__ void k_hits(const uint32_t* sv, uint64_t qa, uint64_t m, const Entry* e, const uint32_t* loc, const uint64_t* len64, const uint64_t* off64,
+                       uint64_t hbase, uint32_t kind, uint64_t Q, uint32_t* hs, uint32_t* lo, uint32_t* len) {
+    for (uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; i < m; i += (uint64_t)gridDim.x * blockDim.x) {
+        const uint64_t l = len64[i], o = hbase + off64[i];
+        const uint32_t q = sv[qa + i];
+        lo[kind * Q + q] = (uint32_t)o; len[kind * Q + q] = (uint32_t)l;
+        for (uint64_t t = 0; t < l; ++t) hs[o + t] = e[loc[i] + t].sid;
+    }
+}
 // after sort 1 (by key, stable) every (read, map, species) group is contiguous; first occurrence = min original position
 __global__ void k_first(const uint32_t* vals, const uint32_t* starts, const uint32_t* counts, uint32_t G, uint32_t* first, uint32_t* gid) {
     for (uint32_t g = blockIdx.x * blockDim.x + threadIdx.x; g < G; g += gridDim.x * blockDim.x) {
@@ -303,8 +355,142 @@ unsigned ceil_log2(uint64_t v) { unsigned b = 0; while ((1ull << b) < v) ++b; re
 // what the classification reads on the device: the three indexes and the Bloom filter
 struct DevSet { Index vi, bi, fi; uint64_t* bloom = nullptr; uint64_t nbits = 0; };
 
+// The index streamed through the device (slot-memory). SINGLET_NONHOST_STREAM=0 keeps the resident path (the whole index on the device).
+struct StreamSrc {
+    const NonhostPaths* paths = nullptr; int device = 0; int threads = 4;
+    double sec = 0;            // reading and probing the index (all slabs)
+    uint64_t bytes = 0, slabs = 0, peakSlab = 0;
+};
+// `total` bytes of a file from `base` into host memory, by `threads` readers over 32 MB pieces
+void read_range(const std::string& path, off_t base, uint64_t total, char* dst, int threads) {
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) throw "cannot open " + path;
+    const uint64_t piece = 32ull << 20, np = (total + piece - 1) / piece;
+    std::atomic<uint64_t> next(0);
+    std::atomic<bool> bad(false);
+    std::vector<std::thread> th;
+    for (int t = 0; t < std::max(1, std::min<int>(threads, (int)np)); ++t) th.emplace_back([&]() {
+        for (uint64_t c; !bad && (c = next++) < np;) {
+            const uint64_t off = c * piece, sz = std::min(piece, total - off);
+            try { pread_full(fd, dst + off, sz, base + (off_t)off, path); } catch (const std::string&) { bad = true; }
+        }
+    });
+    for (auto& x : th) x.join();
+    close(fd);
+    if (bad) throw "read failed: " + path;
+}
+// Probe the three indexes with the minimizers d_flat[0, Q), slab by slab. Writes lo / len as k_probe does, except that lo indexes the compact
+// species-id array *hs (H3 ids, in the order the resident path's k_write reads them: per run, the file order).
+void probe_stream(StreamSrc& S, const uint64_t* d_flat, uint64_t Q, Arena& A, uint32_t* d_lo, uint32_t* d_len, uint32_t*& hs, uint64_t& H3) {
+    const double t0 = now();
+    H3 = 0;
+    hs = nullptr;
+    if (Q > 0) { NH_CK(cudaMemset(d_lo, 0, Q * 12)); NH_CK(cudaMemset(d_len, 0, Q * 12)); }
+    if (Q == 0) return;
+    if (Q >= 0xffffffffull) throw std::string("too many minimizers for the streamed index");
+    // the queries in ascending hash order, each with its flat index
+    cub::DoubleBuffer<uint64_t> sk((uint64_t*)A.dev(Q * 8), (uint64_t*)A.dev(Q * 8));
+    cub::DoubleBuffer<uint32_t> sv((uint32_t*)A.dev(Q * 4), (uint32_t*)A.dev(Q * 4));
+    NH_CK(cudaMemcpy(sk.Current(), d_flat, Q * 8, cudaMemcpyDeviceToDevice));
+    k_iota<<<(int)std::min<uint64_t>((Q + 255) / 256, 1u << 20), 256>>>(sv.Current(), Q);
+    NH_CK(cudaGetLastError());
+    {
+        size_t tb = 0;
+        NH_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, sk, sv, (int)Q, 0, 64));
+        NH_CK(cub::DeviceRadixSort::SortPairs(A.dev(tb), tb, sk, sv, (int)Q, 0, 64));
+    }
+    const uint64_t* d_sk = sk.Current();
+    const uint32_t* d_sv = sv.Current();
+    uint32_t* d_loc = (uint32_t*)A.dev(Q * 4);
+    uint64_t* d_len64 = (uint64_t*)A.dev(Q * 8);
+    uint64_t* d_off64 = (uint64_t*)A.dev(Q * 8);
+    size_t tbScan = 0;
+    NH_CK(cub::DeviceScan::ExclusiveSum(nullptr, tbScan, d_len64, d_off64, (int)Q));
+    void* d_scan = A.dev(tbScan);
+    uint64_t* d_rng = (uint64_t*)A.dev(16);
+    unsigned long long* d_bad = (unsigned long long*)A.dev(8);
+    NH_CK(cudaMemset(d_bad, 0, 8));
+    uint64_t hsCap = 1ull << 24;   // ids; doubled when a slab's hits do not fit
+    hs = (uint32_t*)A.dev(hsCap * 4);
+    uint64_t slabE = 16ull << 20;  // entries per slab (256 MB); SINGLET_NONHOST_SLAB_MB
+    if (const char* e = std::getenv("SINGLET_NONHOST_SLAB_MB")) slabE = std::max<uint64_t>(1, (uint64_t)std::atoll(e) << 20) / sizeof(Entry);
+    const uint64_t extE = std::min<uint64_t>(1ull << 20, slabE);   // reach for the end of the last hash run in a slab
+    Entry* d_slab = (Entry*)A.dev((slabE + extE) * sizeof(Entry));
+    char* hbuf[2] = {(char*)A.pinned((slabE + extE) * sizeof(Entry)), (char*)A.pinned((slabE + extE) * sizeof(Entry))};
+    const std::string* paths[3] = {&S.paths->viral, &S.paths->bacterial, &S.paths->fungal};
+    for (uint32_t kind = 0; kind < 3; ++kind) {
+        if (paths[kind]->empty()) continue;
+        uint32_t Bd = 0;
+        const uint64_t n = index_header(*paths[kind], Bd);
+        if (n == 0) continue;
+        S.bytes += n * sizeof(Entry);
+        auto readSlab = [&](uint64_t start, int b) -> uint64_t {
+            const uint64_t cnt = std::min<uint64_t>(slabE + extE, n - start);
+            read_range(*paths[kind], 32 + (off_t)(start * sizeof(Entry)), cnt * sizeof(Entry), hbuf[b], S.threads);
+            return cnt;
+        };
+        uint64_t s0 = 0, got = readSlab(0, 0), prevLast = 0;
+        int cur = 0;
+        while (s0 < n) {
+            const Entry* he = (const Entry*)hbuf[cur];
+            uint64_t cnt = got;
+            if (s0 + got < n) {   // not the end of the file: cut the slab after a whole run of equal hashes
+                cnt = slabE;
+                while (cnt < got && he[cnt].h == he[cnt - 1].h) ++cnt;
+                if (cnt >= got) throw std::string("a run of equal hashes longer than the slab's reach in ") + *paths[kind];
+            }
+            if (s0 > 0 && he[0].h < prevLast) throw "index not sorted by hash: " + *paths[kind];
+            prevLast = he[cnt - 1].h;
+            const uint64_t next = s0 + cnt;
+            std::string pfErr;
+            uint64_t pfGot = 0;
+            std::thread pf;
+            if (next < n) pf = std::thread([&]() { try { pfGot = readSlab(next, 1 - cur); } catch (const std::string& e) { pfErr = e; } });
+            struct Join { std::thread& t; ~Join() { if (t.joinable()) t.join(); } } joiner{pf};
+            NH_CK(cudaMemcpy(d_slab, he, cnt * sizeof(Entry), cudaMemcpyHostToDevice));
+            k_unsorted<<<1024, 256>>>(d_slab, cnt, d_bad);
+            k_range<<<1, 2>>>(d_sk, Q, he[0].h, prevLast, d_rng);
+            NH_CK(cudaGetLastError());
+            uint64_t rng[2];
+            NH_CK(cudaMemcpy(rng, d_rng, 16, cudaMemcpyDeviceToHost));
+            const uint64_t qa = rng[0], m = rng[1] > rng[0] ? rng[1] - rng[0] : 0;
+            if (m) {
+                const int blk = 256, grd = (int)std::min<uint64_t>((m + blk - 1) / blk, 1u << 20);
+                k_probe_slab<<<grd, blk>>>(d_sk, qa, m, d_slab, (uint32_t)cnt, d_loc, d_len64);
+                NH_CK(cudaGetLastError());
+                NH_CK(cub::DeviceScan::ExclusiveSum(d_scan, tbScan, d_len64, d_off64, (int)m));
+                uint64_t lastOff = 0, lastLen = 0;
+                NH_CK(cudaMemcpy(&lastOff, d_off64 + m - 1, 8, cudaMemcpyDeviceToHost));
+                NH_CK(cudaMemcpy(&lastLen, d_len64 + m - 1, 8, cudaMemcpyDeviceToHost));
+                const uint64_t tot = lastOff + lastLen;
+                if (H3 + tot >= (1ull << 31)) throw std::string("more than 2^31 index hits in one sample");
+                if (H3 + tot > hsCap) {
+                    uint64_t nc = hsCap;
+                    while (nc < H3 + tot) nc *= 2;
+                    uint32_t* nh = (uint32_t*)A.dev(nc * 4);
+                    if (H3) NH_CK(cudaMemcpy(nh, hs, H3 * 4, cudaMemcpyDeviceToDevice));
+                    hs = nh; hsCap = nc;
+                }
+                k_hits<<<grd, blk>>>(d_sv, qa, m, d_slab, d_loc, d_len64, d_off64, H3, kind, Q, hs, d_lo, d_len);
+                NH_CK(cudaGetLastError());
+                H3 += tot;
+            }
+            NH_CK(cudaDeviceSynchronize());
+            if (pf.joinable()) pf.join();
+            if (!pfErr.empty()) throw pfErr;
+            S.slabs++;
+            S.peakSlab = std::max(S.peakSlab, cnt * (uint64_t)sizeof(Entry));
+            got = pfGot; cur = 1 - cur; s0 = next;
+        }
+    }
+    unsigned long long bad = 0;
+    NH_CK(cudaMemcpy(&bad, d_bad, 8, cudaMemcpyDeviceToHost));
+    if (bad) throw std::string("index not sorted by hash (streamed)");
+    S.sec += now() - t0;
+}
+
 // Phases A-C for n reads whose bases are h_seq[h_off[i] .. h_off[i+1]) in page-locked host memory (n > 0)
-void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64_t bytes, const DevSet& X, Arena& A, NonhostResult& out) {
+void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64_t bytes, const DevSet& X, Arena& A, NonhostResult& out, StreamSrc* S = nullptr) {
     out.np.assign(n, 0);
     char* d_seq = (char*)A.dev(bytes);
     uint64_t* d_off = (uint64_t*)A.dev((n + 1) * 8ull);
@@ -333,7 +519,10 @@ void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64
     NH_CK(cudaGetLastError());
     // ---- probe the three indexes
     uint32_t* d_lo = (uint32_t*)A.dev(Q * 12), *d_len = (uint32_t*)A.dev(Q * 12);
-    if (Q) k_probe<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22), blk>>>(d_flat, Q, dv, db, df, d_lo, d_len);
+    uint32_t* d_hs = nullptr;
+    uint64_t H3 = 0;
+    if (S) probe_stream(*S, d_flat, Q, A, d_lo, d_len, d_hs, H3);
+    else if (Q) k_probe<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22), blk>>>(d_flat, Q, dv, db, df, d_lo, d_len);
     NH_CK(cudaGetLastError());
     uint64_t* d_tot = (uint64_t*)A.dev((n + 1) * 8ull);
     uint64_t* d_hoff = (uint64_t*)A.dev((n + 1) * 8ull);
@@ -349,7 +538,8 @@ void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64
     if (H) {
         cub::DoubleBuffer<uint64_t> keys((uint64_t*)A.dev(H * 8), (uint64_t*)A.dev(H * 8));
         cub::DoubleBuffer<uint32_t> vals((uint32_t*)A.dev(H * 4), (uint32_t*)A.dev(H * 4));
-        k_write<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, dv, db, df, n, d_hoff, keys.Current(), vals.Current());
+        if (S) k_write_hs<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, d_hs, n, d_hoff, keys.Current(), vals.Current());
+        else k_write<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, dv, db, df, n, d_hoff, keys.Current(), vals.Current());
         NH_CK(cudaGetLastError());
         size_t tb = 0;
         NH_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, keys, vals, (int)H, 0, 64));
@@ -580,17 +770,10 @@ bool nonhostRemote(const char* sock, const std::vector<std::string>& reads, cons
 
 namespace singlet_engine_gpu {
 
-static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
-    ::singlet::gpu_ledger::Phase ledger_phase("nonhost");
+// stream: the index passes through a slab on the device (a few GB in all); else the three indexes and their directories are resident on it (30 GB)
+static bool nonhostLocal(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out, bool stream) {
     singlet::NvtxChain nvch; nvch.next("nonhost: context + index");
     out = NonhostResult();
-    if (const char* sock = std::getenv("SINGLET_NONHOST_SERVER"); sock != nullptr && *sock && !reads.empty()
-        && reads.size() < (1ull << 31)) {   // E21: the gpu-pool's resident index
-        std::string why;
-        if (nonhostRemote(sock, reads, paths, device, out, why)) return true;
-        fprintf(stderr, "[nonhost] engine_gpu: gpu-pool's non-host server not used (%s); the index is loaded here\n", why.c_str());
-        out = NonhostResult();
-    }
     const double t0 = now();
     try {
         if (reads.size() >= (1ull << 31)) throw std::string("too many reads for this version");
@@ -599,9 +782,11 @@ static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const Non
         Arena A;
         // ---- the resident index (viral, bacterial, fungal) and the host Bloom filter
         DevSet X;
-        if (!paths.viral.empty()) load_index(paths.viral, X.vi, A, device, loadThreads);
-        if (!paths.bacterial.empty()) load_index(paths.bacterial, X.bi, A, device, loadThreads);
-        if (!paths.fungal.empty()) load_index(paths.fungal, X.fi, A, device, loadThreads);
+        if (!stream) {
+            if (!paths.viral.empty()) load_index(paths.viral, X.vi, A, device, loadThreads);
+            if (!paths.bacterial.empty()) load_index(paths.bacterial, X.bi, A, device, loadThreads);
+            if (!paths.fungal.empty()) load_index(paths.fungal, X.fi, A, device, loadThreads);
+        }
         {
             X.nbits = bloom_header(paths.bloom);
             const uint64_t nw = (X.nbits + 63) / 64;
@@ -611,6 +796,7 @@ static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const Non
         out.secLoad = now() - t0;
         out.indexBytes = (X.vi.n + X.bi.n + X.fi.n) * sizeof(Entry);
         const double t1 = now();
+        StreamSrc SS; SS.paths = &paths; SS.device = device; SS.threads = loadThreads;
         nvch.next("nonhost: classify");
         // ---- reads to the device
         const uint32_t n = (uint32_t)reads.size();
@@ -622,8 +808,9 @@ static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const Non
         uint64_t* h_off = (uint64_t*)A.pinned((n + 1) * 8ull);
         h_off[0] = 0;
         for (uint32_t i = 0; i < n; ++i) { memcpy(h_seq + h_off[i], reads[i].data(), reads[i].size()); h_off[i + 1] = h_off[i] + reads[i].size(); }
-        classify_reads(h_seq, h_off, n, bytes, X, A, out);
-        out.secClassify = now() - t1;
+        classify_reads(h_seq, h_off, n, bytes, X, A, out, stream ? &SS : nullptr);
+        if (stream) { out.indexBytes = SS.bytes; out.secLoad += SS.sec; out.secClassify = now() - t1 - SS.sec; }
+        else out.secClassify = now() - t1;
         A.release();
     } catch (const std::string& e) {
         out.log = "engine_gpu nonhost: " + e;
@@ -631,7 +818,35 @@ static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const Non
         cudaDeviceReset();
         return false;
     }
-    cudaDeviceReset();   // release the context and the 30 GB before the next sample's process may take the device
+    cudaDeviceReset();   // release the context and the device memory before the next sample's process may take the device
+    return true;
+}
+
+static bool nonhostClassifyOnce(const std::vector<std::string>& reads, const NonhostPaths& paths, int device, int loadThreads, NonhostResult& out) {
+    ::singlet::gpu_ledger::Phase ledger_phase("nonhost");
+    out = NonhostResult();
+    if (const char* sock = std::getenv("SINGLET_NONHOST_SERVER"); sock != nullptr && *sock && !reads.empty()
+        && reads.size() < (1ull << 31)) {   // E21: the gpu-pool's resident index
+        std::string why;
+        if (nonhostRemote(sock, reads, paths, device, out, why)) return true;
+        fprintf(stderr, "[nonhost] engine_gpu: gpu-pool's non-host server not used (%s); the index is loaded here\n", why.c_str());
+        out = NonhostResult();
+    }
+    // slot-memory: the index is streamed through the device by default (SINGLET_NONHOST_STREAM=0: all of it resident, as before)
+    const char* se = std::getenv("SINGLET_NONHOST_STREAM");
+    const bool stream = !(se != nullptr && se[0] == '0');
+    if (!nonhostLocal(reads, paths, device, loadThreads, out, stream)) return false;
+    // SINGLET_NONHOST_STREAM_CHECK=1: the resident path as well, on the same reads, and the three result arrays compared
+    const char* ck = std::getenv("SINGLET_NONHOST_STREAM_CHECK");
+    if (stream && ck != nullptr && ck[0] == '1') {
+        NonhostResult ref;
+        if (!nonhostLocal(reads, paths, device, loadThreads, ref, false)) { fprintf(stderr, "[nonhost] engine_gpu: stream check: the resident path failed (%s)\n", ref.log.c_str()); return true; }
+        const bool same = ref.np == out.np && ref.key == out.key && ref.cnt == out.cnt && ref.nMinimizers == out.nMinimizers && ref.nHits == out.nHits && ref.nGroups == out.nGroups;
+        fprintf(stderr, "[nonhost] engine_gpu: stream check: %s (%zu reads, %llu minimizers, %llu hits, %llu groups; streamed: load+probe %.2f s, classify %.2f s; resident: load %.2f s, classify %.2f s)\n",
+                same ? "IDENTICAL" : "DIFFERENT", out.np.size(), (unsigned long long)out.nMinimizers, (unsigned long long)out.nHits, (unsigned long long)out.nGroups,
+                out.secLoad, out.secClassify, ref.secLoad, ref.secClassify);
+        if (!same) { out.log = "engine_gpu nonhost: the streamed result differs from the resident one"; return false; }
+    }
     return true;
 }
 
