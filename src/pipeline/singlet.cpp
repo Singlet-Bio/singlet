@@ -3106,6 +3106,8 @@ static void usage(const char* prog) {
         << "  --chimeric-recurrent F Recurrent gene pairs flagged in the table's filter column (default <ref-base>/pileup_indices/\n"
         << "                         fusion/chimeric_recurrent_GRCh38.tsv on GRCh38, when present; 'none' = no flags)\n"
         << "  --chimeric-noncanonical  Keep non-canonical-motif junctions in the chimeric table (default: GT/AG only)\n"
+        << "  --te-gtf FILE          TE annotation (TEtranscripts rmsk GTF): te_counts, te_locus_counts, te_loci.tsv.gz\n"
+        << "  --no-te                In --pipeline mode, skip the default TE annotation (<ref-base>/pileup_indices/te)\n"
         << "  --no-cr4               Do not use the Beta aligner profile (CellRanger4 clipping, junction guard, mismatch cap)\n"
         << "  --cr4-probe-reads N    Reads for the CR4 vs no-CR4 unique-mapping probe (default 200000; 0 = skip the probe, no CR4)\n"
         << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n"
@@ -3533,6 +3535,8 @@ static int singlet_main(int argc, char* argv[]) {
     bool hla_explicit = false;           // --hla, --no-hla or --hla-defer was given
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     bool no_allsite = false;             // --no-allsite: no private/allsite/ member (D-101) in --pipeline mode
+    bool no_default_te = false;          // --no-te: no TE counts in --pipeline mode
+    std::string te_source = "none";      // "user" (--te-gtf), "default" (--pipeline), "none" (provenance)
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
     // Track B cascade (T-L2-7 CLI flags)
@@ -3567,6 +3571,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
         else if (arg == "--hla-defer") { hla_defer = true; no_hla = false; hla_explicit = true; }
+        else if (arg == "--no-te") no_default_te = true;
+        else if (arg == "--te-gtf" && i+1 < argc) { config.te_gtf_path = argv[++i]; te_source = "user"; }
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -4389,6 +4395,28 @@ static int singlet_main(int argc, char* argv[]) {
                 std::cerr << "[singlet] Default RNA editing panel (--pipeline): " << cand << "\n";
             } else {
                 std::cerr << "[singlet] default RNA editing panel not found: " << cand << " (no editing output)\n";
+            }
+        }
+    }
+    // Default TE annotation in --pipeline mode (Beta freeze, D-101: TE counts need the reads). TEtranscripts rmsk GTFs (Tam and Hammell,
+    // Zenodo 18927862) under <ref_base>/pileup_indices/te/. Human and mouse only; the barnyard and other species get none.
+    if (pipeline_mode && config.te_gtf_path.empty() && !no_default_te && !genome_dir.empty()) {
+        std::string rb = ref_base;
+        if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+        const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+        const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
+        std::string te;
+        if (human && !mouse) te = "GRCh38_GENCODE_rmsk_TE.gtf.gz";
+        else if (mouse && !human) te = "GRCm39_GENCODE_rmsk_TE.gtf.gz";
+        if (!rb.empty() && !te.empty()) {
+            const std::string cand = rb + "/pileup_indices/te/" + te;
+            struct stat sst{};
+            if (stat(cand.c_str(), &sst) == 0) {
+                config.te_gtf_path = cand;
+                te_source = "default";
+                std::cerr << "[singlet] Default TE annotation (--pipeline): " << cand << "\n";
+            } else {
+                std::cerr << "[singlet] WARNING: default TE annotation not found: " << cand << " (no TE counts)\n";
             }
         }
     }
@@ -10586,6 +10614,7 @@ static int singlet_main(int argc, char* argv[]) {
             rp.extra.emplace_back("editing_panel", "{\"source\": \"" + edit_panel_source + "\", \"path\": " +
                                                        singlet::json_str(config.edit_path) + ", \"manifest\": " + pj + "}");
         }
+        rp.extra.emplace_back("te_annotation", "{\"source\": \"" + te_source + "\", \"path\": " + singlet::json_str(config.te_gtf_path) + "}");
         rp.extra.emplace_back("bam_sort_mode", singlet::json_str(bam_sort_mode));
         outputs_inv = singlet::outputs_inventory_json(out_prefix);
         rp.extra.emplace_back("outputs", outputs_inv);
