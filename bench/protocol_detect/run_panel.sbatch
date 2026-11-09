@@ -16,7 +16,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; PY=$W/envs/bpub/bin/python3
 export SINGLET_WHITELIST_DIR=${WLDIR:-$W/pipeline-benchmark/whitelists}
 EXCLUDE=${EXCLUDE:-$W/jobs/detect/heldout_exclude.txt}
 O=$W/jobs/detect/panel-$SLURM_JOB_ID; mkdir -p $O/logs; SCR=/tmp/$USER-detp-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
-cp $SRC/panel_design.tsv $O/panel.tsv; echo -e "id	r1_len	r2_len	r1_fixed	r2_fixed	r1_12mer_reuse	r2_12mer_reuse	r2_top100_15mer_share" > $O/geometry.tsv
+cp $SRC/panel_design.tsv $O/panel.tsv; echo -e "id	r1_len	r2_len	r1_fixed	r2_fixed	r1_12mer_reuse	r2_12mer_reuse	r2_top100_15mer_share	r1_adapters	r2_adapters" > $O/geometry.tsv
 if [ "${CORPUS:-1}" = 1 ]; then
   $PY $SRC/panel_pick.py $W/data/corpus-beta/out $EXCLUDE $O/panel_corpus.tsv && tail -n +2 $O/panel_corpus.tsv >> $O/panel.tsv
 fi

@@ -29,6 +29,7 @@ def parse(log):
     a = re.findall(r"\[1fq-encode\] Assay: ([a-z0-9-]+)", t)
     wl = re.findall(r"whitelist validation: \d+/\d+ match \((\d+)", t)
     reason = re.findall(r"reason=([a-z0-9_]+)", t)
+    named = re.findall(r"reason=(unsupported_assay_[a-z0-9_]+)", t)
     return dict(gate=g[-1][0] if g else "-", gate_tag=g[-1][1] if g else "-", proto=p[-1][0] if p else "-", conf=p[-1][1] if p else (g[-1][2] if g else "-"),
                 assay=a[-1] if a else "-", wl=wl[-1] if wl else "-", reason=named[-1] if named else (reason[-1] if reason else "-"), incomplete="data_incomplete" in t)
 
@@ -59,6 +60,9 @@ def main(d):
             rows.append(parts + ["-"] * (13 - len(parts)))
             continue
         id_, group, truth, run, bn, rc, lens = parts[:7]
+        if rc == "no-reads" or not os.path.exists(f"{d}/logs/{id_}.{bn}.log"):
+            rows.append([id_, group, truth, run, bn, rc, lens] + ["-"] * 6 + ["no-reads"])
+            continue
         c = parse(f"{d}/logs/{id_}.{bn}.log")
         rows.append([id_, group, truth, run, bn, rc, lens, c["gate"], c["gate_tag"], c["proto"], c["conf"], c["assay"], c["wl"], call_class(c)])
     hdr = ["id", "group", "truth", "run", "binary", "exit", "r1/r2", "gate", "gate_tag", "protocol", "conf", "assay", "wl_pct", "call"]

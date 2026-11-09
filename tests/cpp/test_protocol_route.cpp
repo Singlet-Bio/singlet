@@ -100,6 +100,31 @@ int main() {
         auto ev = route_evidence(called("bd-rhapsody"), make_spots(60, 9, 0, 3000, "ACTGGCCTGCGA", 9), no_dirs);
         CHECK(ev.ok && ev.linker_rate > 0.95 && ev.bc_reuse < 0.1, "BD Rhapsody linker at its offset confirms the call without barcode reuse");
     }
+    // assay type of reads with no barcode: overlapping pairs (short fragments) read as ATAC, long inserts as bulk or plate RNA
+    {
+        std::mt19937_64 rng(3);
+        auto pairs = [&](int frag, int read_len, int n) {
+            std::vector<Spot> v(static_cast<size_t>(n));
+            for (auto& sp : v) {
+                std::vector<uint8_t> f(static_cast<size_t>(frag));
+                for (auto& b : f) b = static_cast<uint8_t>(rng() % 4);
+                for (int i = 0; i < read_len; ++i) sp.r1_seq.push_back(i < frag ? f[static_cast<size_t>(i)] : static_cast<uint8_t>(rng() % 4));
+                for (int i = 0; i < read_len; ++i) {
+                    const int src = frag - 1 - i;   // reverse complement of the fragment
+                    sp.r2_seq.push_back(src >= 0 ? static_cast<uint8_t>(3 - f[static_cast<size_t>(src)]) : static_cast<uint8_t>(rng() % 4));
+                }
+                sp.r1_len = sp.r2_len = static_cast<uint16_t>(read_len);
+            }
+            return v;
+        };
+        using singlet::fq::AssayType;
+        using singlet::fq::classify_assay;
+        using singlet::fq::Confidence;
+        auto atac = pairs(70, 100, 1000);
+        CHECK(classify_assay(std::string(), Confidence::NONE, atac, 100, 100) == AssayType::SC_ATAC, "pairs from 70-nt fragments read as ATAC");
+        auto bulk = pairs(300, 100, 1000);
+        CHECK(classify_assay(std::string(), Confidence::NONE, bulk, 100, 100) != AssayType::SC_ATAC, "pairs from 300-nt fragments do not");
+    }
     std::fprintf(stderr, "[route] %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

@@ -62,10 +62,17 @@ def top100_share(seqs, k=15, off=0):
     return round(sum(v for _, v in c.most_common(100)) / len(ks), 3)
 
 
+ADAPTERS = {"nextera_rt": "CTGTCTCTTATA", "nextera_fwd": "AGATGTGTATAA", "truseq": "AGATCGGAAGAGC"}
+
+
+def adapter_rates(seqs):
+    return ";".join(f"{k}={sum(v in s for s in seqs) / max(1, len(seqs)):.3f}" for k, v in ADAPTERS.items())
+
+
 def main(id_, p1, p2):
     a, b = reads(p1), reads(p2)
     ml = lambda x: collections.Counter(len(s) for s in x).most_common(1)[0][0] if x else 0
-    print("\t".join(map(str, [id_, ml(a), ml(b), fixed_regions(a), fixed_regions(b), kmer_reuse(a), kmer_reuse(b), top100_share(b)])))
+    print("\t".join(map(str, [id_, ml(a), ml(b), fixed_regions(a), fixed_regions(b), kmer_reuse(a), kmer_reuse(b), top100_share(b), adapter_rates(a), adapter_rates(b)])))
 
 
 if __name__ == "__main__":

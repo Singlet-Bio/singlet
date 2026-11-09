@@ -1179,7 +1179,7 @@ struct RouteEvidence {
     double bc_reuse = -1.0;     // share of probe reads whose barcode segment occurs on at least two reads; -1 when bc_len < 8
     double linker_rate = -1.0;  // -1 when the spec has no linker of 10 nt or more
     double wl_excess = -1.0;    // -1 when the spec has no whitelist or its barcode is shorter than 8 nt
-    double exact_len = 0.0;     // share of probe reads whose barcode read has exactly the spec's R1 length
+    double exact_len = 0.0;     // share of probe reads whose barcode read is the spec's R1 length, or up to 4 nt longer
     double tail_polyt = 0.0;    // share of reads with a poly(T) or poly(A) run right after barcode and UMI (an R1 sequenced past them)
     std::string why;
 };
@@ -1228,7 +1228,7 @@ RouteEvidence route_evidence(const ProtocolCandidate& det, const std::vector<Spo
     if (!spec->whitelist_file.empty() && spec->bc_len >= 8 && det.wl_match_rate >= 0.0) ev.wl_excess = det.wl_match_rate;
     {
         uint32_t exact = 0;
-        for (uint32_t i = 0; i < n; ++i) if (len(i) == spec->r1_len) ++exact;
+        for (uint32_t i = 0; i < n; ++i) if (len(i) >= spec->r1_len && len(i) <= spec->r1_len + 4) ++exact;   // as detect_protocol's 1-4 nt over-sequenced band
         ev.exact_len = n ? static_cast<double>(exact) / n : 0.0;
         const uint16_t tail = static_cast<uint16_t>(spec->bc_offset + spec->bc_len + spec->umi_len);
         uint32_t tailed = 0, tested = 0;
@@ -1667,9 +1667,15 @@ struct AssaySignals {
     // Share of reads whose first 15 R2 bases are one of the 100 most common 15-mers (a feature-barcode read carries a tag from a panel of
     // a few dozen; a gene-expression or genomic read does not). -1 when R2 is shorter than 15 or there are too few reads.
     double tag_concentration = -1.0;
+    // Share of read pairs whose two reads overlap by at least 20 nt (R2 reverse-complemented matches R1 over the overlap, one mismatch
+    // allowed): the fragment is shorter than twice the read. Short-fragment libraries (ATAC, tagmentation of open chromatin, cfDNA) show
+    // tens of percent; RNA-seq and genomic libraries with inserts of 200 nt or more show a few. -1 when not computed.
+    double pair_overlap = -1.0;
+    // Smallest base fraction among C and G over both reads (bisulfite conversion empties C on the converted strand, G on its mate).
+    double min_cg_fraction = 1.0;
 
     static AssaySignals compute(const std::vector<SpotT>& probe_spots,
-                                uint16_t r1_len, uint16_t r2_len) {
+                                uint16_t r1_len, uint16_t r2_len, bool with_pair_stats = false) {
         AssaySignals sig;
         const uint32_t n = std::min<uint32_t>(5000,
             static_cast<uint32_t>(probe_spots.size()));
@@ -1767,6 +1773,38 @@ struct AssaySignals {
                 sig.tag_concentration = static_cast<double>(top) / tested;
             }
         }
+        if (with_pair_stats) {
+            uint64_t cnt[2][5] = {{0}};
+            uint32_t overlapped = 0, paired = 0;
+            for (uint32_t i = 0; i < n; ++i) {
+                const auto& sp = probe_spots[i];
+                for (uint16_t j = 0; j < sp.r1_len && j < sp.r1_seq.size(); ++j) cnt[0][std::min<uint8_t>(sp.r1_seq[j], 4)]++;
+                for (uint16_t j = 0; j < sp.r2_len && j < sp.r2_seq.size(); ++j) cnt[1][std::min<uint8_t>(sp.r2_seq[j], 4)]++;
+                if (sp.r1_len < 30 || sp.r2_len < 30 || sp.r1_seq.size() < sp.r1_len || sp.r2_seq.size() < sp.r2_len) continue;
+                ++paired;
+                // R2 reverse complement (A0 C1 G2 T3: complement is 3 - b)
+                std::vector<uint8_t> rc(sp.r2_len);
+                for (uint16_t j = 0; j < sp.r2_len; ++j) { const uint8_t b = sp.r2_seq[sp.r2_len - 1 - j]; rc[j] = b < 4 ? static_cast<uint8_t>(3 - b) : 4; }
+                bool hit = false;
+                // fragment F of length f: R1 = F[0:r1], rc = reverse complement of R2 = F[f-r2:f]. rc[k] lies over R1[shift + k]; shift is
+                // negative when the fragment is shorter than R2 (the read ran into the adapter). Compare over the shared span.
+                const int32_t r1n = sp.r1_len, r2n = sp.r2_len;
+                for (int32_t shift = -(r2n - 20); shift <= r1n - 20 && !hit; ++shift) {
+                    const int32_t k0 = std::max<int32_t>(0, -shift), k1 = std::min<int32_t>(r2n, r1n - shift);
+                    if (k1 - k0 < 20) continue;
+                    int mm = 0;
+                    for (int32_t k = k0; k < k1 && mm <= 1; ++k) if (sp.r1_seq[shift + k] != rc[k] || rc[k] > 3) ++mm;
+                    if (mm <= 1) hit = true;
+                }
+                if (hit) ++overlapped;
+            }
+            sig.pair_overlap = paired >= 200 ? static_cast<double>(overlapped) / paired : -1.0;
+            for (int r = 0; r < 2; ++r) {
+                const uint64_t tot = cnt[r][0] + cnt[r][1] + cnt[r][2] + cnt[r][3];
+                if (tot < 2000) continue;
+                sig.min_cg_fraction = std::min(sig.min_cg_fraction, std::min(static_cast<double>(cnt[r][1]) / tot, static_cast<double>(cnt[r][2]) / tot));
+            }
+        }
         sig.tn5_fraction   = static_cast<double>(tn5_hits)   / n;
         sig.polyt_fraction = static_cast<double>(polyt_hits) / n;
         sig.adt_fraction   = static_cast<double>(adt_hits)   / n;
@@ -1790,7 +1828,7 @@ inline AssayType classify_assay(
     // The cell barcode and UMI read is that of the gene-expression kit, so the protocol call stands, but R2 is a tag from a small panel.
     // Same cut as the run screen (kFeatureTopShare).
     if (confidence >= Confidence::MEDIUM &&
-        (protocol_tag.rfind("10x-3p-", 0) == 0 || protocol_tag.rfind("10x-5p-", 0) == 0 || protocol_tag == "cite-seq-gex")) {
+        (protocol_tag.rfind("10x-3p-", 0) == 0 || protocol_tag.rfind("10x-5p-", 0) == 0 || protocol_tag == "cite-seq-gex" || protocol_tag == "10x-arc-gex")) {
         const auto sig0 = AssaySignals<SpotT>::compute(probe_spots, r1_len, r2_len);
         if (sig0.tag_concentration >= 0.50) return AssayType::CITE_SEQ_ADT;
     }
@@ -1836,11 +1874,16 @@ inline AssayType classify_assay(
     }
 
     // ── Rule 2: Statistical signals for undetected protocols ──
-    auto sig = AssaySignals<SpotT>::compute(probe_spots, r1_len, r2_len);
+    auto sig = AssaySignals<SpotT>::compute(probe_spots, r1_len, r2_len, true);
 
     // Non-sequence data: >20% N bases
     if (sig.n_fraction > 0.20)
         return AssayType::NOT_SEQUENCE;
+
+    // Bisulfite, both strands: conversion empties C on the converted read and G on its mate, so the smallest C or G fraction over both reads
+    // is the signal (a genome as AT-rich as Plasmodium still has 9% of each).
+    if (sig.min_cg_fraction < 0.05 && sig.min_cg_fraction > 0.0005)
+        return AssayType::SC_METHYLOME;
 
     // Bisulfite / methylome: C content < 8% (normal is ~25%)
     // Bisulfite conversion replaces unmethylated C with T, so C drops dramatically
@@ -1852,6 +1895,11 @@ inline AssayType classify_assay(
         // Could be ATAC or multiome-ATAC — without paired GEX we call it ATAC
         return AssayType::SC_ATAC;
     }
+
+    // Short-fragment library (ATAC and kin): paired reads that overlap. The Tn5 adapter itself shows in a few percent of reads
+    // (2.6% on bulk ATAC at 2x50), too few for the cut above, and Nextera-tagmented RNA libraries carry the same adapter.
+    if (sig.pair_overlap >= 0.20)
+        return AssayType::SC_ATAC;
 
     // CITE-seq ADT: high ADT capture sequence rate + short R2
     if (sig.adt_fraction > 0.30 && r2_len > 0 && r2_len <= 60)
