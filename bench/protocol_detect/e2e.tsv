@@ -1,0 +1,6 @@
+id	r1_url	r2_url	tag	organism	reads
+bd_rhapsody_SRR18900948	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR189/048/SRR18900948/SRR18900948_1.fastq.gz	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR189/048/SRR18900948/SRR18900948_2.fastq.gz	bd-rhapsody	Homo sapiens	2000000
+dropseq_SRR12363075	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR123/075/SRR12363075/SRR12363075_1.fastq.gz	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR123/075/SRR12363075/SRR12363075_2.fastq.gz	dropseq	Homo sapiens	2000000
+seqwell_SRR10042897	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR100/097/SRR10042897/SRR10042897_1.fastq.gz	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR100/097/SRR10042897/SRR10042897_2.fastq.gz	dropseq	Mus musculus	2000000
+quartzseq2_SRR9621763	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR962/003/SRR9621763/SRR9621763_1.fastq.gz	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR962/003/SRR9621763/SRR9621763_2.fastq.gz	quartzseq2	Homo sapiens	2000000
+microwell_SRR6954525	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR695/005/SRR6954525/SRR6954525_1.fastq.gz	https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR695/005/SRR6954525/SRR6954525_2.fastq.gz	microwell-seq	Mus musculus	2000000

@@ -332,20 +332,35 @@ static int pre_gate(const std::string& sra_path,
     }
 
     auto detected = singlet::fq::detect_protocol(gate_spots, gate_r1, gate_r2, whitelist_dirs);
-    // Inverted layout (the barcode read stored second, as in inDrop deposits): a call below MEDIUM gets a second chance on the swapped reads,
-    // and a MEDIUM or higher call there replaces it. A MEDIUM or higher call on the reads as given is never replaced.
-    if (detected.confidence < singlet::fq::Confidence::MEDIUM) {
-        std::vector<GateSpot> swapped = gate_spots;
-        for (auto& sp : swapped) { std::swap(sp.r1_seq, sp.r2_seq); std::swap(sp.r1_len, sp.r2_len); }
-        auto alt = singlet::fq::detect_protocol(swapped, gate_r2, gate_r1, whitelist_dirs);
-        // Adopted only when the swapped reads carry the route evidence, so that a library the gate used to pass through is never newly rejected.
-        if (alt.confidence >= singlet::fq::Confidence::MEDIUM && non10x_reject_tags.count(alt.tag) > 0 &&
-            singlet::fq::route_evidence(alt, swapped, whitelist_dirs).ok) {
-            std::cerr << "[singlet-gate] swapped reads: " << alt.tag << " at confidence " << static_cast<int>(alt.confidence)
-                      << " (as given: " << detected.tag << " at " << static_cast<int>(detected.confidence) << ")\n";
-            detected = alt;
-            gate_spots = std::move(swapped);
-            std::swap(gate_r1, gate_r2);
+    // Second chance. A call below MEDIUM, or a 10x call whose barcodes are in the 10x list at under kProtocolWlRateFloor (the encoder stops such
+    // a run), is tried again: on the reads as given without any whitelist (the 10x lists then cannot outvote a protocol that has none), and on
+    // the swapped reads (the barcode read stored second, as in inDrop deposits) with and without whitelists. The first MEDIUM or higher non-10x
+    // call that carries the route evidence replaces it. Adopting a call needs the evidence, so no library the gate passed before is newly rejected.
+    {
+        const bool tenx_below_floor = tenx_tags.count(detected.tag) > 0 && detected.confidence >= singlet::fq::Confidence::MEDIUM &&
+                                      detected.wl_match_rate < singlet::fq::kProtocolWlRateFloor;
+        if (detected.confidence < singlet::fq::Confidence::MEDIUM || tenx_below_floor) {
+            const std::vector<std::string> no_whitelists;
+            struct Retry { bool swap; bool whitelists; };
+            for (const Retry t : {Retry{false, false}, Retry{true, true}, Retry{true, false}}) {
+                std::vector<GateSpot> swapped;
+                if (t.swap) {
+                    swapped = gate_spots;
+                    for (auto& sp : swapped) { std::swap(sp.r1_seq, sp.r2_seq); std::swap(sp.r1_len, sp.r2_len); }
+                }
+                const std::vector<GateSpot>& spots = t.swap ? swapped : gate_spots;
+                const uint16_t a1 = t.swap ? gate_r2 : gate_r1, a2 = t.swap ? gate_r1 : gate_r2;
+                auto alt = singlet::fq::detect_protocol(spots, a1, a2, t.whitelists ? whitelist_dirs : no_whitelists);
+                if (alt.confidence >= singlet::fq::Confidence::MEDIUM && non10x_reject_tags.count(alt.tag) > 0 &&
+                    singlet::fq::route_evidence(alt, spots, whitelist_dirs).ok) {
+                    std::cerr << "[singlet-gate] retry (" << (t.swap ? "swapped reads" : "reads as given") << (t.whitelists ? "" : ", no whitelists")
+                              << "): " << alt.tag << " at confidence " << static_cast<int>(alt.confidence) << " (first call: " << detected.tag << " at "
+                              << static_cast<int>(detected.confidence) << ")\n";
+                    detected = alt;
+                    if (t.swap) { gate_spots = swapped; std::swap(gate_r1, gate_r2); }
+                    break;
+                }
+            }
         }
     }
 

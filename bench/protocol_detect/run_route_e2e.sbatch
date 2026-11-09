@@ -2,8 +2,8 @@
 #SBATCH --job-name=detect-e2e
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=96G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
 #SBATCH --time=03:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # Routing exit test: one library per non-10x assay goes through the engine twice from the same reads, in auto mode and with the
