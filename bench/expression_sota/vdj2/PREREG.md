@@ -427,3 +427,37 @@ productive IG contigs and no TCR contigs. The cDNA read starts at the 5' end of 
 reach the junction. Both tools work from this same sparse input. Cells and lineage come from the deposited GEX
 `filtered_feature_bc_matrix` (all barcodes are cells, and lineage follows `gex_lineage.py`'s marker rule, read from the
 matrix files instead of an h5).
+
+## Addendum 10 (2026-11-09, registered before any file of the library is opened): deciding held-out library for the IG cell floor
+
+**Why this addendum exists.** An owner decision moved the deciding run from King 2021 tonsil to an ordinary paired-end library,
+because of the input format and the compute. The King BCR deposit holds R1 only, so about 5% of reads reach the junction, and
+stock TRUST4 needs more than 96 GB and more than a day per donor on it. The change was made with Singlet's King numbers already
+seen (pairing 0.066, chain recall 13.1%, wrong-lineage 0 of 1,376 chains) and TRUST4's King numbers not yet produced. The King
+run continues as a supplementary result and has no effect on this addendum's verdict.
+
+**Library.** 10x Genomics "20k Bone Marrow Mononuclear Cells (BMMNCs), 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger
+6.1.0 `multi`, one healthy male donor from StemExpress; dataset prefix `20k_BMMNC_5pv2_HT_nextgem`), short name `bmmnc20kht_b`.
+The cells are unsorted bone marrow, and the page lists 17,645 of them. It has another donor and tissue than every library used so
+far. It is absent from the project's engine-touch table, the launch held-out panel and manifest, the dev and confirmation lists,
+the cluster's data and job folders, and both repositories' main lines; the Alpha sample index holds one unrelated GEO sample
+whose text mentions bone marrow mononuclear cells. Only the dataset page has been read, and the files below were downloaded and
+hashed without being opened.
+
+| File | sha256 |
+|---|---|
+| `20k_BMMNC_5pv2_HT_nextgem_Multiplex_fastqs.tar` | `78037483658208fc47adf5a38121772974569e26383195852b2c5a38625a72f3` |
+| `vdj_b_filtered_contig_annotations.csv` (truth) | `5e1f9ed50e9b0f6c5bdd4f4dea2325150cb77289cc67cfbcea656b2f3421f99a` |
+| `count_sample_feature_bc_matrix.h5` (GEX cells and lineage) | `b6f5b9208cd3c5490b712e8ba214f075f300eac724575f26779ee6e6f593c69d` |
+| `..._vdj_b_S1_L001_R1_001.fastq.gz` | `6a30a1344196e8327783a5f221e83c9deff7aff46db802df534da7d535ee3de7` |
+| `..._vdj_b_S1_L001_R2_001.fastq.gz` | `207df647699b2e5d2f4ee538d83e263fb1164926e3da45a9f1fa89f2d8670944` |
+
+**Run.** One Singlet run at c5ef9032 (the IG cell floor on `gpu/frontier` e0a85e20, defaults) with the first-Cys reference (Cell
+Ranger >= 5), and one stock TRUST4 run on the same reads. The whitelist is `737K-august-2016` unless fewer than 90% of Cell Ranger's
+cell barcodes are on it, in which case `3M-february-2018`; the same list goes to both tools. Lineage labels follow `gex_lineage.py`.
+The floor-off setting is reported from a refilter with both floors at 0. Nothing is tuned or re-run afterwards, and the result is
+reported whichever way it falls.
+
+**Rule.** That of Addendum 6, unchanged, applied to the registered setting (floor on). The difference Singlet minus TRUST4 in
+correct pairing must be at least the negative half-width of its paired bootstrap 95% interval, the wrong-lineage rate at most Cell
+Ranger's plus 0.005, and contig F1 above TRUST4's.
