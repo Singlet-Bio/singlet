@@ -22,7 +22,14 @@ goes to **`<out>/private/`**:
 | `private/hla/hla_genotype.tsv`, `hla_allele.tsv`, `hla_allele.vcf` | sample HLA genotype from T1K (class I and II genes, allele, abundance, quality), T1K's own formats |
 | `private/hla/donors/donorK_genotype.tsv` | the same per assigned donor (cells with label `donorK` and prob_max >= 0.9) |
 | `private/hla/hla_candidate_reads.fq.gz` | the reads that reached T1K (k-mer prefilter on the IPD-IMGT/HLA sequences), named `idx_CB`, kept so HLA can be typed again with a newer index |
-| `private/hla/hla_summary.json` | reads scanned and kept, alleles in the index, donors typed, timings, T1K and IPD-IMGT/HLA versions |
+| `private/hla/hla_summary.json` | reads scanned and kept, alleles in the index and typed against (`typed_alleles`), donors typed, timings, T1K and IPD-IMGT/HLA versions |
+
+### HLA frequency prior (K=2)
+
+T1K types against the alleles recorded in at least 2 cells of IPD-IMGT/HLA (`hlaidx/Allele_status.txt`, the release of the index): 9,881 of 30,322 alleles in release 3.66.0. 3' reads do not cover the exons that separate alleles of one group, so unrestricted T1K picks rare, mostly unconfirmed alleles over the common one. The prefilter still uses the full index. The prior is applied when `Allele_status.txt` sits in the T1K `hlaidx` directory (otherwise the full index is used and the log says so); `hla_summary.json` reports `typed_alleles` and `min_cells`. Cost: 34 of about 26,000 truth alleles in the validation sets belong to a group the prior removes, so those can no longer be called.
+
+Validation (owner-only data): Geuvadis RNA-seq against Abi-Rached 2018, 29 samples typed by all four methods, 2-field accuracy over class I and DRB1/DQB1: Singlet K=2 268/268, stock T1K 99.3%, arcasHLA 89.2%. HLA-A: K=2 58/58, T1K 58/58, arcasHLA 51/58. 10x 3' libraries from donors of known type: K=2 0.914 against 0.686 for the unrestricted index (T1K's genotyper unchanged) and for arcasHLA. See `bench/d101`.
+
 
 `python/singlet/_restricted.py` treats everything under `private/` as restricted (as it already did for `donor/` except
 `donor_assignments.tsv`, `mt/` except `mt_summary.tsv`, `snp_*`, VCFs), so the legacy packer (`bundle.py`) puts these in

@@ -128,13 +128,14 @@ struct Config {
     std::string out_prefix;         // the run directory; outputs go to <out_prefix>/private/hla/
     std::string donor_assignments;  // <out_prefix>/donor_assignments.tsv (empty or absent: no per-donor typing)
     int threads = 8;
+    int min_cells = 2;              // frequency prior: type against alleles recorded in >= this many cells of IPD-IMGT/HLA (0: all alleles)
 };
 
 struct Result {
     bool ran = false;
     std::string why_not;
     uint64_t reads_scanned = 0, reads_kept = 0;
-    size_t n_kmers = 0, n_alleles = 0;
+    size_t n_kmers = 0, n_alleles = 0, n_alleles_typed = 0;
     int n_donors_typed = 0;
     double seconds_prefilter = 0, seconds_t1k = 0;
 };
@@ -220,6 +221,41 @@ inline std::pair<uint64_t, uint64_t> prefilter_fastq(const KmerSet& ks, const st
     gzclose(g1); if (g2) gzclose(g2);
     std::fclose(o1); if (o2) std::fclose(o2);
     return {n, k};
+}
+
+// Frequency prior (D-101): 3' reads cannot separate alleles of one group, so T1K picks rare, mostly unconfirmed alleles over the common one.
+// Keep the alleles that IPD-IMGT/HLA records in >= k cells (Allele_status.txt of the index's release); alleles missing from the file stay in.
+// Returns the number kept, or 0 when the file is absent or nothing would be removed (the caller then uses the full index).
+inline size_t filter_index_by_cells(const std::string& fa, const std::string& status, int k, const std::string& out, size_t& total) {
+    std::ifstream sf(status), in(fa);
+    total = 0;
+    if (!sf || !in) return 0;
+    std::unordered_map<std::string, int> cells;
+    std::string line;
+    while (std::getline(sf, line)) {
+        if (line.empty() || line[0] == '#' || line.rfind("Allele,", 0) == 0) continue;
+        const size_t c1 = line.find(','); if (c1 == std::string::npos) continue;
+        const size_t c2 = line.find(',', c1 + 1);
+        const std::string n = line.substr(c1 + 1, c2 == std::string::npos ? std::string::npos : c2 - c1 - 1);
+        int v = 0; bool dig = !n.empty();
+        for (char ch : n) { if (ch < '0' || ch > '9') { dig = false; break; } v = v * 10 + (ch - '0'); }
+        cells[line.substr(0, c1)] = dig ? v : 0;
+    }
+    std::ofstream of(out);
+    if (!of) return 0;
+    bool keep = false; size_t kept = 0;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line[0] == '>') {
+            ++total;
+            std::string name = line.substr(1, line.find_first_of(" \t") == std::string::npos ? std::string::npos : line.find_first_of(" \t") - 1);
+            if (name.rfind("HLA-", 0) == 0) name = name.substr(4);
+            const auto it = cells.find(name);
+            keep = it == cells.end() || it->second >= k;
+            kept += keep;
+        }
+        if (keep) of << line << '\n';
+    }
+    return kept;
 }
 
 inline Result run(const Config& cfg) {
@@ -308,8 +344,22 @@ inline Result run(const Config& cfg) {
     // 2. the sample
     const std::string T = std::to_string(std::max(1, cfg.threads));
     const std::string log = tmp + "/t1k.log";
+    // typing index: the K-cell frequency prior when the index ships Allele_status.txt, else the full index (reported either way)
+    std::string tref = ref;
+    res.n_alleles_typed = res.n_alleles;
+    const std::string status = cfg.t1k_dir + "/hlaidx/Allele_status.txt";
+    if (cfg.min_cells > 0 && file_exists(status)) {
+        size_t total = 0;
+        const size_t kept = filter_index_by_cells(ref, status, cfg.min_cells, tmp + "/hlaidx.prior.fa", total);
+        if (kept > 0) { tref = tmp + "/hlaidx.prior.fa"; res.n_alleles_typed = kept; }
+        std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "
+";
+    } else if (cfg.min_cells > 0) {
+        std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx
+";
+    }
     auto t1k = [&](const std::string& in, const std::string& prefix, bool no_extract) {
-        const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(ref) + " -t " + T + " -o " + shq(prefix) +
+        const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(tref) + " -t " + T + " -o " + shq(prefix) +
                                 " --od " + shq(tmp) + (no_extract ? " --noExtraction" : "") + " >> " + shq(log) + " 2>&1";
         return std::system(cmd.c_str()) == 0;
     };
@@ -372,7 +422,7 @@ inline Result run(const Config& cfg) {
     {
         std::ofstream j(dir + "/hla_summary.json");
         j << "{\n  \"t1k\": " << manifest << ",\n  \"ran\": " << (res.ran ? "true" : "false") << ",\n  \"why_not\": \"" << res.why_not
-          << "\",\n  \"prefilter\": {\"k\": " << kK << ", \"stride\": " << kStride << ", \"hla_alleles\": " << res.n_alleles << ", \"kmers\": " << res.n_kmers
+          << "\",\n  \"prefilter\": {\"k\": " << kK << ", \"stride\": " << kStride << ", \"hla_alleles\": " << res.n_alleles << ", \"typed_alleles\": " << res.n_alleles_typed << ", \"min_cells\": " << cfg.min_cells << ", \"kmers\": " << res.n_kmers
           << ", \"reads_scanned\": " << res.reads_scanned << ", \"reads_kept\": " << res.reads_kept << ", \"seconds\": " << res.seconds_prefilter
           << "},\n  \"t1k_seconds\": " << res.seconds_t1k << ",\n  \"sample\": " << (res.ran ? genotype_json(dir + "/hla_genotype.tsv") : std::string("null"))
           << ",\n  \"donor_rule\": \"called cells (cell_status cell) of one donor with prob_max >= 0.9, matched by raw cell barcode\""
