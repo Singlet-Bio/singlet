@@ -352,8 +352,7 @@ inline Result run(const Config& cfg) {
         size_t total = 0;
         const size_t kept = filter_index_by_cells(ref, status, cfg.min_cells, tmp + "/hlaidx.prior.fa", total);
         if (kept > 0) { tref = tmp + "/hlaidx.prior.fa"; res.n_alleles_typed = kept; }
-        std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "
-";
+        std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "\n";
     } else if (cfg.min_cells > 0) {
         std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx
 ";
