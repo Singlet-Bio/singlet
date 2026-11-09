@@ -7530,6 +7530,7 @@ static int singlet_main(int argc, char* argv[]) {
         StopWatch sw;
         void stop() {   // join; an exit before the HLA step leaves no temporary files
             if (th.joinable()) th.join();
+            if (s.gz.valid()) s.gz.wait();
             if (on && !finished && !s.tmp.empty()) { std::error_code ec; std::filesystem::remove_all(s.tmp, ec); }
             finished = true;
         }
