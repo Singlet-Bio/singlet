@@ -281,3 +281,95 @@ half-width is 0.0037 and the difference lies above the negative half-width. The 
 Ranger, and contig F1 is 0.9815 for Singlet against 0.7316 for TRUST4. All three conditions of the registered rule hold: **pass**.
 The point estimate stays 0.0016 below TRUST4, within the interval.
 
+## Addendum 7 (2026-11-08, registered before any run of the change): IG chains of expanded clones removed by the cross filter
+
+**Diagnosis (development libraries only, Addendum 6 code with its defaults on).** On the GEX-called reference-paired cells, 429
+reference chains are still wrong. The two largest groups after the never-assembled chains are chains removed by the cross filter
+(104, of which TRUST4 reports 96 correctly) and kept chains outranked by another kept contig of the same chain (106, of which TRUST4
+reports 38). The outranked contigs are mostly second cells in a droplet, each with its own junction, and neither tool resolves them
+reliably, so they are not targeted. Among the 104 cross-filtered chains, the IG rescue of Addendum 4 (`ig_top_min_umis`) misses
+them for two reasons. In 34, a light chain is the strongest high-confidence light contig of its barcode with the heavy partner kept,
+but a weaker light contig of the barcode is kept, and any kept chain of the class blocks the rescue. In 31, both the heavy and the
+light chain of the cell are cross-filtered, and the rescue needs a kept partner.
+
+**Change (each default off until the rule is met).** Two filter settings of `filter_contigs`; the assembly is unchanged.
+1. `ig_top_weaker_kept=True`: in the `ig_top_min_umis` rescue, a kept contig of the class (heavy, or light: IGK and IGL together)
+   blocks the candidate only when it has at least as many UMIs.
+2. `ig_pair_rescue=True`: in a barcode with no kept IG contig, the strongest high-confidence productive heavy contig and the
+   strongest high-confidence productive light contig, both removed by the cross filter and each with at least `ig_top_min_umis`
+   (2) UMIs, are kept together; on a UMI tie the contig with more reads is taken.
+No threshold is new: both reuse `ig_top_min_umis` as set in Addendum 4.
+
+**Runs.** Filter-only settings are applied with `refilter.py` to the Addendum 6 runs of the development and confirmation libraries
+(job 804415, `singlet_fwp`), so no library is re-assembled. Three settings are tested: 1 alone, 2 alone, and both.
+
+**Rules.** The dev rule of Addendum 5 applies unchanged, against the Addendum 6 result as baseline (pooled development BCR pairing
+0.9217): pairing +0.003 at least, no library losing more than 0.005 in pairing or contig F1, wrong-lineage rate +0.001 at most,
+clonotype ARI of no library falling by more than 0.02, TCR pairing and contig F1 falling by at most 0.002 (TCR guards: pbmc2_t and
+pbmc10k_t). Wall time is unaffected by a filter setting and is not re-measured. If several settings keep, the one with the highest
+pooled development pairing is taken. Confirmation (pbmc3_b, ngpbmc3_b, melanoma_b) is reported before and after, and a library
+that loses more than 0.005 counts as a failure. The held-out library of Addendum 6 has had its single run and is not used again.
+A setting adopted here is confirmed on a new untouched NextGem BCR library, named in a further note before it is opened and run
+once.
+
+**Result of Addendum 7 (2026-11-08, `refilter.py` on the Addendum 6 runs; with no setting it reproduces their `kept` column
+exactly).** Pooled development BCR pairing (TRUST4 0.9159), against the Addendum 6 baseline of 0.9217:
+- `ig_top_weaker_kept`: 0.9252 (+0.0035). No library loses (chx10k_b 0.9555, pbmc10k_b 0.9792, pbmc2_b 0.9355, nsclc22_b 0.8462,
+  melv11_b 0.9370), contig F1 rises in every library, ARI does not fall, the wrong-lineage rate moves from 0.00306 to 0.00305. It
+  meets the dev rule.
+- `ig_pair_rescue`: 0.9235 (+0.0018), with the wrong-lineage rate up to 0.00515 and the ARI of nsclc22_b down by 0.044. It fails.
+- Both: 0.9270 (+0.0053), with the same wrong-lineage rise (0.00514) and nsclc22_b ARI drop (0.042). It fails.
+The settings change IG contigs only, so the TCR guards are unchanged by construction. `ig_top_weaker_kept` is adopted and on by
+default; `ig_pair_rescue` stays off. Confirmation with `ig_top_weaker_kept`: pooled pairing on pbmc3_b, ngpbmc3_b and melanoma_b
+rises from 0.9123 to 0.9155 (melanoma_b 0.8976 to 0.9019; pbmc3_b and ngpbmc3_b unchanged), and the gap to TRUST4 (0.9198) narrows
+from -0.0075 to -0.0043 (95% interval -0.0090 to 0.0000). The fresh-library confirmation is pending: a new untouched NextGem BCR
+library is still to be named.
+
+## Addendum 8 (2026-11-08, registered before any file of the library is opened): fresh-library confirmation of Addendum 7
+
+**Library.** 10x Genomics "20k Human PBMCs, 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger 6.1.0 `multi`, one male donor;
+dataset prefix `20k_PBMC_5pv2_HT_nextgem_Chromium_X`), short name `pbmc20kht_b`. It comes from another study and donor than every
+library used so far (the Addendum 6 held-out library is a female donor of a vaccination series). Its page lists about 960 B cells,
+so the interval will be wide. A search of both repositories (all branches, commit messages included) and of the cluster's data, job
+and benchmark folders found no earlier use; the only near match is the human-mouse cell-line mixture
+`20k_hgmm_5pv2_HT_nextgem_Chromium_X`, a different dataset. Only the dataset page has been read. Inputs: the BCR FASTQs from the
+dataset's FASTQ tarball, truth from its `vdj_b_filtered_contig_annotations.csv`, called cells from its GEX filtered matrix.
+
+**Run.** One Singlet run at the tip of `fix/vdj-ig-cross-rescue` (Addendum 7 defaults, `ig_top_weaker_kept` on) with the first-Cys
+reference (Cell Ranger >= 5), and one TRUST4 run on the same reads. The Addendum 6 setting (#222) is the same run re-filtered with
+`ig_top_weaker_kept=false` through `refilter.py`, which reproduces a run's own filter exactly; the assembly is shared, so this is one
+run. Barcode whitelist: `737K-august-2016`, unless fewer than 90% of Cell Ranger's cell barcodes are on it, in which case
+`3M-february-2018`; the same list is given to Singlet and TRUST4. The choice is made by the job before either tool runs and is
+printed. Nothing is re-run or tuned afterwards, and the result is reported whichever way it falls.
+
+**Rule for Addendum 7 (#224 against #222).** `ig_top_weaker_kept` stays on only when, on this library, its correct pairing is
+strictly higher than with the setting off, its wrong-lineage rate is at most 0.001 higher and its contig F1 at most 0.005 lower. Equal
+or lower pairing turns it off.
+
+**Rule for Singlet against TRUST4.** That of Addendum 6, applied to the Singlet setting the previous rule selects: the difference
+Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95% interval, with
+the wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's.
+
+
+**Aborted first attempt (2026-11-08).** The first job (Slurm 804607, state FAILED) downloaded the library, found one BCR FASTQ
+folder and chose `737K-august-2016` (all of Cell Ranger's cell barcodes are on it). Singlet then stopped after five seconds on its
+first read with `gzip.BadGzipFile`: the dataset's tarball stores its FASTQs as plain text under `.fastq.gz` names. TRUST4 received the
+same unreadable input. Neither tool produced any output, so no result was produced or seen. The rerun compresses the same reads with
+gzip into a new folder and is otherwise identical: same commit, settings, whitelist, rules and comparator. It counts as this
+addendum's one run.
+
+**Result (2026-11-08, Slurm 804625, commit 9bb0e777).** The rerun read the gzip copies of the same reads. Singlet took 3 minutes and
+TRUST4 24 minutes on 914 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| `ig_top_weaker_kept` on (#224) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+| `ig_top_weaker_kept` off (#222) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+
+*Addendum 7 rule: fail.* The refilter with the setting off changed none of the 5,427 contigs, so pairing is equal and
+`ig_top_weaker_kept` is turned off (default `False` from this commit on).
+
+*Addendum 6 rule, Singlet against TRUST4: fail.* The pairing difference passes, because -0.0088 is above the negative half-width
+(-0.0110), and contig F1 is above TRUST4's. Wrong-lineage fails: 109 of 1,829 Singlet chains with a known GEX lineage sit in a
+non-B lineage, a rate of 0.0596 against the limit of 0.0062 (Cell Ranger's 0.0012 plus 0.005). The library is not re-run, and the
+rule and comparator stay as registered.
