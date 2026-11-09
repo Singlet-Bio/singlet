@@ -165,7 +165,9 @@ static bool mkdir_p(const std::string& path) {
 
 static int pre_gate(const std::string& sra_path,
                     const std::vector<std::string>& whitelist_dirs,
-                    bool reject_non10x = false) {
+                    bool reject_non10x = false,
+                    std::string* routed_tag = nullptr,
+                    bool* routed_swap = nullptr) {
 
     // ── In-scope 10x protocol tags (auto-detect PASS targets) ──
     // Any of these tags returned by detect_protocol() at MEDIUM+ confidence
@@ -358,6 +360,10 @@ static int pre_gate(const std::string& sra_path,
                               << static_cast<int>(detected.confidence) << ")\n";
                     detected = alt;
                     if (t.swap) { gate_spots = swapped; std::swap(gate_r1, gate_r2); }
+                    // The encoder detects on its own, with the whitelists and on the reads as given, and would not make this call: it
+                    // gets the tag and, for swapped reads, the orientation (see cmd_download).
+                    if (routed_tag) *routed_tag = alt.tag;
+                    if (routed_swap) *routed_swap = t.swap;
                     break;
                 }
             }
@@ -868,8 +874,17 @@ static int cmd_download(int argc, char* argv[]) {
     // SAFETY: UNCERTAIN → pass through; only REJECT on confirmed non-10x.
     // Exit code 2 maps to .rejected in run_one.sbatch (DL_EXIT!=0 path).
     if (protocol_tag.empty()) {
-        int gate_result = pre_gate(sra_input, whitelist_dirs, reject_non10x);
+        std::string routed_tag;
+        bool routed_swap = false;
+        int gate_result = pre_gate(sra_input, whitelist_dirs, reject_non10x, &routed_tag, &routed_swap);
         if (gate_result != 0) return gate_result;
+        if (!routed_tag.empty()) {
+            // Routed by the gate's retry: the run goes on under that spec exactly as `--protocol TAG` (and `--swap-reads on`) would run it.
+            protocol_tag = routed_tag;
+            ecfg.protocol_tag = routed_tag;
+            if (routed_swap) swap_reads_mode = "on";
+            std::cerr << "[singlet-gate] routed to " << routed_tag << (routed_swap ? " with the reads swapped" : "") << "\n";
+        }
     }
 
     // Read declared read_count and catalog protocol from pre-written metadata JSON (if any).

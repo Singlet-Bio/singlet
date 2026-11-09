@@ -18,9 +18,11 @@ IFS=$'\t' read -r id r1 r2 tag org nreads < <(sed -n "$((SLURM_ARRAY_TASK_ID + 2
 O=$W/jobs/detect/e2e-${SLURM_ARRAY_JOB_ID}/$id; mkdir -p $O; SCR=/tmp/$USER-e2e-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 case $org in *Mus*) G=$REF/GRCm39-2024-A;; *) G=$REF/GRCh38-2024-A;; esac
 echo "$id $tag $org reads=$nreads genome=$G bin=$BIN" | tee $O/summary.txt
-for k in 1 2; do u=$([ $k = 1 ] && echo $r1 || echo $r2)
-  ( curl -sS --retry 3 "$u" 2>/dev/null | gzip -dc 2>/dev/null | head -$((4 * nreads)) > $SCR/f$k.fastq ) &
-done; wait
+fetch() {   # url out: the first nreads records of a gzipped FASTQ (the transfer stops when head closes the pipe)
+  curl -sS --retry 3 --max-time 3000 "$1" 2> $2.err | gzip -dc 2>> $2.err | head -$((4 * nreads)) > $2
+}
+fetch "$r1" $SCR/f1.fastq & fetch "$r2" $SCR/f2.fastq & wait
+cp $SCR/f1.fastq.err $O/fetch1.err 2>/dev/null; cp $SCR/f2.fastq.err $O/fetch2.err 2>/dev/null
 echo "pairs: $(( $(wc -l < $SCR/f1.fastq) / 4 ))" | tee -a $O/summary.txt
 for mode in auto forced; do
   extra=; [ $mode = forced ] && extra="--protocol $tag"
