@@ -30,10 +30,14 @@ def parse(log):
     wl = re.findall(r"whitelist validation: \d+/\d+ match \((\d+)", t)
     reason = re.findall(r"reason=([a-z0-9_]+)", t)
     return dict(gate=g[-1][0] if g else "-", gate_tag=g[-1][1] if g else "-", proto=p[-1][0] if p else "-", conf=p[-1][1] if p else (g[-1][2] if g else "-"),
-                assay=a[-1] if a else "-", wl=wl[-1] if wl else "-", reason=reason[-1] if reason else "-", incomplete="data_incomplete" in t)
+                assay=a[-1] if a else "-", wl=wl[-1] if wl else "-", reason=named[-1] if named else (reason[-1] if reason else "-"), incomplete="data_incomplete" in t)
 
 
 def call_class(c):
+    if c["reason"].startswith("unsupported_assay_"):
+        return {"10x_flex": "flex", "singleron_gexscope": "singleron"}.get(c["reason"][len("unsupported_assay_"):], "named:" + c["reason"])
+    if c["gate"] == "ROUTE" and c["proto"] == "-":
+        return "routed-then-stopped:" + c["gate_tag"]
     if c["gate"] == "REJECT":
         return "rejected:" + c["gate_tag"]
     if c["assay"] == "cite-seq-adt":

@@ -1259,6 +1259,60 @@ RouteEvidence route_evidence(const ProtocolCandidate& det, const std::vector<Spo
     return ev;
 }
 
+// ── Assays that have no spec ──
+// A few assays that the corpus holds in numbers have a read layout that is recognizable but no spec in this engine (no barcode lists, or a
+// cDNA read that is not transcript sequence). Their fixed sequences were measured on public libraries of the assay (position-wise base
+// consensus of the first 20,000 read pairs); a library that carries them is named and stopped, so that its reads are not run under another
+// chemistry. Each rule is a fixed sequence at an offset (one mismatch allowed, offset +-2) in a share of the reads of one read.
+struct NamedAssayRule {
+    int read;                // 1 or 2
+    const char* sequence;
+    uint16_t offset;
+    double min_rate;
+};
+
+struct NamedAssayDef {
+    const char* name;        // tag used in the gate's reason (reason=unsupported_assay_<name>)
+    const char* reason;
+    std::vector<NamedAssayRule> rules;   // all must hold
+};
+
+inline const std::vector<NamedAssayDef>& named_assays() {
+    static const std::vector<NamedAssayDef> v = {
+        // 10x Chromium Flex (fixed RNA profiling): R1 is the 28-nt barcode read, R2 carries the ligated probe, whose backbone sits at 50
+        {"10x_flex",
+         "10x Chromium Flex: the cDNA read is the ligated probe, not transcript sequence; counting needs the probe set and the fixed-RNA barcode list, "
+         "which this engine does not carry",
+         {{2, "ACGCGGTTAGCACGTA", 50, 0.5}}},
+        // Singleron GEXSCOPE: R1 = BC1(8) + L1(16) + BC2(8) + L2(16) + BC3(8) + UMI(12) + poly(T)
+        {"singleron_gexscope",
+         "Singleron GEXSCOPE: three-segment barcode with two fixed linkers; this engine has no spec and no barcode lists for it",
+         {{1, "ATCCACGTGCTTGAGA", 8, 0.5}, {1, "TCAGCATGCGGCTACG", 32, 0.5}}},
+    };
+    return v;
+}
+
+// The named assay whose rules all hold on the probe reads, or nullptr.
+template<typename SpotT>
+const NamedAssayDef* match_named_assay(const std::vector<SpotT>& spots) {
+    const uint32_t n = static_cast<uint32_t>(std::min<size_t>(5000, spots.size()));
+    if (n < 200) return nullptr;
+    for (const auto& def : named_assays()) {
+        bool all = true;
+        for (const auto& r : def.rules) {
+            std::vector<const uint8_t*> ptrs(n);
+            std::vector<uint16_t> lens(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                ptrs[i] = r.read == 1 ? spots[i].r1_seq.data() : spots[i].r2_seq.data();
+                lens[i] = r.read == 1 ? spots[i].r1_len : spots[i].r2_len;
+            }
+            if (linker_match_rate(r.sequence, r.offset, ptrs.data(), lens.data(), n) < r.min_rate) { all = false; break; }
+        }
+        if (all) return &def;
+    }
+    return nullptr;
+}
+
 // Error text if an auto-detected protocol fails the whitelist floor, "" otherwise. Not applied to a forced/manual protocol, to protocols
 // without a whitelist, or to short barcodes (bc_len < 14: chance hits).
 // Whitelist directories of a command, in the order singlet download and singlet encode both use: the --whitelist-dir values when given,

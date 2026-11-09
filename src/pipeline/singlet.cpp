@@ -324,7 +324,32 @@ static int pre_gate(const std::string& sra_path,
         return 0;
     }
 
+    // An assay that has no spec but a recognizable layout is named and stopped before any protocol call is made on it.
+    if (const auto* named = singlet::fq::match_named_assay(gate_spots)) {
+        std::cerr << "[singlet-gate] REJECT " << sra_path << " reason=unsupported_assay_" << named->name
+                  << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp: " << named->reason << "
+";
+        return 2;
+    }
+
     auto detected = singlet::fq::detect_protocol(gate_spots, gate_r1, gate_r2, whitelist_dirs);
+    // Inverted layout (the barcode read stored second, as in inDrop deposits): a call below MEDIUM gets a second chance on the swapped reads,
+    // and a MEDIUM or higher call there replaces it. A MEDIUM or higher call on the reads as given is never replaced.
+    if (detected.confidence < singlet::fq::Confidence::MEDIUM) {
+        std::vector<GateSpot> swapped = gate_spots;
+        for (auto& sp : swapped) { std::swap(sp.r1_seq, sp.r2_seq); std::swap(sp.r1_len, sp.r2_len); }
+        auto alt = singlet::fq::detect_protocol(swapped, gate_r2, gate_r1, whitelist_dirs);
+        // Adopted only when the swapped reads carry the route evidence, so that a library the gate used to pass through is never newly rejected.
+        if (alt.confidence >= singlet::fq::Confidence::MEDIUM && non10x_reject_tags.count(alt.tag) > 0 &&
+            singlet::fq::route_evidence(alt, swapped, whitelist_dirs).ok) {
+            std::cerr << "[singlet-gate] swapped reads: " << alt.tag << " at confidence " << static_cast<int>(alt.confidence)
+                      << " (as given: " << detected.tag << " at " << static_cast<int>(detected.confidence) << ")
+";
+            detected = alt;
+            gate_spots = std::move(swapped);
+            std::swap(gate_r1, gate_r2);
+        }
+    }
 
     bool is_tenx = (tenx_tags.count(detected.tag) > 0);
     bool is_non10x = (non10x_reject_tags.count(detected.tag) > 0);
