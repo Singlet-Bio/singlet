@@ -1,0 +1,57 @@
+diff --git a/AlignAlgo.hpp b/AlignAlgo.hpp
+index 0b8d93c..c6b8e94 100644
+--- a/AlignAlgo.hpp
++++ b/AlignAlgo.hpp
+@@ -3,6 +3,9 @@
+ #define _LSONG_ALIGNALGO_HEADER
+ 
+ #include "defs.h"
++#include <string.h>
++#include <string>
++#include <unordered_map>
+ 
+ #define EDIT_MATCH 0
+ #define EDIT_MISMATCH 1
+@@ -212,7 +215,42 @@ public:
+ 		return ret ;
+ 	}
+ 		
++	// singlet: GlobalAlignment is a pure function of (t, p, band), and T1K aligns one read against hundreds of alleles that are
++	// the same over the read's window, so most calls repeat an earlier one. A bounded per-thread cache keyed by the two
++	// segments and the band returns the stored score and edit string; it is cleared when full. Same results as computing.
+ 	static int GlobalAlignment( char *t, int lent, char *p, int lenp, signed char *align, int band = 5 )
++	{
++		if ( lent <= 1 || lenp <= 1 )
++			return GlobalAlignment_Compute( t, lent, p, lenp, align, band ) ;
++		static thread_local std::unordered_map<std::string, std::string> cache ;
++		static thread_local std::string key ;
++		key.assign( t, lent ) ;
++		key.push_back( '\0' ) ;
++		key.append( p, lenp ) ;
++		key.push_back( '\0' ) ;
++		key.append( (const char *)&band, sizeof( band ) ) ;
++		std::unordered_map<std::string, std::string>::const_iterator it = cache.find( key ) ;
++		if ( it != cache.end() )
++		{
++			// stored: the score (sizeof(int) bytes), then the edit string with its -1 terminator
++			int ret ;
++			memcpy( &ret, it->second.data(), sizeof( ret ) ) ;
++			memcpy( align, it->second.data() + sizeof( ret ), it->second.size() - sizeof( ret ) ) ;
++			return ret ;
++		}
++		int ret = GlobalAlignment_Compute( t, lent, p, lenp, align, band ) ;
++		int n = 0 ;
++		while ( align[n] != -1 )
++			++n ;
++		if ( cache.size() >= 65536 )
++			cache.clear() ;
++		std::string v( (const char *)&ret, sizeof( ret ) ) ;
++		v.append( (const char *)align, n + 1 ) ;
++		cache.emplace( key, v ) ;
++		return ret ;
++	}
++
++	static int GlobalAlignment_Compute( char *t, int lent, char *p, int lenp, signed char *align, int band = 5 )
+ 	{
+ 		if ( lent == 0 || lenp == 0 )
+ 		{
