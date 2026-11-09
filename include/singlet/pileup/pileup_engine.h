@@ -174,7 +174,11 @@ struct PileupConfig {
     // 7053 = 2957 + kExonPrecedence (4096): a multimapper with an exonic alignment is judged on its exonic alignments only, as STARsolo
     // Gene, Space Ranger and Cell Ranger count it. Highly expressed genes with unannotated retrocopies in other genes' introns (Eef1a1,
     // Gapdh, Rps10, Rpl24, Bc1) lost most of their reads to gene ambiguity (docs/research-beta/spatial-exon-multimapper.md).
-    uint32_t intron_rules = 7053;
+    // 61837 = 7053 - kGeneFullSet (512) - kUmiGeneSpliced (2048) + kChrMPrecedence (8192) + kTxCompat (16384) + kStarGene (32768):
+    // chrM precedence, transcript compatibility and STARsolo Gene's gene set for multimappers on; the GeneFull body rule and the spliced-winner
+    // UMI rule off. On the 91-row dev table 61837 passes 77 rows (7053: 62, 63885: 73) with none lost against 63885; the PBMC-E long reads
+    // show 2048 drops molecules whose gene is the long-read gene in 72% of the 21,000 with truth. Env SINGLET_INTRON_RULES overrides.
+    uint32_t intron_rules = 61837;
 };
 
 namespace intron_rule {

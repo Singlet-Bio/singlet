@@ -6232,7 +6232,7 @@ static int singlet_main(int argc, char* argv[]) {
     config.cb_from_cr = (stream_unsorted == 1);
 #ifdef SINGLET_HAVE_ENGINE_GPU
     // The GPU pileup mirrors the intron rules that are on by default (intron_rule::kUnique, kNoSplicedIntron, kFlank, kUmiGeneCR, kMtPrefer, kGeneFullSet, kUmiGeneSpliced,
-    // kExonPrecedence; rules 7053) and the optional kChrMPrecedence (8192), kTxCompat (16384) and kStarGene (32768)
+    // kExonPrecedence; rules 7053 before 61837) and the optional kChrMPrecedence (8192), kTxCompat (16384) and kStarGene (32768)
     // and any subset of them (e.g. 389, without kFlank), with the alevin-fry USA molecule labels and the mixed molecules behind the pre-USA split (mixed_exon / mixed_intron)
     // as the CPU pileup. The others (kContained, kNoExonPriority, kUmiGene, kUmiGeneAll) are experiments it does not implement: with one of them on its
     // counts would differ from the CPU pileup's, so the pileup stays on the CPU (the GPU still maps the reads). Decided here, before the stream.
