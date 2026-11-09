@@ -169,7 +169,8 @@ int main() {
         // computed calls from the donor's cells; with so little depth they may be no-calls, which keep every covered entry
         const A::DonorCalls computed = A::donor_calls(a, donor_of, 1);
         CHECK(computed.gt.size() == 2 && computed.differs.size() == 2, "computed calls cover both sites");
-        for (const A::DonorCalls* dc : {&fixed, &computed}) {
+        const A::DonorCalls* const call_sets[2] = {&fixed, &computed};
+        for (const A::DonorCalls* dc : call_sets) {
             A::DeltaStore st; A::build_store(a, 4, cells, donor_of, *dc, st);
             CHECK(st.n_cells() == 3 && st.full_entries == n_pairs, "store columns and full entries");
             uint64_t stored = 0;
