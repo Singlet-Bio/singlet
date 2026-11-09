@@ -26,7 +26,9 @@
 #include "../../../../include/singlet/pileup/tx_compat.h"
 #include <fstream>
 #include <sstream>
+#include <array>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <tuple>
 #include <cmath>
@@ -708,6 +710,7 @@ __global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
 // exon gene: 9 bytes per alignment) instead of the 48-byte AA records split on the host
 static bool g_e16_aasplit = false;
 static bool g_e16_fetchpar = false;   // E16 "fetchpar" (singlet, level 5): a partition's outputs downloaded and converted on one thread each
+static bool g_e24_post = false;       // E24 "lockpost" (singlet, level 5): the fetch's host half and the merge after the device is unlocked (post_run)
 __global__ void k_e16_aa_split(const AA* __restrict__ aa, int n, uint32_t* __restrict__ gene, uint8_t* __restrict__ stat, uint32_t* __restrict__ exg) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) { gene[i] = aa[i].gene; stat[i] = (uint8_t) aa[i].stat; exg[i] = aa[i].exg; }
@@ -756,6 +759,9 @@ struct Outputs {
     std::vector<uint32_t> aa_gene, aa_exg; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
     std::vector<uint2> amb_sig;          // per signature: k_resolve's multimap record genes (MAXU: none)
+    // E24 "lockpost" (g_e24_post): per partition, the host half of each fetch step (rows from the arrays downloaded under the device lock),
+    // one list per step; post_run runs them after the unlock, then the merge (post_merge)
+    std::vector<std::array<std::vector<std::function<void()>>, 8>> post; bool post_merge = false;
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
 
@@ -955,6 +961,28 @@ static void prof_gene_groups(const Inputs& in, const GeneStore& g) {
     g_prof_log.push_back(b);
 }
 
+// ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row) (the K = 1 order). Each partition's rows
+// are sorted already: they are merged (K = 1: nothing to do); the reads-per-molecule and mixed matrices are sorted whole. par: one thread per
+// matrix (each touches only its own)
+static void merge_parts(Outputs* out, std::vector<T3>* const outv[8], const std::vector<size_t> bnd[8], bool par) {
+    auto byCell = [](const T3& a, const T3& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
+    auto one = [&](int v) {
+        for (size_t p = 2; p <= bnd[v].size(); p++) {
+            const size_t mid = bnd[v][p - 1], end = p < bnd[v].size() ? bnd[v][p] : outv[v]->size();
+            std::inplace_merge(outv[v]->begin(), outv[v]->begin() + mid, outv[v]->begin() + end, byCell);
+        }
+    };
+    std::vector<T3>* whole[4] = {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron};
+    if (par) {
+        std::vector<std::thread> th;
+        for (int v = 0; v < 8; v++) th.emplace_back(one, v);
+        for (auto* w : whole) th.emplace_back([w, byCell]() { std::sort(w->begin(), w->end(), byCell); });
+        for (auto& t : th) t.join();
+    } else {
+        for (int v = 0; v < 8; v++) one(v);
+        for (auto* w : whole) std::sort(w->begin(), w->end(), byCell);
+    }
+}
 static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int TB = 256; const int nS = in.nS, nA = in.nA, nR = in.nR;
     { const char* pf = getenv("SINGLET_GPU_PILEUP_PROF"); g_prof = pf && *pf && *pf != '0'; g_prof_log.clear(); }
@@ -1120,40 +1148,58 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         ng_all += ng; n_sjt_all += n_sjt; n_snpt_all += n_snpt; n_mtt_all += n_mtt; n_indt_all += n_indt;
         if (!out) continue;
         // ---------------- fetch this partition's cells (host; its span is marked "fetch" and left out of the GPU time) ----------------
-        for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
+        // E24 (g_e24_post): each step downloads here and queues its host half (the rows from the downloaded arrays) in its own list of
+        // out->post.back(); post_run runs the lists after the device is unlocked. Without it the host half runs at once, as before.
+        if (!g_e24_post) for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
+        std::array<std::vector<std::function<void()>>, 8>* pq = g_e24_post ? &out->post.emplace_back() : nullptr;
+        auto defer = [pq](int step, std::function<void()> f) { if (pq) (*pq)[step].push_back(std::move(f)); else f(); };
+        const int ncl = in.ncells;
         // (E16: the steps as lambdas, called in this order, or with g_e16_fetchpar on threads: each fills its own outputs in the same order)
-        auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells);
-                                                              if (g_e16_fetchpar && v.empty()) v.swap(t); else v.insert(v.end(), t.begin(), t.end()); };
+        auto add = [&](std::vector<T3>& v, const CsrDev& c, int step) {
+            auto h = std::make_shared<Csr>(fetch_csr(c, ncl)); std::vector<T3>* pv = &v;
+            defer(step, [h, pv, ncl]() { std::vector<T3> t = csr_to_t3(*h, ncl);
+                                         if (g_e16_fetchpar && pv->empty()) pv->swap(t); else pv->insert(pv->end(), t.begin(), t.end()); }); };
         auto fExtra = [&]() {   // campaign's extra outputs: the pre-USA exon / intron split and the reads-per-molecule sums
             if (ng <= 0) return;
-            if (g_want_mixed) { add(out->mixed_exon, MX[0]); add(out->mixed_intron, MX[1]); }
+            if (g_want_mixed) { add(out->mixed_exon, MX[0], 3); add(out->mixed_intron, MX[1], 3); }
             if (g_want_reads) {
                 auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
-                    std::vector<uint32_t> ip(in.ncells + 1), ix(c.nnz), da(c.nnz);
-                    CK(cudaMemcpy(ip.data(), c.indptr, 4 * (size_t)(in.ncells + 1), cudaMemcpyDeviceToHost));
-                    if (c.nnz) { CK(cudaMemcpy(ix.data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da.data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
-                    for (int cell = 0; cell < in.ncells; cell++) for (uint32_t k = ip[cell]; k < ip[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, ix[k], da[k]});
+                    auto ip = std::make_shared<std::vector<uint32_t>>(ncl + 1), ix = std::make_shared<std::vector<uint32_t>>(c.nnz), da = std::make_shared<std::vector<uint32_t>>(c.nnz);
+                    CK(cudaMemcpy(ip->data(), c.indptr, 4 * (size_t)(ncl + 1), cudaMemcpyDeviceToHost));
+                    if (c.nnz) { CK(cudaMemcpy(ix->data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da->data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
+                    std::vector<T3>* pv = &v;
+                    defer(3, [ip, ix, da, pv, ncl]() { for (int cell = 0; cell < ncl; cell++) for (uint32_t k = (*ip)[cell]; k < (*ip)[cell + 1]; k++) pv->push_back(T3{(uint32_t)cell, (*ix)[k], (*da)[k]}); });
                 };
                 addr(out->exon_reads, RD[0]); addr(out->intron_reads, RD[1]);
             }
         };
+        // the downloads land in uninitialised buffers (the host half reads each word once)
+        auto hbuf64 = [](int n) { return std::shared_ptr<uint64_t>(new uint64_t[(size_t)n], std::default_delete<uint64_t[]>()); };
+        auto hbuf32 = [](int n) { return std::shared_ptr<uint32_t>(new uint32_t[(size_t)n], std::default_delete<uint32_t[]>()); };
         auto fSj = [&]() {
-        if (n_sju > 0) { std::vector<uint64_t> k(n_sju); std::vector<uint32_t> c(n_sju); CK(cudaMemcpy(k.data(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
-            for (int i = 0; i < n_sju; i++) out->sj_raw_sum += c[i];
-            for (int i = 0; i < n_sju; i++) out->sj.push_back(T3{(uint32_t)(k[i] >> jb), (uint32_t)(k[i] & ((1ull << jb) - 1)), std::min(c[i], 65535u)}); }
+        if (n_sju > 0) { auto k = hbuf64(n_sju); auto c = hbuf32(n_sju); CK(cudaMemcpy(k.get(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
+            const int n = n_sju, jbl = jb;
+            defer(4, [k, c, n, jbl, out]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
+                for (int i = 0; i < n; i++) out->sj_raw_sum += cc[i];
+                for (int i = 0; i < n; i++) out->sj.push_back(T3{(uint32_t)(kk[i] >> jbl), (uint32_t)(kk[i] & ((1ull << jbl) - 1)), std::min(cc[i], 65535u)}); }); }
         };
         auto fSn = [&]() {
-        if (n_snu > 0) { std::vector<uint64_t> k(n_snu), v(n_snu); CK(cudaMemcpy(k.data(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.data(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
-            for (int i = 0; i < n_snu; i++) { T3 a{(uint32_t)(k[i] >> sb), (uint32_t)(k[i] & ((1ull << sb) - 1)), 0}; uint32_t dp = (uint32_t)(v[i] & 0xFFFFFFFFu), ad = (uint32_t)(v[i] >> 32);
-                if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }
+        if (n_snu > 0) { auto k = hbuf64(n_snu), v = hbuf64(n_snu); CK(cudaMemcpy(k.get(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.get(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
+            const int n = n_snu, sbl = sb;
+            defer(5, [k, v, n, sbl, out]() { const uint64_t* kk = k.get(); const uint64_t* vv = v.get();
+                out->snp_dp.reserve(out->snp_dp.size() + (size_t)n);
+                for (int i = 0; i < n; i++) { T3 a{(uint32_t)(kk[i] >> sbl), (uint32_t)(kk[i] & ((1ull << sbl) - 1)), 0}; uint32_t dp = (uint32_t)(vv[i] & 0xFFFFFFFFu), ad = (uint32_t)(vv[i] >> 32);
+                    if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }); }
         };
         auto fMt = [&]() {
-        if (n_mtu > 0) { std::vector<uint64_t> k(n_mtu); std::vector<uint32_t> c(n_mtu); CK(cudaMemcpy(k.data(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
-            for (int i = 0; i < n_mtu;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
-                uint64_t bk = k[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
-                while (j < n_mtu && (k[j] >> 1) == bk) { tot += c[j]; if (k[j] & 1) rv += c[j]; j++; }
+        if (n_mtu > 0) { auto k = hbuf64(n_mtu); auto c = hbuf32(n_mtu); CK(cudaMemcpy(k.get(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
+            const int n = n_mtu;
+            defer(6, [k, c, n, out]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
+            for (int i = 0; i < n;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
+                uint64_t bk = kk[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
+                while (j < n && (kk[j] >> 1) == bk) { tot += cc[j]; if (kk[j] & 1) rv += cc[j]; j++; }
                 uint32_t cell = (uint32_t)(bk >> 17), feat = (uint32_t)(bk & ((1u << 17) - 1));
-                out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }
+                out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }); }
         };
         auto fInd = [&]() {
         if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
@@ -1164,11 +1210,11 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             int dev = 0; cudaGetDevice(&dev);
             std::vector<std::thread> fth;
             auto run = [&](std::function<void()> f) { fth.emplace_back([dev, f]() { cudaSetDevice(dev); f(); }); };
-            if (ng > 0) { run([&]() { add(out->exon, C[0]); }); run([&]() { add(out->intron, C[1]); }); run([&]() { add(out->amb, C[2]); }); }
+            if (ng > 0) { run([&]() { add(out->exon, C[0], 0); }); run([&]() { add(out->intron, C[1], 1); }); run([&]() { add(out->amb, C[2], 2); }); }
             run(fExtra); run(fSj); run(fSn); run(fMt); run(fInd);
             for (auto& t : fth) t.join();
         } else {
-            if (ng > 0) { add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]); }
+            if (ng > 0) { add(out->exon, C[0], 0); add(out->intron, C[1], 1); add(out->amb, C[2], 2); }
             fExtra(); fSj(); fSn(); fMt(); fInd();
         }
         T.mark("fetch");
@@ -1197,17 +1243,10 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     }
 
     if (!out) return;
-    // ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row), indels by read (the K = 1 order)
-    // each partition's rows are sorted already: merge them (K = 1: nothing to do)
-    auto byCell = [](const T3& a, const T3& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
-    for (int v = 0; v < 8; v++)
-        for (size_t p = 2; p <= bnd[v].size(); p++) {
-            const size_t mid = bnd[v][p - 1], end = p < bnd[v].size() ? bnd[v][p] : outv[v]->size();
-            std::inplace_merge(outv[v]->begin(), outv[v]->begin() + mid, outv[v]->begin() + end, byCell);
-        }
+    // ---- canonical merge (merge_parts; E24: post_run, after the unlock); indels by read (the K = 1 order)
+    if (g_e24_post) out->post_merge = true; else merge_parts(out, outv, bnd, false);
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
-    for (auto* v : {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron}) std::sort(v->begin(), v->end(), byCell);
     const double e16m0 = now_s();   // E16: the host side of the final downloads (per-alignment results, junction table)
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1)); out->cell_mixed.resize(std::max(in.ncells, 1));
@@ -1237,6 +1276,21 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     if (nj > 0) { std::vector<uint64_t> h1(nj); std::vector<uint32_t> h2(nj); CK(cudaMemcpy(h1.data(), t1, (size_t)nj * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(h2.data(), t2, (size_t)nj * 4, cudaMemcpyDeviceToHost));
         for (int i = 0; i < nj; i++) out->sjtab.push_back({(uint32_t)(h1[i] >> 32), (uint32_t)(h1[i] & 0xFFFFFFFFu), h2[i]}); }
 
+}
+
+// E24 "lockpost": after the device is unlocked, the queued host halves partition by partition (each partition's rows start where the
+// previous partition's end: the bounds the merge takes), then the merge. The same rows in the same order as run_pipeline without the queue.
+static void post_run(Outputs* out) {
+    std::vector<T3>* outv[8] = {&out->exon, &out->intron, &out->amb, &out->sj, &out->snp_ad, &out->snp_dp, &out->mt, &out->mt_rev};
+    std::vector<size_t> bnd[8];
+    auto run = [](std::vector<std::function<void()>>* l) { for (auto& f : *l) f(); l->clear(); };   // clear: the downloaded arrays go
+    for (auto& steps : out->post) {
+        for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
+        if (g_e16_fetchpar) { std::vector<std::thread> th; for (auto& l : steps) if (!l.empty()) th.emplace_back(run, &l); for (auto& t : th) t.join(); }
+        else for (auto& l : steps) run(&l);
+    }
+    out->post.clear();
+    if (out->post_merge) { merge_parts(out, outv, bnd, true); out->post_merge = false; }
 }
 
 // ------------------------------------------------------------------------------------------------------------------------

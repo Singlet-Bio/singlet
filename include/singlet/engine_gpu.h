@@ -608,6 +608,8 @@ struct PileupOutput {
     // E16 "resetbg" (level 5): pileupRun left the device's context (and the inputs page-locked in it) in place; the caller keeps the device
     // lock and calls pileupRelease(device) (then unlocks) before the input's memory goes
     bool resetDeferred = false;
+    // E24 "lockpost": pileupRun called PileupInput::release (the device unlocked) before its host half; the reset is still the caller's
+    bool unlockedEarly = false;
 };
 // Runs the pileup on `device`. NOTE: the kernels' CUDA error checks still exit the process (research code); callers isolate it.
 bool pileupRun(const PileupInput& in, int device, PileupOutput& out);

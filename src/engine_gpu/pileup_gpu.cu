@@ -6,6 +6,7 @@
 #include "gpu_pileup/pileup/pileup.cu"
 #include "singlet/engine_gpu.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14
+#include <cstring>
 #include "singlet/tail_trace.h"   // E16: the level-5 switches (digest)
 #include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
@@ -41,12 +42,11 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     par.n_barcodes = pi.nBarcodes; par.n_tid = pi.nTid; par.n_exons = pi.nExons; par.n_introns = pi.nIntrons; par.n_genes = pi.nGenes;
     par.has_gene_model = pi.hasGeneModel;
     Anno an;
-    an.ex.resize(pi.exonTrees.size()); an.in.resize(pi.intronTrees.size()); an.snp.resize(pi.snps.size());
+    an.ex.resize(pi.exonTrees.size()); an.in.resize(pi.intronTrees.size());   // an.snp stays empty: the SNP rows are read from pi.snps (below)
     for (size_t t = 0; t < pi.exonTrees.size(); t++) { an.ex[t].resize(pi.exonTrees[t].size()); if (!an.ex[t].empty()) memcpy(an.ex[t].data(), pi.exonTrees[t].data(), an.ex[t].size() * sizeof(IV)); }
     for (size_t t = 0; t < pi.intronTrees.size(); t++) { an.in[t].resize(pi.intronTrees[t].size()); if (!an.in[t].empty()) memcpy(an.in[t].data(), pi.intronTrees[t].data(), an.in[t].size() * sizeof(IV)); }
-    for (size_t t = 0; t < pi.snps.size(); t++) { an.snp[t].resize(pi.snps[t].size()); if (!an.snp[t].empty()) memcpy(an.snp[t].data(), pi.snps[t].data(), an.snp[t].size() * sizeof(SnpRow)); }
     an.e2g = pi.exonToGene; an.i2g = pi.intronToGene; an.gstr = pi.geneStrand;
-    { uint32_t mx = 0; for (auto& v : an.snp) for (auto& sr : v) mx = std::max(mx, sr.idx + 1); par.n_snps = std::max(par.n_snps, mx); }
+    { uint32_t mx = 0; for (auto& v : pi.snps) for (auto& sr : v) mx = std::max(mx, sr.idx + 1); par.n_snps = std::max(par.n_snps, mx); }
     // E16: an array's leading part may be read in place (PileupInput::Pre), the vector holding the rest
     const size_t nS = (pi.preSigs.n + pi.sigs.size()) / sizeof(SigRec), nA = (pi.preAlns.n + pi.alns.size()) / sizeof(AlnRec),
                  nR = (pi.preReads.n + pi.reads.size()) / sizeof(ReadRec);
@@ -86,13 +86,16 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     in.ne2g = (uint32_t)an.e2g.size(); in.ni2g = (uint32_t)an.i2g.size(); in.ngstr = (uint32_t)an.gstr.size();
     {
-        std::vector<int32_t> P; std::vector<uint32_t> I, off(an.snp.size()), n(an.snp.size()); std::vector<char> alt, ref;
-        for (size_t t = 0; t < an.snp.size(); t++) {
-            off[t] = (uint32_t)P.size(); n[t] = (uint32_t)an.snp[t].size();
-            for (auto& s : an.snp[t]) { P.push_back(s.pos); I.push_back(s.idx); alt.push_back(s.alt); ref.push_back(s.ref); }
+        // the rows per contig as four flat arrays (E24: sized first and filled in place; with the editing panel they hold ~23 M rows)
+        const size_t nt = pi.snps.size(); std::vector<uint32_t> off(nt), n(nt); size_t tot = 0;
+        for (size_t t = 0; t < nt; t++) { off[t] = (uint32_t)tot; n[t] = (uint32_t)pi.snps[t].size(); tot += n[t]; }
+        std::vector<int32_t> P(tot); std::vector<uint32_t> I(tot); std::vector<char> alt(tot), ref(tot);
+        for (size_t t = 0; t < nt; t++) {
+            size_t j = off[t];
+            for (const auto& s : pi.snps[t]) { P[j] = s.pos; I[j] = s.idx; alt[j] = s.alt; ref[j] = s.ref; j++; }
         }
         in.SN.pos = to_dev(A, P); in.SN.idx = to_dev(A, I); in.SN.alt = to_dev(A, alt); in.SN.ref = to_dev(A, ref); in.SN.off = to_dev(A, off);
-        in.SN.n = to_dev(A, n); in.SN.ntid = (int)an.snp.size();
+        in.SN.n = to_dev(A, n); in.SN.ntid = (int)nt;
     }
     e16step("annotation H2D");
     auto devBytes = [&](const std::vector<uint8_t>& v) { uint8_t* d = A.alloc<uint8_t>(std::max<size_t>(1, v.size())); if (!v.empty()) CK(cudaMemcpy(d, v.data(), v.size(), cudaMemcpyHostToDevice)); return d; };
@@ -126,6 +129,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
     g_e16_aasplit = singlet_tail::cut("aasplit");   // E16 (level 5): the per-alignment results split on the device before their download
     g_e16_fetchpar = singlet_tail::cut("fetchpar");
+    g_e24_post = singlet_tail::cut("lockpost");   // E24: the fetch's host half and the merge after the unlock (post_run, below)
     Timer T; T.start();
     Outputs o;
     run_pipeline(A, T, in, &o);
@@ -140,6 +144,15 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     if (singlet_tail::cut("resetbg")) po.resetDeferred = true;   // the caller's thread resets it (pileupRelease) and then unlocks the device
     else { cudaDeviceReset(); if (pi.release) pi.release(); }
     e16step(po.resetDeferred ? "device reset deferred" : "device reset, lock released");
+    // E24 "lockpost": the device's work is done. With the deferred reset in E20's order (unlock, then reset) the device is unlocked here,
+    // before the host half of the fetch and the merge (post_run), instead of when pileupRun returns
+    if (g_e24_post) {
+        const char* ul = getenv("SINGLET_GPU_PILEUP_UNLOCK");
+        const bool early = po.resetDeferred && pi.release && !(ul != nullptr && (strcmp(ul, "reset") == 0 || strcmp(ul, "late") == 0));
+        if (early) { pi.release(); po.unlockedEarly = true; }
+        post_run(&o);
+        e16step(early ? "host half after the unlock (E24)" : "host half (E24)");
+    }
     // E16 "digest" (level 5): skipped; it hashes every output tuple (4.3 GB of chrM tuples on pbmc1k_v3: 2.4 s) for a log line only
     if (singlet_tail::cut("digest")) po.log += "digest skipped (E16); ";
     else {   // digest of everything the run returns (the partition-invariance gate compares it across K)
