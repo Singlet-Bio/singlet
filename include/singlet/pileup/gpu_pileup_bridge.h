@@ -149,7 +149,7 @@ public:
                 if (sec) return;
                 int nh = 1; const char* ub = nullptr; const char* ur = nullptr;
                 scan_aux(b, nh, ub, ur);
-                const char* us = ub ? ub : ur;
+                const char* us = prefer_ur_ ? (ur ? ur : ub) : (ub ? ub : ur);
                 uint64_t u3 = 0;
                 if (us) {
                     const int ul = (int) std::strlen(us);
@@ -178,7 +178,7 @@ public:
         g.alns.push_back(std::move(a)); g.seen++;
         if (!sec) {
             g.primary = (int) g.alns.size() - 1; g.bc = bc;
-            const char* us = ub ? ub : ur;
+            const char* us = prefer_ur_ ? (ur ? ur : ub) : (ub ? ub : ur);
             if (us) {
                 const int ul = (int) std::strlen(us);
                 if (umi_len_ < 0) umi_len_ = ul;
@@ -317,6 +317,9 @@ public:
     size_t n_sigs() const { return sigs_.size(); }
     uint64_t incomplete() const { return incomplete_; }
     uint64_t no_umi() const { return no_umi_; }
+    // the raw UMI (UR) before the corrected one (UB): the stream hand-off counts raw UMIs, so a BAM re-read that must match it
+    // (the all-site pass on the region-parallel path) reads UR first
+    void prefer_raw_umi(bool v) { prefer_ur_ = v; }
 
 private:
     // the SNP pileup's base-quality rule (see snpSkipN): every base of every primary
@@ -522,7 +525,7 @@ private:
         reads_.push_back(ReadRec{sid, g.bc, g.umi3}); push_q(reads_q_, g.qm.m);
     }
 
-    int min_baseq_; int umi_len_ = -1;
+    int min_baseq_; int umi_len_ = -1; bool prefer_ur_ = false;
     uint64_t lowqual_bases_ = 0, qual_neq_n_ = 0, incomplete_ = 0, no_umi_ = 0;
     std::unordered_map<uint64_t, Group> pend_;   // keyed like the engine's mm_buffer (64-bit qname hash)
     std::unordered_map<H128, uint32_t, H128Hash> sigmap_;

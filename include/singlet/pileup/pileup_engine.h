@@ -1786,6 +1786,9 @@ public:
         }
 
         for (auto& t : threads) t.join();
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        allsite_parallel_pass(bam_path, n_workers);   // D-101: the region workers keep no records, so one more pass over the BAM collects them
+#endif
 
         auto proc_t1 = std::chrono::high_resolution_clock::now();
         double proc_s = std::chrono::duration<double>(proc_t1 - proc_t0).count();
@@ -2282,6 +2285,33 @@ public:
     }
     void allsite_cpu_mode() {
         if (!gpu_col_ || gpupileup::enabled() || !allsite_on()) return;
+        singlet_engine_gpu::PileupInput in;
+        if (!gpu_build_input(in)) { std::cerr << "[allsite] not run: records not reproducible\n"; return; }
+        allsite_from_input(in);
+    }
+    // D-101 on the region-parallel path (run_parallel): the workers keep no alignment records, so the member reads the sorted BAM once
+    // more, in file order, into a collector, with the barcode column the stream gives (the CB, or the corrected CR when cb_from_cr).
+    // Every all-site count is a function of the set of reads (allsite.h), so the sorted order gives what the stream order gives.
+    void allsite_parallel_pass(const std::string& bam_path, int n_threads) {
+        if (!allsite_on() || allsite_done_) return;
+        const auto t0 = std::chrono::steady_clock::now();
+        htsFile* fp = hts_open(bam_path.c_str(), "r");
+        if (!fp) { std::cerr << "[allsite] not run: cannot open " << bam_path << "\n"; return; }
+        if (n_threads > 1) hts_set_threads(fp, n_threads);
+        sam_hdr_t* hdr = sam_hdr_read(fp);
+        if (!hdr) { hts_close(fp); std::cerr << "[allsite] not run: no BAM header\n"; return; }
+        gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));
+        gpu_col_->prefer_raw_umi(true);   // UB in the sorted BAM is the corrected UMI and merges molecules the serial pass keeps apart
+        bam1_t* b = bam_init1();
+        uint64_t n = 0;
+        while (sam_read1(fp, hdr, b) >= 0) {
+            const char* cb = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
+            gpu_col_->add(b, (cb && cb[0] != '-') ? bc_index_.lookup(cb) : -1);
+            if ((++n % 50000000) == 0) singlet::rearm_stall_watchdog("allsite pass");
+        }
+        bam_destroy1(b); sam_hdr_destroy(hdr); hts_close(fp);
+        std::cerr << "[allsite] parallel path: " << n << " records re-read in "
+                  << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
         singlet_engine_gpu::PileupInput in;
         if (!gpu_build_input(in)) { std::cerr << "[allsite] not run: records not reproducible\n"; return; }
         allsite_from_input(in);
