@@ -1235,18 +1235,22 @@ static int cmd_encode(int argc, char* argv[]) {
 // ════════════════════════════════════════════════════════════
 // singlet hla / hla-prefilter — D-101 HLA typing on its own (the same code as the --pipeline step)
 // ════════════════════════════════════════════════════════════
-// singlet hla --t1k DIR --out DIR [--donors donor_assignments.tsv] [--threads N] [--cdna-r1] RUN.1fq [RUN2.1fq ...]
-//   types HLA from .1fq input exactly as the pipeline does (private/hla/ under --out)
+// singlet hla --t1k DIR --out DIR [--donors donor_assignments.tsv] [--threads N] [--cdna-r1] [--defer] RUN.1fq [RUN2.1fq ...]
+//   types HLA from .1fq input exactly as the pipeline does (private/hla/ under --out); --defer: prefilter only, private/hla/pending/
+// singlet hla --pending RUN/private/hla/pending [--t1k DIR] [--threads N]
+//   the deferred route's CPU step (--hla-defer): T1K on the run's candidate reads; the same private/hla/ outputs, then pending/ is deleted
 // singlet hla-prefilter --t1k DIR -1 R1.fq[.gz] [-2 R2.fq[.gz]] -o PREFIX
 //   the prefilter alone on FASTQ (keeps a pair when either mate shares a 19-mer with the HLA index): PREFIX_1.fq [PREFIX_2.fq]
 static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
-    std::string t1k, out, donors, r1, r2, prefix;
+    std::string t1k, out, donors, r1, r2, prefix, pending;
     std::vector<std::string> inputs;
-    int threads = 8; bool cdna_r1 = false;
+    int threads = 8; bool cdna_r1 = false, defer = false;
     for (int i = 0; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--t1k" && i + 1 < argc) t1k = argv[++i];
+        else if (a == "--defer") defer = true;
         else if (a == "--out" && i + 1 < argc) out = argv[++i];
+        else if (a == "--pending" && i + 1 < argc) pending = argv[++i];
         else if (a == "--donors" && i + 1 < argc) donors = argv[++i];
         else if (a == "--threads" && i + 1 < argc) threads = std::atoi(argv[++i]);
         else if (a == "--cdna-r1") cdna_r1 = true;
@@ -1255,6 +1259,14 @@ static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
         else if (a == "-o" && i + 1 < argc) prefix = argv[++i];
         else if (!a.empty() && a[0] != '-') inputs.push_back(a);
         else { std::cerr << "singlet hla: unknown argument " << a << "\n"; return 2; }
+    }
+    if (!pending.empty()) {
+        const std::string tmp = (std::filesystem::temp_directory_path() / ("singlet-hla-" + std::to_string(getpid()) + "-" +
+                                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
+        const auto hr = singlet::hla::run_pending(pending, t1k, threads, tmp);
+        if (!hr.landed) { std::cerr << "[hla] FAILED, pending/ kept: " << hr.why_not << "\n"; return 1; }
+        std::cerr << "[hla] " << singlet::hla::status_text(hr) << "; " << hr.n_donors_typed << " donors typed; pending/ deleted\n";
+        return 0;
     }
     if (t1k.empty()) { std::cerr << "singlet hla: --t1k DIR is required\n"; return 2; }
     if (prefilter_only) {
@@ -1267,11 +1279,11 @@ static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
     }
     if (out.empty() || inputs.empty()) { std::cerr << "usage: singlet hla --t1k DIR --out DIR [--donors TSV] [--threads N] RUN.1fq ...\n"; return 2; }
     singlet::hla::Config hc;
-    hc.t1k_dir = t1k; hc.onefq = inputs; hc.cdna_is_r1 = cdna_r1; hc.out_prefix = out; hc.donor_assignments = donors; hc.threads = threads;
+    hc.t1k_dir = t1k; hc.onefq = inputs; hc.cdna_is_r1 = cdna_r1; hc.out_prefix = out; hc.donor_assignments = donors; hc.threads = threads; hc.defer = defer;
     mkdir_p(out);
     const auto hr = singlet::hla::run(hc);
-    std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed << " donors typed\n";
-    return hr.ran ? 0 : 1;
+    std::cerr << "[hla] " << singlet::hla::status_text(hr) << "; " << hr.n_donors_typed << " donors typed\n";
+    return hr.ran || hr.deferred ? 0 : 1;
 }
 
 static int cmd_decode(int argc, char* argv[]) {
@@ -3023,7 +3035,7 @@ static void usage(const char* prog) {
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
         << "  --hla-t1k DIR          T1K install with its IPD-IMGT/HLA index (bin/, hlaidx/, manifest.json); --pipeline on a human\n"
-        << "                         genome uses <ref-base>/hla/t1k (--no-hla: none). Output: private/hla/ (owner-only)\n"
+        << "                         genome uses <ref-base>/hla/t1k (--no-hla: none; --hla-defer: prefilter only, then `singlet hla --pending` on a CPU node). Output: private/hla/ (owner-only)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
         << "Output:\n"
         << "  --out-prefix DIR       Output directory [./singlet_out]\n"
@@ -3506,6 +3518,7 @@ static int singlet_main(int argc, char* argv[]) {
     std::string edit_panel_source = "none";
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
     bool no_hla = false;                 // --no-hla
+    bool hla_defer = false;              // --hla-defer: prefilter only, private/hla/pending/ for `singlet hla --pending`
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
@@ -3536,6 +3549,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--no-editing") no_default_editing = true;
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
         else if (arg == "--no-hla") no_hla = true;
+        else if (arg == "--hla-defer") hla_defer = true;
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -8769,6 +8783,7 @@ static int singlet_main(int argc, char* argv[]) {
                 c.t1k_dir = t1k;
                 c.onefq = onefq_files.empty() ? std::vector<std::string>{onefq_file} : onefq_files;
                 c.cdna_is_r1 = reads_inverted;
+                c.defer = hla_defer;
                 c.out_prefix = out_prefix;
                 c.donor_assignments = out_prefix + "/donor_assignments.tsv";
                 c.threads = std::max(config.threads, star_threads);
@@ -9826,7 +9841,7 @@ static int singlet_main(int argc, char* argv[]) {
                 const double waited = wait_sw.elapsed_s();
                 const auto hr = singlet::hla::finish_stage(hla_bg.s);
                 hla_bg.finished = true;
-                std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed
+                std::cerr << "[hla] " << singlet::hla::status_text(hr) << "; " << hr.n_donors_typed
                           << " donors typed; " << hla_bg.sw.elapsed_s() << " s since the STAR fork, waited " << waited
                           << " s for the sample stage\n";
             } else {
@@ -9835,11 +9850,12 @@ static int singlet_main(int argc, char* argv[]) {
                 hc.t1k_dir = t1k;
                 hc.onefq = onefq_files.empty() ? std::vector<std::string>{onefq_file} : onefq_files;
                 hc.cdna_is_r1 = reads_inverted;
+                hc.defer = hla_defer;
                 hc.out_prefix = out_prefix;
                 hc.donor_assignments = out_prefix + "/donor_assignments.tsv";
                 hc.threads = export_cfg.threads;
                 const auto hr = singlet::hla::run(hc);
-                std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed
+                std::cerr << "[hla] " << singlet::hla::status_text(hr) << "; " << hr.n_donors_typed
                           << " donors typed; " << hla_sw.elapsed_s() << " s\n";
             }
         }

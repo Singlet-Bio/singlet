@@ -19,6 +19,11 @@
 //   donors/donor<k>_genotype.tsv     the same table per donor
 //   hla_candidate_reads.fq.gz        the prefiltered reads (name: <index>_<raw cell barcode>), so HLA can be typed again later
 //   hla_summary.json            T1K and IPD-IMGT/HLA manifest, read counts, calls per gene for the sample and each donor
+//
+// Deferred route (--hla-defer, then `singlet hla --pending`): the run does the prefilter only and leaves private/hla/pending/ (the candidate
+// reads and manifest.json), so T1K can run later on a CPU node after the input reads are gone. run_pending types from there, writes the
+// outputs above byte for byte as the direct route does, and deletes pending/ once hla_summary.json has landed. pending/ holds reads: it is
+// owner-only, under private/, and never part of a public object.
 
 #include <algorithm>
 #include <atomic>
@@ -145,6 +150,7 @@ struct Config {
     // the run's files do not change while the sample stage runs beside STAR (sample_stage / finish_stage below).
     std::string tmp_dir;
     int min_cells = 2;              // frequency prior: type against alleles recorded in >= this many cells of IPD-IMGT/HLA (0: all alleles)
+    bool defer = false;             // prefilter only: leave private/hla/pending/ for run_pending (--hla-defer)
 };
 
 struct Result {
@@ -152,9 +158,17 @@ struct Result {
     std::string why_not;
     uint64_t reads_scanned = 0, reads_kept = 0;
     size_t n_kmers = 0, n_alleles = 0, n_alleles_typed = 0;
-    int n_donors_typed = 0;
+    int n_donors_typed = 0, n_donors_failed = 0;   // failed: a donor with candidate reads whose T1K call failed
     double seconds_prefilter = 0, seconds_t1k = 0;
+    bool deferred = false;   // private/hla/pending/ was written (Config::defer)
+    bool landed = false;     // run_pending: hla_summary.json is complete and pending/ is gone
 };
+
+/// One line for the run log.
+inline std::string status_text(const Result& r) {
+    if (r.deferred) return "deferred: candidate reads and manifest in private/hla/pending/";
+    return r.ran ? std::string("typed") : "not typed: " + r.why_not;
+}
 
 inline std::string shq(const std::string& s) {   // single-quote for /bin/sh
     std::string o = "'";
@@ -392,6 +406,47 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
     return true;
 }
 
+constexpr const char* kPendingReads = "candidate_reads.fq.gz";
+constexpr const char* kPendingFormat = "singlet-hla-pending-1";
+
+/// gzip a file (mode: gzopen's, e.g. "wb1"); false when anything failed.
+inline bool gzip_file(const std::string& from, const std::string& to, const char* mode) {
+    std::ifstream in(from, std::ios::binary);
+    gzFile g = gzopen(to.c_str(), mode);
+    if (!in || !g) { if (g) gzclose(g); return false; }
+    std::vector<char> b(1 << 20);
+    bool ok = true;
+    while (ok && in) { in.read(b.data(), b.size()); const int n = static_cast<int>(in.gcount()); if (n > 0 && gzwrite(g, b.data(), static_cast<unsigned>(n)) != n) ok = false; }
+    return gzclose(g) == Z_OK && ok && !in.bad();
+}
+
+/// The sample's T1K on the prefiltered reads (Session::kept_fq), with the frequency prior.
+inline void type_sample(Session& s) {
+    const Config& cfg = s.cfg;
+    Result& res = s.res;
+    const std::string ref = cfg.t1k_dir + "/hlaidx/hlaidx_rna_seq.fa";
+    auto t1 = std::chrono::steady_clock::now();
+    // the sample
+    s.T = std::to_string(std::max(1, cfg.threads));
+    s.log = s.tmp + "/t1k.log";
+    // typing index: the K-cell frequency prior when the index ships Allele_status.txt, else the full index (reported either way)
+    s.tref = ref;
+    res.n_alleles_typed = res.n_alleles;
+    const std::string status = cfg.t1k_dir + "/hlaidx/Allele_status.txt";
+    if (cfg.min_cells > 0 && file_exists(status)) {
+        size_t total = 0;
+        const size_t kept = filter_index_by_cells(ref, status, cfg.min_cells, s.tmp + "/hlaidx.prior.fa", total);
+        if (kept > 0) { s.tref = s.tmp + "/hlaidx.prior.fa"; res.n_alleles_typed = kept; }
+        std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "\n";
+    } else if (cfg.min_cells > 0) {
+        std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx\n";
+    }
+    if (res.reads_kept == 0) { res.why_not = "no read shares a k-mer with the HLA index"; }
+    else if (!t1k_call(s, s.kept_fq, "sample", false)) { res.why_not = "run-t1k failed (" + s.log + ")"; }
+    else res.ran = true;
+    s.t1k_sample_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
+}
+
 inline void sample_stage(Session& s) {
     const Config& cfg = s.cfg;
     Result& res = s.res;
@@ -420,36 +475,83 @@ inline void sample_stage(Session& s) {
     }
     std::fclose(out);
     s.stopped = false;
-    auto t1 = std::chrono::steady_clock::now();
-    res.seconds_prefilter = std::chrono::duration<double>(t1 - t0).count();
+    res.seconds_prefilter = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     std::cerr << "[hla] prefilter: " << res.reads_kept << " of " << res.reads_scanned << " reads share a 19-mer with " << res.n_alleles
               << " HLA alleles (" << res.n_kmers << " k-mers), " << res.seconds_prefilter << " s\n";
 
-    // 2. the sample
-    s.T = std::to_string(std::max(1, cfg.threads));
-    s.log = s.tmp + "/t1k.log";
-    // typing index: the K-cell frequency prior when the index ships Allele_status.txt, else the full index (reported either way)
-    s.tref = ref;
-    res.n_alleles_typed = res.n_alleles;
-    const std::string status = cfg.t1k_dir + "/hlaidx/Allele_status.txt";
-    if (cfg.min_cells > 0 && file_exists(status)) {
-        size_t total = 0;
-        const size_t kept = filter_index_by_cells(ref, status, cfg.min_cells, s.tmp + "/hlaidx.prior.fa", total);
-        if (kept > 0) { s.tref = s.tmp + "/hlaidx.prior.fa"; res.n_alleles_typed = kept; }
-        std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "\n";
-    } else if (cfg.min_cells > 0) {
-        std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx\n";
+    if (cfg.defer) {
+        if (res.reads_kept > 0 && !gzip_file(s.kept_fq, s.tmp + "/" + kPendingReads, "wb1")) {
+            s.stopped = true; res.why_not = "cannot compress the candidate reads in " + s.tmp; return;
+        }
+        std::remove(s.kept_fq.c_str());
+        return;
     }
-    if (res.reads_kept == 0) { res.why_not = "no read shares a k-mer with the HLA index"; }
-    else if (!t1k_call(s, s.kept_fq, "sample", false)) { res.why_not = "run-t1k failed (" + s.log + ")"; }
-    else res.ran = true;
-    s.t1k_sample_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
+    type_sample(s);
+}
+
+inline std::string json_quote(const std::string& s) {
+    std::string o = "\"";
+    for (char c : s) { if (c == '"' || c == '\\') o += '\\'; o += c; }
+    return o + "\"";
+}
+
+/// A field of the manifest (one key per line); false when absent. String values are unquoted.
+inline bool manifest_field(const std::string& text, const std::string& key, std::string& value) {
+    const std::string k = "\n  \"" + key + "\": ";
+    auto p = text.find(k);
+    if (p == std::string::npos) return false;
+    p += k.size();
+    auto e = text.find('\n', p);
+    std::string v = text.substr(p, e == std::string::npos ? std::string::npos : e - p);
+    if (!v.empty() && v.back() == ',') v.pop_back();
+    if (v.size() >= 2 && v.front() == '"' && v.back() == '"') {
+        value.clear();
+        for (size_t i = 1; i + 1 < v.size(); ++i) { if (v[i] == '\\' && i + 2 < v.size()) ++i; value += v[i]; }
+    } else value = v;
+    return true;
+}
+
+/// Deferred route, end of the run: the candidate reads and the manifest into private/hla/pending/. The manifest is written last, after
+/// the reads are in place, so a pending/ with a manifest is complete.
+inline Result write_pending(Session& s) {
+    const Config& cfg = s.cfg;
+    Result& res = s.res;
+    const std::string pend = s.dir + "/pending", reads = pend + "/" + kPendingReads, staged = s.tmp + "/" + kPendingReads;
+    run_sh(("rm -rf " + shq(pend) + " && mkdir -p " + shq(pend)).c_str());
+    ::chmod((cfg.out_prefix + "/private").c_str(), 0700);
+    auto fail = [&](const std::string& why) -> Result& { res.why_not = why; run_sh(("rm -rf " + shq(pend)).c_str()); if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str()); return res; };
+    long long bytes = 0;
+    if (res.reads_kept > 0) {
+        struct stat a{}, b{};
+        if (stat(staged.c_str(), &a) != 0) return fail("no candidate reads at " + staged);
+        move_file(staged, reads);
+        if (stat(reads.c_str(), &b) != 0 || a.st_size != b.st_size) return fail("cannot write " + reads);
+        bytes = static_cast<long long>(b.st_size);
+    }
+    // the donor file relative to the run directory, which may move before the CPU job runs
+    std::string donors = cfg.donor_assignments;
+    const std::string pre = cfg.out_prefix + "/";
+    if (donors.rfind(pre, 0) == 0) donors = donors.substr(pre.size());
+    {
+        std::ofstream j(pend + "/manifest.json.tmp");
+        j << "{\n  \"format\": " << json_quote(kPendingFormat) << ",\n  \"t1k_dir\": " << json_quote(cfg.t1k_dir) << ",\n  \"cdna_is_r1\": " << (cfg.cdna_is_r1 ? "true" : "false")
+          << ",\n  \"donor_assignments\": " << json_quote(donors) << ",\n  \"min_cells\": " << cfg.min_cells << ",\n  \"reads_scanned\": " << res.reads_scanned
+          << ",\n  \"reads_kept\": " << res.reads_kept << ",\n  \"n_kmers\": " << res.n_kmers << ",\n  \"n_alleles\": " << res.n_alleles
+          << ",\n  \"seconds_prefilter\": " << res.seconds_prefilter << ",\n  \"candidate_bytes\": " << bytes << "\n}\n";
+        j.close();
+        if (!j || std::rename((pend + "/manifest.json.tmp").c_str(), (pend + "/manifest.json").c_str()) != 0) return fail("cannot write the manifest in " + pend);
+    }
+    if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str());
+    run_sh(("chmod -R go-rwx " + shq(s.dir)).c_str());
+    res.deferred = true;
+    return res;
 }
 
 inline Result finish_stage(Session& s) {
     const Config& cfg = s.cfg;
     Result& res = s.res;
     if (!s.made) return res;   // stopped at the input checks, before any directory was made
+    if (cfg.defer && !s.stopped) return write_pending(s);
     const std::string& dir = s.dir;
     const std::string& tmp = s.tmp;
     run_sh(("mkdir -p " + shq(dir + "/donors")).c_str());
@@ -493,6 +595,10 @@ inline Result finish_stage(Session& s) {
                 move_file(tmp + "/" + name + "_genotype.tsv", dir + "/donors/" + name + "_genotype.tsv");
                 calls = genotype_json(dir + "/donors/" + name + "_genotype.tsv");
                 ++res.n_donors_typed;
+            } else if (nr[k] > 0) {
+                ++res.n_donors_failed;
+                std::cerr << "[hla] T1K failed for " << name << "; end of its log:\n" << std::flush;
+                run_sh(("tail -n 20 " + shq(s.log) + " 1>&2").c_str());
             }
             donors_json += std::string(k ? ", " : "") + "\"" + name + "\": {\"candidate_reads\": " + std::to_string(nr[k]) + ", \"calls\": " + calls + "}";
         }
@@ -513,7 +619,7 @@ inline Result finish_stage(Session& s) {
     while (!manifest.empty() && (manifest.back() == '\n' || manifest.back() == ' ')) manifest.pop_back();
     if (manifest.empty()) manifest = "null";
     {
-        std::ofstream j(dir + "/hla_summary.json");
+        std::ofstream j(dir + "/hla_summary.json.tmp");   // renamed once complete: a hla_summary.json is always whole
         j << "{\n  \"t1k\": " << manifest << ",\n  \"ran\": " << (res.ran ? "true" : "false") << ",\n  \"why_not\": \"" << res.why_not
           << "\",\n  \"prefilter\": {\"k\": " << kK << ", \"stride\": " << kStride << ", \"hla_alleles\": " << res.n_alleles << ", \"typed_alleles\": " << res.n_alleles_typed << ", \"min_cells\": " << cfg.min_cells << ", \"kmers\": " << res.n_kmers
           << ", \"reads_scanned\": " << res.reads_scanned << ", \"reads_kept\": " << res.reads_kept << ", \"seconds\": " << res.seconds_prefilter
@@ -521,6 +627,7 @@ inline Result finish_stage(Session& s) {
           << ",\n  \"donor_rule\": \"called cells (cell_status cell) of one donor with prob_max >= 0.9, matched by raw cell barcode\""
           << ",\n  \"donors\": " << donors_json << "\n}\n";
     }
+    std::rename((dir + "/hla_summary.json.tmp").c_str(), (dir + "/hla_summary.json").c_str());
     if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(tmp)).c_str());
     run_sh(("chmod -R go-rwx " + shq(dir)).c_str());
     return res;
@@ -531,6 +638,82 @@ inline Result run(const Config& cfg) {
     s.cfg = cfg;
     sample_stage(s);
     return finish_stage(s);
+}
+
+/// Deferred route, the CPU job: `pending_dir` is <run>/private/hla/pending. t1k_dir overrides the manifest's install when not empty; tmp_dir
+/// as in Config (empty: <run>/private/hla/.t1k). Result::landed is true when hla_summary.json is complete and pending/ has been deleted (a
+/// sample with no candidate read lands with ran = false, as the direct route writes it). On any failure pending/ stays, so the job can run
+/// again, and no hla_summary.json is left.
+inline Result run_pending(const std::string& pending_dir, const std::string& t1k_dir, int threads, const std::string& tmp_dir) {
+    Result bad;
+    std::string pend = pending_dir;
+    while (pend.size() > 1 && pend.back() == '/') pend.pop_back();
+    const std::string suffix = "/private/hla/pending";
+    if (pend.size() <= suffix.size() || pend.compare(pend.size() - suffix.size(), suffix.size(), suffix) != 0) { bad.why_not = "not a <run>/private/hla/pending directory: " + pend; return bad; }
+    const std::string man = slurp(pend + "/manifest.json");
+    std::string v;
+    if (man.empty()) { bad.why_not = "no manifest in " + pend; return bad; }
+    if (!manifest_field(man, "format", v) || v != kPendingFormat) { bad.why_not = "unknown pending format in " + pend; return bad; }
+    auto num = [&](const char* k, unsigned long long& out) { std::string x; if (!manifest_field(man, k, x)) return false; out = std::strtoull(x.c_str(), nullptr, 10); return true; };
+
+    Session s;
+    Config& cfg = s.cfg;
+    Result& res = s.res;
+    cfg.out_prefix = pend.substr(0, pend.size() - suffix.size());
+    cfg.threads = threads;
+    cfg.tmp_dir = tmp_dir;
+    cfg.t1k_dir = t1k_dir;
+    if (cfg.t1k_dir.empty() && !manifest_field(man, "t1k_dir", cfg.t1k_dir)) { bad.why_not = "the manifest names no T1K install"; return bad; }
+    if (manifest_field(man, "cdna_is_r1", v)) cfg.cdna_is_r1 = v == "true";
+    if (manifest_field(man, "donor_assignments", v) && !v.empty()) cfg.donor_assignments = v[0] == '/' ? v : cfg.out_prefix + "/" + v;
+    unsigned long long mc = 0, scanned = 0, kept = 0, nk = 0, na = 0;
+    if (!num("min_cells", mc) || !num("reads_scanned", scanned) || !num("reads_kept", kept) || !num("n_kmers", nk) || !num("n_alleles", na)) { bad.why_not = "incomplete manifest in " + pend; return bad; }
+    cfg.min_cells = static_cast<int>(mc);
+    res.reads_scanned = scanned; res.reads_kept = kept; res.n_kmers = nk; res.n_alleles = na;
+    if (manifest_field(man, "seconds_prefilter", v)) res.seconds_prefilter = std::atof(v.c_str());
+
+    s.dir = cfg.out_prefix + "/private/hla";
+    s.tmp = tmp_dir.empty() ? s.dir + "/.t1k" : tmp_dir;
+    if (!file_exists(cfg.t1k_dir + "/hlaidx/hlaidx_rna_seq.fa") || !file_exists(cfg.t1k_dir + "/bin/run-t1k")) { bad.why_not = "T1K or its HLA index not found in " + cfg.t1k_dir; return bad; }
+    run_sh(("mkdir -p " + shq(s.tmp)).c_str());
+    auto clean = [&]() { if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str()); };
+    s.kept_fq = s.tmp + "/prefilter.fq";
+    if (kept > 0) {   // the reads as the prefilter wrote them, checked against the manifest
+        gzFile g = gzopen((pend + "/" + kPendingReads).c_str(), "rb");
+        FILE* out = g ? std::fopen(s.kept_fq.c_str(), "wb") : nullptr;
+        uint64_t lines = 0;
+        bool ok = g && out;
+        std::vector<char> b(1 << 20);
+        for (int n; ok && (n = gzread(g, b.data(), static_cast<unsigned>(b.size()))) != 0;) {
+            if (n < 0 || std::fwrite(b.data(), 1, static_cast<size_t>(n), out) != static_cast<size_t>(n)) { ok = false; break; }
+            lines += static_cast<uint64_t>(std::count(b.data(), b.data() + n, '\n'));
+        }
+        if (g) gzclose(g);
+        if (out && std::fclose(out) != 0) ok = false;
+        if (!ok || lines != 4 * kept) { bad.why_not = "the candidate reads in " + pend + " are damaged (" + std::to_string(lines / 4) + " reads, the manifest says " + std::to_string(kept) + ")"; clean(); return bad; }
+    }
+    s.made = true;
+    type_sample(s);
+    if (kept > 0 && !res.ran) {
+        bad.why_not = res.why_not;
+        std::cerr << "[hla] end of T1K's log:\n" << std::flush;
+        run_sh(("tail -n 20 " + shq(s.log) + " 1>&2").c_str());
+        clean();
+        return bad;
+    }
+    Result out = finish_stage(s);
+    const std::string summary = s.dir + "/hla_summary.json";
+    if (out.n_donors_failed > 0) {
+        std::remove(summary.c_str());
+        out.ran = false;
+        out.why_not = std::to_string(out.n_donors_failed) + " donor(s) failed in T1K";
+        return out;
+    }
+    if (!file_exists(summary)) { out.why_not = "hla_summary.json was not written"; return out; }
+    run_sh(("rm -rf " + shq(pend)).c_str());
+    out.landed = !file_exists(pend);
+    if (!out.landed) out.why_not = "cannot delete " + pend;
+    return out;
 }
 
 }  // namespace singlet::hla

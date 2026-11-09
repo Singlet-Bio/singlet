@@ -25,6 +25,7 @@ goes to **`<out>/private/`**:
 | `private/hla/donors/donorK_genotype.tsv` | the same per assigned donor (cells with label `donorK` and prob_max >= 0.9) |
 | `private/hla/hla_candidate_reads.fq.gz` | the reads that reached T1K (k-mer prefilter on the IPD-IMGT/HLA sequences), named `idx_CB`, kept so HLA can be typed again with a newer index |
 | `private/hla/hla_summary.json` | reads scanned and kept, alleles in the index and typed against (`typed_alleles`), donors typed, timings, T1K and IPD-IMGT/HLA versions |
+| `private/hla/pending/` | only with `--hla-defer`, until the CPU step has run: the candidate reads and `manifest.json` for `singlet hla --pending` (`docs/gpu-engine/hla_pending_batch.py` runs a batch). Deleted once `hla_summary.json` has landed; holds reads, owner-only, never public |
 
 ### HLA frequency prior (K=2)
 
