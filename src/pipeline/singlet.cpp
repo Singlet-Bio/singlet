@@ -3085,6 +3085,8 @@ static void usage(const char* prog) {
         << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
         << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
         << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --no-allsite           In --pipeline mode, skip the all-site allele counts (private/allsite/; D-101)\n"
+        << "  --allsite-min-alt-molecules N / --allsite-min-alt-cells N   All-site discovery: an ALT base needs N molecules / N barcodes (2 / 2)\n"
         << "  --chimeric             Second STAR pass in chimeric mode on the unmapped reads -> chimeric_junctions.tsv.gz\n"
         << "  --chimeric-blacklist F Arriba blacklist for the chimeric table (default <ref-base>/pileup_indices/fusion/\n"
         << "                         blacklist_hg38_GRCh38_v2.5.1.tsv.gz on GRCh38, when present; 'none' = no blacklist)\n"
@@ -3515,6 +3517,7 @@ static int singlet_main(int argc, char* argv[]) {
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
     bool no_hla = false;                 // --no-hla
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
+    bool no_allsite = false;             // --no-allsite: no private/allsite/ member (D-101) in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
     // Track B cascade (T-L2-7 CLI flags)
@@ -3540,6 +3543,9 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--exons" && i+1 < argc) config.exon_gtf_path = argv[++i];
         else if (arg == "--snps" && i+1 < argc) { config.snp_path = argv[++i]; snp_panel_source = "user"; }
         else if (arg == "--no-snps") no_default_snps = true;
+        else if (arg == "--no-allsite") no_allsite = true;
+        else if (arg == "--allsite-min-alt-molecules" && i+1 < argc) config.allsite_min_alt_molecules = std::atoi(argv[++i]);
+        else if (arg == "--allsite-min-alt-cells" && i+1 < argc) config.allsite_min_alt_cells = std::atoi(argv[++i]);
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
@@ -4347,6 +4353,9 @@ static int singlet_main(int argc, char* argv[]) {
             }
         }
     }
+    // D-101: per-cell allele counts at every nuclear site with alternate-allele evidence (private/allsite/), wherever a SNP panel is in
+    // use (the same donors and privacy class); the reference bases come from the STAR genome. GPU builds (allsite.h).
+    if (pipeline_mode && !no_allsite && !config.snp_path.empty() && !genome_dir.empty()) config.allsite_genome_dir = genome_dir;
     // D-101: default RNA editing panel in --pipeline mode, REDIportal A-to-I sites on the genome strand
     // (scripts/editing/build_rediportal_panel.py writes the panel and its manifest <panel>.json: version, sha256, license).
     // Human GRCh38 and mouse GRCm39 only; the barnyard and other species get none.

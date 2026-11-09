@@ -84,6 +84,10 @@ KEEP, DROP = "GSM9001", "GSM9002"
         ("summary.json", None),
         ("pileup_stats.json", None),
         ("star_Solo.out/Gene/raw/matrix.mtx", None),
+        ("private/allsite/allele_ad.1pz", "genotype"),
+        ("private/allsite/allele_dp.mtx.gz", "genotype"),
+        ("private/allsite/sites.tsv.gz", "genotype"),
+        ("private/genotype/cellsnp/cellSNP.tag.AD.mtx", "genotype"),
     ],
 )
 def test_omitted_layer(rel, layer):
@@ -696,3 +700,10 @@ def test_sample_facts_never_carry_an_accession_into_the_manifest(tmp_path, pol):
         str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy
     )
     assert any("excluded or withheld accessions" in what for _s, _w, what in rep.items)
+
+
+def test_private_members_are_withheld_by_both_rules():
+    # D-101: the all-site member carries each donor's genotype; the policy withholds it even where private/ was not split off
+    from singlet._restricted import is_restricted_member
+    for rel in ("private/allsite/allele_ad.1pz", "private/allsite/allele_dp.1pz", "private/allsite/sites.tsv.gz"):
+        assert is_restricted_member(rel) and POL.omitted_layer(rel) == "genotype"
