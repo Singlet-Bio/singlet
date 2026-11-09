@@ -10,9 +10,9 @@ import sys
 import pandas as pd
 
 PICK = {  # stated assay -> (truth class, libraries)
-    "seqwell": ("dropseq", 3), "dropseq": ("dropseq", 4), "dnbelab_c4": ("dnbelab-c4", 3), "microwell_seq": ("microwell-seq", 3),
-    "indrop": ("indrop", 3), "bd_rhapsody": ("bd-rhapsody", 4), "10x_flex": ("flex", 3), "singleron": ("singleron", 3),
-    "pipseq": ("pipseq", 3), "visium_hd": ("visium-hd", 2), "stereoseq": ("stereo-seq", 2), "curio": ("slide-seq", 2),
+    "seqwell": ("dropseq", 6), "dropseq": ("dropseq", 6), "dnbelab_c4": ("dnbelab-c4", 6), "microwell_seq": ("microwell-seq", 5),
+    "indrop": ("indrop", 5), "bd_rhapsody": ("bd-rhapsody", 5), "10x_flex": ("flex", 4), "singleron": ("singleron", 5),
+    "pipseq": ("pipseq", 4), "visium_hd": ("visium-hd", 3), "stereoseq": ("stereo-seq", 3), "curio": ("slide-seq", 3),
     "bulk": ("bulk-or-plate", 3), "split_pool": ("split-pool", 2), "10x_3p_v3": ("10x-3p", 2), "10x_5p": ("10x-5p", 2),
 }
 LIBTYPE = {  # GEO-stated library type -> (truth class, libraries), any assay
