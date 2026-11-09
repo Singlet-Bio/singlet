@@ -9,7 +9,8 @@
 # Routing exit test: one library per non-10x assay goes through the engine twice from the same reads, in auto mode and with the
 # protocol forced, and the two runs are compared. Needs BIN, SRC and an array over the lines of E2E_TSV (id, r1_url, r2_url, forced tag,
 # organism, reads). Each run: `singlet download --r1 --r2` (auto, or --protocol TAG), then the CPU pipeline (--output-format mtx).
-# Compared: the decoded read pairs, the .1fq header minus its provenance fields, and the count matrix files. Output: $W/jobs/detect/e2e-<job>/<id>/.
+# Compared: the decoded read pairs, the .1fq header minus its provenance fields (file name, protocol source and confidence: a forced call is
+# recorded as confidence 4), and the count matrix files. Output: $W/jobs/detect/e2e-<job>/<id>/.
 set -uo pipefail
 : "${BIN:?}" "${E2E_TSV:?}"
 W=/mnt/projects/debruinz_project/debruinz/singlet; REF=/mnt/projects/debruinz_project/cellarium/reference; T=${SLURM_CPUS_PER_TASK:-16}
@@ -18,8 +19,13 @@ IFS=$'\t' read -r id r1 r2 tag org nreads < <(sed -n "$((SLURM_ARRAY_TASK_ID + 2
 O=$W/jobs/detect/e2e-${SLURM_ARRAY_JOB_ID}/$id; mkdir -p $O; SCR=/tmp/$USER-e2e-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 case $org in *Mus*) G=$REF/GRCm39-2024-A;; *) G=$REF/GRCh38-2024-A;; esac
 echo "$id $tag $org reads=$nreads genome=$G bin=$BIN" | tee $O/summary.txt
-fetch() {   # url out: the first nreads records of a gzipped FASTQ (the transfer stops when head closes the pipe)
-  curl -sS --retry 3 --max-time 3000 "$1" 2> $2.err | gzip -dc 2>> $2.err | head -$((4 * nreads)) > $2
+fetch() {   # url out: the first nreads records of a gzipped FASTQ (the transfer stops when head closes the pipe); the whole transfer is retried
+  local a
+  for a in 1 2 3 4 5 6; do
+    curl -sS --max-time 3000 "$1" 2> $2.err | gzip -dc 2>> $2.err | head -$((4 * nreads)) > $2
+    [ "$(wc -l < $2)" -ge $((4 * nreads)) ] && return
+    sleep $((20 * a))
+  done
 }
 fetch "$r1" $SCR/f1.fastq & fetch "$r2" $SCR/f2.fastq & wait
 cp $SCR/f1.fastq.err $O/fetch1.err 2>/dev/null; cp $SCR/f2.fastq.err $O/fetch2.err 2>/dev/null
@@ -28,7 +34,7 @@ for mode in auto forced; do
   extra=; [ $mode = forced ] && extra="--protocol $tag"
   $BIN download --r1 $SCR/f1.fastq --r2 $SCR/f2.fastq --staging-dir $SCR/st-$mode -o $SCR/$mode.1fq $extra > $O/$mode.download.log 2>&1; echo "$mode download exit $?" | tee -a $O/summary.txt
   grep -a -E "\[singlet-gate\]|Protocol:" $O/$mode.download.log | cut -c1-260 | tee -a $O/summary.txt
-  $BIN decode $SCR/$mode.1fq --header 2>&1 | grep -a -v -E "protocol_source|protocol_confidence|protocol_detector|protocol_geo|protocol_evidence|source_label|created|timestamp|version|commit|input|path|elapsed" > $O/$mode.header.txt
+  $BIN decode $SCR/$mode.1fq --header 2>&1 | grep -a -v -E "protocol_source|protocol_confidence|protocol_detector|protocol_geo|protocol_evidence|source_label|created|timestamp|commit|input|path|elapsed|File:" | sed -E 's/confidence=[0-9]+/confidence=N/' > $O/$mode.header.txt
   $BIN decode $SCR/$mode.1fq --r1 $SCR/$mode.r1.fq --r2 $SCR/$mode.r2.fq --threads 8 > /dev/null 2>&1
   echo "$mode reads md5 $(cat $SCR/$mode.r1.fq $SCR/$mode.r2.fq | md5sum | cut -c1-16)" | tee -a $O/summary.txt; rm -f $SCR/$mode.r1.fq $SCR/$mode.r2.fq
   mkdir -p $SCR/run-$mode/out

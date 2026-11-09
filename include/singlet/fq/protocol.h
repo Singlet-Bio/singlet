@@ -1225,7 +1225,14 @@ RouteEvidence route_evidence(const ProtocolCandidate& det, const std::vector<Spo
         ev.linker_rate = linker_match_rate(spec->linker, spec->linker_offset, ptrs.data(), lens.data(), n);
     }
     // det.wl_match_rate is already the share beyond chance for short lists (detect_protocol).
-    if (!spec->whitelist_file.empty() && spec->bc_len >= 8 && det.wl_match_rate >= 0.0) ev.wl_excess = det.wl_match_rate;
+    bool wl_loaded = false;
+    if (!spec->whitelist_file.empty() && spec->bc_len >= 8 && det.wl_match_rate >= 0.0) {
+        ev.wl_excess = det.wl_match_rate;
+        for (const auto& d : whitelist_dirs) {
+            wl_loaded = !load_whitelist_hashes(d + "/" + spec->whitelist_file, spec->bc_len).empty();
+            if (wl_loaded) break;
+        }
+    }
     {
         uint32_t exact = 0;
         for (uint32_t i = 0; i < n; ++i) if (len(i) >= spec->r1_len && len(i) <= spec->r1_len + 4) ++exact;   // as detect_protocol's 1-4 nt over-sequenced band
@@ -1243,6 +1250,13 @@ RouteEvidence route_evidence(const ProtocolCandidate& det, const std::vector<Spo
         ev.tail_polyt = tested ? static_cast<double>(tailed) / tested : 0.0;
     }
     ev.ok = (ev.bc_reuse >= kRouteMinBarcodeReuse) || (ev.linker_rate >= kRouteMinLinkerRate) || (ev.wl_excess >= kRouteMinWlExcess);
+    // A barcode list that was loaded and does not hold the barcodes vetoes the call, whatever the reuse: reads of another chemistry can repeat
+    // their first bases as well (a combinatorial 8-nt barcode read against its own list scored 0.00).
+    if (ev.ok && wl_loaded && ev.wl_excess < 0.10 && !(ev.linker_rate >= kRouteMinLinkerRate)) {
+        ev.ok = false;
+        ev.why = "the barcodes are not in " + spec->whitelist_file + " (share beyond chance " + std::to_string(ev.wl_excess).substr(0, 4) + ")";
+        return ev;
+    }
     // A spec with neither linker nor whitelist rests on read length and barcode reuse alone: the length must be the spec's own.
     if (ev.ok && spec->linker.empty() && spec->whitelist_file.empty() && ev.exact_len < 0.9 && ev.tail_polyt < 0.5) {
         ev.ok = false;

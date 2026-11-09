@@ -12,6 +12,10 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <random>
 #include <string>
 #include <vector>
@@ -99,6 +103,21 @@ int main() {
         // BD Rhapsody: CLS1 (9) + ACTGGCCTGCGA at 9, 60-nt read; barcodes also repeat, but the linker alone suffices
         auto ev = route_evidence(called("bd-rhapsody"), make_spots(60, 9, 0, 3000, "ACTGGCCTGCGA", 9), no_dirs);
         CHECK(ev.ok && ev.linker_rate > 0.95 && ev.bc_reuse < 0.1, "BD Rhapsody linker at its offset confirms the call without barcode reuse");
+    }
+    // whitelist veto: Quartz-seq2 geometry (23 nt, 15-nt barcodes that repeat) against a list that does not hold those barcodes
+    {
+        char dir[] = "/tmp/route_wl_XXXXXX";
+        if (mkdtemp(dir)) {
+            std::mt19937_64 rng(99);
+            std::ofstream f(std::string(dir) + "/quartzseq2_bc.txt");
+            for (int i = 0; i < 96; ++i) { std::string b; for (int j = 0; j < 15; ++j) b += "ACGT"[rng() % 4]; f << b << "
+"; }
+            f.close();
+            auto ev = route_evidence(called("quartzseq2"), make_spots(23, 15, 200), {std::string(dir)});
+            CHECK(!ev.ok && ev.bc_reuse > 0.9 && ev.wl_excess < 0.1, "barcodes that repeat but are not in the loaded list do not confirm the call");
+            std::remove((std::string(dir) + "/quartzseq2_bc.txt").c_str());
+            rmdir(dir);
+        }
     }
     // assay type of reads with no barcode: overlapping pairs (short fragments) read as ATAC, long inserts as bulk or plate RNA
     {
