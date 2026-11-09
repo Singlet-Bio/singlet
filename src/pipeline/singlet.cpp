@@ -3042,7 +3042,9 @@ static void usage(const char* prog) {
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
-        << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
+        << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default for 3' libraries; for 5' it writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
+        << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default) or defer (env SINGLET_HLA_GPU_3P)\n"
+        << "  --hla-gpu-5p MODE      GPU engine, 5' libraries: defer (default) or type on the node (env SINGLET_HLA_GPU_5P)\n"
         << "  --hla-t1k DIR          T1K install with its IPD-IMGT/HLA index (bin/, hlaidx/, manifest.json); --pipeline on a human\n"
         << "                         genome uses <ref-base>/hla/t1k. Output: private/hla/ (owner-only)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
@@ -3531,7 +3533,8 @@ static int singlet_main(int argc, char* argv[]) {
     std::string edit_panel_source = "none";
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
     bool no_hla = false;                 // --no-hla: no HLA step at all
-    bool hla_defer = false;              // prefilter only, private/hla/pending/ for `singlet hla --pending` (the GPU route's default; see below)
+    bool hla_defer = false;              // prefilter only, private/hla/pending/ for `singlet hla --pending` (the GPU route's default for 5' libraries; see below)
+    std::string hla_gpu_3p, hla_gpu_5p;  // --hla-gpu-3p / --hla-gpu-5p type|defer: the GPU engine's route by chemistry
     bool hla_explicit = false;           // --hla, --no-hla or --hla-defer was given
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     bool no_allsite = false;             // --no-allsite: no private/allsite/ member (D-101) in --pipeline mode
@@ -3571,6 +3574,8 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
         else if (arg == "--hla-defer") { hla_defer = true; no_hla = false; hla_explicit = true; }
+        else if (arg == "--hla-gpu-3p" && i+1 < argc) hla_gpu_3p = argv[++i];
+        else if (arg == "--hla-gpu-5p" && i+1 < argc) hla_gpu_5p = argv[++i];
         else if (arg == "--no-te") no_default_te = true;
         else if (arg == "--te-gtf" && i+1 < argc) { config.te_gtf_path = argv[++i]; te_source = "user"; }
         else if (arg == "--no-clip5p") no_clip5p = true;
@@ -7437,7 +7442,7 @@ static int singlet_main(int argc, char* argv[]) {
     pid_t star_pid = -1;
     int pipe_fd[2] = {-1, -1};
 
-    // HLA by route, unless a flag chose: the CPU engine types inside the run; the GPU engine writes the candidate reads for a later
+    // HLA by route, unless a flag chose: the CPU engine types inside the run; the GPU engine types 3' libraries and writes the candidate reads of 5' ones for a later
     // `singlet hla --pending` on a CPU node. SINGLET_HLA=type|defer|off gives both routes one mode (the byte-identity gate compares them).
     if (!hla_explicit) {
         const char* hm = std::getenv("SINGLET_HLA");
@@ -7446,7 +7451,24 @@ static int singlet_main(int argc, char* argv[]) {
         else if (mode == "type") hla_defer = false;
         else if (mode == "defer") hla_defer = true;
 #ifdef SINGLET_HAVE_ENGINE_GPU
-        else { const char* eg = std::getenv("SINGLET_ENGINE_GPU"); hla_defer = eg && eg[0] == '1'; }
+        else {
+            // The GPU engine types 3' libraries on the node and defers 5' ones, whose typing costs several times more host CPU. The chemistry
+            // is the label known before alignment; a library relabeled by strand later still gets correct calls, since both routes agree.
+            const char* eg = std::getenv("SINGLET_ENGINE_GPU");
+            hla_defer = false;
+            if (eg && eg[0] == '1') {
+                const bool five_prime = config.reverse_strand;
+                std::string m = five_prime ? hla_gpu_5p : hla_gpu_3p;
+                const char* ev = std::getenv(five_prime ? "SINGLET_HLA_GPU_5P" : "SINGLET_HLA_GPU_3P");
+                if (m.empty() && ev) m = ev;
+                if (m != "type" && m != "defer") {
+                    if (!m.empty()) std::cerr << "[hla] ignoring unknown GPU route '" << m << "' (type or defer)\n";
+                    m = five_prime ? "defer" : "type";
+                }
+                hla_defer = m == "defer";
+                std::cerr << "[hla] GPU route: " << (five_prime ? "5'" : "3'") << " library, " << m << "\n";
+            }
+        }
 #endif
     }
 
