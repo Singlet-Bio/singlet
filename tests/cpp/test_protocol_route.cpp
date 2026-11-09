@@ -110,8 +110,7 @@ int main() {
         if (mkdtemp(dir)) {
             std::mt19937_64 rng(99);
             std::ofstream f(std::string(dir) + "/quartzseq2_bc.txt");
-            for (int i = 0; i < 96; ++i) { std::string b; for (int j = 0; j < 15; ++j) b += "ACGT"[rng() % 4]; f << b << "
-"; }
+            for (int i = 0; i < 96; ++i) { std::string b; for (int j = 0; j < 15; ++j) b += "ACGT"[rng() % 4]; f << b << "\n"; }
             f.close();
             auto ev = route_evidence(called("quartzseq2"), make_spots(23, 15, 200), {std::string(dir)});
             CHECK(!ev.ok && ev.bc_reuse > 0.9 && ev.wl_excess < 0.1, "barcodes that repeat but are not in the loaded list do not confirm the call");
