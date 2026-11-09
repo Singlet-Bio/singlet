@@ -1,0 +1,121 @@
+diff --git a/SeqSet.hpp b/SeqSet.hpp
+index 598f5a9..2c858da 100644
+--- a/SeqSet.hpp
++++ b/SeqSet.hpp
+@@ -1564,30 +1564,22 @@ public:
+ 		int i, k ;
+ 		if ( hits.Size() > 2 * seqs.size() && alreadyReadOrder ) 
+ 		{
+-			// Bucket sort.
++			// Bucket sort (singlet: a stable counting sort on the key tag * seqCnt + idx, the order of the
++			// per-sequence buckets it replaces, without allocating 2 * seqCnt vectors per read).
+ 			int hitCnt = hits.Size() ;
+ 			int seqCnt = seqs.size() ;
+-			SimpleVector<struct _hit> *buckets[2] ;
+-			buckets[0] = new SimpleVector<struct _hit>[seqCnt] ;
+-			buckets[1] = new SimpleVector<struct _hit>[seqCnt] ;
+-
++			static thread_local std::vector<int> offset ;
++			static thread_local std::vector<struct _hit> sorted ;
++			offset.assign( 2 * seqCnt + 1, 0 ) ;
+ 			for ( i = 0 ; i < hitCnt ; ++i )
+-			{
+-				int tag = hits[i].strand == 1 ? 1 : 0 ;
+-				buckets[tag][ hits[i].indexHit.idx ].PushBack( hits[i] ) ;
+-			}
+-			
+-			hits.Clear() ;
+-			for ( k = 0 ; k <= 1 ; ++k )
+-			{
+-				for ( i = 0 ; i < seqCnt ; ++i )
+-				{
+-					hits.PushBack( buckets[k][i] ) ;
+-				}
+-			}
+-
+-			delete[] buckets[0] ;
+-			delete[] buckets[1] ;
++				++offset[ ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx + 1 ] ;
++			for ( k = 1 ; k <= 2 * seqCnt ; ++k )
++				offset[k] += offset[k - 1] ;
++			sorted.resize( hitCnt ) ;
++			for ( i = 0 ; i < hitCnt ; ++i )
++				sorted[ offset[ ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ]++ ] = hits[i] ;
++			for ( i = 0 ; i < hitCnt ; ++i )
++				hits[i] = sorted[i] ;
+ 		}
+ 		else
+ 			std::sort( hits.BeginAddress(), hits.EndAddress() ) ;
+@@ -1930,48 +1922,42 @@ public:
+ 		if ( hitCnt == 0 )
+ 			return false ;
+ 
+-		// Bucket sort.
++		// Find the best bucket (singlet: count hits per key tag * seqCnt + idx in a reused array instead of
++		// filling 2 * seqCnt vectors per read; the largest bucket wins, ties to the smallest key, as the scan
++		// over k = 0, 1 and i = 0 .. seqCnt - 1 with a strict > did; its hits keep their order).
+ 		int seqCnt = seqs.size() ;
+-		SimpleVector<struct _hit> *buckets[2] ;
+-		buckets[0] = new SimpleVector<struct _hit>[seqCnt] ;
+-		buckets[1] = new SimpleVector<struct _hit>[seqCnt] ;
+-
++		static thread_local std::vector<int> bucketSize ;
++		if ( (int)bucketSize.size() < 2 * seqCnt )
++			bucketSize.assign( 2 * seqCnt, 0 ) ;
+ 		for ( i = 0 ; i < hitCnt ; ++i )
+-		{
+-			int tag = hits[i].strand == 1 ? 1 : 0 ;
+-			buckets[tag][ hits[i].indexHit.idx ].PushBack( hits[i] ) ;
+-		}
+-		
+-		// Find the best bucket.
++			++bucketSize[ ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ] ;
+ 		int max = -1 ;
+-		int maxTag = -1 ;
+-		int maxSeqIdx = -1 ;
+-		for ( k = 0 ; k <= 1 ; ++k )
++		int maxKey = -1 ;
++		for ( i = 0 ; i < hitCnt ; ++i )
+ 		{
+-			for ( i = 0 ; i < seqCnt ; ++i )
++			int key = ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ;
++			int size = bucketSize[key] ;
++			if ( size > max || ( size == max && key < maxKey ) )
+ 			{
+-				int size = buckets[k][i].Size() ;
+-				if ( size > 0 && size > max )
+-				{
+-					maxTag = k ;
+-					maxSeqIdx = i ;
+-					max = size ;
+-				}
++				max = size ;
++				maxKey = key ;
+ 			}
+ 		}
++		for ( i = 0 ; i < hitCnt ; ++i )
++			bucketSize[ ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ] = 0 ;
+ 
+ 		if (kmerLength * max < hitLenRequired)
+-		{
+-			delete[] buckets[0] ;
+-			delete[] buckets[1] ;
+ 			return false ;
+-		}
+-		
++
++		SimpleVector<struct _hit> best ;
++		best.Reserve( max ) ;
++		for ( i = 0 ; i < hitCnt ; ++i )
++			if ( ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx == maxKey )
++				best.PushBack( hits[i] ) ;
++
+ 		std::vector<struct _overlap> overlaps ;
+ 		std::vector< SimpleVector<struct _pair> *> overlapsHitCoords ;
+-		GetOverlapsFromHits( buckets[maxTag][maxSeqIdx], hitLenRequired, 0, overlapsHitCoords, overlaps ) ;
+-		delete[] buckets[0] ;
+-		delete[] buckets[1] ;
++		GetOverlapsFromHits( best, hitLenRequired, 0, overlapsHitCoords, overlaps ) ;
+ 		//printf( "%d %d\n", hitCnt, overlaps.size() ) ;	
+ 		bool valid = false ;
+ 		int mismatchThreshold = int(len * (1-refSeqSimilarity)) * kmerLength ;
