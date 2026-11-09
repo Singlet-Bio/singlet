@@ -761,8 +761,7 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
     const double msRun = msSince(tK1);
     out.nRecOverflow = K.nOverflow;
     soloKeepReleaseDevice();   // the page-locked host copies are freed by the caller after the unlock (soloKeepRelease)
-    snprintf(lb, sizeof lb, "soloRunKept: join %.0f ms, before soloRun %.0f ms (back to the device included), soloRun %.0f ms, device release %.0f ms
-",
+    snprintf(lb, sizeof lb, "soloRunKept: join %.0f ms, before soloRun %.0f ms (back to the device included), soloRun %.0f ms, device release %.0f ms\n",
              msJoin, msPre, msRun, msSince(tK1) - msRun);
     log += lb;
     return ok;
