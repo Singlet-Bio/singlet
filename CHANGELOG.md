@@ -4,6 +4,18 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **Run metadata is kept apart from data** (summary.json schema 1.2). `memory_tier` described the process that ran, bucketed
+  from its peak RSS, so two runs of the same input near a tier boundary wrote different summary.json files. It now lives in
+  `private/run_metadata.json` with the peak RSS and the timings; summary.json keeps `peak_rss_gb` and its timing keys where they
+  were. `provenance.json` gains a `run` block (timestamp, host, timings, peak RSS and the output inventory with `bytes_public`)
+  whose note says these vary between runs. `--memory-tier` still sets the value, now written to the private file.
+- **`read_stats.tsv` uses one set of definitions on every input route.** The align row's `reads_in` is the number of reads
+  given to STAR (the stored reads of the `.1fq` input), and its `reads_out` counts mapped reads without secondary alignments.
+  The CPU FIFO and STAR-ingest routes used to fall back to the number of BAM records, which also counts multimapped
+  secondaries, so the same sample showed a larger `reads_in` there than on the GPU route.
+- **The content probe sees the same reads on every decode route.** The ingest route sampled one read per stride, while the
+  decode routes offered every read to the content-hash sampler; both now offer every read, so the probe's read set (and
+  everything derived from it) matches between routes.
 - **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and
   1 for a local file; `io_threads=1` sends them one at a time.
   - Over a link with a 30 ms round trip, the eight block ranges of a minibatch cost about one round trip instead of

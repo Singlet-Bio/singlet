@@ -2177,6 +2177,12 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (summary.estimated_cells > 0 && summary.estimated_cells < 10)
             summary.warnings.push_back("few_cells_detected");
         bool ok = write_summary_json(summary, out_prefix + "/summary.json");
+        {   // memory_tier and the other run metadata, privately (summary.json schema 1.2)
+            std::error_code pec;
+            std::filesystem::create_directories(out_prefix + "/private", pec);
+            if (!write_run_metadata_json(summary, out_prefix + "/private/run_metadata.json"))
+                std::cerr << "[export] WARNING: private/run_metadata.json not written\n";
+        }
         std::cerr << "[export] summary.json status=" << summary.status
                   << " cells=" << summary.estimated_cells
                   << " mapping_rate=" << summary.mapping_rate
