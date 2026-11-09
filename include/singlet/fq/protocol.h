@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <unistd.h>
 #include <iostream>
 #include <string>
@@ -807,6 +808,13 @@ ProtocolCandidate detect_protocol(
                     }
                     rate = static_cast<double>(matches) / n_test;
                 }
+                // A short list with one-mismatch matching catches random sequence at about n(1+3L)/4^L (microwell-seq: 96 six-mers,
+                // 45%). Where that chance level is 2% or more, report the share of reads in the list beyond chance, so that reads with
+                // no barcode do not score as a weak match. The 10x lists (16-nt barcodes) have chance levels near zero and are untouched.
+                if (!use_exact) {
+                    const double chance = std::min(1.0, wl_hashes.size() * (1.0 + 3.0 * cand->bc_len) / std::pow(4.0, cand->bc_len));
+                    if (chance >= 0.02) rate = chance >= 1.0 ? 0.0 : std::max(0.0, (rate - chance) / (1.0 - chance));
+                }
             }
         }
 
@@ -1172,6 +1180,7 @@ struct RouteEvidence {
     double linker_rate = -1.0;  // -1 when the spec has no linker of 10 nt or more
     double wl_excess = -1.0;    // -1 when the spec has no whitelist or its barcode is shorter than 8 nt
     double exact_len = 0.0;     // share of probe reads whose barcode read has exactly the spec's R1 length
+    double tail_polyt = 0.0;    // share of reads with a poly(T) or poly(A) run right after barcode and UMI (an R1 sequenced past them)
     std::string why;
 };
 
@@ -1215,30 +1224,30 @@ RouteEvidence route_evidence(const ProtocolCandidate& det, const std::vector<Spo
         for (uint32_t i = 0; i < n; ++i) { ptrs[i] = seq(i); lens[i] = len(i); }
         ev.linker_rate = linker_match_rate(spec->linker, spec->linker_offset, ptrs.data(), lens.data(), n);
     }
-    if (!spec->whitelist_file.empty() && spec->bc_len >= 8 && det.wl_match_rate >= 0.0) {
-        size_t wl_size = 0;
-        for (const auto& d : whitelist_dirs) {
-            wl_size = load_whitelist_hashes(d + "/" + spec->whitelist_file, spec->bc_len).size();
-            if (wl_size) break;
-        }
-        if (wl_size) {
-            // one-mismatch matching below 100,000 entries (as detect_protocol), exact above
-            const double space = std::pow(4.0, spec->bc_len);
-            const double chance = std::min(1.0, wl_size * (wl_size >= 100000 ? 1.0 : 1.0 + 3.0 * spec->bc_len) / space);
-            ev.wl_excess = chance >= 1.0 ? 0.0 : std::max(0.0, (det.wl_match_rate - chance) / (1.0 - chance));
-        }
-    }
+    // det.wl_match_rate is already the share beyond chance for short lists (detect_protocol).
+    if (!spec->whitelist_file.empty() && spec->bc_len >= 8 && det.wl_match_rate >= 0.0) ev.wl_excess = det.wl_match_rate;
     {
         uint32_t exact = 0;
         for (uint32_t i = 0; i < n; ++i) if (len(i) == spec->r1_len) ++exact;
         ev.exact_len = n ? static_cast<double>(exact) / n : 0.0;
+        const uint16_t tail = static_cast<uint16_t>(spec->bc_offset + spec->bc_len + spec->umi_len);
+        uint32_t tailed = 0, tested = 0;
+        for (uint32_t i = 0; spec->umi_len > 0 && i < n; ++i) {
+            if (len(i) < tail + 6) continue;
+            ++tested;
+            uint32_t t = 0, a = 0;
+            const uint16_t w = std::min<uint16_t>(12, static_cast<uint16_t>(len(i) - tail));
+            for (uint16_t j = 0; j < w; ++j) { t += seq(i)[tail + j] == 3; a += seq(i)[tail + j] == 0; }
+            if (t >= 6 || a >= 6) ++tailed;
+        }
+        ev.tail_polyt = tested ? static_cast<double>(tailed) / tested : 0.0;
     }
     ev.ok = (ev.bc_reuse >= kRouteMinBarcodeReuse) || (ev.linker_rate >= kRouteMinLinkerRate) || (ev.wl_excess >= kRouteMinWlExcess);
     // A spec with neither linker nor whitelist rests on read length and barcode reuse alone: the length must be the spec's own.
-    if (ev.ok && spec->linker.empty() && spec->whitelist_file.empty() && ev.exact_len < 0.9) {
+    if (ev.ok && spec->linker.empty() && spec->whitelist_file.empty() && ev.exact_len < 0.9 && ev.tail_polyt < 0.5) {
         ev.ok = false;
         ev.why = "no linker or whitelist to confirm " + spec->tag + " and only " + std::to_string(static_cast<int>(ev.exact_len * 100)) +
-                 "% of barcode reads have its length of " + std::to_string(spec->r1_len) + " nt";
+                 "% of barcode reads have its length of " + std::to_string(spec->r1_len) + " nt and no poly(T) follows the barcode and UMI";
         return ev;
     }
     if (!ev.ok) {
@@ -1601,6 +1610,9 @@ struct AssaySignals {
     double tn5_fraction   = 0.0;  // Contain Tn5 ME (ATAC)
     double polyt_fraction = 0.0;  // Contain polyT run ≥10 at expected position
     double adt_fraction   = 0.0;  // Contain CITE-seq capture sequence
+    // Share of reads whose first 15 R2 bases are one of the 100 most common 15-mers (a feature-barcode read carries a tag from a panel of
+    // a few dozen; a gene-expression or genomic read does not). -1 when R2 is shorter than 15 or there are too few reads.
+    double tag_concentration = -1.0;
 
     static AssaySignals compute(const std::vector<SpotT>& probe_spots,
                                 uint16_t r1_len, uint16_t r2_len) {
@@ -1677,6 +1689,30 @@ struct AssaySignals {
             sig.c_fraction  = static_cast<double>(base_counts[1]) / total_bases;
             sig.n_fraction  = static_cast<double>(base_counts[4]) / total_bases;
         }
+        {
+            std::unordered_map<uint64_t, uint32_t> tags;
+            uint32_t tested = 0;
+            for (uint32_t i = 0; i < n; ++i) {
+                const auto& sp = probe_spots[i];
+                if (sp.r2_len < 15 || sp.r2_seq.size() < 15) continue;
+                uint64_t h = 0;
+                bool has_n = false;
+                for (uint16_t j = 0; j < 15; ++j) { if (sp.r2_seq[j] > 3) { has_n = true; break; } h = (h << 2) | sp.r2_seq[j]; }
+                if (has_n) continue;
+                ++tags[h];
+                ++tested;
+            }
+            if (tested >= 200) {
+                std::vector<uint32_t> c;
+                c.reserve(tags.size());
+                for (const auto& kv : tags) c.push_back(kv.second);
+                const size_t k = std::min<size_t>(100, c.size());
+                std::partial_sort(c.begin(), c.begin() + k, c.end(), std::greater<uint32_t>());
+                uint64_t top = 0;
+                for (size_t i = 0; i < k; ++i) top += c[i];
+                sig.tag_concentration = static_cast<double>(top) / tested;
+            }
+        }
         sig.tn5_fraction   = static_cast<double>(tn5_hits)   / n;
         sig.polyt_fraction = static_cast<double>(polyt_hits) / n;
         sig.adt_fraction   = static_cast<double>(adt_hits)   / n;
@@ -1695,6 +1731,15 @@ inline AssayType classify_assay(
         const std::vector<SpotT>& probe_spots,
         uint16_t r1_len,
         uint16_t r2_len) {
+
+    // ── Rule 0: feature-barcode library (ADT, hashtag, guide tags) on a 10x chemistry ──
+    // The cell barcode and UMI read is that of the gene-expression kit, so the protocol call stands, but R2 is a tag from a small panel.
+    // Same cut as the run screen (kFeatureTopShare).
+    if (confidence >= Confidence::MEDIUM &&
+        (protocol_tag.rfind("10x-3p-", 0) == 0 || protocol_tag.rfind("10x-5p-", 0) == 0 || protocol_tag == "cite-seq-gex")) {
+        const auto sig0 = AssaySignals<SpotT>::compute(probe_spots, r1_len, r2_len);
+        if (sig0.tag_concentration >= 0.50) return AssayType::CITE_SEQ_ADT;
+    }
 
     // ── Rule 1: Known protocol tag → definitive assay type ──
     if (confidence >= Confidence::LOW) {

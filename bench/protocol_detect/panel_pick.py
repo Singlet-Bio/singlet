@@ -13,7 +13,10 @@ PICK = {  # stated assay -> (truth class, libraries)
     "seqwell": ("dropseq", 3), "dropseq": ("dropseq", 4), "dnbelab_c4": ("dnbelab-c4", 3), "microwell_seq": ("microwell-seq", 3),
     "indrop": ("indrop", 3), "bd_rhapsody": ("bd-rhapsody", 4), "10x_flex": ("flex", 3), "singleron": ("singleron", 3),
     "pipseq": ("pipseq", 3), "visium_hd": ("visium-hd", 2), "stereoseq": ("stereo-seq", 2), "curio": ("slide-seq", 2),
-    "bulk": ("bulk-rna", 3), "split_pool": ("splitseq", 2), "10x_3p_v3": ("10x-3p", 2), "10x_5p": ("10x-5p", 2),
+    "bulk": ("bulk-or-plate", 3), "split_pool": ("split-pool", 2), "10x_3p_v3": ("10x-3p", 2), "10x_5p": ("10x-5p", 2),
+}
+LIBTYPE = {  # GEO-stated library type -> (truth class, libraries), any assay
+    "feature": ("adt", 4), "vdj": ("vdj", 4), "atac": ("atac", 4),
 }
 
 
@@ -24,8 +27,14 @@ def main(out_dir, excl_file, dest, seed=20261109):
     m = r.merge(s, on="sample", how="inner")
     keys = [c for c in ("run_accession", "sample", "study", "gse", "gsm", "study_accession", "secondary_study_accession") if c in m.columns]
     bad = m[keys].astype(str).isin(excl).any(axis=1)
-    m = m[~bad & (m.lib_type == "gex") & m.fastq_urls.fillna("").str.count(";").eq(1) & (m.read_count.fillna(0) >= 1_000_000)]
+    m = m[~bad & m.fastq_urls.fillna("").str.count(";").eq(1) & (m.read_count.fillna(0) >= 1_000_000)]
     out = []
+    for lt, (truth, k) in LIBTYPE.items():
+        a = m[m.lib_type == lt].sample(frac=1.0, random_state=seed).drop_duplicates("study").head(k)
+        for _, x in a.iterrows():
+            u = x.fastq_urls.split(";")
+            out.append([f"{lt}_{x.run_accession}", "corpus (GEO-stated)", truth, x.run_accession, u[0], u[1], f"{x.study} ({x['sample']})", f"stated {lt} library; {x.assay}; {x.organism}"])
+    m = m[m.lib_type == "gex"]
     for assay, (truth, k) in PICK.items():
         a = m[m.assay == assay].sample(frac=1.0, random_state=seed).drop_duplicates("study").head(k)
         for _, x in a.iterrows():

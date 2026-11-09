@@ -6,6 +6,7 @@
 //  1. a Drop-seq-like library (20-nt R1, 12-nt barcodes repeated across reads) is confirmed
 //  2. random 20-nt reads of the same length are not (no barcode repeats)
 //  3. Drop-seq geometry at the wrong read length is not confirmed even when the barcodes repeat
+//  3b. the same geometry sequenced past the UMI into poly(T) is confirmed
 //  4. CEL-Seq2 and MARS-seq (6-7 nt barcodes, no linker, no list) have no measurable evidence and are never confirmed
 //  5. a BD Rhapsody read with its CLS1/CLS2 linker at the fixed offset is confirmed by the linker alone
 
@@ -80,6 +81,13 @@ int main() {
     {
         auto ev = route_evidence(called("dropseq"), make_spots(30, 12, 400), no_dirs);
         CHECK(!ev.ok && ev.exact_len < 0.1, "repeated barcodes at 30 nt do not confirm a spec that has neither linker nor list");
+    }
+    {
+        // R1 sequenced past barcode and UMI (Drop-seq deposited at 76 nt): poly(T) follows the 20 nt of barcode and UMI
+        auto spots = make_spots(76, 12, 400);
+        for (auto& sp : spots) for (int i = 20; i < 76; ++i) sp.r1_seq[static_cast<size_t>(i)] = 3;
+        auto ev = route_evidence(called("dropseq"), spots, no_dirs);
+        CHECK(ev.ok && ev.tail_polyt > 0.9, "Drop-seq barcode read of 76 nt with poly(T) after the UMI is confirmed");
     }
     {
         auto ev = route_evidence(called("celseq2"), make_spots(12, 6, 96), no_dirs);

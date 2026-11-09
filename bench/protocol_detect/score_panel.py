@@ -16,9 +16,9 @@ CLASS = {
     "10x-5p-v2": "10x-5p", "10x-5p-v3": "10x-5p", "10x-5p-v4": "10x-5p", "10x-arc-gex": "10x-multiome", "10x-visium": "visium",
     "dropseq": "dropseq", "seqwell": "dropseq", "celseq2": "celseq2", "celseq2-u6b8": "celseq2", "marsseq2": "marsseq", "scrbseq": "scrbseq",
     "icell8": "icell8", "ddseq": "ddseq", "surecell": "ddseq", "quartzseq2": "quartzseq2", "indrop": "indrop", "bd-rhapsody": "bd-rhapsody",
-    "dnbelab-c4": "dnbelab-c4", "microwell-seq": "microwell-seq", "splitseq": "splitseq", "sci-rna-seq3": "sci", "strtseq": "strtseq",
+    "dnbelab-c4": "dnbelab-c4", "microwell-seq": "microwell-seq", "splitseq": "split-pool", "sci-rna-seq3": "split-pool", "strtseq": "strtseq",
 }
-ASSAY_CLASS = {"bulk-rna": "bulk-rna", "sc-rna-plate": "plate-fulllength", "sc-atac": "bulk-atac", "cite-seq-adt": "adt",
+ASSAY_CLASS = {"bulk-rna": "bulk-or-plate", "sc-rna-plate": "bulk-or-plate", "sc-atac": "atac", "cite-seq-adt": "adt",
                "sc-methylome": "bisulfite", "unknown": "no-call", "not-sequence": "no-call"}
 
 
@@ -36,6 +36,8 @@ def parse(log):
 def call_class(c):
     if c["gate"] == "REJECT":
         return "rejected:" + c["gate_tag"]
+    if c["assay"] == "cite-seq-adt":
+        return "adt"
     if c["proto"] in CLASS and c["conf"] in ("2", "3", "4", "5"):
         return CLASS[c["proto"]]
     if c["assay"] in ASSAY_CLASS and ASSAY_CLASS[c["assay"]] != "no-call":

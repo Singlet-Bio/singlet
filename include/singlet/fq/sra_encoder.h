@@ -1408,6 +1408,14 @@ class SraEncoder {
                                           << "). Data is likely barcode-stripped or ADT "
                                              "mislabeled as GEX (data_incomplete). "
                                              "Aborting download.\n";
+                                // Name what the reads are: no read of this library carries a barcode, so the assay type comes from the read
+                                // statistics alone (bulk or plate RNA, ATAC, bisulfite, ...), and the log says so before the run stops.
+                                {
+                                    const AssayType nb = classify_assay(std::string(), Confidence::NONE, probe_spots, r1_len, r2_len);
+                                    stats.assay_type = nb;
+                                    std::cerr << "[1fq-encode] Assay: " << assay_type_name(nb) << " (no barcode read; excluded as data_incomplete)
+";
+                                }
                                 stats.exit_code = 2;
                                 return stats;
                             }

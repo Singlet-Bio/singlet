@@ -16,7 +16,7 @@ W=/mnt/projects/debruinz_project/debruinz/singlet; PY=$W/envs/bpub/bin/python3
 export SINGLET_WHITELIST_DIR=${WLDIR:-$W/pipeline-benchmark/whitelists}
 EXCLUDE=${EXCLUDE:-$W/jobs/detect/heldout_exclude.txt}
 O=$W/jobs/detect/panel-$SLURM_JOB_ID; mkdir -p $O/logs; SCR=/tmp/$USER-detp-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
-cp $SRC/panel_design.tsv $O/panel.tsv
+cp $SRC/panel_design.tsv $O/panel.tsv; echo -e "id	r1_len	r2_len	r1_fixed	r2_fixed	r1_12mer_reuse	r2_12mer_reuse	r2_top100_15mer_share" > $O/geometry.tsv
 if [ "${CORPUS:-1}" = 1 ]; then
   $PY $SRC/panel_pick.py $W/data/corpus-beta/out $EXCLUDE $O/panel_corpus.tsv && tail -n +2 $O/panel_corpus.tsv >> $O/panel.tsv
 fi
@@ -34,6 +34,7 @@ one() {   # id group truth run r1 r2
   local files=()
   for f in $d/f1.fastq $d/f2.fastq; do [ $(wc -l < $f) -ge 4000 ] && files+=($f); done
   if [ ${#files[@]} -lt 2 ]; then echo -e "$id\t$2\t$truth\t$4\t-\tno-reads\t-\t-\t-\t-\t-\t-\t-" > $O/calls.part.$id; rm -rf $d; return; fi
+  $PY $SRC/read_geometry.py $id ${files[0]} ${files[1]} >> $O/geometry.tsv 2>/dev/null
   local r1l=$(awk 'NR%4==2{s+=length($0);c++}END{printf "%d", s/c}' ${files[0]}) r2l=$(awk 'NR%4==2{s+=length($0);c++}END{printf "%d", s/c}' ${files[1]})
   for b in $(echo $BINS | tr , ' '); do local bn=${b%%=*}; local bp=${b#*=}; local log=$O/logs/$id.$bn.log
     ( cd $d && timeout 900 $bp download --r1 ${files[0]} --r2 ${files[1]} --staging-dir $d/st-$bn -o $d/$bn.1fq ) > $log 2>&1; local rc=$?
