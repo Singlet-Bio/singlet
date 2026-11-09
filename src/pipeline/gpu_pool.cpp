@@ -1,8 +1,12 @@
 // singlet E21 (docs/gpu-engine/fable/E21-pool.md): `singlet gpu-pool`, one resident process per GPU that runs a queue of samples on the GPU
 // path with the per-sample fixed costs paid once.
 //
-//   singlet gpu-pool --device D --queue FILE [--slots 2] [--workers 8] [--threads 7] [--args "<pipeline arguments>"] [--report DIR]
-//                    [--nonhost-server on|off] [--genome-preload on|off] [--shared-index on|off] [--timeout S]
+//   singlet gpu-pool --device D --queue FILE [--slots N|auto] [--workers 8] [--threads 7] [--args "<pipeline arguments>"] [--report DIR]
+//                    [--nonhost-server on|off|auto] [--genome-preload on|off] [--shared-index on|off|auto] [--timeout S]
+//
+// Slots, the shared index and the non-host screen's place are chosen from the device's memory and the genomes' index sizes unless given
+// (--slots, --shared-index, --nonhost-server, SINGLET_ENGINE_GPU_SLOTS, SINGLET_GPU_SHARED_INDEX; include/singlet/gpu_plan.h,
+// docs/gpu-engine/ANY-DEVICE.md). A sample whose genome index cannot fit the device runs on the CPU engine (singlet.cpp, one log line).
 //
 // The queue file has one sample per line: `<sample.1fq> <out dir> [extra pipeline arguments]` (blank lines and # comments skipped; quotes
 // group words). Sample i runs `singlet <sample.1fq> <--args ...> --out-prefix <out dir> --threads T <extra ...>` exactly as on its own,
@@ -22,7 +26,7 @@
 // (the fields of /usr/bin/time -v). A sample that crashes or is killed is recorded and the stream goes on; the pool exits when the queue
 // is drained, with status 0 if every sample exited 0, else 1, after a summary: per sample wall, core-s, peak RSS, and the pool's pairs/s.
 // <report>/pids.tsv lists pid, label and start time of the pool, the server and each sample's process (for a sampler).
-// --shared-index on (the default) exports SINGLET_GPU_SHARED_INDEX=1 to every sample unless the variable is already set: one holder per
+// --shared-index on (the default with more than one slot) exports SINGLET_GPU_SHARED_INDEX=1 to every sample unless the variable is already set: one holder per
 // device and genome keeps G, SA and SAi on the device and every slot maps them, so no sample uploads the index (outputs are the same).
 #include <algorithm>
 #include <cctype>
@@ -52,6 +56,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "singlet/gpu_plan.h"
 #include "star_api.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
@@ -265,10 +270,11 @@ void close_fds_from(int lo, int keep = -1) {
 // preload_refs (singlet.cpp, may be null): parses the pileup references of the samples' arguments once, in the pool, before any fork.
 int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                      std::string (*preload_refs)(const std::vector<std::vector<std::string>>&)) {
-    int device = -1, slots = 2, workers = 8, threads = 7, preloadThreads = 8;
+    int device = -1, slots = 0, workers = 8, threads = 7, preloadThreads = 8;
     double timeout = 0;
     std::string queue, args, report;
-    bool server = true, preload = true, sharedIdx = true;
+    int serverReq = -1, sharedReq = -1;   // -1: chosen from the device
+    bool preload = true;
     for (int i = 0; i < argc; ++i) {
         const std::string a = argv[i];
         auto val = [&]() -> std::string {
@@ -276,7 +282,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             return argv[++i];
         };
         if (a == "--device") device = std::atoi(val().c_str());
-        else if (a == "--slots") slots = std::atoi(val().c_str());
+        else if (a == "--slots") { const std::string v = val(); slots = v == "auto" ? 0 : std::atoi(v.c_str()); }
         else if (a == "--workers") workers = std::atoi(val().c_str());
         else if (a == "--threads") threads = std::atoi(val().c_str());
         else if (a == "--queue") queue = val();
@@ -284,18 +290,18 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         else if (a == "--report") report = val();
         else if (a == "--timeout") timeout = std::atof(val().c_str());
         else if (a == "--preload-threads") preloadThreads = std::atoi(val().c_str());
-        else if (a == "--nonhost-server") server = val() != "off";
+        else if (a == "--nonhost-server") { const std::string v = val(); serverReq = v == "auto" ? -1 : v == "off" ? 0 : 1; }
         else if (a == "--genome-preload") preload = val() != "off";
-        else if (a == "--shared-index") sharedIdx = val() != "off";
+        else if (a == "--shared-index") { const std::string v = val(); sharedReq = v == "auto" ? -1 : v == "off" ? 0 : 1; }
         else if (a == "-h" || a == "--help") {
-            std::cout << "singlet gpu-pool --device D --queue FILE [--slots 2] [--workers 8] [--threads 7] [--args \"<pipeline arguments>\"]\n"
-                         "                 [--report DIR] [--nonhost-server on|off] [--genome-preload on|off] [--shared-index on|off]\n"
+            std::cout << "singlet gpu-pool --device D --queue FILE [--slots N|auto] [--workers 8] [--threads 7] [--args \"<pipeline arguments>\"]\n"
+                         "                 [--report DIR] [--nonhost-server on|off|auto] [--genome-preload on|off] [--shared-index on|off|auto]\n"
                          "                 [--timeout S] [--preload-threads 8]\n"
                          "Queue lines: <sample.1fq> <out dir> [extra pipeline arguments]. docs/gpu-engine/fable/GPU-PATH.md, E21-pool.md.\n";
             return 0;
         } else { std::cerr << "gpu-pool: unknown option " << a << " (--help)\n"; return 2; }
     }
-    if (device < 0 || queue.empty() || workers < 1 || threads < 1 || slots < 1) {
+    if (device < 0 || queue.empty() || workers < 1 || threads < 1 || slots < 0) {
         std::cerr << "gpu-pool: --device D and --queue FILE are required (--help)\n";
         return 2;
     }
@@ -334,11 +340,44 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     fflush(stsv);
     auto pid_line = [&](pid_t p, const std::string& label) { fprintf(pids, "%d\t%s\t%llu\n", (int) p, label.c_str(), proc_starttime(p)); fflush(pids); };
     pid_line(self, "pool" + std::to_string(device));
+    // ---- the device plan: slots, the shared index and the non-host screen's place, from the device's memory and the genomes' index sizes
+    // (a value the user gave is kept). The device is asked once, by a child process (this process never initializes CUDA); the answer is
+    // passed to the samples, which check their genome against it.
+    bool server = serverReq != 0;
+    {
+        using namespace singlet_gpu_plan;
+        Device dev;
+        const bool known = probeDevice(device, dev);
+        if (known) setenv(kEnvDevice, encode(dev).c_str(), 1);
+        Request rq;
+        if (const char* e = std::getenv("SINGLET_ENGINE_GPU_MIN_CC")) if (*e) rq.minCC = std::atoi(e);
+        if (slots > 0) rq.slots = slots;
+        else if (const char* e = std::getenv("SINGLET_ENGINE_GPU_SLOTS")) rq.slots = std::max(1, std::atoi(e));
+        if (sharedReq >= 0) rq.sharedIndex = sharedReq;
+        else if (const char* e = std::getenv("SINGLET_GPU_SHARED_INDEX")) rq.sharedIndex = e[0] == '1';
+        if (serverReq >= 0) rq.screen = serverReq == 1 ? (int) Screen::Server : (int) Screen::Private;
+        // the samples that run on the GPU are those whose genome index fits; the largest of them sizes the plan
+        std::map<std::string, uint64_t> gsz;
+        int fitting = 0;
+        for (const Item& it : items) {
+            const std::string g = !it.genome.empty() ? it.genome : arg_value(base, "--genome-dir");
+            if (!gsz.count(g)) gsz[g] = genomeIndexBytes(g);
+            if (!known || fits(dev, gsz[g])) { ++fitting; rq.indexBytes = std::max(rq.indexBytes, gsz[g]); }
+        }
+        Plan pl = plan(dev, rq);
+        if (known && fitting == 0 && !items.empty()) { pl.gpu = false; pl.why = "no sample's genome index fits the device"; }
+        if (!pl.gpu) { pl.slots = std::max(1, rq.slots); pl.sharedIndex = false; pl.screen = Screen::Cpu; }
+        plog("device plan: %s%s", describe(dev, rq, pl).c_str(), pl.gpu && fitting < (int) items.size() ? "; samples whose genome index does not fit run on the CPU engine" : "");
+        slots = pl.slots;
+        if (serverReq < 0) server = pl.gpu && pl.screen == Screen::Server;
+        if (pl.gpu && pl.screen == Screen::Cpu && !std::getenv("SINGLET_NONHOST_GPU")) setenv("SINGLET_NONHOST_GPU", "0", 1);
+        if (sharedReq >= 0) setenv("SINGLET_GPU_SHARED_INDEX", sharedReq == 1 ? "1" : "0", 1);
+        else if (std::getenv("SINGLET_GPU_SHARED_INDEX") == nullptr) setenv("SINGLET_GPU_SHARED_INDEX", pl.sharedIndex ? "1" : "0", 1);
+    }
     plog("pool pid %d on device %d: %zu samples, %d in flight, --threads %d, SINGLET_ENGINE_GPU_SLOTS=%d; report %s; args: %s", (int) self, device,
          items.size(), workers, threads, slots, report.c_str(), args.c_str());
     setenv("SINGLET_ENGINE_GPU_SLOTS", std::to_string(slots).c_str(), 1);
     setenv("SINGLET_ENGINE_GPU_DEVICE", std::to_string(device).c_str(), 1);
-    if (sharedIdx && std::getenv("SINGLET_GPU_SHARED_INDEX") == nullptr) setenv("SINGLET_GPU_SHARED_INDEX", "1", 1);
     { const char* si = std::getenv("SINGLET_GPU_SHARED_INDEX"); plog("shared device index: SINGLET_GPU_SHARED_INDEX=%s", si ? si : "(unset)"); }
     unsetenv("SINGLET_NONHOST_SERVER");
     struct sigaction sa{};

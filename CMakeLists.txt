@@ -130,7 +130,7 @@ if(SINGLET_BUILD_PIPELINE)
         set_target_properties(singlet_engine_gpu PROPERTIES
             CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "52")
-            set_target_properties(singlet_engine_gpu PROPERTIES CUDA_ARCHITECTURES "80;90")
+            set_target_properties(singlet_engine_gpu PROPERTIES CUDA_ARCHITECTURES "70;75;80;90")
         endif()
         # no fused multiply-add: the port's double arithmetic must round as STAR's does on the host
         target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false>)

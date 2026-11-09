@@ -73,6 +73,7 @@
 #include "singlet/pileup/nonhost/nonhost_confirmed_reads.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
+#include "singlet/gpu_plan.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14: per-read low-quality mask width
 #include "singlet/engine_gpu_ingest.h"   // E13: the GPU prefill decodes the .1fq itself
 #include "singlet/engine_gpu_ingest_fused.h"
@@ -1737,7 +1738,9 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // --engine gpu: the host reads only the headers and species names (MinSketchIndex::load_names); the entries go to the
         // GPU (singlet_engine_gpu::nonhostClassify). Any failure there reloads the full indices and runs the CPU screen.
 #ifdef SINGLET_HAVE_ENGINE_GPU
+        // SINGLET_NONHOST_GPU=0: the screen runs on the CPU (the pool sets it for a device too small to hold the screen's index, gpu_plan.h)
         bool use_gpu = getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1" &&
+                       !(getenv("SINGLET_NONHOST_GPU") && std::string(getenv("SINGLET_NONHOST_GPU")) == "0") &&
                        !viral_db_path.empty() && !bacterial_db_path.empty() && !fungal_db_path.empty() &&
                        singlet_engine_gpu::available();
 #else
@@ -3376,6 +3379,8 @@ static int singlet_main(int argc, char* argv[]) {
                 const int dev = argc >= 4 ? std::atoi(argv[3]) : 0, th = argc >= 5 ? std::atoi(argv[4]) : 8;
                 return singlet_engine_gpu::nonhostServe(argv[2], dev, std::max(4, std::min(12, th)), singlet_engine_gpu::NonhostPaths{}, -1);
             }
+            if (sub == "gpu-info")   // gpu_plan.h: total memory, compute capability and name of one device, without a context
+                return singlet_engine_gpu::deviceInfoMain(argc >= 3 ? std::atoi(argv[2]) : 0);
             if (sub == "gpu-probe") {   // E19: "ok" (exit 0) when CUDA sees a usable device, else the reason (exit 1); the pipeline's probe
                 std::string w;
                 const bool ok = singlet_engine_gpu::available(&w);
@@ -3807,6 +3812,18 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
+    // Any device (docs/gpu-engine/ANY-DEVICE.md): a genome index that cannot sit on the device with the engine's smallest working set (the 52.7 GB
+    // barnyard index on a 46 GB RTX 8000 or a 32 GB V100S) runs on the CPU engine, with this one line, before STAR loads anything for the GPU
+    if (getenv("SINGLET_ENGINE_GPU") && std::string(getenv("SINGLET_ENGINE_GPU")) == "1" && !genome_dir.empty()) {
+        singlet_gpu_plan::Device dev;
+        const char* dv = getenv("SINGLET_ENGINE_GPU_DEVICE");
+        const uint64_t ib = singlet_gpu_plan::genomeIndexBytes(genome_dir);
+        std::string why;
+        if (ib > 0 && singlet_gpu_plan::probeDevice(dv ? std::atoi(dv) : 0, dev) && !singlet_gpu_plan::fits(dev, ib, &why)) {
+            std::cerr << "[singlet] --engine gpu: " << why << "; using the CPU engine" << std::endl;
+            for (const char* v : {"SINGLET_ENGINE_GPU", "SINGLET_ENGINE_GPU_HANDOFF", "SINGLET_GPU_PILEUP", "SINGLET_ENGINE_GPU_E2E", "SINGLET_ENGINE_GPU_INGEST"}) unsetenv(v);
+        }
+    }
     // E19 (docs/gpu-engine/fable/GPU-PATH.md): the GPU path's defaults (level 5 + ingest + E16 with SINGLET_GPU_PILEUP=on), set in the environment
     // before anything reads them (singlet_engine_gpu::applyDefaults in engine_gpu.h)
     if (getenv("SINGLET_GPU_PILEUP")) e19probe::start();   // the GPU pileup's device check (e19probe above), answered before STAR runs

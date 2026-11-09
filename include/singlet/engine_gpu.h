@@ -290,6 +290,8 @@ struct Output {
 
 // true if a CUDA device of compute capability >= 8.0 is usable
 bool available(std::string* why = nullptr);
+// `singlet gpu-info [DEVICE]` (gpu_plan.h): one device's total memory, compute capability and name on stdout, no context created
+int deviceInfoMain(int device);
 int deviceCount();
 std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
 

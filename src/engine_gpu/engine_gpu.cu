@@ -8,6 +8,7 @@
 // sequences through the lane cascade A → M → B (GPU, staged) → host lane (STAR's limits, same code), and return
 // (sequence, result) records.
 #include "singlet/engine_gpu.h"
+#include "singlet/gpu_plan.h"
 #include "stitch.cuh"
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
 #include "singlet/qmask_words.h"   // P3-ENG-14
@@ -1069,12 +1070,24 @@ bool available(std::string* why) {
     cudaError_t e = cudaGetDeviceCount(&n);
     if (e != cudaSuccess || n == 0) { if (why) *why = e != cudaSuccess ? cudaGetErrorString(e) : "no CUDA device"; return false; }
     cudaDeviceProp p; cudaGetDeviceProperties(&p, 0);
-    // SINGLET_ENGINE_GPU_MIN_CC (default 80): the lowest compute capability accepted, as major*10+minor. The engine's kernels compile for
-    // sm_70 and sm_75 too (CMAKE_CUDA_ARCHITECTURES="70;75;80;90"); 70 admits the V100S and RTX 8000 for identity checks
+    // SINGLET_ENGINE_GPU_MIN_CC (default 70, gpu_plan.h): the lowest compute capability accepted, as major*10+minor. The engine's kernels compile
+    // for sm_70 (V100S), sm_75 (RTX 8000), sm_80 and sm_90 (H100); a higher value declines the older devices
     const char* mc = std::getenv("SINGLET_ENGINE_GPU_MIN_CC");
-    const int minCC = mc != nullptr && *mc ? std::atoi(mc) : 80;
+    const int minCC = mc != nullptr && *mc ? std::atoi(mc) : singlet_gpu_plan::kDefaultMinCC;
     if (p.major * 10 + p.minor < minCC) { if (why) *why = std::string("device ") + p.name + " below compute capability " + std::to_string(minCC / 10) + "." + std::to_string(minCC % 10); return false; }
     return true;
+}
+
+// `singlet gpu-info [DEVICE]`: "<total bytes> <major> <minor> <name>" of one device, read without creating a context; exit 1 with the reason
+// when there is none
+int deviceInfoMain(int device) {
+    int n = 0;
+    const cudaError_t e = cudaGetDeviceCount(&n);
+    if (e != cudaSuccess || n == 0 || device < 0 || device >= n) { std::printf("%s\n", e != cudaSuccess ? cudaGetErrorString(e) : "no CUDA device"); return 1; }
+    cudaDeviceProp p;
+    if (cudaGetDeviceProperties(&p, device) != cudaSuccess) { std::printf("cannot read the device properties\n"); return 1; }
+    std::printf("%llu %d %d %s\n", (unsigned long long) p.totalGlobalMem, p.major, p.minor, p.name);
+    return 0;
 }
 
 std::string deviceId(int device) {

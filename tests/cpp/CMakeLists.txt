@@ -105,6 +105,7 @@ add_pileup_test(test_pileup_workers)   # run_parallel: counts independent of the
 # GPU pileup vs CPU pileup (labels, kFlank, legacy_exon_extra) under intron rules 397 and 389. Built in every configuration; it prints SKIP
 # and exits 77 (ctest: skipped) in a CPU-only build or without a usable CUDA device. The GPU engine library exists when the pipeline is built
 # with a CUDA compiler (SINGLET_ENGINE_GPU, top-level CMakeLists.txt).
+add_pileup_test(test_gpu_plan)   # the device plan of the GPU path (include/singlet/gpu_plan.h): header only, no CUDA
 add_pileup_test(test_gpu_pileup_labels)
 set_tests_properties(test_gpu_pileup_labels PROPERTIES SKIP_RETURN_CODE 77)
 if(TARGET singlet_engine_gpu)
