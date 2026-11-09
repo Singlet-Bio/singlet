@@ -3042,7 +3042,7 @@ static void usage(const char* prog) {
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
-        << "  --hla                  type HLA with T1K inside --pipeline (default: the run writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --no-hla: none)\n"
+        << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
         << "  --hla-t1k DIR          T1K install with its IPD-IMGT/HLA index (bin/, hlaidx/, manifest.json); --pipeline on a human\n"
         << "                         genome uses <ref-base>/hla/t1k. Output: private/hla/ (owner-only)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
@@ -3527,7 +3527,8 @@ static int singlet_main(int argc, char* argv[]) {
     std::string edit_panel_source = "none";
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
     bool no_hla = false;                 // --no-hla: no HLA step at all
-    bool hla_defer = true;               // default: prefilter only, private/hla/pending/ for `singlet hla --pending`; --hla types inside the run
+    bool hla_defer = false;              // prefilter only, private/hla/pending/ for `singlet hla --pending` (the GPU route's default; see below)
+    bool hla_explicit = false;           // --hla, --no-hla or --hla-defer was given
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
@@ -3557,9 +3558,9 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
-        else if (arg == "--hla") { hla_defer = false; no_hla = false; }
-        else if (arg == "--no-hla") no_hla = true;
-        else if (arg == "--hla-defer") { hla_defer = true; no_hla = false; }
+        else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
+        else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
+        else if (arg == "--hla-defer") { hla_defer = true; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-clip5p") no_clip5p = true;
         else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--no-cr4") no_cr4 = true;
@@ -7398,6 +7399,19 @@ static int singlet_main(int argc, char* argv[]) {
     std::string bam_source;
     pid_t star_pid = -1;
     int pipe_fd[2] = {-1, -1};
+
+    // HLA by route, unless a flag chose: the CPU engine types inside the run; the GPU engine writes the candidate reads for a later
+    // `singlet hla --pending` on a CPU node. SINGLET_HLA=type|defer|off gives both routes one mode (the byte-identity gate compares them).
+    if (!hla_explicit) {
+        const char* hm = std::getenv("SINGLET_HLA");
+        const std::string mode = hm ? hm : "";
+        if (mode == "off") no_hla = true;
+        else if (mode == "type") hla_defer = false;
+        else if (mode == "defer") hla_defer = true;
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        else { const char* eg = std::getenv("SINGLET_ENGINE_GPU"); hla_defer = eg && eg[0] == '1'; }
+#endif
+    }
 
     // D-101 HLA: the T1K install for this run, or empty when HLA typing is off (human genomes only, not the barnyard)
     auto hla_t1k_for_run = [&]() -> std::string {
