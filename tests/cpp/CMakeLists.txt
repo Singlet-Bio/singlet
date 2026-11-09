@@ -90,6 +90,7 @@ add_pileup_test(test_sj_unique_only)
 add_pileup_test(test_em_rescue)
 add_pileup_test(test_multimap_record)   # the multi-mapping record: two-gene reads, serial = parallel, the classes x barcodes matrix
 add_pileup_test(test_molecule_labels)
+add_pileup_test(test_rna_editing)      # D-101: REDIportal editing rows ride the SNP pileup and split off before every SNP consumer
 add_pileup_test(test_chimeric_table)
 add_pileup_test(test_csc_add_signed)   # the uint16 cap of the pre-USA exon / intron split (csc_add_signed, mixed molecules past 65535)
 add_pileup_test(test_umi_store_scale)

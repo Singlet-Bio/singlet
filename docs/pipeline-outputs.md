@@ -19,6 +19,8 @@ goes to **`<out>/private/`**:
 | `private/mt_allele_counts.*`, `private/mt_allele_counts_rev.*` | raw per-cell chrM allele counts, all reads and the reverse-strand subset (forward = total - reverse); features `chrM:<pos>:<A/C/G/T>`; columns of non-called barcodes empty |
 | `private/mt/donorN_mt_variants.vcf`, `donorN_mt_consensus.fa`, `het_site_donor_af.tsv` | mt haplotypes per donor (homoplasmic calls with DP/AD/AF/SB/NC) |
 | `private/mt_sites.tsv` | every chrM site the caller looked at, with its class and the filters it failed |
+| `private/editing/editing_alt.*`, `private/editing/editing_dp.*` | per-cell edited / total UMIs at the REDIportal A-to-I sites covered in called cells (rows `chrom:pos:A>G` or `chrom:pos:T>C`, genome strand); same pileup kernels and filters as the SNP panel |
+| `private/editing/editing_sites.tsv.gz` | per site: strand, ref / edited UMIs and editing level over called cells, cells covered and edited, UMIs over all barcodes |
 
 `python/singlet/_restricted.py` treats everything under `private/` as restricted (as it already did for `donor/` except
 `donor_assignments.tsv`, `mt/` except `mt_summary.tsv`, `snp_*`, VCFs), so the legacy packer (`bundle.py`) puts these in
@@ -47,6 +49,8 @@ and the top-level `donor_assignments.tsv` (no longer a header-only stub).
 | `barnyard_classification.tsv` | table | called cells only (covered every barcode: 69k "doublets" on hgmm1k) | |
 | `nonhost/nonhost_per_cell.*` | table | written on a fresh output directory; only EM-confirmed species are counted per cell | `nonhost_summary.json` adds `per_cell_species` and `missing_reference_fasta` |
 | `nonhost/nonhost_confirmed_reads.bin` | binary (`SNCR` v2: species keys carry bit 31 for microbial species, D-100; `include/singlet/pileup/nonhost/nonhost_confirmed_reads.h`) | the cDNA reads (2-bit) with cell barcode, UMI and species id of EM-confirmed non-host species only; written only when `em_species_count > 0` and the host Bloom filter is loaded, and never a read with a host k-mer; absent on uninfected samples | the one place sequenced reads are kept |
+| `editing_cells.tsv` | table | per called cell: edited UMIs, total UMIs and sites covered over the REDIportal panel, and `editing_index` = edited / total (an Alu editing index over known sites) | public: a per-cell aggregate, no site-level allele counts; `rna_editing.h` |
+| `editing_summary.json` | json | panel name and size, sites covered, sites with >= 10 UMIs in called cells, sample editing index and its definition | `provenance.editing_panel` records the panel path and its manifest (REDIportal version, sha256) |
 | `multimap_counts` (`.1pz` or `.mtx.gz` + features/barcodes) | matrix gene sets x barcodes | molecules whose reads fit two genes, per gene set and cell; the gene counts never include them | see "Multi-mapping record" below; `multimap_record.h` |
 
 ## Reads-per-UMI (Beta freeze)
@@ -119,6 +123,7 @@ raise a warning.
 | `--bam-sort-mode` | auto (in-RAM sort OOM at 80 GB on 182 M reads) | disk | identical output, no measured time penalty |
 | SNP panel in `--pipeline` | none unless `--snps` | `<ref-base>/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz` (human), `mus_musculus.vcf.gz` (mouse), none for mixed or other species; `--no-snps` | donor demux and genotype doublets need it; `provenance.snp_panel` |
 | `--no-adapter-clip` | n/a | new flag: skip STAR `--clip3pAdapterSeq` (the protocol TSO on 5' kits) | see the 5' timing note in the PR |
+| RNA editing panel in `--pipeline` | none | `<ref-base>/pileup_indices/rna_editing_GRCh38.tsv.gz` (REDIportal v3, 15.6 M sites) for human, `rna_editing_GRCm39.tsv.gz` (REDIportal v3 mm10 lifted to GRCm39, 107 k sites) for mouse, none for mixed species; `--editing-sites FILE`, `--no-editing` | D-101; sites are appended to the SNP panel rows and split off before every SNP consumer, so SNP outputs are byte-identical; panel built by `scripts/editing/build_rediportal_panel.py` |
 
 ## What the v2 packer needs (python/singlet/v2 is unchanged)
 
