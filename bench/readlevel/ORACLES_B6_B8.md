@@ -634,3 +634,18 @@ engine's 4,309. Most comparator reads therefore carried no valid cell barcode. T
 0.9699 and 0.9791, scTE 0.9664 and 0.9784, SoloTE 0.9688 and 0.9860, over all and young subfamilies) used that run and is kept
 as a record only. STARsolo, scTE and SoloTE are rerun on A375 with `CBWL_OVERRIDE` set to the 737K-arc list, and the rule is
 unchanged.
+
+## B7 mESC result: fail
+
+Job 805757 scored the 2C-like clause against 6de5821a on 4,161 shared cells. The engine's MERVL-fraction AUROC is 0.6268, scTE's
+0.6328 and SoloTE's 0.6686, so the engine trails the best comparator by 0.0418 against a tie band of 0.005. B7 needs both clauses,
+so it fails whatever A375 shows. On raw MERVL counts, which the rule does not score, the engine's AUROC is 0.8471, scTE's 0.8501
+and SoloTE's 0.7316.
+
+The suspected cause is the engine's too-many-loci cap: it drops 4.47M mESC reads (2.1%) as mapped to too many loci, while the
+comparators' STARsolo run at 100 loci drops 9,971. These reads include high-copy MERVL and MT2 copies. This is untested, and the
+aligner is unchanged.
+
+Job 804624 ended early because `b7run.sbatch` did not export `PZ_SO`. `te_eval` stopped after mESC's scTE, the batch exited, and
+Slurm cancelled the overlapping A375 step. A375 is rerunning as job 805756 with the Multiome whitelist, whose STARsolo now calls
+4,356 cells.
