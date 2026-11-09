@@ -1,0 +1,174 @@
+diff --git a/SeqSet.hpp b/SeqSet.hpp
+index fc5bdb6..8830995 100644
+--- a/SeqSet.hpp
++++ b/SeqSet.hpp
+@@ -1915,45 +1915,149 @@ public:
+ 		if ( len < kmerLength )
+ 			return false ;
+ 
+-		SimpleVector<struct _hit> hits ;	
+-		GetHitsFromRead( read, rcRead, 0, -1, false, hits, NULL  ) ;
++		// singlet: the hits are not materialized. GetHitsFromRead (puse = NULL, barcode = -1, no total skip) walks the
++		// k-mers of the read and appends every index entry of the k-mers it keeps; this does the same walk, keeps
++		// the index lists as segments, counts the entries per (strand, allele) straight from the lists, and builds
++		// only the hits of the winning bucket, in the order GetHitsFromRead would have appended them.
++		struct _seg { const struct _indexInfo *p ; int size ; int readOffset ; int strand ; } ;
++		static thread_local std::vector<struct _seg> segs ;
++		segs.clear() ;
++		{
++			KmerCode kmerCode( kmerLength ) ;
++			KmerCode prevKmerCode( kmerLength ) ;
++			int skipLimit = kmerLength / 2 ; 
++			int skipCnt = 0 ;
++			int downSample = 1 ;
++			if ( len > 200 && isLongSeqSet )
++				downSample = 1 + len / 200 ;
++			for ( i = 0 ; i < kmerLength - 1 ; ++i )
++				kmerCode.Append( read[i] ) ;
++			for ( ; i < len ; ++i )
++			{
++				kmerCode.Append( read[i] ) ;
++				if ( downSample > 1 && ( i - kmerLength + 1 ) % downSample != 0 )
++					continue ;
++				if ( i == kmerLength - 1 || !prevKmerCode.IsEqual( kmerCode ) )
++				{
++					SimpleVector<struct _indexInfo> &indexHit = *seqIndex.Search( kmerCode ) ; 
++					int size = indexHit.Size() ;
++					if ( size >= 100 && i != kmerLength - 1 && i != len - 1 )
++					{
++						if ( skipCnt < skipLimit )
++						{
++							++skipCnt ;
++							continue ;
++						}
++					}
++					skipCnt = 0 ;
++					if ( size > 0 )
++					{
++						struct _seg sg = { indexHit.BeginAddress(), size, i - kmerLength + 1, 1 } ;
++						segs.push_back( sg ) ;
++					}
++				}
++				prevKmerCode = kmerCode ;
++			}
++			ReverseComplement( rcRead, read, len ) ;		
++			kmerCode.Restart() ;
++			for ( i = 0 ; i < kmerLength - 1 ; ++i )
++				kmerCode.Append( rcRead[i] ) ;
++			skipCnt = 0 ; 
++			for ( ; i < len ; ++i )
++			{
++				kmerCode.Append( rcRead[i] ) ;
++				if ( downSample > 1 && ( i - kmerLength + 1 ) % downSample != 0 )
++					continue ;
++				if ( i == kmerLength - 1 || !prevKmerCode.IsEqual( kmerCode ) )
++				{
++					SimpleVector<struct _indexInfo> &indexHit = *seqIndex.Search( kmerCode ) ; 
++					int size = indexHit.Size() ;
++					if ( size >= 100 && i != kmerLength - 1 && i != len - 1 )
++					{
++						if ( skipCnt < skipLimit )
++						{
++							++skipCnt ;
++							continue ;
++						}
++					}
++					skipCnt = 0 ;
++					if ( size > 0 )
++					{
++						struct _seg sg = { indexHit.BeginAddress(), size, i - kmerLength + 1, -1 } ;
++						segs.push_back( sg ) ;
++					}
++				}
++				prevKmerCode = kmerCode ;
++			}
++		}
+ 
+-		int hitCnt = hits.Size() ;
+-		if ( hitCnt == 0 )
++		if ( segs.empty() )
+ 			return false ;
+ 
+-		// Find the best bucket (singlet: count hits per key tag * seqCnt + idx in a reused array instead of
+-		// filling 2 * seqCnt vectors per read; the largest bucket wins, ties to the smallest key, as the scan
+-		// over k = 0, 1 and i = 0 .. seqCnt - 1 with a strict > did; its hits keep their order).
++		// Best bucket: the largest count, ties to the smallest key (tag * seqCnt + idx).
+ 		int seqCnt = seqs.size() ;
+ 		static thread_local std::vector<int> bucketSize ;
+ 		if ( (int)bucketSize.size() < 2 * seqCnt )
+ 			bucketSize.assign( 2 * seqCnt, 0 ) ;
+-		for ( i = 0 ; i < hitCnt ; ++i )
+-			++bucketSize[ ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ] ;
++		long long totalHits = 0 ;
++		for ( size_t sgi = 0 ; sgi < segs.size() ; ++sgi )
++		{
++			const struct _seg &sg = segs[sgi] ;
++			int *cnt = bucketSize.data() + ( sg.strand == 1 ? seqCnt : 0 ) ;
++			for ( k = 0 ; k < sg.size ; ++k )
++				++cnt[ sg.p[k].idx ] ;
++			totalHits += sg.size ;
++		}
+ 		int max = -1 ;
+ 		int maxKey = -1 ;
+-		for ( i = 0 ; i < hitCnt ; ++i )
++		for ( size_t sgi = 0 ; sgi < segs.size() ; ++sgi )
++		{
++			const struct _seg &sg = segs[sgi] ;
++			const int base = sg.strand == 1 ? seqCnt : 0 ;
++			for ( k = 0 ; k < sg.size ; ++k )
++			{
++				int key = base + sg.p[k].idx ;
++				int size = bucketSize[key] ;
++				if ( size > max || ( size == max && key < maxKey ) )
++				{
++					max = size ;
++					maxKey = key ;
++				}
++			}
++		}
++		if ( totalHits > 4LL * seqCnt )
++			std::fill( bucketSize.begin(), bucketSize.begin() + 2 * seqCnt, 0 ) ;
++		else
+ 		{
+-			int key = ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ;
+-			int size = bucketSize[key] ;
+-			if ( size > max || ( size == max && key < maxKey ) )
++			for ( size_t sgi = 0 ; sgi < segs.size() ; ++sgi )
+ 			{
+-				max = size ;
+-				maxKey = key ;
++				const struct _seg &sg = segs[sgi] ;
++				const int base = sg.strand == 1 ? seqCnt : 0 ;
++				for ( k = 0 ; k < sg.size ; ++k )
++					bucketSize[ base + sg.p[k].idx ] = 0 ;
+ 			}
+ 		}
+-		for ( i = 0 ; i < hitCnt ; ++i )
+-			bucketSize[ ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx ] = 0 ;
+ 
+ 		if (kmerLength * max < hitLenRequired)
+ 			return false ;
+ 
+ 		SimpleVector<struct _hit> best ;
+ 		best.Reserve( max ) ;
+-		for ( i = 0 ; i < hitCnt ; ++i )
+-			if ( ( hits[i].strand == 1 ? seqCnt : 0 ) + hits[i].indexHit.idx == maxKey )
+-				best.PushBack( hits[i] ) ;
++		for ( size_t sgi = 0 ; sgi < segs.size() ; ++sgi )
++		{
++			const struct _seg &sg = segs[sgi] ;
++			const int base = sg.strand == 1 ? seqCnt : 0 ;
++			for ( k = 0 ; k < sg.size ; ++k )
++				if ( base + sg.p[k].idx == maxKey )
++				{
++					struct _hit nh ;
++					nh.indexHit = sg.p[k] ;
++					nh.readOffset = sg.readOffset ;
++					nh.strand = sg.strand ;
++					nh.repeats = sg.size ;
++					best.PushBack( nh ) ;
++				}
++		}
+ 
+ 		std::vector<struct _overlap> overlaps ;
+ 		std::vector< SimpleVector<struct _pair> *> overlapsHitCoords ;
