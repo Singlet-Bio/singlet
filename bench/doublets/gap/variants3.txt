@@ -1,0 +1,14 @@
+base mask=7
+h8_m25 het=8 hetmix=0.25
+h8_m50 het=8 hetmix=0.5
+h8_m75 het=8 hetmix=0.75
+h16_m25 het=16 hetmix=0.25
+h16_m50 het=16 hetmix=0.5
+h16_m75 het=16 hetmix=0.75
+h4_m50 het=4 hetmix=0.5
+h32_m50 het=32 hetmix=0.5
+h16_m50_ex het=16 hetmix=0.5 rounds=2
+h16_m50_f3 het=16 hetmix=0.5 mask=15
+h16_m50_k2 het=16 hetmix=0.5 knn=2
+h16_m10 het=16 hetmix=0.1
+h16_m100_s1 het=16 hetmix=1 simratio=1
