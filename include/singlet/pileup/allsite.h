@@ -316,8 +316,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
         }
         std::sort(all.begin(), all.end(), [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; });
         m.nrows = row0[n_tid]; m.ncols = n_barcodes; m.indptr.assign(n_barcodes + 1, 0); m.indices.clear(); m.data.clear();
-        if (all.size() >= static_cast<size_t>(INT32_MAX)) { std::cerr << "[allsite] " << all.size() << " entries do not fit the int32 column pointers; the member is not built
-"; return false; }
+        if (all.size() >= static_cast<size_t>(INT32_MAX)) { std::cerr << "[allsite] " << all.size() << " entries do not fit the int32 column pointers; the member is not built\n"; return false; }
         for (size_t i = 0; i < all.size();) {   // duplicates (one per molecule) summed, saturated at 65535
             size_t j = i; uint64_t v = 0; while (j < all.size() && all[j].cell == all[i].cell && all[j].row == all[i].row) v += all[j++].val;
             m.indices.push_back(static_cast<int32_t>(all[i].row)); m.data.push_back(static_cast<uint16_t>(std::min<uint64_t>(v, 65535)));

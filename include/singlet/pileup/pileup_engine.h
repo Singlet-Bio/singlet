@@ -3051,8 +3051,7 @@ public:
         const auto t0 = std::chrono::steady_clock::now();
         if (!allsite_.finalize(keep)) { allsite_ok_ = false; return false; }
         std::cerr << "[allsite] matrices built for " << (keep ? "the called cells" : "every barcode") << ": DP entries " << allsite_.dp.data.size()
-                  << ", AD entries " << allsite_.ad.data.size() << " in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s
-";
+                  << ", AD entries " << allsite_.ad.data.size() << " in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
         return true;
     }
     const allsite::Result& allsite() const { return allsite_; }

@@ -1810,8 +1810,7 @@ inline ExportStats export_results(const PileupEngine& engine,
             keep_cells.assign(barcodes.size(), 0);
             for (uint32_t c : cc_result.cell_indices) if (c < keep_cells.size()) keep_cells[c] = 1;
         }
-        if (!engine.finalize_allsite(export_cfg.run_cell_calling ? &keep_cells : nullptr)) std::cerr << "[allsite] member dropped
-";
+        if (!engine.finalize_allsite(export_cfg.run_cell_calling ? &keep_cells : nullptr)) std::cerr << "[allsite] member dropped\n";
     }
     if (demux_thread.joinable()) {
         demux_thread.join();
