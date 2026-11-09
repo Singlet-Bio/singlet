@@ -2630,8 +2630,11 @@ public:
                     else if (op == 2 || op == 3) rpos += len;
                 }
                 TeRecord tr;
-                if (!L.blocks.empty() && te_record(a.tid, L.blocks, nh, static_cast<uint32_t>(rr.bc), umi_str, umi_len, L.te_scratch, L.te_exon_scratch, tr))
+                if (!L.blocks.empty() && te_record(a.tid, L.blocks, nh, static_cast<uint32_t>(rr.bc), nullptr, 0, L.te_scratch, L.te_exon_scratch, tr)) {
+                    makeUmi();   // the UMI's text is made on demand, as for poly(A) and V(D)J: only for a read a TE takes
+                    tr.umi = polya_umi_hash(umi_str, umi_len);
                     L.te.push_back(tr);
+                }
             }
             }
         };

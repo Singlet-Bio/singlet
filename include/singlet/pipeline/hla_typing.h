@@ -622,8 +622,8 @@ inline Result finish_stage(Session& s) {
         std::ofstream j(dir + "/hla_summary.json.tmp");   // renamed once complete: a hla_summary.json is always whole
         j << "{\n  \"t1k\": " << manifest << ",\n  \"ran\": " << (res.ran ? "true" : "false") << ",\n  \"why_not\": \"" << res.why_not
           << "\",\n  \"prefilter\": {\"k\": " << kK << ", \"stride\": " << kStride << ", \"hla_alleles\": " << res.n_alleles << ", \"typed_alleles\": " << res.n_alleles_typed << ", \"min_cells\": " << cfg.min_cells << ", \"kmers\": " << res.n_kmers
-          << ", \"reads_scanned\": " << res.reads_scanned << ", \"reads_kept\": " << res.reads_kept << ", \"seconds\": " << res.seconds_prefilter
-          << "},\n  \"t1k_seconds\": " << res.seconds_t1k << ",\n  \"sample\": " << (res.ran ? genotype_json(dir + "/hla_genotype.tsv") : std::string("null"))
+          << ", \"reads_scanned\": " << res.reads_scanned << ", \"reads_kept\": " << res.reads_kept
+          << "},\n  \"run\": {\"prefilter_seconds\": " << res.seconds_prefilter << ", \"t1k_seconds\": " << res.seconds_t1k << "},\n  \"sample\": " << (res.ran ? genotype_json(dir + "/hla_genotype.tsv") : std::string("null"))
           << ",\n  \"donor_rule\": \"called cells (cell_status cell) of one donor with prob_max >= 0.9, matched by raw cell barcode\""
           << ",\n  \"donors\": " << donors_json << "\n}\n";
     }
