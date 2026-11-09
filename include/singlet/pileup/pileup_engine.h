@@ -4392,8 +4392,7 @@ private:
             edit_sites_ = std::move(e->sites); edit_chroms_ = std::move(e->chroms);
             e->taken = true;
             std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites from " << config_.edit_path
-                      << " (parsed once by the pool)
-";
+                      << " (parsed once by the pool)\n";
             return true;
         }
         return false;
