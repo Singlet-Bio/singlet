@@ -648,4 +648,4 @@ aligner is unchanged.
 
 Job 804624 ended early because `b7run.sbatch` did not export `PZ_SO`. `te_eval` stopped after mESC's scTE, the batch exited, and
 Slurm cancelled the overlapping A375 step. A375 is rerunning as job 805756 with the Multiome whitelist, whose STARsolo now calls
-4,356 cells.
+4,357 cells.
