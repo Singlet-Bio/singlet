@@ -3241,14 +3241,14 @@ public:
 #endif
     }
     bool allsite_ready() const { return allsite_ok_; }
-    // Builds the all-site matrices for the barcodes marked in keep (null: every barcode); called once, after cell calling. A false result
-    // (the entries do not fit int32 column pointers) turns the member off.
-    bool finalize_allsite(const std::vector<uint8_t>* keep) const {   // export holds the engine by const reference; the build is a one-time lazy step
+    // Builds the all-site matrices once, after cell calling and demux: build(result) applies the storage rule (allsite_store.h). A false
+    // result (the entries do not fit int32 column pointers) turns the member off.
+    bool finalize_allsite(const std::function<bool(allsite::Result&)>& build) const {   // export holds the engine by const reference; the build is a one-time lazy step
         if (!allsite_ok_ || allsite_built_) return allsite_ok_;
         allsite_built_ = true;
         const auto t0 = std::chrono::steady_clock::now();
-        if (!allsite_.finalize(keep)) { allsite_ok_ = false; return false; }
-        std::cerr << "[allsite] matrices built for " << (keep ? "the called cells" : "every barcode") << ": DP entries " << allsite_.dp.data.size()
+        if (!build(allsite_)) { allsite_ok_ = false; return false; }
+        std::cerr << "[allsite] matrices built: DP entries " << allsite_.dp.data.size()
                   << ", AD entries " << allsite_.ad.data.size() << " in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
         return true;
     }

@@ -1857,18 +1857,28 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
     const bool demux_thread_ran = demux_thread.joinable();
-    // D-101: build the all-site matrices now that the cells are called, for those cells only (every barcode when no cell call ran).
-    // An LCL's millions of near-empty droplets hold over 2^31 entries together, which the int32 column pointers cannot index.
-    if (engine.allsite_ready()) {
+    // D-101: build the all-site matrices once the cells are called and demux has given the donor count, under the storage rule
+    // (allsite_store.h): called cells; one donor, its ALT-evidence sites. An LCL's millions of near-empty droplets hold over 2^31 entries
+    // together, which the int32 column pointers cannot index, so the rule is applied before the entries are counted.
+    allsite::BuildReport allsite_report;
+    auto build_allsite = [&](int n_donors) {
+        if (!engine.allsite_ready()) return;
         std::vector<uint8_t> keep_cells;
         if (export_cfg.run_cell_calling) {
             keep_cells.assign(barcodes.size(), 0);
             for (uint32_t c : cc_result.cell_indices) if (c < keep_cells.size()) keep_cells[c] = 1;
         }
-        if (!engine.finalize_allsite(export_cfg.run_cell_calling ? &keep_cells : nullptr)) std::cerr << "[allsite] member dropped\n";
-    }
+        const std::vector<uint8_t>* keep = export_cfg.run_cell_calling ? &keep_cells : nullptr;
+        const char* env_max = std::getenv("SINGLET_ALLSITE_MAX_ENTRIES");   // test hook: a small limit exercises the fallback on a small library
+        if (!engine.finalize_allsite([&](allsite::Result& r) {
+                if (env_max && *env_max) r.max_entries = std::strtoull(env_max, nullptr, 10);
+                return allsite::build_member(r, keep, n_donors, allsite_report); }))
+            std::cerr << "[allsite] member dropped: " << allsite_report.reason << "\n";
+    };
+    if (!demux_thread.joinable()) build_allsite(0);
     if (demux_thread.joinable()) {
         demux_thread.join();
+        build_allsite(demux_result.n_donors_k);
         write_donor_assignments(out_prefix + "/donor/donor_assignments.tsv",
                                 demux_result.assignments, barcodes);
         // The top-level donor_assignments.tsv (a required output) was a header-only stub; it now holds the same
@@ -1946,6 +1956,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // D-101: the all-site member under the storage rule (allsite_store.h): called cells; one donor, its ALT-evidence sites; private.
     std::string allsite_rule; int allsite_donors = 0;   // mirrored in provenance.json (no genotype information)
+    std::string allsite_dropped = engine.allsite_on() && !engine.allsite_ready() && !allsite_report.reason.empty() ? allsite_report.reason : "";
     if (engine.allsite_ready()) {
         std::filesystem::create_directories(out_prefix + "/private/allsite");
         // without a cell call (--barcodes and no --cell-calling) every barcode is kept, as in the mt allele members
@@ -1957,7 +1968,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         }
         const auto plan = allsite::plan_store(engine.allsite().ad, engine.allsite().dp,
                                               export_cfg.run_cell_calling ? cc_result.cell_indices : all_cols,
-                                              demux_thread_ran ? demux_result.n_donors_k : 0);
+                                              demux_thread_ran ? demux_result.n_donors_k : 0, allsite_report.alt_rule);
         auto ad = allsite::restrict_store(engine.allsite().ad, plan);
         auto dp = allsite::restrict_store(engine.allsite().dp, plan);
         const auto names = engine.allsite_names();
@@ -2009,6 +2020,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         ProvenanceConfig prov_with_caller = export_cfg.provenance;
         prov_with_caller.allsite_store_rule = allsite_rule;
         prov_with_caller.allsite_n_donors = allsite_donors;
+        prov_with_caller.allsite_dropped_reason = allsite_dropped;
         if (!cell_caller_method.empty())
             prov_with_caller.cell_caller = cell_caller_method;
         else if (!export_cfg.provenance.cell_caller.empty())

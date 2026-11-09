@@ -13,8 +13,10 @@
 #include <vector>
 
 #include "singlet/pileup/allsite.h"
+#include "singlet/pileup/allsite_store.h"
 
 namespace A = singlet::allsite;
+namespace AS = singlet::allsite;
 static int n_fail = 0;
 #define CHECK(cond, msg) do { if (!(cond)) { std::cout << "FAIL " << msg << "\n"; ++n_fail; } } while (0)
 
@@ -146,6 +148,48 @@ int main() {
           && r4.ad.data == r3.ad.data && r4.ad.indices == r3.ad.indices && r4.ambiguous == r3.ambiguous && r4.other == r3.other,
           "site blocks do not change the result");
     P.block_hits = 8000000;
+    // Deferred build with the storage rule (allsite_store.h): barcodes 0-2 are the called cells; sites at 1/1 are chr1:11 (ALT in the cells) and
+    // chr1:21 (ALT only in uncalled barcode 3), so with the rule applied first the second row is not variant.
+    {
+        A::Params Q = P; Q.defer_build = true;
+        const std::vector<uint8_t> keep = {1, 1, 1, 0};
+        auto fresh = [&]() { return A::run(R, G, 3, 4, Q); };
+        auto nnz = [](const singlet::SparseAccumulator<uint16_t>::CSCMatrix& m) { return static_cast<uint64_t>(m.data.size()); };
+        CHECK(fresh().dp.data.empty(), "defer_build leaves the matrices empty");
+        // no limit: two donors keep every site; the entries are the merged ones of the called cells
+        A::Result a = fresh(); AS::BuildReport rep;
+        CHECK(AS::build_member(a, &keep, 2, rep) && rep.built && !rep.alt_rule, "two donors: every site, built");
+        CHECK(a.kept_dp.size() == 2 && a.site_dp.size() == 2 && a.kept_dp[1] > 0 && a.site_dp[1] > a.kept_dp[1], "per-site sums: all barcodes beside the called cells");
+        const uint64_t E = nnz(a.dp);
+        CHECK(E == rep.dp_entries && E >= 4, "entries counted after the merge: " + std::to_string(E));
+        CHECK(a.dp.indptr[3] == a.dp.indptr[4], "the uncalled barcode has no entries");
+        CHECK(at(a, a.dp, 0, 0) == 2 && at(a, a.ad, 0, 0) == 1 && at(a, a.dp, 1, 1) > 0, "merged values as the immediate build");
+        // the limit applies to merged entries: E fails, E + 1 passes (every record of a (barcode, site) counts once)
+        A::Result b = fresh(); b.max_entries = E + 1;
+        CHECK(AS::build_member(b, &keep, 2, rep) && !rep.alt_rule && nnz(b.dp) == E, "a limit one above the merged entries builds every site");
+        // at the limit, the multi-donor member falls back to the ALT-evidence sites and says so
+        A::Result c = fresh(); c.max_entries = E;
+        CHECK(AS::build_member(c, &keep, 2, rep) && rep.built && rep.alt_rule && nnz(c.dp) < E, "at the limit, the ALT-evidence sites are stored instead");
+        bool row1 = false; for (int32_t i : c.dp.indices) row1 = row1 || i == 1;
+        CHECK(!row1 && c.dp.nrows == 2, "no per-cell entry at the non-variant site; the shape is kept");
+        const auto plan = AS::plan_store(c.ad, c.dp, {0, 1, 2}, 2, rep.alt_rule);
+        CHECK(plan.rule == "multi-donor-alt-sites" && plan.sites_per_cell == 1, "the plan names the fallback rule: " + plan.rule);
+        CHECK(AS::plan_store(c.ad, c.dp, {0, 1, 2}, 0, true).rule == "no-demux-alt-sites", "no demux fallback rule");
+        // one donor: the rule is applied before the build, whatever the limit
+        A::Result d = fresh();
+        CHECK(AS::build_member(d, &keep, 1, rep) && rep.alt_rule && nnz(d.dp) < E, "one donor: ALT-evidence sites only");
+        CHECK(d.site_dp[1] == a.site_dp[1] && d.site_ad.size() == 2, "the per-site sums still cover every site and barcode");
+        // nothing fits: the member is dropped with a reason and no matrices
+        A::Result e = fresh(); e.max_entries = 1;
+        CHECK(!AS::build_member(e, &keep, 2, rep) && !rep.built && !rep.reason.empty() && e.dp.data.empty() && e.ad.data.empty(), "dropped with a reason: " + rep.reason);
+        A::Result f2 = fresh(); f2.max_entries = std::max<uint64_t>(nnz(a.ad) + 1, nnz(d.dp));   // AD fits, DP does not even at the ALT sites
+        CHECK(nnz(d.dp) > nnz(a.ad), "fixture: more DP than AD entries at the ALT site");
+        CHECK(!AS::build_member(f2, &keep, 2, rep) && rep.reason.find("ALT-evidence") != std::string::npos, "DP over the limit at the ALT sites: " + rep.reason);
+        // the immediate build and the deferred one over every barcode agree
+        A::Params Q0 = P; Q0.defer_build = true; A::Result g0 = A::run(R, G, 3, 4, Q0);
+        CHECK(g0.finalize(nullptr) && g0.dp.data == r3.dp.data && g0.dp.indices == r3.dp.indices && g0.dp.indptr == r3.dp.indptr && g0.ad.data == r3.ad.data,
+              "finalize over every barcode equals the immediate build");
+    }
     // sites.tsv
     const std::string tsv = (dir / "sites.tsv.gz").string();
     CHECK(A::write_sites_tsv(tsv, r, tids), "sites.tsv written");

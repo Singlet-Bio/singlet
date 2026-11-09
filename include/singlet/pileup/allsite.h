@@ -105,11 +105,31 @@ struct Result {
     uint64_t reads_used = 0, mismatch_obs = 0, molecules = 0, ambiguous = 0, other = 0;
     uint64_t dp_records = 0, ad_records = 0;                         // per-(barcode, site, molecule-batch) counts before they are summed
     std::vector<uint64_t> site_dp, site_ad;                          // per site, summed over every barcode (filled by finalize)
-    // With Params::defer_build the matrices stay empty until finalize(keep): keep[c] != 0 marks the barcodes to build (null: all). The
-    // column pointers are int32, so a library whose barcodes together hold over 2^31 entries (an LCL, with millions of near-empty
-    // droplets) only fits once restricted to its called cells. Returns false, leaving the matrices empty, when it still does not fit.
-    std::function<bool(Result&, const std::vector<uint8_t>*)> finalize_fn;
-    bool finalize(const std::vector<uint8_t>* keep) { return finalize_fn ? finalize_fn(*this, keep) : true; }
+    // With Params::defer_build the matrices stay empty until the caller builds them in two steps, once the called cells (and with them the
+    // donor count) are known. prepare(keep_cols) drops the entries of other barcodes, merges the per-molecule records of each (barcode, site)
+    // and fills kept_ad / kept_dp, the per-site sums over the kept barcodes. emit(is_ad, keep_rows, entries) then builds one matrix from the
+    // merged entries, optionally only for the rows marked in keep_rows. The int32 column pointers bound the matrix: entries counts the
+    // merged entries (what the matrix would hold, not the records they came from), and emit returns false, leaving the matrix empty,
+    // when that is max_entries or more. emit does not consume the merged entries, so a smaller row set can follow a failed attempt;
+    // release() frees them.
+    std::vector<uint64_t> kept_dp, kept_ad;                          // per site, summed over the kept barcodes (filled by prepare)
+    uint64_t max_entries = static_cast<uint64_t>(INT32_MAX);
+    std::function<void(Result&, const std::vector<uint8_t>*)> prepare_fn;
+    std::function<bool(Result&, bool, const std::vector<uint8_t>*, uint64_t&)> emit_fn;
+    std::function<void()> release_fn;
+    void prepare(const std::vector<uint8_t>* keep_cols) { if (prepare_fn) prepare_fn(*this, keep_cols); }
+    bool emit(bool is_ad, const std::vector<uint8_t>* keep_rows, uint64_t& entries) { entries = 0; return emit_fn ? emit_fn(*this, is_ad, keep_rows, entries) : true; }
+    void release() { if (release_fn) release_fn(); }
+    // Both matrices over every site for the barcodes marked in keep (null: all); false when either does not fit.
+    bool finalize(const std::vector<uint8_t>* keep) {
+        if (!prepare_fn) return true;
+        prepare(keep);
+        uint64_t e = 0;
+        const bool ok = emit(true, nullptr, e) && emit(false, nullptr, e);
+        release();
+        if (!ok) { ad = {}; dp = {}; }
+        return ok;
+    }
 };
 
 namespace detail {
@@ -299,38 +319,66 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
         res.mismatch_obs += out[t].obs; res.molecules += out[t].st.snp_molecules; res.ambiguous += out[t].st.snp_molecules_ambiguous; res.other += out[t].st.snp_molecules_other; }
     for (uint32_t t = 0; t < n_tid; ++t) { res.ad_records += out[t].ad.size(); res.dp_records += out[t].dp.size(); }
     auto row0_sp = std::make_shared<std::vector<uint32_t>>(std::move(row0));
-    auto build = [out_sp, row0_sp, n_tid, n_barcodes](bool is_ad, SparseAccumulator<uint16_t>::CSCMatrix& m, const std::vector<uint8_t>* keep,
-                                                       std::vector<uint64_t>& site_sum) -> bool {
+    const unsigned build_threads = std::max(1u, std::min<unsigned>(P.threads, n_tid));
+    auto cmp = [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
+    res.prepare_fn = [out_sp, row0_sp, n_tid, n_barcodes, build_threads, cmp](Result& r, const std::vector<uint8_t>* keep) {
         auto& out = *out_sp; const auto& row0 = *row0_sp;
-        site_sum.assign(row0[n_tid], 0);
-        std::vector<Tri> all;
-        size_t n = 0; for (uint32_t t = 0; t < n_tid; ++t) n += (is_ad ? out[t].ad : out[t].dp).size();
-        all.reserve(n);
-        for (uint32_t t = 0; t < n_tid; ++t) {
-            auto& v = is_ad ? out[t].ad : out[t].dp;
-            for (const auto& x : v) {
-                site_sum[x.row + row0[t]] += x.val;
-                if (!keep || (x.cell < keep->size() && (*keep)[x.cell])) all.push_back({x.cell, x.row + row0[t], x.val});
+        const size_t nrow = row0[n_tid];
+        r.site_ad.assign(nrow, 0); r.site_dp.assign(nrow, 0); r.kept_ad.assign(nrow, 0); r.kept_dp.assign(nrow, 0);
+        std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
+        std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return out[a].ad.size() + out[a].dp.size() > out[b].ad.size() + out[b].dp.size(); });
+        std::atomic<uint32_t> next{0};
+        // Contigs own disjoint row ranges, so each worker writes its own part of the per-site sums.
+        auto work = [&]() {
+            for (;;) {
+                const uint32_t oi = next.fetch_add(1); if (oi >= n_tid) return;
+                const uint32_t t = order[oi];
+                for (int w = 0; w < 2; ++w) {
+                    auto& v = w == 0 ? out[t].ad : out[t].dp;
+                    auto& site = w == 0 ? r.site_ad : r.site_dp; auto& kept = w == 0 ? r.kept_ad : r.kept_dp;
+                    size_t m = 0;
+                    for (size_t i = 0; i < v.size(); ++i) {
+                        Tri x = v[i]; x.row += row0[t];
+                        site[x.row] += x.val;
+                        if (x.cell >= n_barcodes || (keep && !(x.cell < keep->size() && (*keep)[x.cell]))) continue;
+                        kept[x.row] += x.val; v[m++] = x;
+                    }
+                    v.resize(m);
+                    std::sort(v.begin(), v.end(), cmp);
+                    size_t o = 0;
+                    for (size_t i = 0; i < m;) {   // one record per molecule batch: summed per (barcode, site), saturated at 65535
+                        size_t j = i; uint64_t sum = 0; while (j < m && v[j].cell == v[i].cell && v[j].row == v[i].row) sum += v[j++].val;
+                        Tri y = v[i]; y.val = static_cast<uint32_t>(std::min<uint64_t>(sum, 65535)); v[o++] = y; i = j;
+                    }
+                    v.resize(o); v.shrink_to_fit();
+                }
             }
-            std::vector<Tri>().swap(v);
+        };
+        std::vector<std::thread> th; for (unsigned i = 1; i < build_threads; ++i) th.emplace_back(work);
+        work(); for (auto& x : th) x.join();
+    };
+    res.emit_fn = [out_sp, row0_sp, n_tid, n_barcodes](Result& r, bool is_ad, const std::vector<uint8_t>* keep_rows, uint64_t& entries) -> bool {
+        auto& out = *out_sp; const auto& row0 = *row0_sp;
+        auto& m = is_ad ? r.ad : r.dp;
+        m = {}; m.nrows = row0[n_tid]; m.ncols = n_barcodes;
+        const auto row_ok = [&](uint32_t row) { return !keep_rows || (row < keep_rows->size() && (*keep_rows)[row]); };
+        std::vector<uint64_t> cnt(static_cast<size_t>(n_barcodes) + 1, 0);
+        entries = 0;
+        for (uint32_t t = 0; t < n_tid; ++t)
+            for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { ++cnt[x.cell + 1]; ++entries; }
+        if (entries >= r.max_entries) {
+            std::cerr << "[allsite] " << (is_ad ? "AD" : "DP") << ": " << entries << " (barcode, site) entries do not fit the int32 column pointers\n";
+            return false;
         }
-        std::sort(all.begin(), all.end(), [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; });
-        m.nrows = row0[n_tid]; m.ncols = n_barcodes; m.indptr.assign(n_barcodes + 1, 0); m.indices.clear(); m.data.clear();
-        if (all.size() >= static_cast<size_t>(INT32_MAX)) { std::cerr << "[allsite] " << all.size() << " entries do not fit the int32 column pointers; the member is not built\n"; return false; }
-        for (size_t i = 0; i < all.size();) {   // duplicates (one per molecule) summed, saturated at 65535
-            size_t j = i; uint64_t v = 0; while (j < all.size() && all[j].cell == all[i].cell && all[j].row == all[i].row) v += all[j++].val;
-            m.indices.push_back(static_cast<int32_t>(all[i].row)); m.data.push_back(static_cast<uint16_t>(std::min<uint64_t>(v, 65535)));
-            if (all[i].cell < n_barcodes) m.indptr[all[i].cell + 1]++;
-            i = j;
-        }
-        for (uint32_t c = 0; c < n_barcodes; ++c) m.indptr[c + 1] += m.indptr[c];
+        m.indptr.assign(static_cast<size_t>(n_barcodes) + 1, 0);
+        for (uint32_t c = 0; c < n_barcodes; ++c) { cnt[c + 1] += cnt[c]; m.indptr[c + 1] = static_cast<int32_t>(cnt[c + 1]); }
+        m.indices.resize(entries); m.data.resize(entries);
+        std::vector<int32_t> pos(m.indptr.begin(), m.indptr.end() - 1);
+        for (uint32_t t = 0; t < n_tid; ++t)   // contigs hold ascending row ranges and each is sorted, so rows ascend within a column
+            for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { const int32_t k = pos[x.cell]++; m.indices[k] = static_cast<int32_t>(x.row); m.data[k] = static_cast<uint16_t>(x.val); }
         return true;
     };
-    res.finalize_fn = [build](Result& r, const std::vector<uint8_t>* keep) -> bool {
-        const bool a = build(true, r.ad, keep, r.site_ad), d = build(false, r.dp, keep, r.site_dp);
-        if (!a || !d) { r.ad = {}; r.dp = {}; return false; }
-        return true;
-    };
+    res.release_fn = [out_sp, n_tid]() { auto& out = *out_sp; for (uint32_t t = 0; t < n_tid; ++t) { std::vector<Tri>().swap(out[t].ad); std::vector<Tri>().swap(out[t].dp); } };
     if (!P.defer_build) res.finalize(nullptr);
     return res;
 }
