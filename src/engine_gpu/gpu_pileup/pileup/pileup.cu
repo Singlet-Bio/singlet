@@ -622,6 +622,22 @@ static int group_starts(Arena& A, const uint64_t* uh, int m, uint32_t** gs) {
     int ng = 0; CK(cudaMemcpy(&ng, dn, 4, cudaMemcpyDeviceToHost)); return ng; }
 static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
 static unsigned long long g_snp_stat[3] = {0, 0, 0};
+// D-101 (singlet): rows >= g_edit_start of the SNP table are RNA editing sites. red_snp counts their tuples (hits) and their molecules,
+// ties and other-majority votes into g_edit_stat {hits, molecules, ambiguous, other}; these are parts of n_snp_tuples and g_snp_stat.
+// Counting only: every output is the same with or without it.
+static uint32_t g_edit_start = 0xFFFFFFFFu;
+static unsigned long long g_edit_stat[4] = {0, 0, 0, 0};
+__global__ void k_edit_hits(const uint64_t* hi, int n, uint64_t mask, uint32_t start, unsigned long long* c) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    const bool e = i < n && (uint32_t)(hi[i] & mask) >= start;
+    const unsigned int b = __ballot_sync(0xffffffffu, e);
+    if ((threadIdx.x & 31) == 0 && b) atomicAdd(c, (unsigned long long)__popc(b)); }
+// the vote of k_r9 / k_r9_vote per root entry, counted for the roots of editing rows: c[1] molecules, c[2] ties, c[3] other
+__global__ void k_edit_vote(const uint32_t* root, const uint32_t* msum, const uint64_t* uh, int m, uint64_t mask, uint32_t start, unsigned long long* c) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m || root[i] != (uint32_t)i || (uint32_t)(uh[i] & mask) < start) return;
+    const uint32_t* s = msum + 3 * (size_t)i; int best = 0; for (int k = 1; k < 3; k++) if (s[k] > s[best]) best = k;
+    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && s[k] == s[best]) tie = true;
+    atomicAdd(&c[tie ? 2 : (best == 2 ? 3 : 1)], 1ull); }
 __global__ void k_mtres(const ReadRec* R, int n, const GRes* G, unsigned long long* c) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n && R[r].bc >= 0 && (G[R[r].sig].flags & 256u)) atomicAdd(&c[3], 1ull); }
 // count_read's counters over the gene tuples: [0] exon_hits, [1] intron_hits (kReadIntron), [2] reads recorded with a UMI (umi_duplicate)
 __global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
@@ -788,6 +804,11 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
         uint64_t* sn_hi = A.alloc<uint64_t>(n_snpt); uint32_t* sn_lo = A.alloc<uint32_t>(n_snpt); uint8_t* sn_alt = A.alloc<uint8_t>(n_snpt);
         uint32_t* tg = (gst && !g_snp_first) ? A.alloc<uint32_t>(n_snpt) : nullptr;
         k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg, Qp, lq_snp, in.dp.qw);
+        unsigned long long* est = nullptr;   // D-101: the editing rows' counts (g_edit_stat)
+        if (g_edit_start != 0xFFFFFFFFu) {
+            est = A.alloc<unsigned long long>(4); CK(cudaMemset(est, 0, 32));
+            k_edit_hits<<<(n_snpt + TB - 1) / TB, TB>>>(sn_hi, n_snpt, (1ull << sb) - 1, g_edit_start, est);
+        }
         T.mark("6.snp.fill");
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sn_hi, sn_lo, n_snpt, cb + sb, ub5, &hs); const int G = (n_snpt + TB - 1) / TB;
         T.mark("6.snp.sort");
@@ -818,9 +839,11 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
             T.mark("6.snp.r9"); if (g_prof) { prof_groups("snp r9 (cell, SNP)", gs, ngr, m); T.mark("prof"); }
             unsigned long long s[3]; CK(cudaMemcpy(s, st, 24, cudaMemcpyDeviceToHost));
             for (int k = 0; k < 3; k++) g_snp_stat[k] += s[k];
+            if (est) k_edit_vote<<<(m + TB - 1) / TB, TB>>>(root, msum, mk, m, (1ull << sb) - 1, g_edit_start, est);
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, mk, *sn_u, val, *sn_v, dn, SumU64(), m); });
         }
         CK(cudaMemcpy(&n_snu, dn, 4, cudaMemcpyDeviceToHost));
+        if (est) { unsigned long long e[4]; CK(cudaMemcpy(e, est, 32, cudaMemcpyDeviceToHost)); for (int k = 0; k < 4; k++) g_edit_stat[k] += e[k]; }
     }
     T.mark("6.snp");
     return n_snu;
@@ -925,6 +948,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         CK(cudaMemcpyToSymbol(g_cell_hist, &cell_hist, sizeof(cell_hist)));
     }
     g_snp_stat[0] = g_snp_stat[1] = g_snp_stat[2] = 0;
+    g_edit_stat[0] = g_edit_stat[1] = g_edit_stat[2] = g_edit_stat[3] = 0;
     // ---- cell partitions (align-and-count design 4.4): every reducer's key starts with the cell, so the read-level stages run once
     // per partition of the cells (hash(cell) mod K) on that partition's reads; the signature-level tables above are shared. Sized up
     // front: the smallest K whose largest partition fits the arena (part_bytes: an upper bound per read from its tuple counts).

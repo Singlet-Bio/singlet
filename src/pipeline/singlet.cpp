@@ -3292,6 +3292,15 @@ static std::string default_snp_panel(const std::string& genome_dir) {
     return "";
 }
 
+// The default RNA editing panel of --pipeline for a genome directory (D-101; a file under <ref_base>/pileup_indices/), empty for none
+static std::string default_edit_panel(const std::string& genome_dir) {
+    const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+    const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
+    if (human && !mouse) return "rna_editing_GRCh38.tsv.gz";
+    if (mouse && !human) return "rna_editing_GRCm39.tsv.gz";
+    return "";
+}
+
 // Pool-resident pileup references (PileupEngine::preload_pool_references): the GTF and SNP panel that singlet_main resolves for each
 // queued sample's arguments in the pool's form (--exons or the GTF next to --genome-dir; --snps or --pipeline's default panel), parsed
 // once in the pool before it forks the samples. A sample takes a structure only when its own file is the same file, so a guess here
@@ -3303,7 +3312,7 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
         return r;
     };
     auto has = [](const std::vector<std::string>& v, const char* k) { return std::find(v.begin(), v.end(), std::string(k)) != v.end(); };
-    std::vector<std::string> snps, gtfs;
+    std::vector<std::string> snps, gtfs, edits;
     for (const auto& a : item_args) {
         const std::string gd = val(a, "--genome-dir");
         std::string gtf = val(a, "--exons"), snp = val(a, "--snps");
@@ -3321,8 +3330,17 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
         }
         if (!gtf.empty() && gtf != "None" && gtf != "none") gtfs.push_back(gtf);
         if (!snp.empty()) snps.push_back(snp);
+        // D-101 editing panel: --editing-sites, else --pipeline's default for the genome (as singlet_main resolves it)
+        std::string ed = val(a, "--editing-sites");
+        if (ed.empty() && has(a, "--pipeline") && !has(a, "--no-editing") && !gd.empty()) {
+            std::string rb = val(a, "--ref-base");
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            const std::string panel = default_edit_panel(gd);
+            if (!rb.empty() && !panel.empty()) ed = rb + "/pileup_indices/" + panel;
+        }
+        if (!ed.empty()) edits.push_back(ed);
     }
-    return singlet::PileupEngine::preload_pool_references(snps, gtfs);
+    return singlet::PileupEngine::preload_pool_references(snps, gtfs, edits);
 }
 
 int main(int argc, char* argv[]) {
@@ -4328,11 +4346,7 @@ static int singlet_main(int argc, char* argv[]) {
     if (pipeline_mode && config.edit_path.empty() && !no_default_editing && !genome_dir.empty()) {
         std::string rb = ref_base;
         if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
-        const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
-        const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
-        std::string panel;
-        if (human && !mouse) panel = "rna_editing_GRCh38.tsv.gz";
-        else if (mouse && !human) panel = "rna_editing_GRCm39.tsv.gz";
+        const std::string panel = default_edit_panel(genome_dir);
         if (!rb.empty() && !panel.empty()) {
             std::string cand = rb + "/pileup_indices/" + panel;
             struct stat est{};
@@ -7363,6 +7377,35 @@ static int singlet_main(int argc, char* argv[]) {
     pid_t star_pid = -1;
     int pipe_fd[2] = {-1, -1};
 
+    // D-101 HLA: the T1K install for this run, or empty when HLA typing is off (human genomes only, not the barnyard)
+    auto hla_t1k_for_run = [&]() -> std::string {
+        if (no_hla || is_atac_mode) return {};
+        const bool human = (genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos) &&
+                           genome_dir.find("GRCm39") == std::string::npos && genome_dir.find("mm39") == std::string::npos;
+        std::string t1k = hla_t1k_dir;
+        if (t1k.empty() && pipeline_mode && human) {
+            std::string rb = ref_base;
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            if (!rb.empty()) t1k = rb + "/hla/t1k";
+        }
+        return t1k;
+    };
+    // The HLA sample stage (prefilter + sample T1K) reads only the input .1fq, so it runs on a thread from the STAR fork on,
+    // in a temporary directory outside the run directory; the HLA step joins it and finishes (donors, summary) after export.
+    // No fork happens in the parent while it runs. SINGLET_HLA_BG=0 runs the whole step after export as before.
+    struct HlaBackground {
+        singlet::hla::Session s;
+        std::thread th;
+        bool on = false, finished = false;
+        StopWatch sw;
+        void stop() {   // join; an exit before the HLA step leaves no temporary files
+            if (th.joinable()) th.join();
+            if (on && !finished && !s.tmp.empty()) { std::error_code ec; std::filesystem::remove_all(s.tmp, ec); }
+            finished = true;
+        }
+        ~HlaBackground() { stop(); }
+    } hla_bg;
+
     if (!bam_file.empty()) {
         // Mode A: existing BAM
         bam_source = bam_file;
@@ -8718,6 +8761,26 @@ static int singlet_main(int argc, char* argv[]) {
         }
 
         // ── PARENT ──
+        if (onefq_mode) {
+            const std::string t1k = hla_t1k_for_run();
+            const char* bg = std::getenv("SINGLET_HLA_BG");
+            if (!t1k.empty() && singlet::hla::file_exists(t1k + "/bin/run-t1k") && !(bg && std::string(bg) == "0")) {
+                auto& c = hla_bg.s.cfg;
+                c.t1k_dir = t1k;
+                c.onefq = onefq_files.empty() ? std::vector<std::string>{onefq_file} : onefq_files;
+                c.cdna_is_r1 = reads_inverted;
+                c.out_prefix = out_prefix;
+                c.donor_assignments = out_prefix + "/donor_assignments.tsv";
+                c.threads = std::max(config.threads, star_threads);
+                c.tmp_dir = (std::filesystem::temp_directory_path() /
+                             ("singlet-hla-" + std::to_string(getpid()) + "-" +
+                              std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
+                hla_bg.on = true;
+                hla_bg.sw = StopWatch();
+                hla_bg.th = std::thread([&hla_bg] { singlet::hla::sample_stage(hla_bg.s); });
+                std::cerr << "[hla] sample stage started in the background (" << c.tmp_dir << ")\n";
+            }
+        }
         if (parallel_pileup == 1) {
             // Parallel path: STAR writes sorted BAM to file; no pipe in parent.
             std::string star_prefix = out_prefix + "/star_";
@@ -9336,6 +9399,7 @@ static int singlet_main(int argc, char* argv[]) {
             waitpid(star_pid, &ws_kill, 0);
             close(pipe_fd[0]);
             if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+            hla_bg.stop();   // the restart re-executes this command: end the HLA sample stage first
             return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "after the first " +
                                           std::to_string(stats.total_reads / 1000000) + "M reads");
         }
@@ -9393,13 +9457,17 @@ static int singlet_main(int argc, char* argv[]) {
         // SINGLET_TEST_FORCE_STRAND_RESTART=1: restart whatever the strand counts (the regression test of the restart, tests/cpp)
         const bool force_restart = stream_unsorted == 1 && stream_auto && getenv("SINGLET_TEST_FORCE_STRAND_RESTART")
                                    && std::string(getenv("SINGLET_TEST_FORCE_STRAND_RESTART")) == "1";
-        if (force_restart)
+        if (force_restart) {
+            hla_bg.stop();   // the restart re-executes this command: end the HLA sample stage first
             return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "forced by SINGLET_TEST_FORCE_STRAND_RESTART");
+        }
         if (stream_unsorted == 1 && config.stranded && config.auto_strand
             && stats.strand_sense + stats.strand_antisense >= singlet::kStrandRetryMinReads
             && singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) > singlet::kStrandRetryFrac) {
-            if (stream_auto)
+            if (stream_auto) {
+                hla_bg.stop();   // the restart re-executes this command: end the HLA sample stage first
                 return restart_on_sorted_path(stats, engine_ptr->reverse_strand(), out_prefix, g_argc, g_argv, "at the end of the pass");
+            }
             std::cerr << "[singlet] ERROR: " << static_cast<int>(singlet::counted_antisense_frac(stats, engine_ptr->reverse_strand()) * 100)
                       << "% of nuclear reads are antisense to the protocol orientation; rerun with --sorted-bam (strand safety net)" << std::endl;
             return 8;  // strand_contradiction
@@ -9746,19 +9814,21 @@ static int singlet_main(int argc, char* argv[]) {
     // ── D-101: HLA typing per sample and per donor (T1K on the input reads; private/hla/) ──
     // Reads only the input .1fq, so the CPU and GPU engines give the same output. Human genomes only (not the barnyard).
     {
-        const bool human = (genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos) &&
-                           genome_dir.find("GRCm39") == std::string::npos && genome_dir.find("mm39") == std::string::npos;
-        std::string t1k = hla_t1k_dir;
-        if (t1k.empty() && pipeline_mode && human && !no_hla) {
-            std::string rb = ref_base;
-            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
-            if (!rb.empty()) t1k = rb + "/hla/t1k";
-        }
-        if (!no_hla && !t1k.empty() && !is_atac_mode) {
+        const std::string t1k = hla_t1k_for_run();
+        if (!t1k.empty()) {
             if (!onefq_mode) {
                 std::cerr << "[hla] skipped: HLA typing reads a .1fq input\n";
             } else if (!singlet::hla::file_exists(t1k + "/bin/run-t1k")) {
                 std::cerr << "[hla] skipped: no T1K install at " << t1k << "\n";
+            } else if (hla_bg.on) {
+                StopWatch wait_sw;
+                if (hla_bg.th.joinable()) hla_bg.th.join();
+                const double waited = wait_sw.elapsed_s();
+                const auto hr = singlet::hla::finish_stage(hla_bg.s);
+                hla_bg.finished = true;
+                std::cerr << "[hla] " << (hr.ran ? "typed" : "not typed: " + hr.why_not) << "; " << hr.n_donors_typed
+                          << " donors typed; " << hla_bg.sw.elapsed_s() << " s since the STAR fork, waited " << waited
+                          << " s for the sample stage\n";
             } else {
                 StopWatch hla_sw;
                 singlet::hla::Config hc;

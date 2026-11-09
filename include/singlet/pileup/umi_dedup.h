@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>       // std::pair
@@ -1186,8 +1187,8 @@ public:
     template <typename AccT, typename StatsT, typename GeneRoot = NoGeneRoot>
     void finalize(AccT& ad, AccT& dp, StatsT& st, bool directional = true, GeneRoot&& gene_root = GeneRoot()) const {
         auto emit = [&](uint32_t bc, uint32_t snp, uint8_t cls) {
-            if (cls == kOther) { ++st.snp_molecules_other; return; }
-            ++st.snp_molecules;
+            if (cls == kOther) { count(st, snp, 2); return; }
+            count(st, snp, 0);
             dp.increment(snp, bc, 1);
             if (cls == kAlt) ad.increment(snp, bc, 1);
         };
@@ -1195,7 +1196,7 @@ public:
             uint8_t best = 0;
             for (uint8_t c = 1; c < 3; ++c) if (n[c] > n[best]) best = c;
             for (uint8_t c = 0; c < 3; ++c)
-                if (c != best && n[c] == n[best]) { ++st.snp_molecules_ambiguous; return; }
+                if (c != best && n[c] == n[best]) { count(st, static_cast<uint32_t>(site & 0xffffffffu), 1); return; }
             emit(static_cast<uint32_t>(site >> 32), static_cast<uint32_t>(site & 0xffffffffu), best);
         };
         for (const auto& r : single_) emit(r.bc, r.snp, r.cls);
@@ -1236,6 +1237,10 @@ public:
         }
     }
 
+    /// D-101: rows from `start` on are RNA editing sites; finalize counts their molecules into StatsT's edit_molecules,
+    /// edit_molecules_ambiguous and edit_molecules_other (when StatsT has them) instead of the snp_* counters. AD and DP are unchanged.
+    void set_edit_start(uint32_t start) { edit_start_ = start; }
+
     void clear() {
         decltype(mols_)().swap(mols_);
         decltype(long_mols_)().swap(long_mols_);
@@ -1259,6 +1264,17 @@ private:
     std::unordered_map<Key, Counts, KeyHash> mols_;
     std::unordered_map<std::string, Counts> long_mols_;
     std::vector<Single> single_;
+    uint32_t edit_start_ = UINT32_MAX;
+
+    template <typename S, typename = void> struct HasEdit : std::false_type {};
+    template <typename S> struct HasEdit<S, std::void_t<decltype(std::declval<S&>().edit_molecules)>> : std::true_type {};
+    /// k: 0 molecule (in DP), 1 ambiguous, 2 other
+    template <typename StatsT> void count(StatsT& st, uint32_t snp, int k) const {
+        if constexpr (HasEdit<StatsT>::value) {
+            if (snp >= edit_start_) { ++(k == 0 ? st.edit_molecules : k == 1 ? st.edit_molecules_ambiguous : st.edit_molecules_other); return; }
+        }
+        ++(k == 0 ? st.snp_molecules : k == 1 ? st.snp_molecules_ambiguous : st.snp_molecules_other);
+    }
 };
 
 } // namespace singlet

@@ -85,7 +85,7 @@ bool make_bam(const std::string& bam, const std::string& dir) {
     return std::system(("samtools view -bS " + dir + "/t.sam -o " + bam + " 2>/dev/null").c_str()) == 0;
 }
 
-struct Run { CSC ad, dp; uint32_t edit_start; std::vector<std::string> snp_names, edit_names; };
+struct Run { CSC ad, dp; uint32_t edit_start; std::vector<std::string> snp_names, edit_names; singlet::PileupStats st; };
 
 Run run_engine(const std::string& dir, const std::string& bam, bool with_edit) {
     singlet::PileupConfig cfg;
@@ -96,7 +96,7 @@ Run run_engine(const std::string& dir, const std::string& bam, bool with_edit) {
     singlet::PileupEngine e(cfg);
     Run r{};
     if (!e.load_references()) { std::cout << "  load_references failed\n"; return r; }
-    e.run(bam);
+    r.st = e.run(bam);
     r.ad = e.snp_ad().to_csc(); r.dp = e.snp_dp().to_csc();
     r.edit_start = e.edit_snp_start(); r.snp_names = e.snp_names();
     for (uint32_t i = 0; i < e.n_edit_sites(); ++i) r.edit_names.push_back(e.edit_name(i));
@@ -134,6 +134,13 @@ void test_engine() {
     CHECK(at(ed, 0, 1) == 1 && at(ea, 0, 1) == 1, "bc2 + site: 1 edited, C base and low-MAPQ read out");
     CHECK(at(ed, 1, 1) == 3 && at(ea, 1, 1) == 2, "bc2 - site: 1 T ref + 2 C edited");
     CHECK(at(ed, 2, 0) == 0 && at(ed, 2, 1) == 0, "uncovered site empty");
+    CHECK(b.st.snp_hits == a.st.snp_hits && b.st.snp_molecules == a.st.snp_molecules &&
+          b.st.snp_molecules_ambiguous == a.st.snp_molecules_ambiguous && b.st.snp_molecules_other == a.st.snp_molecules_other,
+          "snp_* counters count SNP rows only, as without the panel");
+    CHECK(!a.st.edit_panel && a.st.edit_hits == 0 && a.st.edit_molecules == 0, "no panel: no edit counts");
+    CHECK(b.st.edit_panel && b.st.edit_hits == 8, "edit_hits: 5 reads at the + site, 3 at the - site (low-MAPQ read out)");
+    CHECK(b.st.edit_molecules == 7 && b.st.edit_molecules_other == 1 && b.st.edit_molecules_ambiguous == 0,
+          "edit_molecules: one per read without a UMI, 7 in DP, the C read other");
 
     std::cout << "=== summarize and writers ===\n";
     std::vector<uint32_t> cells{0, 1};

@@ -1390,17 +1390,23 @@ inline ExportStats export_results(const PileupEngine& engine,
     }
 
     // D-101: RNA editing at the REDIportal sites. Per-site allele counts are owner-only (private/editing/); the per-cell index and the
-    // summary are public (rna_editing.h).
+    // summary are public (rna_editing.h). Its own thread, joined before the run's provenance below rather than with write_threads, so the
+    // donor VCFs and the mt outputs after the demux join do not wait for it; inside it the two matrices and the site table are written at once.
+    std::thread edit_thread;
     if (have_editing) {
-        write_threads.emplace_back([&]() {
+        edit_thread = std::thread([&]() {
             std::filesystem::create_directories(out_prefix + "/private/editing");
             const auto er = editing::summarize(edit_alt_csc, edit_dp_csc, cc_result.cell_indices);
-            std::vector<std::string> cov_names; cov_names.reserve(er.covered.size());
-            for (uint32_t i : er.covered) cov_names.push_back(engine.edit_name(i));
-            auto alt_cov = editing::select_rows(edit_alt_csc, er.covered);
-            auto dp_cov = editing::select_rows(edit_dp_csc, er.covered);
-            write_matrix("private/editing/editing_alt", alt_cov, cov_names);
-            write_matrix("private/editing/editing_dp", dp_cov, cov_names);
+            std::vector<std::string> cov_names(er.covered.size());
+            for (size_t j = 0; j < er.covered.size(); ++j) cov_names[j] = engine.edit_name(er.covered[j]);
+            std::thread t_alt([&]() {
+                auto alt_cov = editing::select_rows(edit_alt_csc, er.covered);
+                write_matrix("private/editing/editing_alt", alt_cov, cov_names);
+            });
+            std::thread t_dp([&]() {
+                auto dp_cov = editing::select_rows(edit_dp_csc, er.covered);
+                write_matrix("private/editing/editing_dp", dp_cov, cov_names);
+            });
             if (!editing::write_sites(out_prefix + "/private/editing/editing_sites.tsv.gz", er, cov_names))
                 record_failed_write("private/editing/editing_sites.tsv.gz");
             if (!editing::write_cells(out_prefix + "/editing_cells.tsv", er, cc_result.cell_indices, barcodes))
@@ -1408,6 +1414,7 @@ inline ExportStats export_results(const PileupEngine& engine,
             if (!editing::write_summary(out_prefix + "/editing_summary.json", pileup_cfg.edit_path, engine.n_edit_sites(), er,
                                         cc_result.cell_indices.size()))
                 record_failed_write("editing_summary.json");
+            t_alt.join(); t_dp.join();
             std::cerr << "[editing] " << er.covered.size() << " of " << engine.n_edit_sites() << " panel sites covered, "
                       << er.n_sites_10 << " with >= 10 UMIs in called cells; editing index "
                       << (er.dp_total ? double(er.alt_total) / double(er.dp_total) : 0.0) << "\n";
@@ -1899,6 +1906,12 @@ inline ExportStats export_results(const PileupEngine& engine,
         { auto _unused2 = std::move(snp_dp_csc); }
     }
 
+    if (edit_thread.joinable()) {   // D-101: the editing outputs, before the provenance lists the run's files
+        edit_thread.join();
+        std::lock_guard<std::mutex> lock(failed_writes_mu);
+        result.failed_writes = failed_writes;
+    }
+
     auto export_t1 = std::chrono::high_resolution_clock::now();
     result.export_time_s = std::chrono::duration<double>(export_t1 - export_t0).count();
     std::cerr << "[export] Total: " << result.export_time_s << "s\n";
@@ -2378,8 +2391,13 @@ inline void write_stats_json(const std::string& path,
        << "  \"rrna_reads\": " << stats.rrna_reads << ",\n"
        << "  \"snp_molecules\": " << stats.snp_molecules << ",\n"
        << "  \"snp_molecules_ambiguous\": " << stats.snp_molecules_ambiguous << ",\n"
-       << "  \"snp_molecules_other\": " << stats.snp_molecules_other << ",\n"
-       << "  \"molecules_spliced\": " << stats.molecules_spliced << ",\n"
+       << "  \"snp_molecules_other\": " << stats.snp_molecules_other << ",\n";
+    if (stats.edit_panel)   // D-101: the RNA editing sites' counts, apart from the SNP panel's
+        sf << "  \"edit_hits\": " << stats.edit_hits << ",\n"
+           << "  \"edit_molecules\": " << stats.edit_molecules << ",\n"
+           << "  \"edit_molecules_ambiguous\": " << stats.edit_molecules_ambiguous << ",\n"
+           << "  \"edit_molecules_other\": " << stats.edit_molecules_other << ",\n";
+    sf << "  \"molecules_spliced\": " << stats.molecules_spliced << ",\n"
        << "  \"molecules_unspliced\": " << stats.molecules_unspliced << ",\n"
        << "  \"molecules_ambiguous\": " << stats.molecules_ambiguous << ",\n"
        << "  \"molecules_legacy_double\": " << stats.molecules_legacy_double << ",\n"

@@ -540,6 +540,7 @@ struct PileupInput {
     int wantGeneMerges = 0;   // return PileupOutput::geneMerges (the host collapses V(D)J molecules per (cell, gene), R9)
     int wantUmiKeys = 0;      // return PileupOutput::umiKeys (the multimap record leaves out the UMIs the gene counts hold)
     uint32_t nSnps = 0, nBarcodes = 0, nTid = 0, nExons = 0, nIntrons = 0, nGenes = 0;
+    uint32_t editStart = 0xFFFFFFFFu;   // D-101: first RNA editing row of the SNP table (none: 0xFFFFFFFF); PileupOutput::edit* count its rows
     // records, raw pileup_rec.h structs
     std::vector<uint8_t> sigs, alns, reads;   // SigRec, AlnRec, ReadRec arrays
     std::vector<uint32_t> ops;
@@ -580,6 +581,8 @@ struct PileupOutput {
     std::vector<PileupGeneMerge> geneMerges;         // only when wantGeneMerges; sorted by (cell, gene, umi)
     std::vector<uint64_t> umiKeys;                   // only when wantUmiKeys: every exact (cell << 32 | 2-bit UMI) of the gene store, sorted, distinct
     uint64_t snpMolecules = 0, snpAmbiguous = 0, snpOther = 0;
+    // D-101: the part of snpHits / snpMolecules / snpAmbiguous / snpOther at rows >= PileupInput::editStart (the RNA editing sites)
+    uint64_t editHits = 0, editMolecules = 0, editAmbiguous = 0, editOther = 0;
     // the engine's PileupStats counters these outputs replace: molecule labels (DirectionalUmiStore::MoleculeStats), SNP overlaps
     // passing the quality gate (snp_hits), distinct (cell, junction, UMI) (sj_hits), chrM bases counted (mt_pileup_bases)
     uint64_t molSpliced = 0, molUnspliced = 0, molAmbiguous = 0, molLegacyDouble = 0, molDropped = 0, mtRescued = 0, snpHits = 0, sjHits = 0, mtBases = 0;

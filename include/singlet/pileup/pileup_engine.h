@@ -272,6 +272,13 @@ struct PileupStats {
     uint64_t snp_molecules = 0;            ///< molecules with a REF or ALT majority (in DP)
     uint64_t snp_molecules_ambiguous = 0;  ///< tie between the two largest base classes: in neither AD nor DP
     uint64_t snp_molecules_other = 0;      ///< majority base is neither REF nor ALT: in neither AD nor DP
+    // D-101: the same counts at the RNA editing sites, which ride on the SNP rows after the SNP and AIM blocks; the snp_* counters
+    // above count SNP and AIM sites only, as without a panel. Written to pileup_stats.json when a panel was loaded (edit_panel).
+    bool edit_panel = false;
+    uint64_t edit_hits = 0;
+    uint64_t edit_molecules = 0;
+    uint64_t edit_molecules_ambiguous = 0;
+    uint64_t edit_molecules_other = 0;
     // Molecule labels (each UMI-deduplicated (barcode, gene, UMI) counted once)
     uint64_t molecules_spliced = 0;
     uint64_t molecules_unspliced = 0;
@@ -546,7 +553,7 @@ public:
         // D-101: the editing panel parses alongside (its indices are assigned after the AIM block below)
         bool edit_ok = true;
         std::thread edit_thread;
-        if (!config_.edit_path.empty()) edit_thread = std::thread([&]() { edit_ok = parse_edit_panel(); });
+        if (!config_.edit_path.empty() && !take_pool_edit()) edit_thread = std::thread([&]() { edit_ok = parse_edit_panel(); });
 
         if (snp_thread.joinable()) snp_thread.join();
         if (gtf_thread.joinable()) gtf_thread.join();
@@ -1351,6 +1358,7 @@ public:
             look->finish();
             stats.sj_hits += post_stats_.sj_hits;
             stats.snp_hits += post_stats_.snp_hits;
+            stats.edit_hits += post_stats_.edit_hits;
             stats.mt_pileup_bases += post_stats_.mt_pileup_bases;
             post_stats_ = PileupStats{};
         }
@@ -1387,7 +1395,9 @@ public:
         singlet_tail::mark("parent: GPU pileup applied");
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
         fin_mark("stream done, finalize starts");
+        snp_cons_.set_edit_start(edit_snp_start_);   // D-101: editing rows count into the edit_* counters
         snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
+        stats.edit_panel = edit_snp_start_ != UINT32_MAX;
         fin_mark("SNP consensus finalize");
         snp_cons_.clear();
         fin_mark("SNP consensus freed");
@@ -1882,6 +1892,7 @@ public:
             stats.mapped_reads += ws.mapped_reads;
             stats.barcoded_reads += ws.barcoded_reads;
             stats.snp_hits += ws.snp_hits;
+            stats.edit_hits += ws.edit_hits;
             stats.exon_hits += ws.exon_hits;
             stats.intron_hits += ws.intron_hits;
             stats.sj_hits += ws.sj_hits;
@@ -1946,6 +1957,7 @@ public:
         }
         // SNP AD/DP: consensus per molecule in its worker (order-free-rules R1), then merge
         for (auto& wc : workers) {
+            wc.snp_cons.set_edit_start(edit_snp_start_);   // D-101: editing rows count into the edit_* counters
             wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats, config_.umi_dedup_directional,
                                  gene_roots(wc.mol_store));  // R1 over R9 molecules
             wc.snp_cons.clear();
@@ -1954,6 +1966,7 @@ public:
             finalize_umi_features(wc.vdj_umi, wc.vdj, stats.vdj_hits, wc.mol_store);
             wc.mol_store.clear_molecules();
         }
+        stats.edit_panel = edit_snp_start_ != UINT32_MAX;
         merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_ad; });
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_dp; });
         if (config_.count_mt) {
@@ -2198,6 +2211,7 @@ public:
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
         in.wantUmiKeys = (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) ? 1 : 0;   // the multimap record's counted UMIs
         in.wantReads = reads_matrix_on() ? 1 : 0;   // reads per molecule (exon_reads / intron_reads / histogram)
+        in.editStart = edit_snp_start_;   // D-101: the editing rows' counters apart (PileupOutput::edit*)
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
         singlet_tail::mark("parent: build input: annotation (trees, SNPs, genes) done");
@@ -3058,8 +3072,11 @@ public:
             }
             gpu_put(sj_acc_, out.sj);
             for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
-            stats.snp_hits += out.snpHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
-            stats.snp_molecules += out.snpMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous; stats.snp_molecules_other += out.snpOther;
+            stats.snp_hits += out.snpHits - out.editHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
+            stats.snp_molecules += out.snpMolecules - out.editMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous - out.editAmbiguous;
+            stats.snp_molecules_other += out.snpOther - out.editOther;
+            stats.edit_hits += out.editHits; stats.edit_molecules += out.editMolecules; stats.edit_molecules_ambiguous += out.editAmbiguous;
+            stats.edit_molecules_other += out.editOther;   // D-101: the GPU counts the editing rows apart (pileup_gpu.cu)
             gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
             gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
             gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
@@ -4266,10 +4283,16 @@ public:
     };
     static std::vector<std::unique_ptr<PoolSnps>>& pool_snps() { static std::vector<std::unique_ptr<PoolSnps>> v; return v; }
     static std::vector<std::unique_ptr<PoolGtf>>& pool_gtfs() { static std::vector<std::unique_ptr<PoolGtf>> v; return v; }
+    struct PoolEdit {   // D-101 editing panel: parse_edit_panel's edit_sites_ and edit_chroms_
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        std::vector<EditSite> sites; std::vector<std::string> chroms; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolEdit>>& pool_edits() { static std::vector<std::unique_ptr<PoolEdit>> v; return v; }
 
     // In the pool, before any sample is forked: parse each distinct file of `snp_paths` and `gtf_paths` once (each file on a thread of its
     // own, as load_references runs its two loaders). Returns a log line.
-    static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths) {
+    static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths,
+                                               const std::vector<std::string>& edit_paths = {}) {
         std::string log;
         if (!pool_refs_enabled()) return "off (SINGLET_POOL_REFS=0)";
         std::vector<std::thread> th;
@@ -4308,6 +4331,24 @@ public:
                 e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             });
         }
+        for (const std::string& p : edit_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "editing panel " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_edits()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_edits().push_back(std::make_unique<PoolEdit>());
+            PoolEdit* e = pool_edits().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                PileupConfig c; c.edit_path = e->path;
+                auto eng = std::make_unique<PileupEngine>(c);
+                e->ok = eng->parse_edit_panel();
+                e->sites = std::move(eng->edit_sites_); e->chroms = std::move(eng->edit_chroms_);
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
         for (auto& t : th) t.join();
         char b[64];
         for (const auto& e : pool_snps()) {
@@ -4318,6 +4359,10 @@ public:
             std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
             log += "GTF " + e->path + ": " +
                    (e->ok ? std::to_string(e->gm.n_exons()) + " exons, " + std::to_string(e->gm.n_genes()) + " genes" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_edits()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "editing panel " + e->path + ": " + (e->ok ? std::to_string(e->sites.size()) + " sites" : std::string("failed")) + b;
         }
         return log.empty() ? "no reference files" : log;
     }
@@ -4333,6 +4378,22 @@ private:
             snp_pending_ = std::move(e->pending); snp_names_ = std::move(e->names); n_snps_loaded_ = e->n;
             e->taken = true;
             std::cerr << "[singlet-pileup] Loaded " << n_snps_loaded_ << " SNP sites (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // parse_edit_panel's result from the pool, for config_.edit_path (false: parse_edit_panel runs)
+    bool take_pool_edit() {
+        if (pool_edits().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.edit_path, id)) return false;
+        for (auto& e : pool_edits()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            edit_sites_ = std::move(e->sites); edit_chroms_ = std::move(e->chroms);
+            e->taken = true;
+            std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites from " << config_.edit_path
+                      << " (parsed once by the pool)
+";
             return true;
         }
         return false;
@@ -4568,7 +4629,7 @@ private:
                             snp_cons_.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
                                           SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
                                           read_gene);
-                            stats.snp_hits++;
+                            if (it->index >= edit_snp_start_) stats.edit_hits++; else stats.snp_hits++;
                         }
                     }
 
@@ -5461,7 +5522,7 @@ private:
                             wc.snp_cons.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
                                             SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
                                             wc.cur_gene);
-                            wc.stats.snp_hits++;
+                            if (it->index >= edit_snp_start_) wc.stats.edit_hits++; else wc.stats.snp_hits++;
                         }
                     }
                     ref_pos += len;

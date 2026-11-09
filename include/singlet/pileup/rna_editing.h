@@ -138,6 +138,9 @@ inline bool write_sites(const std::string& path, const EditingResult& r, const s
     gzFile g = gzopen(path.c_str(), "wb6");
     if (!g) return false;
     gzputs(g, "site\tstrand\tref_umis\tedited_umis\tediting_level\tcells_covered\tcells_edited\tumis_all_barcodes\n");
+    // rows gathered into 1 MB chunks for gzwrite: the same bytes into the same deflate stream (no flush in between), fewer calls
+    std::string chunk;
+    chunk.reserve((1u << 20) + 512);
     char buf[256];
     for (size_t j = 0; j < r.covered.size(); ++j) {
         const auto& s = r.site[r.covered[j]];
@@ -148,9 +151,11 @@ inline bool write_sites(const std::string& path, const EditingResult& r, const s
         if (s.dp > 0) n = std::snprintf(buf, sizeof buf, "\t%c\t%llu\t%llu\t%.6g\t%u\t%u\t%llu\n", strand, (unsigned long long)ref,
                                         (unsigned long long)s.alt, double(s.alt) / double(s.dp), s.cells_cov, s.cells_edited, (unsigned long long)s.dp_all);
         else n = std::snprintf(buf, sizeof buf, "\t%c\t0\t0\tNA\t0\t0\t%llu\n", strand, (unsigned long long)s.dp_all);
-        gzwrite(g, nm.data(), static_cast<unsigned>(nm.size()));
-        gzwrite(g, buf, static_cast<unsigned>(n));
+        chunk.append(nm);
+        chunk.append(buf, static_cast<size_t>(n));
+        if (chunk.size() >= (1u << 20)) { gzwrite(g, chunk.data(), static_cast<unsigned>(chunk.size())); chunk.clear(); }
     }
+    if (!chunk.empty()) gzwrite(g, chunk.data(), static_cast<unsigned>(chunk.size()));
     return gzclose(g) == Z_OK;
 }
 

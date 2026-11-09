@@ -117,6 +117,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     { unsigned long long z[5] = {0, 0, 0, 0, 0}; CK(cudaMemcpyToSymbol(g_molstat, z, sizeof z)); }
     g_cell_stats = true;
     g_want_reads = pi.wantReads != 0;
+    g_edit_start = pi.editStart;   // D-101: red_snp counts the editing rows apart (g_edit_stat)
     g_want_mixed = true;   // the engine's mixed_exon / mixed_intron (export.h's pre-USA exon / intron split)
     { const char* pk = getenv("SINGLET_GPU_PILEUP_PARTS"); g_force_parts = pk ? std::max(0, std::min(atoi(pk), kMaxParts)) : 0; }
     g_e16_aasplit = singlet_tail::cut("aasplit");   // E16 (level 5): the per-alignment results split on the device before their download
@@ -201,6 +202,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         for (size_t i = 0; i < o.merges.size(); i++) po.geneMerges[i] = PileupGeneMerge{o.merges[i].cell, o.merges[i].gene, o.merges[i].umi, o.merges[i].root};
     }
     po.snpMolecules = g_snp_stat[0]; po.snpAmbiguous = g_snp_stat[1]; po.snpOther = g_snp_stat[2];
+    po.editHits = g_edit_stat[0]; po.editMolecules = g_edit_stat[1]; po.editAmbiguous = g_edit_stat[2]; po.editOther = g_edit_stat[3];
     if (attempt == 0) { char ab[96]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
                                               singlet_engine_gpu::memBudget(totB) / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
