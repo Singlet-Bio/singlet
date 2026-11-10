@@ -9,9 +9,13 @@
 // doublet_prior, geno_error, min_prob, max_donors, n_inits, seed, k_select_sep_z, k_select_sep_min, n_ward_inits, min_donor_cells, min_donor_frac, geno_conc_hom, geno_conc_het, k_select_patience,
 // k_select_inits, k_select_max_iter, k_select_max_cells, k_select_min_snp_cells, fast_k_select.
 //
-// Build (Clipper job):  g++ -std=c++20 -O2 -pthread -I<repo>/include demux_harness.cpp -o demux_harness
+// Build (Clipper job), the flags of the pipeline's Release build (CMake -O3 -DNDEBUG, singlet target -O3 -march=native
+// which the cluster builds rewrite to x86-64-v3; gnu++17 keeps GCC's default -ffp-contract=fast):
+//   g++ -std=gnu++17 -O3 -DNDEBUG -march=x86-64-v3 -pthread -I<repo>/include demux_harness.cpp -o demux_harness -lzstd -lz
 
+#include <algorithm>
 #include <chrono>
+#include <mutex>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -22,6 +26,8 @@
 #include <vector>
 
 #include "singlet/pileup/donor_demux.h"
+#include "singlet/pileup/genotype_export.h"
+#include "singlet/pileup/pz_reader.h"
 
 struct Csc {
     int32_t nrows = 0, ncols = 0;
@@ -54,7 +60,7 @@ static bool read_mtx_gz(const std::string& path, Csc& m) {
         long v = strtol(p, &e, 10);
         rows[i] = static_cast<int32_t>(r - 1);
         cols[i] = static_cast<int32_t>(c - 1);
-        vals[i] = static_cast<uint8_t>(v > 255 ? 255 : (v < 0 ? 0 : v));
+        vals[i] = static_cast<uint16_t>(v > 65535 ? 65535 : (v < 0 ? 0 : v));
         ++i;
     }
     pclose(f);
@@ -71,7 +77,7 @@ static bool read_mtx_gz(const std::string& path, Csc& m) {
         m.data[q] = vals[k];
     }
     // sort rows within each column (extract_covered_snps binary-searches them)
-    std::vector<std::pair<int32_t, uint8_t>> tmp;
+    std::vector<std::pair<int32_t, uint16_t>> tmp;
     for (int j = 0; j < m.ncols; ++j) {
         const int32_t a = m.indptr[j], b = m.indptr[j + 1];
         bool sorted = true;
@@ -144,21 +150,121 @@ static void apply_kv(singlet::DonorDemuxConfig& cfg, const std::string& k, const
     else std::cerr << "unknown key " << k << "\n";
 }
 
+// stderr with elapsed seconds in front of every line, so stage times can be read off the [demux] lines
+class TsBuf : public std::streambuf {
+public:
+    explicit TsBuf(std::streambuf* sink) : sink_(sink), t0_(std::chrono::steady_clock::now()) {}
+protected:
+    int_type overflow(int_type ch) override {
+        if (traits_type::eq_int_type(ch, traits_type::eof())) return traits_type::not_eof(ch);
+        std::lock_guard<std::mutex> lk(mu_);
+        put(static_cast<char>(ch));
+        return ch;
+    }
+    std::streamsize xsputn(const char* s, std::streamsize n) override {
+        std::lock_guard<std::mutex> lk(mu_);
+        for (std::streamsize i = 0; i < n; ++i) put(s[i]);
+        return n;
+    }
+private:
+    void put(char c) {
+        if (bol_) {
+            char b[40];
+            const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
+            const int len = snprintf(b, sizeof b, "[%9.3f] ", t);
+            sink_->sputn(b, len);
+            bol_ = false;
+        }
+        if (c == '\n') bol_ = true;
+        sink_->sputc(c);
+    }
+    std::streambuf* sink_;
+    std::chrono::steady_clock::time_point t0_;
+    std::mutex mu_;
+    bool bol_ = true;
+};
+
+// CSC view with the field names write_donors_vcf expects
+struct CscView {
+    uint32_t nrows = 0, ncols = 0;
+    std::vector<int32_t> indptr, indices;
+    std::vector<uint16_t> data;
+};
+
+static bool read_1pz_matrix(const std::string& path, CscView& m, std::vector<std::string>& rownames,
+                            std::vector<std::string>& colnames) {
+    try {
+        singlet::pz::ReadLimits lim;   // the defaults stop at 4.2 M features; the panel here has 7.4 M
+        lim.max_rows = 1ull << 26; lim.max_cols = 1ull << 26; lim.max_nnz = 1ull << 33; lim.max_file_bytes = 1ull << 36;
+        singlet::pz::ReadResult r = singlet::pz::read_1pz(path, lim);
+        m.nrows = r.m; m.ncols = r.n;
+        m.indptr.resize(r.indptr.size());
+        for (size_t i = 0; i < r.indptr.size(); ++i) m.indptr[i] = static_cast<int32_t>(r.indptr[i]);
+        std::vector<uint32_t>().swap(r.indptr);
+        m.indices.resize(r.indices.size());
+        for (size_t i = 0; i < r.indices.size(); ++i) m.indices[i] = static_cast<int32_t>(r.indices[i]);
+        std::vector<uint32_t>().swap(r.indices);
+        m.data.resize(r.data.size());
+        for (size_t i = 0; i < r.data.size(); ++i) m.data[i] = static_cast<uint16_t>(r.data[i] > 65535u ? 65535u : r.data[i]);
+        std::vector<uint32_t>().swap(r.data);
+        rownames = std::move(r.rownames);
+        colnames = std::move(r.colnames);
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "1pz read failed " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+static void write_text(const std::string& path, const std::string& body) {
+    std::ofstream f(path);
+    f << body;
+}
+
 int main(int argc, char** argv) {
-    if (argc < 9) {
-        std::cerr << "usage: demux_harness AD DP BARCODES CELL_CALLS OUTDIR THREADS TAG K [key=value ...] [-- TAG K ...]\n";
+    static TsBuf ts_buf(std::cerr.rdbuf());
+    std::cerr.rdbuf(&ts_buf);
+    const bool pz_mode = argc > 1 && std::string(argv[1]) == "--1pz";
+    if ((!pz_mode && argc < 9) || (pz_mode && argc < 7)) {
+        std::cerr << "usage: demux_harness AD DP BARCODES CELL_CALLS OUTDIR THREADS TAG K [key=value ...] [-- TAG K ...]\n"
+                  << "       demux_harness --1pz PIPELINE_OUT_DIR OUTDIR THREADS TAG K [key=value ...] [-- TAG K ...]\n";
         return 1;
     }
-    const std::string ad_path = argv[1], dp_path = argv[2], bc_path = argv[3], calls_path = argv[4];
-    const std::string outdir = argv[5];
-    const int threads = atoi(argv[6]);
-
+    std::string calls_path, outdir;
+    int threads = 0, first_run_arg = 0;
     auto t0 = std::chrono::steady_clock::now();
-    Csc ad, dp;
-    if (!read_mtx_gz(ad_path, ad) || !read_mtx_gz(dp_path, dp)) { std::cerr << "mtx read failed\n"; return 1; }
-    std::vector<std::string> barcodes = read_lines_gz(bc_path);
+    CscView ad, dp;
+    std::vector<std::string> barcodes, snp_names;
+    if (pz_mode) {
+        const std::string dir = argv[2];
+        outdir = argv[3]; threads = atoi(argv[4]); first_run_arg = 5;
+        calls_path = dir + "/cell_calls.tsv";
+        std::vector<std::string> rn2, cn2;
+        if (!read_1pz_matrix(dir + "/private/snp_ad.1pz", ad, snp_names, barcodes) ||
+            !read_1pz_matrix(dir + "/private/snp_dp.1pz", dp, rn2, cn2)) return 1;
+        if (rn2.size() != snp_names.size() || cn2.size() != barcodes.size()) { std::cerr << "ad/dp shape mismatch\n"; return 1; }
+    } else {
+        const std::string ad_path = argv[1], dp_path = argv[2], bc_path = argv[3];
+        calls_path = argv[4]; outdir = argv[5]; threads = atoi(argv[6]); first_run_arg = 7;
+        Csc a, d;
+        if (!read_mtx_gz(ad_path, a) || !read_mtx_gz(dp_path, d)) { std::cerr << "mtx read failed\n"; return 1; }
+        barcodes = read_lines_gz(bc_path);
+        std::string fpath = ad_path;
+        const size_t pos = fpath.rfind(".mtx.gz");
+        if (pos != std::string::npos) {
+            fpath = fpath.substr(0, pos) + "_features.tsv.gz";
+            if (std::ifstream(fpath).good()) {
+                snp_names = read_lines_gz(fpath);
+                for (auto& n : snp_names) { const size_t t = n.find('\t'); if (t != std::string::npos) n.resize(t); }
+                if (snp_names.size() != static_cast<size_t>(a.nrows)) snp_names.clear();
+            }
+        }
+        ad.nrows = a.nrows; ad.ncols = a.ncols; ad.indptr = std::move(a.indptr); ad.indices = std::move(a.indices); ad.data = std::move(a.data);
+        dp.nrows = d.nrows; dp.ncols = d.ncols; dp.indptr = std::move(d.indptr); dp.indices = std::move(d.indices); dp.data = std::move(d.data);
+    }
     std::cerr << "[harness] AD " << ad.nrows << "x" << ad.ncols << " nnz=" << ad.data.size()
-              << "  DP nnz=" << dp.data.size() << "  barcodes=" << barcodes.size() << "  load "
+              << "  DP nnz=" << dp.data.size() << "  barcodes=" << barcodes.size() << "  names=" << snp_names.size()
+              << "  load "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
 
     // called cells
@@ -195,7 +301,7 @@ int main(int argc, char** argv) {
     std::cerr << "[harness] called cells: " << cell_indices.size() << "\n";
 
     // run groups
-    int a = 7;
+    int a = first_run_arg;
     while (a < argc) {
         if (std::string(argv[a]) == "--") { ++a; continue; }
         if (a + 1 >= argc) break;
@@ -310,12 +416,18 @@ int main(int argc, char** argv) {
         singlet::DonorDemuxConfig cfg;
         cfg.threads = threads;
         cfg.n_donors = K;
+        // as in export.h: seed 42 (the default), the screen switch from the environment
+        if (const char* e = getenv("SINGLET_DEMUX_SCREEN")) cfg.screen_single_donor = atoi(e) != 0;
         std::string subset_path;   // subset=FILE: barcodes (no -1 suffix), one per line; restricts the called cells
+        bool called_only = false;  // called_only=1: donor_assignments.tsv lists the called cells only (the old harness layout)
+        bool no_write = false;     // no_write=1: skip the VCF / coverage / genotype writers (stage timing only)
         while (a < argc && std::string(argv[a]) != "--") {
             std::string kv = argv[a++];
             const size_t eq = kv.find('=');
             if (eq == std::string::npos) continue;
             if (kv.substr(0, eq) == "subset") { subset_path = kv.substr(eq + 1); continue; }
+            if (kv.substr(0, eq) == "called_only") { called_only = atoi(kv.c_str() + eq + 1) != 0; continue; }
+            if (kv.substr(0, eq) == "no_write") { no_write = atoi(kv.c_str() + eq + 1) != 0; continue; }
             apply_kv(cfg, kv.substr(0, eq), kv.substr(eq + 1));
         }
         const std::string rd = outdir + "/" + tag;
@@ -331,25 +443,60 @@ int main(int argc, char** argv) {
                 if (keep.count(barcodes[c].substr(0, barcodes[c].find('-')))) run_cells.push_back(c);
         }
 
-        std::cerr << "[harness] === run " << tag << " K=" << K << " cells=" << run_cells.size() << " ===\n";
+        std::cerr << "[harness] === run " << tag << " K=" << K << " cells=" << run_cells.size()
+                  << " threads=" << threads << " ===\n";
         const auto tr = std::chrono::steady_clock::now();
-        singlet::DemuxResult res = singlet::run_demux(
+        singlet::DemuxResult res = singlet::run_demux_by_species(
             ad.nrows, ad.ncols, ad.indptr.data(), ad.indices.data(), ad.data.data(), ad.data.size(),
-            dp.indptr.data(), dp.indices.data(), dp.data.data(), dp.data.size(), cfg, run_cells);
+            dp.indptr.data(), dp.indices.data(), dp.data.data(), dp.data.size(), cfg, run_cells, snp_names);
         const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - tr).count();
+        std::cerr << "[harness] run_demux wall " << wall << " s\n";
 
-        // called cells only
-        std::vector<singlet::DonorAssignment> as;
-        std::vector<std::string> bcs;
-        as.reserve(run_cells.size());
-        for (uint32_t c : run_cells) { as.push_back(res.assignments[c]); bcs.push_back(barcodes[c]); }
-        singlet::write_donor_assignments(rd + "/donor_assignments.tsv", as, bcs);
+        // outputs, as export.h writes them after the demux
+        if (called_only) {
+            std::vector<singlet::DonorAssignment> as;
+            std::vector<std::string> bcs;
+            as.reserve(run_cells.size());
+            for (uint32_t c : run_cells) { as.push_back(res.assignments[c]); bcs.push_back(barcodes[c]); }
+            singlet::write_donor_assignments(rd + "/donor_assignments.tsv", as, bcs);
+        } else {
+            singlet::write_donor_assignments(rd + "/donor_assignments.tsv", res.assignments, barcodes);
+        }
+        const auto tw = std::chrono::steady_clock::now();
+        if (!no_write && res.n_donors_k > 0 && !res.covered_to_original.empty() && !snp_names.empty()) {
+            auto depths = singlet::aggregate_donor_depths(res, ad.nrows, ad.ncols, ad.indptr.data(), ad.indices.data(),
+                ad.data.data(), dp.indptr.data(), dp.indices.data(), dp.data.data());
+            std::string mk2 = "mkdir -p '" + rd + "/private/donor' '" + rd + "/private/genotype'";
+            if (system(mk2.c_str()) != 0) return 1;
+            singlet::write_donor_vcfs(rd + "/private/donor", res, depths, snp_names);
+            singlet::write_donor_coverages(rd + "/private/donor", res, depths, snp_names);
+            const long long ns = singlet::genotype::write_donors_vcf(rd + "/private/genotype/donors.vcf.gz", res, ad, dp,
+                                                                      run_cells, snp_names);
+            std::cerr << "[harness] donors.vcf.gz sites=" << ns << "\n";
+        }
+        std::cerr << "[harness] output writers " << std::chrono::duration<double>(std::chrono::steady_clock::now() - tw).count() << " s\n";
 
         int n_dbl = 0, n_un = 0;
-        for (const auto& x : as) { if (x.label == "doublet") ++n_dbl; else if (x.label == "unassigned") ++n_un; }
+        for (uint32_t c : run_cells) {
+            const auto& x = res.assignments[c];
+            if (x.label == "doublet") ++n_dbl; else if (x.label == "unassigned") ++n_un;
+        }
+        // deterministic result record (hashed): K, doublet count, genotype error, the auto-K trace without times
+        {
+            char b[160];
+            std::string body = "n_donors_k\t" + std::to_string(res.n_donors_k) + "\ndoublets_called\t" + std::to_string(n_dbl)
+                             + "\nunassigned\t" + std::to_string(n_un) + "\n";
+            snprintf(b, sizeof b, "geno_error\t%.9g\n", static_cast<double>(res.geno_error));
+            body += b;
+            for (const auto& r : res.k_selection) {
+                snprintf(b, sizeof b, "K%d\t%.17g\t%.17g\t%.17g\t%d\n", r.K, r.ll_per_cell, r.gain, r.z, r.accepted ? 1 : 0);
+                body += b;
+            }
+            write_text(rd + "/result.tsv", body);
+        }
         std::ofstream js(rd + "/summary.json");
         js << "{\"tag\":\"" << tag << "\",\"n_donors_arg\":" << K << ",\"n_donors_k\":" << res.n_donors_k
-           << ",\"wall_s\":" << wall << ",\"threads\":" << threads << ",\"cells\":" << as.size()
+           << ",\"wall_s\":" << wall << ",\"threads\":" << threads << ",\"cells\":" << run_cells.size()
            << ",\"doublets_called\":" << n_dbl << ",\"unassigned\":" << n_un
            << ",\"geno_error\":" << res.geno_error << ",\"k_selection\":[";
         for (size_t i = 0; i < res.k_selection.size(); ++i) {
