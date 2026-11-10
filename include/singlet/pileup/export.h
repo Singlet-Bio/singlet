@@ -1881,7 +1881,9 @@ inline ExportStats export_results(const PileupEngine& engine,
             for (uint32_t c : cc_result.cell_indices) if (c < keep_cells.size()) keep_cells[c] = 1;
         }
         const std::vector<uint8_t>* keep = export_cfg.run_cell_calling ? &keep_cells : nullptr;
+        const auto p0 = std::chrono::steady_clock::now();
         engine.finalize_allsite([&](allsite::Result& r) { r.prepare(keep); return true; });
+        std::cerr << "[allsite] records prepared for the called cells in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - p0).count() << " s\n";
     };
     if (!demux_thread.joinable()) build_allsite();
     if (demux_thread.joinable()) {
@@ -1974,25 +1976,44 @@ inline ExportStats export_results(const PileupEngine& engine,
                 donor_of[c] = a.donor_id; assignment[j] = a.label;
             } else assignment[j] = a.label == "doublet" ? "doublet" : "unassigned";
         }
+        // Each file is written whole by one thread, so the bytes do not depend on the overlap: sites.tsv.gz and donors_allsite.vcf.gz need
+        // only the calls and run while the store is built; the store's three files then run side by side.
+        using clk = std::chrono::steady_clock;
+        auto secs = [](clk::time_point a, clk::time_point b) { return std::chrono::duration<double>(b - a).count(); };
+        const auto e0 = clk::now();
         const auto calls = allsite::donor_calls(engine.allsite(), donor_of, K);
+        const auto e1 = clk::now();
+        double t_sites = 0, t_dvcf = 0, t_bin = 0, t_ctsv = 0, t_cvcf = 0;
+        bool ok_sites = true; long long n = 0, m = 0;
+        std::thread th_sites([&] { const auto a = clk::now();
+            ok_sites = allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names()); t_sites = secs(a, clk::now()); });
+        std::thread th_dvcf([&] { if (K <= 0) return; const auto a = clk::now();
+            n = allsite::write_donors_vcf(out_prefix + "/private/genotype/donors_allsite.vcf.gz", engine.allsite(), engine.contig_names(), calls); t_dvcf = secs(a, clk::now()); });
         allsite::DeltaStore store;
         allsite::build_store(engine.allsite(), nb, cells, donor_of, calls, store);
-        const uint64_t bytes = allsite::write_store(adir + "/allele_delta.bin", store);
+        const auto e2 = clk::now();
+        bool ok_ctsv = true; uint64_t bytes = 0;
+        std::thread th_ctsv([&] { const auto a = clk::now(); ok_ctsv = allsite::write_cells_tsv(adir + "/cells.tsv.gz", barcodes, cells, assignment, store); t_ctsv = secs(a, clk::now()); });
+        std::thread th_cvcf([&] { if (K <= 0) return; const auto a = clk::now();
+            m = allsite::write_cells_vcf(out_prefix + "/private/genotype/cells_allsite.vcf.gz", store, engine.allsite(), engine.contig_names(), barcodes, cells, donor_of, calls);
+            t_cvcf = secs(a, clk::now()); });
+        { const auto a = clk::now(); bytes = allsite::write_store(adir + "/allele_delta.bin", store); t_bin = secs(a, clk::now()); }
+        th_ctsv.join(); th_cvcf.join(); th_sites.join(); th_dvcf.join();
         if (bytes == 0) record_failed_write("private/allsite/allele_delta.bin");
-        if (!allsite::write_cells_tsv(adir + "/cells.tsv.gz", barcodes, cells, assignment, store)) record_failed_write("private/allsite/cells.tsv.gz");
-        if (!allsite::write_sites_tsv(out_prefix + "/private/allsite/sites.tsv.gz", engine.allsite(), engine.contig_names()))
-            record_failed_write("private/allsite/sites.tsv.gz");
+        if (!ok_ctsv) record_failed_write("private/allsite/cells.tsv.gz");
+        if (!ok_sites) record_failed_write("private/allsite/sites.tsv.gz");
         const auto stats = allsite::store_stats(store, calls, donor_of, cells, bytes);
         if (!allsite::write_store_json(adir + "/store.json", stats)) record_failed_write("private/allsite/store.json");
         if (K > 0) {
-            const long long n = allsite::write_donors_vcf(out_prefix + "/private/genotype/donors_allsite.vcf.gz", engine.allsite(), engine.contig_names(), calls);
             if (n < 0) record_failed_write("private/genotype/donors_allsite.vcf.gz");
             else std::cerr << "[genotype] donors_allsite.vcf.gz: " << n << " sites x " << K << " donors\n";
-            const long long m = allsite::write_cells_vcf(out_prefix + "/private/genotype/cells_allsite.vcf.gz", store, engine.allsite(), engine.contig_names(), barcodes, cells, donor_of, calls);
             if (m == -1) record_failed_write("private/genotype/cells_allsite.vcf.gz");
             else if (m == -2) std::cerr << "[genotype] cells_allsite.vcf.gz skipped: too many sites x cells (the store holds every entry)\n";
             else std::cerr << "[genotype] cells_allsite.vcf.gz: " << m << " variant sites\n";
         }
+        std::cerr << "[allsite] export " << secs(e0, clk::now()) << " s: donor calls " << secs(e0, e1) << ", store build " << secs(e1, e2)
+                  << ", allele_delta.bin " << t_bin << ", cells.tsv.gz " << t_ctsv << ", sites.tsv.gz " << t_sites << ", donors_allsite.vcf.gz " << t_dvcf
+                  << ", cells_allsite.vcf.gz " << t_cvcf << " (files written side by side)\n";
         allsite_rule = allsite::kStoreRule; allsite_donors = K;
         std::cerr << "[allsite] stored " << allsite::kStoreRule << ": " << stats.cells << " called cells (" << stats.assigned << " with a donor), " << stats.sites
                   << " sites; entries " << stats.entries << " of " << stats.full_entries << ", " << stats.bytes << " bytes, " << (stats.cells ? stats.bytes / stats.cells : 0)
