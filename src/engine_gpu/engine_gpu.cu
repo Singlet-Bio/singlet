@@ -587,7 +587,7 @@ __global__ void k_feat(u64 n, const Work<C>* work, const u64* need, const u64* n
     if (k >= n) return;
     const Work<C>& w = work[k];
     u64 sq = 0, mxr = 0;
-    for (uint i = 0; i < w.nWall && i < (uint)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; sq += r * r; if (r > mxr) mxr = r; }
+    for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; sq += r * r; if (r > mxr) mxr = r; }
     f[6 * k + 0] = (uint32_t)min(w.nSteps, (u64)0xFFFFFFFFull); f[6 * k + 1] = w.nW; f[6 * k + 2] = (uint32_t)min(need[k], (u64)0xFFFFFFFFull);
     f[6 * k + 3] = (uint32_t)min(nEnt[k], (u64)0xFFFFFFFFull); f[6 * k + 4] = (uint32_t)min(sq, (u64)0xFFFFFFFFull); f[6 * k + 5] = (uint32_t)mxr;
 }
