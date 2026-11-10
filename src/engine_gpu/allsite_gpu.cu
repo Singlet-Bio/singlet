@@ -648,7 +648,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 // barcode count and byte offset, then the bytes; each contig of the block takes the bytes of its sites
                 const u32 nsb = s1 - s0;
                 u32* pre = A.get<u32>((size_t) nG + 1); u32* cntS = A.get<u32>(nsb); u32* rs = A.get<u32>((size_t) nsb + 1);
-                u64* so = A.get<u64>((size_t) nsb + 1); u64* tb = A.get<u64>(nsb);
+                u64* so = A.get<u64>((size_t) nsb + 1); u64* stb = A.get<u64>(nsb);
                 AS_CK(cudaMemsetAsync(cntS, 0, (size_t) nsb * 4, st));
                 {
                     cub::TransformInputIterator<u32, ToU32Flag, cub::CountingInputIterator<u32>> fi(cub::CountingInputIterator<u32>(0), ToU32Flag{f8, (u32) nG});
@@ -668,8 +668,8 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                     AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t2, cntS, rs, (int) nsb, st));
                     A.top = tm;
                     AS_CK(cudaMemcpyAsync(rs + nsb, &nRec, 4, cudaMemcpyHostToDevice, st));
-                    kSiteBytes<<<gridFor(nsb), 256, 0, st>>>(cntS, rs, lx, nsb, tb);
-                    cub::TransformInputIterator<u64, ToU64Plain, cub::CountingInputIterator<u64>> bi(cub::CountingInputIterator<u64>(0), ToU64Plain{tb, nsb});
+                    kSiteBytes<<<gridFor(nsb), 256, 0, st>>>(cntS, rs, lx, nsb, stb);
+                    cub::TransformInputIterator<u64, ToU64Plain, cub::CountingInputIterator<u64>> bi(cub::CountingInputIterator<u64>(0), ToU64Plain{stb, nsb});
                     size_t t3 = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, t3, bi, so, (int) nsb + 1, st));
                     tm = A.top; tmp = A.get<char>(t3); AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t3, bi, so, (int) nsb + 1, st)); A.top = tm;
                 }
