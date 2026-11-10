@@ -41,6 +41,7 @@
 
 #include "sparse_accumulator.h"
 #include "umi_dedup.h"
+#include "allsite_records.h"
 
 namespace singlet { namespace allsite {
 
@@ -97,6 +98,8 @@ struct Params {
     bool defer_build = false;        // keep the counts as triplets; Result::finalize builds the matrices (for the called cells only)
     std::function<void()> progress;  // called (from worker threads) after each contig's discovery and each counting block; the
                                      // engine re-arms its stall watchdog here, since an LCL's pass runs well past an hour
+    int kernel = -1;                 // counting kernel: 1 sorted records (allsite_records.h), 0 the per-block hash map; -1: sorted records
+                                     // unless SINGLET_ALLSITE_KERNEL=old (A/B). Both give identical counts; keys that do not fit 64 bits use 0.
 };
 
 struct Site { int32_t tid, pos; char ref, alt; uint32_t alt_molecules, alt_cells; };
@@ -168,11 +171,100 @@ struct Timers {
 inline uint64_t now_ns() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); }
 }  // namespace detail
 
+namespace detail {
+struct PerTid { std::vector<Site> sites; std::vector<Tri> ad, dp; uint64_t obs = 0; Stats st; uint64_t ad_rec = 0, dp_rec = 0; };
+// Rows, per-site sums and the deferred matrix builders from the per-contig counts (both kernels). ad / dp hold (barcode, site in contig,
+// count) triplets in any order; prepare sums them per (barcode, site), so one triplet per molecule and one per (barcode, site) agree.
+inline void finish(Result& res, std::shared_ptr<std::vector<PerTid>> out_sp, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {
+    auto& out = *out_sp;
+    // 4. rows in (contig, position) order; CSC by barcode
+    std::vector<uint32_t> row0(n_tid + 1, 0);
+    for (uint32_t t = 0; t < n_tid; ++t) row0[t + 1] = row0[t] + static_cast<uint32_t>(out[t].sites.size());
+    res.sites.reserve(row0[n_tid]);
+    for (uint32_t t = 0; t < n_tid; ++t) { for (const auto& s : out[t].sites) res.sites.push_back(s);
+        res.mismatch_obs += out[t].obs; res.molecules += out[t].st.snp_molecules; res.ambiguous += out[t].st.snp_molecules_ambiguous; res.other += out[t].st.snp_molecules_other; }
+    for (uint32_t t = 0; t < n_tid; ++t) { res.ad_records += out[t].ad_rec; res.dp_records += out[t].dp_rec; }
+    auto row0_sp = std::make_shared<std::vector<uint32_t>>(std::move(row0));
+    const unsigned build_threads = std::max(1u, std::min<unsigned>(P.threads, n_tid));
+    auto cmp = [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
+    res.prepare_fn = [out_sp, row0_sp, n_tid, n_barcodes, build_threads, cmp](Result& r, const std::vector<uint8_t>* keep) {
+        auto& out = *out_sp; const auto& row0 = *row0_sp;
+        const size_t nrow = row0[n_tid];
+        r.site_ad.assign(nrow, 0); r.site_dp.assign(nrow, 0); r.kept_ad.assign(nrow, 0); r.kept_dp.assign(nrow, 0);
+        std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
+        std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return out[a].ad.size() + out[a].dp.size() > out[b].ad.size() + out[b].dp.size(); });
+        std::atomic<uint32_t> next{0};
+        // Contigs own disjoint row ranges, so each worker writes its own part of the per-site sums.
+        auto work = [&]() {
+            for (;;) {
+                const uint32_t oi = next.fetch_add(1); if (oi >= n_tid) return;
+                const uint32_t t = order[oi];
+                for (int w = 0; w < 2; ++w) {
+                    auto& v = w == 0 ? out[t].ad : out[t].dp;
+                    auto& site = w == 0 ? r.site_ad : r.site_dp; auto& kept = w == 0 ? r.kept_ad : r.kept_dp;
+                    size_t m = 0;
+                    for (size_t i = 0; i < v.size(); ++i) {
+                        Tri x = v[i]; x.row += row0[t];
+                        site[x.row] += x.val;
+                        if (x.cell >= n_barcodes || (keep && !(x.cell < keep->size() && (*keep)[x.cell]))) continue;
+                        kept[x.row] += x.val; v[m++] = x;
+                    }
+                    v.resize(m);
+                    std::sort(v.begin(), v.end(), cmp);
+                    size_t o = 0;
+                    for (size_t i = 0; i < m;) {   // one record per molecule batch: summed per (barcode, site), saturated at 65535
+                        size_t j = i; uint64_t sum = 0; while (j < m && v[j].cell == v[i].cell && v[j].row == v[i].row) sum += v[j++].val;
+                        Tri y = v[i]; y.val = static_cast<uint32_t>(std::min<uint64_t>(sum, 65535)); v[o++] = y; i = j;
+                    }
+                    v.resize(o); v.shrink_to_fit();
+                }
+            }
+        };
+        std::vector<std::thread> th; for (unsigned i = 1; i < build_threads; ++i) th.emplace_back(work);
+        work(); for (auto& x : th) x.join();
+    };
+    res.emit_fn = [out_sp, row0_sp, n_tid, n_barcodes](Result& r, bool is_ad, const std::vector<uint8_t>* keep_rows, uint64_t& entries) -> bool {
+        auto& out = *out_sp; const auto& row0 = *row0_sp;
+        auto& m = is_ad ? r.ad : r.dp;
+        m = {}; m.nrows = row0[n_tid]; m.ncols = n_barcodes;
+        const auto row_ok = [&](uint32_t row) { return !keep_rows || (row < keep_rows->size() && (*keep_rows)[row]); };
+        std::vector<uint64_t> cnt(static_cast<size_t>(n_barcodes) + 1, 0);
+        entries = 0;
+        for (uint32_t t = 0; t < n_tid; ++t)
+            for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { ++cnt[x.cell + 1]; ++entries; }
+        if (entries >= r.max_entries) {
+            std::cerr << "[allsite] " << (is_ad ? "AD" : "DP") << ": " << entries << " (barcode, site) entries do not fit the int32 column pointers\n";
+            return false;
+        }
+        m.indptr.assign(static_cast<size_t>(n_barcodes) + 1, 0);
+        for (uint32_t c = 0; c < n_barcodes; ++c) { cnt[c + 1] += cnt[c]; m.indptr[c + 1] = static_cast<int32_t>(cnt[c + 1]); }
+        m.indices.resize(entries); m.data.resize(entries);
+        std::vector<int32_t> pos(m.indptr.begin(), m.indptr.end() - 1);
+        for (uint32_t t = 0; t < n_tid; ++t)   // contigs hold ascending row ranges and each is sorted, so rows ascend within a column
+            for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { const int32_t k = pos[x.cell]++; m.indices[k] = static_cast<int32_t>(x.row); m.data[k] = static_cast<uint16_t>(x.val); }
+        return true;
+    };
+    res.pairs_fn = [out_sp, n_tid](const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>& f) {
+        const auto& out = *out_sp;
+        for (uint32_t t = 0; t < n_tid; ++t) {
+            const auto& ad = out[t].ad; const auto& dp = out[t].dp; size_t ia = 0;
+            for (const auto& d : dp) {   // every AD key has a DP key (a molecule that shows the ALT is a molecule that covers the site)
+                while (ia < ad.size() && (ad[ia].cell < d.cell || (ad[ia].cell == d.cell && ad[ia].row < d.row))) ++ia;
+                const uint32_t a = (ia < ad.size() && ad[ia].cell == d.cell && ad[ia].row == d.row) ? ad[ia].val : 0;
+                f(d.cell, d.row, std::min(a, d.val), d.val);
+            }
+        }
+    };
+    res.release_fn = [out_sp, n_tid]() { auto& out = *out_sp; for (uint32_t t = 0; t < n_tid; ++t) { std::vector<Tri>().swap(out[t].ad); std::vector<Tri>().swap(out[t].dp); } };
+    if (!P.defer_build) res.finalize(nullptr);
+}
+}  // namespace detail
+
 // Records: n_sigs(), n_reads(), sig(i), aln(i), read(i) (SigRec / AlnRec / ReadRec of pileup_rec.h, or structs with the same fields),
 // ops_at(off) and seq_at(off) (pointers to a record's CIGAR ops and packed sequence) and lowq_word(i) (64-bit mask word i). The engine
 // adapts PileupInput (PileupCat over its split arrays); the unit test feeds hand-made records.
 template <class Rec>
-inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {
+inline Result run_hashmap(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {   // kernel 0
     using namespace detail;
     Result res;
     const uint64_t nS = R.n_sigs(), nR = R.n_reads();
@@ -202,7 +294,6 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
 
     const bool TM = std::getenv("SINGLET_ALLSITE_TIMING") != nullptr;
     Timers tmr; const uint64_t T_start = now_ns();
-    struct PerTid { std::vector<Site> sites; std::vector<Tri> ad, dp; uint64_t obs = 0; Stats st; };
     auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
     auto& out = *out_sp;
     std::atomic<uint32_t> next{0};
@@ -350,87 +441,280 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                   << " s; hits " << tmr.hits << ", blocks " << tmr.blocks << ", records (ad+dp) " << tmr.records << "\n";
     }
 
-    // 4. rows in (contig, position) order; CSC by barcode
-    std::vector<uint32_t> row0(n_tid + 1, 0);
-    for (uint32_t t = 0; t < n_tid; ++t) row0[t + 1] = row0[t] + static_cast<uint32_t>(out[t].sites.size());
-    res.sites.reserve(row0[n_tid]);
-    for (uint32_t t = 0; t < n_tid; ++t) { for (const auto& s : out[t].sites) res.sites.push_back(s);
-        res.mismatch_obs += out[t].obs; res.molecules += out[t].st.snp_molecules; res.ambiguous += out[t].st.snp_molecules_ambiguous; res.other += out[t].st.snp_molecules_other; }
-    for (uint32_t t = 0; t < n_tid; ++t) { res.ad_records += out[t].ad.size(); res.dp_records += out[t].dp.size(); }
-    auto row0_sp = std::make_shared<std::vector<uint32_t>>(std::move(row0));
-    const unsigned build_threads = std::max(1u, std::min<unsigned>(P.threads, n_tid));
-    auto cmp = [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
-    res.prepare_fn = [out_sp, row0_sp, n_tid, n_barcodes, build_threads, cmp](Result& r, const std::vector<uint8_t>* keep) {
-        auto& out = *out_sp; const auto& row0 = *row0_sp;
-        const size_t nrow = row0[n_tid];
-        r.site_ad.assign(nrow, 0); r.site_dp.assign(nrow, 0); r.kept_ad.assign(nrow, 0); r.kept_dp.assign(nrow, 0);
-        std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
-        std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return out[a].ad.size() + out[a].dp.size() > out[b].ad.size() + out[b].dp.size(); });
-        std::atomic<uint32_t> next{0};
-        // Contigs own disjoint row ranges, so each worker writes its own part of the per-site sums.
-        auto work = [&]() {
-            for (;;) {
-                const uint32_t oi = next.fetch_add(1); if (oi >= n_tid) return;
-                const uint32_t t = order[oi];
-                for (int w = 0; w < 2; ++w) {
-                    auto& v = w == 0 ? out[t].ad : out[t].dp;
-                    auto& site = w == 0 ? r.site_ad : r.site_dp; auto& kept = w == 0 ? r.kept_ad : r.kept_dp;
-                    size_t m = 0;
-                    for (size_t i = 0; i < v.size(); ++i) {
-                        Tri x = v[i]; x.row += row0[t];
-                        site[x.row] += x.val;
-                        if (x.cell >= n_barcodes || (keep && !(x.cell < keep->size() && (*keep)[x.cell]))) continue;
-                        kept[x.row] += x.val; v[m++] = x;
-                    }
-                    v.resize(m);
-                    std::sort(v.begin(), v.end(), cmp);
-                    size_t o = 0;
-                    for (size_t i = 0; i < m;) {   // one record per molecule batch: summed per (barcode, site), saturated at 65535
-                        size_t j = i; uint64_t sum = 0; while (j < m && v[j].cell == v[i].cell && v[j].row == v[i].row) sum += v[j++].val;
-                        Tri y = v[i]; y.val = static_cast<uint32_t>(std::min<uint64_t>(sum, 65535)); v[o++] = y; i = j;
-                    }
-                    v.resize(o); v.shrink_to_fit();
-                }
-            }
-        };
-        std::vector<std::thread> th; for (unsigned i = 1; i < build_threads; ++i) th.emplace_back(work);
-        work(); for (auto& x : th) x.join();
-    };
-    res.emit_fn = [out_sp, row0_sp, n_tid, n_barcodes](Result& r, bool is_ad, const std::vector<uint8_t>* keep_rows, uint64_t& entries) -> bool {
-        auto& out = *out_sp; const auto& row0 = *row0_sp;
-        auto& m = is_ad ? r.ad : r.dp;
-        m = {}; m.nrows = row0[n_tid]; m.ncols = n_barcodes;
-        const auto row_ok = [&](uint32_t row) { return !keep_rows || (row < keep_rows->size() && (*keep_rows)[row]); };
-        std::vector<uint64_t> cnt(static_cast<size_t>(n_barcodes) + 1, 0);
-        entries = 0;
-        for (uint32_t t = 0; t < n_tid; ++t)
-            for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { ++cnt[x.cell + 1]; ++entries; }
-        if (entries >= r.max_entries) {
-            std::cerr << "[allsite] " << (is_ad ? "AD" : "DP") << ": " << entries << " (barcode, site) entries do not fit the int32 column pointers\n";
-            return false;
-        }
-        m.indptr.assign(static_cast<size_t>(n_barcodes) + 1, 0);
-        for (uint32_t c = 0; c < n_barcodes; ++c) { cnt[c + 1] += cnt[c]; m.indptr[c + 1] = static_cast<int32_t>(cnt[c + 1]); }
-        m.indices.resize(entries); m.data.resize(entries);
-        std::vector<int32_t> pos(m.indptr.begin(), m.indptr.end() - 1);
-        for (uint32_t t = 0; t < n_tid; ++t)   // contigs hold ascending row ranges and each is sorted, so rows ascend within a column
-            for (const auto& x : (is_ad ? out[t].ad : out[t].dp)) if (row_ok(x.row)) { const int32_t k = pos[x.cell]++; m.indices[k] = static_cast<int32_t>(x.row); m.data[k] = static_cast<uint16_t>(x.val); }
-        return true;
-    };
-    res.pairs_fn = [out_sp, n_tid](const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>& f) {
-        const auto& out = *out_sp;
-        for (uint32_t t = 0; t < n_tid; ++t) {
-            const auto& ad = out[t].ad; const auto& dp = out[t].dp; size_t ia = 0;
-            for (const auto& d : dp) {   // every AD key has a DP key (a molecule that shows the ALT is a molecule that covers the site)
-                while (ia < ad.size() && (ad[ia].cell < d.cell || (ad[ia].cell == d.cell && ad[ia].row < d.row))) ++ia;
-                const uint32_t a = (ia < ad.size() && ad[ia].cell == d.cell && ad[ia].row == d.row) ? ad[ia].val : 0;
-                f(d.cell, d.row, std::min(a, d.val), d.val);
-            }
-        }
-    };
-    res.release_fn = [out_sp, n_tid]() { auto& out = *out_sp; for (uint32_t t = 0; t < n_tid; ++t) { std::vector<Tri>().swap(out[t].ad); std::vector<Tri>().swap(out[t].dp); } };
-    if (!P.defer_build) res.finalize(nullptr);
+    for (uint32_t t = 0; t < n_tid; ++t) { out[t].ad_rec = out[t].ad.size(); out[t].dp_rec = out[t].dp.size(); }
+    detail::finish(res, out_sp, n_tid, n_barcodes, P);
     return res;
+}
+
+namespace detail {
+template <class F> inline void pfor(unsigned nth, size_t n, F&& f) {   // f(item, worker) over [0, n), items taken in order
+    std::atomic<size_t> next{0};
+    auto w = [&](unsigned id) { for (;;) { const size_t i = next.fetch_add(1); if (i >= n) return; f(i, id); } };
+    const unsigned k = static_cast<unsigned>(std::max<size_t>(1, std::min<size_t>(nth, n)));
+    std::vector<std::thread> th; for (unsigned i = 1; i < k; ++i) th.emplace_back(w, i);
+    w(0); for (auto& x : th) x.join();
+}
+// "[allsite] counting: B of N blocks ..." at most once per 30 s, from whichever worker gets there first
+struct ProgressLine {
+    std::atomic<uint64_t> last{0}; uint64_t t0 = now_ns();
+    void tick(uint64_t done, uint64_t total, uint64_t hits) {
+        const uint64_t t = now_ns(), l = last.load();
+        if (t - std::max(l, t0) < 30000000000ull) return;
+        uint64_t e = l; if (!last.compare_exchange_strong(e, t)) return;
+        std::string s = "[allsite] counting: " + std::to_string(done) + " of " + std::to_string(total) + " blocks, " + std::to_string(hits / 1000000)
+                      + " M hits, " + std::to_string((t - t0) / 1000000000ull) + " s\n";
+        std::cerr << s << std::flush;
+    }
+};
+}  // namespace detail
+
+// Kernel 1: the same counts from sorted records (allsite_records.h). Discovery runs over chunks of each contig's reads; counting runs over
+// (contig, block) units, so threads stay busy past the largest contig. Every unit's output depends only on its reads, and units are put
+// back in (contig, block) order, so the result does not depend on the thread count.
+template <class Rec>
+inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barcodes, const Params& P, const rec::Layout& Y) {
+    using namespace detail;
+    Result res;
+    const bool TM = std::getenv("SINGLET_ALLSITE_TIMING") != nullptr;
+    const uint64_t T_start = now_ns();
+    const uint64_t nS = R.n_sigs(), nR = R.n_reads();
+    const unsigned nth = std::max(1u, P.threads);
+    // 1-2. as kernel 0: each signature's qualifying primary alignment; reads per contig ordered by read index
+    std::vector<int32_t> sig_tid(nS, -1);
+    std::vector<uint8_t> sig_p(nS, 0);
+    pfor(nth, (nS + (1u << 20) - 1) >> 20, [&](size_t c, unsigned) {
+        const uint64_t e = std::min<uint64_t>(nS, (c + 1) << 20);
+        for (uint64_t s = c << 20; s < e; ++s) {
+            const auto& sg = R.sig(s);
+            for (int k = 0; k < sg.n_aln; ++k) {
+                const auto& a = R.aln(sg.aln_off + k);
+                if (!(a.flags & 2)) continue;
+                if (a.mapq >= P.min_mapq && a.tid >= 0 && static_cast<uint32_t>(a.tid) < n_tid && a.tid != P.skip_tid) { sig_tid[s] = a.tid; sig_p[s] = static_cast<uint8_t>(k); }
+                break;
+            }
+        }
+    });
+    auto use = [&](const auto& x) { return x.bc >= 0 && static_cast<uint32_t>(x.bc) < n_barcodes && sig_tid[x.sig] >= 0; };
+    std::vector<uint64_t> cnt(n_tid + 1, 0);
+    for (uint64_t r = 0; r < nR; ++r) { const auto& x = R.read(r); if (use(x)) cnt[sig_tid[x.sig] + 1]++; }
+    for (uint32_t t = 0; t < n_tid; ++t) cnt[t + 1] += cnt[t];
+    std::vector<uint64_t> by_tid(cnt[n_tid]);
+    { std::vector<uint64_t> w(cnt.begin(), cnt.end() - 1);
+      for (uint64_t r = 0; r < nR; ++r) { const auto& x = R.read(r); if (use(x)) by_tid[w[sig_tid[x.sig]]++] = r; } }
+    res.reads_used = by_tid.size();
+    std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
+    std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { const uint64_t na = cnt[a + 1] - cnt[a], nb = cnt[b + 1] - cnt[b]; return na != nb ? na > nb : a < b; });
+    const uint64_t T_prep = now_ns();
+
+    auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };
+    auto walk = [&](uint64_t r, auto&& on_base) {
+        const auto& x = R.read(r); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
+        const bool rev = (a.flags & 1) != 0; const uint32_t* o = R.ops_at(a.ops_off); const uint8_t* seq = R.seq_at(sg.seq_off);
+        int32_t rpos = a.pos; int qpos = 0;
+        for (int i = 0; i < a.n_ops; ++i) {
+            const uint32_t c = o[i]; const int op = c & 15; const int32_t len = static_cast<int32_t>(c >> 4);
+            if (op == 0 || op == 7 || op == 8) {
+                for (int32_t j = 0; j < len; ++j) {
+                    const int qp = qpos + j; const uint8_t code = aligned_base(seq, sg.rlen, qp, rev);
+                    on_base(rpos + j, code, static_cast<uint32_t>(rev ? sg.rlen - 1 - qp : qp));
+                }
+                rpos += len; qpos += len;
+            } else if (op == 1 || op == 4) qpos += len;
+            else if (op == 2 || op == 3) rpos += len;
+        }
+    };
+    auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
+    auto& out = *out_sp;
+    std::atomic<uint64_t> t_walk{0}, t_sort{0}, t_member{0}, t_cwalk{0}, t_csort{0}, t_coll{0}, n_hits{0};
+
+    // 3a. discovery observations over chunks of reads (chunk order = contig then read order)
+    struct Obs { uint64_t key; int32_t bc; uint64_t umi; };
+    constexpr uint64_t CH = 1u << 18;
+    struct Chunk { uint32_t t; uint64_t k0, k1; };
+    std::vector<Chunk> chunks; std::vector<size_t> ch0(n_tid + 1, 0);
+    for (uint32_t t = 0; t < n_tid; ++t) { ch0[t] = chunks.size(); for (uint64_t k = cnt[t]; k < cnt[t + 1]; k += CH) chunks.push_back({t, k, std::min(cnt[t + 1], k + CH)}); }
+    ch0[n_tid] = chunks.size();
+    std::vector<std::vector<Obs>> cobs(chunks.size());
+    pfor(nth, chunks.size(), [&](size_t ci, unsigned) {
+        const uint64_t u0 = TM ? now_ns() : 0;
+        const Chunk& C = chunks[ci]; const int32_t t = static_cast<int32_t>(C.t); auto& obs = cobs[ci];
+        for (uint64_t k = C.k0; k < C.k1; ++k) {
+            const uint64_t r = by_tid[k]; const auto& x = R.read(r);
+            walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
+                const int bi = base_idx(code); if (bi < 0) return;
+                const uint8_t ref = G.base(t, pos); if (ref > 3 || bi == ref || !pass_q(r, ri, code)) return;
+                obs.push_back({(static_cast<uint64_t>(static_cast<uint32_t>(pos)) << 2) | static_cast<uint64_t>(bi), x.bc, P.umi_dedup ? x.umi3 : r});
+            });
+        }
+        if (TM) t_walk += now_ns() - u0;
+        if (P.progress) P.progress();
+    });
+    const uint64_t T_a1 = now_ns();
+
+    // 3b. per contig: sites (kernel 0's rule), each read's site range, blocks of about block_hits hits, each block's reads in read order
+    struct Plan { std::vector<int32_t> spos; std::vector<uint8_t> refc, altc; std::vector<size_t> cuts; std::vector<uint64_t> boff; std::vector<uint32_t> bread; };
+    std::vector<Plan> plan(n_tid);
+    pfor(nth, n_tid, [&](size_t oi, unsigned) {
+        const uint32_t t = order[oi]; const uint64_t b0 = cnt[t], b1 = cnt[t + 1]; if (b0 == b1) return;
+        const uint64_t u0 = TM ? now_ns() : 0;
+        PerTid& pt = out[t];
+        std::vector<Obs> obs;
+        { size_t n = 0; for (size_t c = ch0[t]; c < ch0[t + 1]; ++c) n += cobs[c].size(); obs.reserve(n);
+          for (size_t c = ch0[t]; c < ch0[t + 1]; ++c) { obs.insert(obs.end(), cobs[c].begin(), cobs[c].end()); std::vector<Obs>().swap(cobs[c]); } }
+        pt.obs = obs.size();
+        std::sort(obs.begin(), obs.end(), [](const Obs& a, const Obs& b) {
+            if (a.key != b.key) return a.key < b.key; if (a.bc != b.bc) return a.bc < b.bc; return a.umi < b.umi; });
+        for (size_t s = 0; s < obs.size();) {
+            const uint64_t pos = obs[s].key >> 2; size_t e = s;
+            uint32_t best_m = 0, best_c = 0; int best_b = -1;
+            while (e < obs.size() && (obs[e].key >> 2) == pos) {
+                size_t f = e; uint32_t mol = 0, cells = 0;
+                while (f < obs.size() && obs[f].key == obs[e].key) {
+                    if (f == e || obs[f].bc != obs[f - 1].bc) { ++cells; ++mol; }
+                    else if (obs[f].umi != obs[f - 1].umi) ++mol;
+                    ++f;
+                }
+                if (static_cast<int>(mol) >= P.min_alt_molecules && static_cast<int>(cells) >= P.min_alt_cells && mol > best_m) {
+                    best_m = mol; best_c = cells; best_b = static_cast<int>(obs[e].key & 3);
+                }
+                e = f;
+            }
+            if (best_b >= 0) pt.sites.push_back({static_cast<int32_t>(t), static_cast<int32_t>(pos), "ACGT"[G.base(static_cast<int32_t>(t), static_cast<int32_t>(pos))],
+                                                  "ACGT"[best_b], best_m, best_c});
+            s = e;
+        }
+        std::vector<Obs>().swap(obs);
+        const uint64_t u1 = TM ? now_ns() : 0;
+        if (TM) t_sort += u1 - u0;
+        if (pt.sites.empty()) return;
+        Plan& C = plan[t];
+        const size_t nsite = pt.sites.size();
+        auto nt16 = [](char c) -> uint8_t { return c == 'A' ? 1 : c == 'C' ? 2 : c == 'G' ? 4 : 8; };
+        C.spos.resize(nsite); C.refc.resize(nsite); C.altc.resize(nsite);
+        for (size_t i = 0; i < nsite; ++i) { C.spos[i] = pt.sites[i].pos; C.refc[i] = nt16(pt.sites[i].ref); C.altc[i] = nt16(pt.sites[i].alt); }
+        const auto& spos = C.spos;
+        std::vector<uint32_t> rf(b1 - b0, 0), rl(b1 - b0, 0);
+        std::vector<int64_t> load(nsite + 1, 0);
+        for (uint64_t k = b0; k < b1; ++k) {
+            const auto& x = R.read(by_tid[k]); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
+            const uint32_t* o = R.ops_at(a.ops_off); int64_t end = a.pos;
+            for (int i = 0; i < a.n_ops; ++i) { const int op = o[i] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[i] >> 4; }
+            const size_t f = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), a.pos) - spos.begin());
+            const size_t l = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), end) - spos.begin());
+            if (f >= l) continue;
+            rf[k - b0] = static_cast<uint32_t>(f); rl[k - b0] = static_cast<uint32_t>(l); load[f]++; load[l]--;
+        }
+        C.cuts.assign(1, 0);
+        { int64_t run = 0, acc = 0;
+          for (size_t i = 0; i < nsite; ++i) { run += load[i]; acc += run; if (acc >= static_cast<int64_t>(P.block_hits) && i + 1 < nsite) { C.cuts.push_back(i + 1); acc = 0; } } }
+        C.cuts.push_back(nsite);
+        std::vector<int64_t>().swap(load);
+        const size_t nb = C.cuts.size() - 1;
+        C.boff.assign(nb + 1, 0);
+        auto block_of = [&](uint32_t si) { return static_cast<size_t>(std::upper_bound(C.cuts.begin(), C.cuts.end(), static_cast<size_t>(si)) - C.cuts.begin()) - 1; };
+        for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
+            const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) C.boff[b + 1]++; }
+        for (size_t b = 0; b < nb; ++b) C.boff[b + 1] += C.boff[b];
+        C.bread.resize(C.boff[nb]);
+        { std::vector<uint64_t> w(C.boff.begin(), C.boff.end() - 1);
+          for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
+              const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) C.bread[w[b]++] = static_cast<uint32_t>(k - b0); } }
+        if (TM) t_member += now_ns() - u1;
+        if (P.progress) P.progress();
+    });
+    std::vector<std::vector<Obs>>().swap(cobs);
+    const uint64_t T_a2 = now_ns();
+
+    // 3c. counting units, largest first (reads in the block; ties: contig, block)
+    struct Unit { uint32_t t, b; uint64_t w; };
+    std::vector<Unit> units;
+    std::vector<size_t> u0(n_tid + 1, 0);
+    for (uint32_t t = 0; t < n_tid; ++t) { u0[t] = units.size();
+        for (uint32_t b = 0; b + 1 < plan[t].cuts.size(); ++b) units.push_back({t, b, plan[t].boff[b + 1] - plan[t].boff[b]}); }
+    u0[n_tid] = units.size();
+    std::vector<uint32_t> uorder(units.size()); for (size_t i = 0; i < units.size(); ++i) uorder[i] = static_cast<uint32_t>(i);
+    std::sort(uorder.begin(), uorder.end(), [&](uint32_t a, uint32_t b) { return units[a].w != units[b].w ? units[a].w > units[b].w : a < b; });
+    struct UnitOut { std::vector<Tri> ad, dp; Stats st; uint64_t adr = 0, dpr = 0; };
+    std::vector<UnitOut> uout(units.size());
+    struct Hit { uint64_t key; uint32_t site; };
+    struct WS { std::vector<Hit> hits; std::vector<uint64_t> keys; std::vector<uint64_t> off; rec::Scratch sc; };
+    std::vector<WS> ws(nth);
+    ProgressLine pl; std::atomic<uint64_t> done{0};
+    pfor(nth, units.size(), [&](size_t ui, unsigned id) {
+        const uint32_t un = uorder[ui]; const Unit& U = units[un]; const uint32_t t = U.t; const Plan& C = plan[t]; UnitOut& o = uout[un];
+        WS& W = ws[id];
+        const uint64_t v0 = TM ? now_ns() : 0;
+        const size_t s0 = C.cuts[U.b], s1 = C.cuts[U.b + 1], ns = s1 - s0; const uint64_t b0 = cnt[t];
+        const int32_t* sp = C.spos.data();
+        W.hits.clear();
+        for (uint64_t j = C.boff[U.b]; j < C.boff[U.b + 1]; ++j) {
+            const uint64_t r = by_tid[b0 + C.bread[j]]; const auto& x = R.read(r);
+            const auto& a = R.aln(R.sig(x.sig).aln_off + sig_p[x.sig]);
+            const uint64_t uf = Y.umi ? rec::umi_field(x.umi3, Y.L) : 0; const uint32_t bc = static_cast<uint32_t>(x.bc);
+            size_t cur = static_cast<size_t>(std::lower_bound(sp + s0, sp + s1, a.pos) - sp);
+            walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
+                while (cur < s1 && sp[cur] < pos) ++cur;
+                if (cur >= s1 || sp[cur] != pos || !pass_q(r, ri, code)) return;
+                const uint8_t cls = code == C.altc[cur] ? 1 : code == C.refc[cur] ? 0 : 2;
+                W.hits.push_back({rec::key(Y, bc, uf, cls), static_cast<uint32_t>(cur - s0)});
+            });
+        }
+        const uint64_t v1 = TM ? now_ns() : 0;
+        W.off.assign(ns + 1, 0);
+        for (const auto& h : W.hits) W.off[h.site + 1]++;
+        for (size_t i = 0; i < ns; ++i) W.off[i + 1] += W.off[i];
+        W.keys.resize(W.hits.size());
+        { std::vector<uint64_t>& w = W.off; for (const auto& h : W.hits) W.keys[w[h.site]++] = h.key;
+          for (size_t i = ns; i > 0; --i) w[i] = w[i - 1]; w[0] = 0; }
+        for (size_t i = 0; i < ns; ++i) std::sort(W.keys.begin() + W.off[i], W.keys.begin() + W.off[i + 1]);
+        const uint64_t v2 = TM ? now_ns() : 0;
+        rec::Counts cn;
+        for (size_t i = 0; i < ns; ++i) {
+            const uint32_t row = static_cast<uint32_t>(s0 + i);
+            rec::collapse_site(W.keys.data() + W.off[i], W.off[i + 1] - W.off[i], Y, P.directional != 0, W.sc, cn, [&](uint32_t bc, uint32_t dp, uint32_t ad) {
+                o.dp.push_back({bc, row, dp}); o.dpr += dp;
+                if (ad) { o.ad.push_back({bc, row, ad}); o.adr += ad; }
+            });
+        }
+        o.st.snp_molecules = cn.molecules; o.st.snp_molecules_ambiguous = cn.ambiguous; o.st.snp_molecules_other = cn.other;
+        const uint64_t nh = W.hits.size(); n_hits += nh;
+        if (W.hits.capacity() > 4 * (P.block_hits + 1024)) { std::vector<Hit>().swap(W.hits); std::vector<uint64_t>().swap(W.keys); }
+        if (TM) { const uint64_t v3 = now_ns(); t_cwalk += v1 - v0; t_csort += v2 - v1; t_coll += v3 - v2; }
+        if (P.progress) P.progress();
+        pl.tick(++done, units.size(), n_hits.load());
+    });
+    std::vector<WS>().swap(ws);
+    for (uint32_t t = 0; t < n_tid; ++t) {   // units back in (contig, block) order
+        PerTid& pt = out[t];
+        size_t na = 0, nd = 0; for (size_t u = u0[t]; u < u0[t + 1]; ++u) { na += uout[u].ad.size(); nd += uout[u].dp.size(); }
+        pt.ad.reserve(na); pt.dp.reserve(nd);
+        for (size_t u = u0[t]; u < u0[t + 1]; ++u) {
+            UnitOut& o = uout[u];
+            pt.ad.insert(pt.ad.end(), o.ad.begin(), o.ad.end()); pt.dp.insert(pt.dp.end(), o.dp.begin(), o.dp.end());
+            pt.st.snp_molecules += o.st.snp_molecules; pt.st.snp_molecules_ambiguous += o.st.snp_molecules_ambiguous; pt.st.snp_molecules_other += o.st.snp_molecules_other;
+            pt.ad_rec += o.adr; pt.dp_rec += o.dpr;
+            std::vector<Tri>().swap(o.ad); std::vector<Tri>().swap(o.dp);
+        }
+    }
+    if (TM) {
+        const double sec = 1e-9; const uint64_t T_b = now_ns();
+        std::cerr << "[allsite-timing] kernel sorted, threads " << nth << ", reads " << res.reads_used << ", units " << units.size() << ", hits " << n_hits.load()
+                  << "; wall s: prepare " << (T_prep - T_start) * sec << ", discovery walk " << (T_a1 - T_prep) * sec << ", sites+blocks " << (T_a2 - T_a1) * sec
+                  << ", counting+assembly " << (T_b - T_a2) * sec << "; thread-s: discovery walk " << t_walk * sec << ", discovery sort+scan " << t_sort * sec
+                  << ", block membership " << t_member * sec << ", counting walk " << t_cwalk * sec << ", counting sort " << t_csort * sec << ", collapse " << t_coll * sec << "\n";
+    }
+    finish(res, out_sp, n_tid, n_barcodes, P);
+    return res;
+}
+
+// The pass: kernel 1 (sorted records) unless Params::kernel or SINGLET_ALLSITE_KERNEL=old asks for kernel 0, or the keys do not fit
+template <class Rec>
+inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {
+    int k = P.kernel;
+    if (k < 0) { const char* e = std::getenv("SINGLET_ALLSITE_KERNEL"); k = (e && std::string(e) == "old") ? 0 : 1; }
+    const rec::Layout Y = rec::layout(P.umi_dedup != 0, P.umi_len, n_barcodes);
+    if (k == 1 && Y.ok) return run_sorted(R, G, n_tid, n_barcodes, P, Y);
+    return run_hashmap(R, G, n_tid, n_barcodes, P);
 }
 
 inline std::string site_name(const Site& s, const std::vector<std::string>& tid_names) {

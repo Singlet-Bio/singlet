@@ -63,6 +63,7 @@
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 #include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
 #include "allsite.h"           // D-101: per-cell allele counts at every site with alternate-allele evidence
+#include "allsite_replay.h"    // SINGLET_ALLSITE_DUMP_DIR: the pass's input for `singlet allsite-replay`
 
 namespace singlet {
 // Timing and memory milestones of the end-of-stream finalize (stderr only, no effect on any output).
@@ -2347,6 +2348,15 @@ public:
         P.progress = [] { singlet::rearm_stall_watchdog("allsite pass"); };
         P.defer_build = true;   // finalize_allsite builds the matrices for the called cells once they are known
         AllSiteView v(in);
+        if (const char* dd = std::getenv("SINGLET_ALLSITE_DUMP_DIR")) {   // speed work: the pass's input for `singlet allsite-replay`
+            namespace RP = allsite::replay; const std::string d = dd; ::mkdir(d.c_str(), 0755);
+            auto wr = [&](const char* f, const auto& c) { using T = std::remove_cv_t<std::remove_reference_t<decltype(c.a[0])>>;
+                return RP::write_parts(d + "/" + f, c.a, c.na * sizeof(T), c.b, c.nb * sizeof(T)); };
+            const bool ok = wr("sigs.bin", v.S) && wr("alns.bin", v.A) && wr("reads.bin", v.Rd) && wr("ops.bin", v.O) && wr("seq.bin", v.Q) && wr("lowq.bin", v.L)
+                && RP::write_meta(d, P, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), config_.allsite_genome_dir, tid_to_chrom_);
+            std::cerr << "[allsite] input written to " << d << (ok ? "" : " (FAILED)") << "
+";
+        }
         allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
         allsite_ok_ = true;
         std::cerr << "[allsite] " << allsite_.sites.size() << " sites (>= " << P.min_alt_molecules << " ALT molecules in >= " << P.min_alt_cells
