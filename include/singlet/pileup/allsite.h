@@ -80,6 +80,13 @@ public:
         const uint8_t v = static_cast<const uint8_t*>(map_)[o];
         return v < 4 ? v : 4;
     }
+    // the raw bytes of [pos, pos + len) on contig t when all of them lie inside the contig (else null: use base())
+    const uint8_t* span(int32_t t, int32_t pos, int32_t len) const {
+        if (t < 0 || static_cast<size_t>(t) >= off_.size() || off_[t] == UINT64_MAX || pos < 0 || len < 0 || static_cast<uint64_t>(pos) + static_cast<uint64_t>(len) > len_[t]) return nullptr;
+        const uint64_t o = off_[t] + static_cast<uint64_t>(pos);
+        if (o + static_cast<uint64_t>(len) > size_) return nullptr;
+        return static_cast<const uint8_t*>(map_) + o;
+    }
 private:
     int fd_ = -1; void* map_ = nullptr; size_t size_ = 0;
     std::vector<uint64_t> off_, len_;
@@ -507,22 +514,6 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     const uint64_t T_prep = now_ns();
 
     auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };
-    auto walk = [&](uint64_t r, auto&& on_base) {
-        const auto& x = R.read(r); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
-        const bool rev = (a.flags & 1) != 0; const uint32_t* o = R.ops_at(a.ops_off); const uint8_t* seq = R.seq_at(sg.seq_off);
-        int32_t rpos = a.pos; int qpos = 0;
-        for (int i = 0; i < a.n_ops; ++i) {
-            const uint32_t c = o[i]; const int op = c & 15; const int32_t len = static_cast<int32_t>(c >> 4);
-            if (op == 0 || op == 7 || op == 8) {
-                for (int32_t j = 0; j < len; ++j) {
-                    const int qp = qpos + j; const uint8_t code = aligned_base(seq, sg.rlen, qp, rev);
-                    on_base(rpos + j, code, static_cast<uint32_t>(rev ? sg.rlen - 1 - qp : qp));
-                }
-                rpos += len; qpos += len;
-            } else if (op == 1 || op == 4) qpos += len;
-            else if (op == 2 || op == 3) rpos += len;
-        }
-    };
     auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
     auto& out = *out_sp;
     std::atomic<uint64_t> t_walk{0}, t_sort{0}, t_member{0}, t_cwalk{0}, t_csort{0}, t_coll{0}, n_hits{0};
@@ -538,13 +529,28 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     pfor(nth, chunks.size(), [&](size_t ci, unsigned) {
         const uint64_t u0 = TM ? now_ns() : 0;
         const Chunk& C = chunks[ci]; const int32_t t = static_cast<int32_t>(C.t); auto& obs = cobs[ci];
+        static const int8_t bidx[16] = {-1, 0, 1, -1, 2, -1, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1};   // base_idx
         for (uint64_t k = C.k0; k < C.k1; ++k) {
             const uint64_t r = by_tid[k]; const auto& x = R.read(r);
-            walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
-                const int bi = base_idx(code); if (bi < 0) return;
-                const uint8_t ref = G.base(t, pos); if (ref > 3 || bi == ref || !pass_q(r, ri, code)) return;
-                obs.push_back({(static_cast<uint64_t>(static_cast<uint32_t>(pos)) << 2) | static_cast<uint64_t>(bi), x.bc, P.umi_dedup ? x.umi3 : r});
-            });
+            const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
+            const bool rev = (a.flags & 1) != 0; const uint32_t* o = R.ops_at(a.ops_off); const uint8_t* seq = R.seq_at(sg.seq_off);
+            const uint64_t um = P.umi_dedup ? x.umi3 : r;
+            int32_t rpos = a.pos; int qpos = 0;
+            for (int i = 0; i < a.n_ops; ++i) {   // walk()'s bases, with the reference bytes of each block read in one span
+                const uint32_t c = o[i]; const int op = c & 15; const int32_t len = static_cast<int32_t>(c >> 4);
+                if (op == 0 || op == 7 || op == 8) {
+                    const uint8_t* gp = G.span(t, rpos, len);
+                    for (int32_t j = 0; j < len; ++j) {
+                        const int qp = qpos + j; const uint8_t code = aligned_base(seq, sg.rlen, qp, rev);
+                        const int bi = bidx[code]; if (bi < 0) continue;
+                        uint8_t ref = gp ? gp[j] : G.base(t, rpos + j); if (ref > 3) continue;
+                        if (bi == ref || !pass_q(r, static_cast<uint32_t>(rev ? sg.rlen - 1 - qp : qp), code)) continue;
+                        obs.push_back({(static_cast<uint64_t>(static_cast<uint32_t>(rpos + j)) << 2) | static_cast<uint64_t>(bi), x.bc, um});
+                    }
+                    rpos += len; qpos += len;
+                } else if (op == 1 || op == 4) qpos += len;
+                else if (op == 2 || op == 3) rpos += len;
+            }
         }
         if (TM) t_walk += now_ns() - u0;
         if (P.progress) P.progress();
@@ -592,18 +598,33 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         auto nt16 = [](char c) -> uint8_t { return c == 'A' ? 1 : c == 'C' ? 2 : c == 'G' ? 4 : 8; };
         C.spos.resize(nsite); C.refc.resize(nsite); C.altc.resize(nsite);
         for (size_t i = 0; i < nsite; ++i) { C.spos[i] = pt.sites[i].pos; C.refc[i] = nt16(pt.sites[i].ref); C.altc[i] = nt16(pt.sites[i].alt); }
-        const auto& spos = C.spos;
-        std::vector<uint32_t> rf(b1 - b0, 0), rl(b1 - b0, 0);
-        std::vector<int64_t> load(nsite + 1, 0);
-        for (uint64_t k = b0; k < b1; ++k) {
+        if (TM) t_sort += now_ns() - u1;
+        if (P.progress) P.progress();
+    });
+    std::vector<std::vector<Obs>>().swap(cobs);
+    // each read's site range [rf, rl) from its alignment span (the span bounds the hits per site; spliced reads overcount), over chunks
+    std::vector<uint32_t> RF(by_tid.size(), 0), RL(by_tid.size(), 0);
+    pfor(nth, chunks.size(), [&](size_t ci, unsigned) {
+        const uint64_t u0 = TM ? now_ns() : 0;
+        const Chunk& Ch = chunks[ci]; const auto& spos = plan[Ch.t].spos; if (spos.empty()) return;
+        for (uint64_t k = Ch.k0; k < Ch.k1; ++k) {
             const auto& x = R.read(by_tid[k]); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
             const uint32_t* o = R.ops_at(a.ops_off); int64_t end = a.pos;
             for (int i = 0; i < a.n_ops; ++i) { const int op = o[i] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[i] >> 4; }
             const size_t f = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), a.pos) - spos.begin());
             const size_t l = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), end) - spos.begin());
-            if (f >= l) continue;
-            rf[k - b0] = static_cast<uint32_t>(f); rl[k - b0] = static_cast<uint32_t>(l); load[f]++; load[l]--;
+            if (f < l) { RF[k] = static_cast<uint32_t>(f); RL[k] = static_cast<uint32_t>(l); }
         }
+        if (TM) t_member += now_ns() - u0;
+    });
+    // per contig: blocks of about block_hits hits, each block's reads in read order
+    pfor(nth, n_tid, [&](size_t oi, unsigned) {
+        const uint32_t t = order[oi]; const uint64_t b0 = cnt[t], b1 = cnt[t + 1]; Plan& C = plan[t]; if (C.spos.empty()) return;
+        const uint64_t u0 = TM ? now_ns() : 0;
+        const size_t nsite = C.spos.size();
+        const uint32_t* rf = RF.data() + b0; const uint32_t* rl = RL.data() + b0;
+        std::vector<int64_t> load(nsite + 1, 0);
+        for (uint64_t k = 0; k < b1 - b0; ++k) if (rf[k] < rl[k]) { load[rf[k]]++; load[rl[k]]--; }
         C.cuts.assign(1, 0);
         { int64_t run = 0, acc = 0;
           for (size_t i = 0; i < nsite; ++i) { run += load[i]; acc += run; if (acc >= static_cast<int64_t>(P.block_hits) && i + 1 < nsite) { C.cuts.push_back(i + 1); acc = 0; } } }
@@ -612,17 +633,17 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         const size_t nb = C.cuts.size() - 1;
         C.boff.assign(nb + 1, 0);
         auto block_of = [&](uint32_t si) { return static_cast<size_t>(std::upper_bound(C.cuts.begin(), C.cuts.end(), static_cast<size_t>(si)) - C.cuts.begin()) - 1; };
-        for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
-            const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) C.boff[b + 1]++; }
+        for (uint64_t k = 0; k < b1 - b0; ++k) { if (rf[k] >= rl[k]) continue;
+            const size_t fb = block_of(rf[k]), lb = block_of(rl[k] - 1); for (size_t b = fb; b <= lb; ++b) C.boff[b + 1]++; }
         for (size_t b = 0; b < nb; ++b) C.boff[b + 1] += C.boff[b];
         C.bread.resize(C.boff[nb]);
         { std::vector<uint64_t> w(C.boff.begin(), C.boff.end() - 1);
-          for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
-              const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) C.bread[w[b]++] = static_cast<uint32_t>(k - b0); } }
-        if (TM) t_member += now_ns() - u1;
+          for (uint64_t k = 0; k < b1 - b0; ++k) { if (rf[k] >= rl[k]) continue;
+              const size_t fb = block_of(rf[k]), lb = block_of(rl[k] - 1); for (size_t b = fb; b <= lb; ++b) C.bread[w[b]++] = static_cast<uint32_t>(k); } }
+        if (TM) t_member += now_ns() - u0;
         if (P.progress) P.progress();
     });
-    std::vector<std::vector<Obs>>().swap(cobs);
+    std::vector<uint32_t>().swap(RF); std::vector<uint32_t>().swap(RL);
     const uint64_t T_a2 = now_ns();
 
     // 3c. counting units, largest first (reads in the block; ties: contig, block)
@@ -649,15 +670,26 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         W.hits.clear();
         for (uint64_t j = C.boff[U.b]; j < C.boff[U.b + 1]; ++j) {
             const uint64_t r = by_tid[b0 + C.bread[j]]; const auto& x = R.read(r);
-            const auto& a = R.aln(R.sig(x.sig).aln_off + sig_p[x.sig]);
+            const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
             const uint64_t uf = Y.umi ? rec::umi_field(x.umi3, Y.L) : 0; const uint32_t bc = static_cast<uint32_t>(x.bc);
+            const bool rev = (a.flags & 1) != 0; const uint32_t* ops = R.ops_at(a.ops_off); const uint8_t* seq = R.seq_at(sg.seq_off);
             size_t cur = static_cast<size_t>(std::lower_bound(sp + s0, sp + s1, a.pos) - sp);
-            walk(r, [&](int32_t pos, uint8_t code, uint32_t ri) {
-                while (cur < s1 && sp[cur] < pos) ++cur;
-                if (cur >= s1 || sp[cur] != pos || !pass_q(r, ri, code)) return;
-                const uint8_t cls = code == C.altc[cur] ? 1 : code == C.refc[cur] ? 0 : 2;
-                W.hits.push_back({rec::key(Y, bc, uf, cls), static_cast<uint32_t>(cur - s0)});
-            });
+            int32_t rpos = a.pos; int qpos = 0;
+            for (int i = 0; i < a.n_ops && cur < s1; ++i) {   // walk()'s bases, visiting only the site positions of each block
+                const uint32_t c = ops[i]; const int op = c & 15; const int32_t len = static_cast<int32_t>(c >> 4);
+                if (op == 0 || op == 7 || op == 8) {
+                    const int32_t e = rpos + len;
+                    while (cur < s1 && sp[cur] < rpos) ++cur;
+                    for (; cur < s1 && sp[cur] < e; ++cur) {
+                        const int qp = qpos + (sp[cur] - rpos); const uint8_t code = aligned_base(seq, sg.rlen, qp, rev);
+                        if (!pass_q(r, static_cast<uint32_t>(rev ? sg.rlen - 1 - qp : qp), code)) continue;
+                        const uint8_t cls = code == C.altc[cur] ? 1 : code == C.refc[cur] ? 0 : 2;
+                        W.hits.push_back({rec::key(Y, bc, uf, cls), static_cast<uint32_t>(cur - s0)});
+                    }
+                    rpos = e; qpos += len;
+                } else if (op == 1 || op == 4) qpos += len;
+                else if (op == 2 || op == 3) rpos += len;
+            }
         }
         const uint64_t v1 = TM ? now_ns() : 0;
         W.off.assign(ns + 1, 0);
@@ -666,12 +698,11 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         W.keys.resize(W.hits.size());
         { std::vector<uint64_t>& w = W.off; for (const auto& h : W.hits) W.keys[w[h.site]++] = h.key;
           for (size_t i = ns; i > 0; --i) w[i] = w[i - 1]; w[0] = 0; }
-        for (size_t i = 0; i < ns; ++i) std::sort(W.keys.begin() + W.off[i], W.keys.begin() + W.off[i + 1]);
         const uint64_t v2 = TM ? now_ns() : 0;
         rec::Counts cn;
         for (size_t i = 0; i < ns; ++i) {
             const uint32_t row = static_cast<uint32_t>(s0 + i);
-            rec::collapse_site(W.keys.data() + W.off[i], W.off[i + 1] - W.off[i], Y, P.directional != 0, W.sc, cn, [&](uint32_t bc, uint32_t dp, uint32_t ad) {
+            rec::collapse_site_unsorted(W.keys.data() + W.off[i], W.off[i + 1] - W.off[i], Y, P.directional != 0, W.sc, cn, [&](uint32_t bc, uint32_t dp, uint32_t ad) {
                 o.dp.push_back({bc, row, dp}); o.dpr += dp;
                 if (ad) { o.ad.push_back({bc, row, ad}); o.adr += ad; }
             });

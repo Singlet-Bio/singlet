@@ -122,15 +122,21 @@ int main() {
     }
 
     struct Cfg { int umi_dedup, umi_len, directional, use_qual, skip_n; };
-    const std::vector<Cfg> cfgs = {{1, 12, 1, 1, 0}, {1, 12, 0, 0, 1}, {1, 10, 1, 0, 0}, {0, 12, 1, 1, 0}, {1, 0, 1, 0, 1}};
-    for (const auto& c : cfgs) {
+    std::vector<Cfg> cfgs = {{1, 12, 1, 1, 0}, {1, 12, 0, 0, 1}, {1, 10, 1, 0, 0}, {0, 12, 1, 1, 0}, {1, 0, 1, 0, 1}, {1, 12, 1, 1, 0}};
+    uint32_t nbc = NBC;
+    for (size_t ci = 0; ci < cfgs.size(); ++ci) {
+        const Cfg& c = cfgs[ci];
+        if (ci + 1 == cfgs.size()) {   // last: barcode columns spread over 3 bytes (the radix grouping by barcode takes several passes)
+            for (auto& x : rec.R) if (x.bc >= 0) x.bc = x.bc * 100003 + 7;
+            nbc = NBC * 100003 + 16;
+        }
         std::string ref_d, ref_p; uint64_t ref_sites = 0;
         for (int kernel : {0, 1}) for (unsigned th : {1u, 2u, 3u, 8u}) for (uint64_t bh : {uint64_t(300), uint64_t(8000000)}) {
             if (kernel == 0 && (th != 1 || bh != 300)) continue;
             A::Params P; P.min_mapq = 20; P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = 2; P.skip_n = c.skip_n;
             P.umi_dedup = c.umi_dedup; P.umi_len = c.umi_len; P.directional = c.directional; P.threads = th; P.block_hits = bh; P.kernel = kernel;
             P.defer_build = true;
-            A::Result r = A::run(rec, G, 3, NBC, P);
+            A::Result r = A::run(rec, G, 3, nbc, P);
             r.prepare(nullptr);
             A::replay::Fnv fp; r.for_each_pair([&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) { fp.s(bc); fp.s(row); fp.s(ad); fp.s(dp); });
             uint64_t e = 0; const bool ok = r.emit(true, nullptr, e) && r.emit(false, nullptr, e); r.release();
@@ -150,6 +156,19 @@ int main() {
         }
     }
     // kernel 1 runs only when the key fits 64 bits (else run() takes kernel 0)
+    {   // collapse_site_unsorted against collapse_site on one random site (hash table, radix by barcode) with UMIs one base apart
+        const A::rec::Layout y = A::rec::layout(true, 12, 1u << 22);
+        std::vector<uint64_t> k;
+        for (int i = 0; i < 5000; ++i) { const uint32_t bc = static_cast<uint32_t>(g() % 300) * 13001; uint64_t u = umipool[g() % 8]; if (g() % 3 == 0) u = mut1(u);
+            k.push_back(A::rec::key(y, bc, A::rec::umi_field(u, 12), static_cast<uint8_t>(g() % 3))); }
+        for (int dir = 0; dir < 2; ++dir) {
+            std::vector<uint64_t> a = k, b = k; std::sort(a.begin(), a.end());
+            A::rec::Scratch S; A::rec::Counts ca, cb; std::vector<uint64_t> ea, eb;
+            A::rec::collapse_site(a.data(), a.size(), y, dir, S, ca, [&](uint32_t bc, uint32_t dp, uint32_t ad) { ea.push_back((uint64_t(bc) << 40) | (uint64_t(dp) << 20) | ad); });
+            A::rec::collapse_site_unsorted(b.data(), b.size(), y, dir, S, cb, [&](uint32_t bc, uint32_t dp, uint32_t ad) { eb.push_back((uint64_t(bc) << 40) | (uint64_t(dp) << 20) | ad); });
+            CHECK(ea == eb && ca.molecules == cb.molecules && ca.ambiguous == cb.ambiguous && ca.other == cb.other && !ea.empty(), "unsorted site collapse, directional " << dir);
+        }
+    }
     CHECK(A::rec::layout(true, 12, NBC).ok && A::rec::layout(false, 12, NBC).ok && !A::rec::layout(true, 21, NBC).ok, "key layout");
     fs::remove_all(dir);
     std::cout << (n_fail ? "FAILED " : "OK ") << n_fail << "\n";
