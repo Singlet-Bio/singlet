@@ -26,6 +26,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <fstream>
 #include <string>
 #include <thread>
@@ -105,6 +106,8 @@ struct Params {
     bool defer_build = false;        // keep the counts as triplets; Result::finalize builds the matrices (for the called cells only)
     std::function<void()> progress;  // called (from worker threads) after each contig's discovery and each counting block; the
                                      // engine re-arms its stall watchdog here, since an LCL's pass runs well past an hour
+    std::string spill_dir;           // kernel 1 keeps its merged counts in a file here, unlinked at once, so memory does not grow with them:
+                                     // "" SINGLET_ALLSITE_SPILL_DIR, else TMPDIR, else /tmp; "-" compact bytes in memory
     int kernel = -1;                 // counting kernel: 1 sorted records (allsite_records.h), 0 the per-block hash map; -1: sorted records
                                      // unless SINGLET_ALLSITE_KERNEL=old (A/B). Both give identical counts; keys that do not fit 64 bits use 0.
 };
@@ -263,6 +266,120 @@ inline void finish(Result& res, std::shared_ptr<std::vector<PerTid>> out_sp, uin
         }
     };
     res.release_fn = [out_sp, n_tid]() { auto& out = *out_sp; for (uint32_t t = 0; t < n_tid; ++t) { std::vector<Tri>().swap(out[t].ad); std::vector<Tri>().swap(out[t].dp); } };
+    if (!P.defer_build) res.finalize(nullptr);
+}
+
+// Kernel 1's merged (barcode, site) counts, unit by unit, off the heap: a file in Params::spill_dir, unlinked as soon as it is made so it
+// leaves with the process, or compact strings in memory when no file can be made. A unit's bytes are, per site in row order, the number of
+// barcodes and then per barcode (ascending) the gap from the previous one, DP and AD, all varints. Readers decode unit by unit, so memory
+// stays bounded by one unit per reader whatever the record count.
+struct Spill {
+    struct U { uint64_t off = 0, len = 0; uint32_t row0 = 0, ns = 0; bool mem = false; std::string b; };
+    std::vector<U> u;
+    int fd = -1; uint64_t end = 0, bytes = 0; std::mutex mu; std::string where = "memory";
+    void open(const std::string& want, size_t n_units) {
+        u.assign(n_units, U());
+        std::string dir = want;
+        if (dir.empty()) { const char* e = std::getenv("SINGLET_ALLSITE_SPILL_DIR"); if (!e || !*e) e = std::getenv("TMPDIR"); dir = (e && *e) ? e : "/tmp"; }
+        if (dir == "-") return;
+        std::string path = dir + "/singlet-allsite-XXXXXX";
+        std::vector<char> p(path.begin(), path.end()); p.push_back(0);
+        fd = ::mkstemp(p.data());
+        if (fd >= 0) { ::unlink(p.data()); where = dir; }
+    }
+    void put(size_t i, uint32_t row0, uint32_t ns, std::string& b) {
+        U& x = u[i]; x.row0 = row0; x.ns = ns; x.len = b.size();
+        if (fd >= 0) {
+            uint64_t off; { std::lock_guard<std::mutex> g(mu); off = end; end += b.size(); bytes += b.size(); }
+            size_t done = 0;
+            while (done < b.size()) { const ssize_t w = ::pwrite(fd, b.data() + done, b.size() - done, static_cast<off_t>(off + done)); if (w <= 0) break; done += static_cast<size_t>(w); }
+            if (done == b.size()) { x.off = off; return; }
+        }
+        x.mem = true; x.b.swap(b); std::lock_guard<std::mutex> g(mu); bytes += x.len;
+    }
+    const uint8_t* get(size_t i, std::string& buf) const {
+        const U& x = u[i];
+        if (x.mem) return reinterpret_cast<const uint8_t*>(x.b.data());
+        buf.resize(x.len); size_t done = 0;
+        while (done < x.len) { const ssize_t r = ::pread(fd, &buf[done], x.len - done, static_cast<off_t>(x.off + done)); if (r <= 0) break; done += static_cast<size_t>(r); }
+        if (done != x.len) { std::cerr << "[allsite] FATAL: spill read failed\n"; std::abort(); }
+        return reinterpret_cast<const uint8_t*>(buf.data());
+    }
+    // f(barcode, row, ad, dp) for every entry of unit i, rows ascending
+    template <class F> void each(size_t i, std::string& buf, F&& f) const {
+        const U& x = u[i]; if (!x.len) return;
+        const uint8_t* p = get(i, buf); const uint8_t* e = p + x.len;
+        auto vi = [&]() { uint32_t v = 0; int sh = 0; while (p < e) { const uint8_t c = *p++; v |= static_cast<uint32_t>(c & 127) << sh; if (!(c & 128)) break; sh += 7; } return v; };
+        for (uint32_t s = 0; s < x.ns; ++s) {
+            const uint32_t n = vi(); uint32_t bc = 0;
+            for (uint32_t j = 0; j < n; ++j) { bc += vi(); const uint32_t dp = vi(); const uint32_t ad = vi(); f(bc, x.row0 + s, ad, dp); }
+        }
+    }
+    void clear() { std::lock_guard<std::mutex> g(mu); std::vector<U>().swap(u); if (fd >= 0) { ::close(fd); fd = -1; } }
+    ~Spill() { if (fd >= 0) ::close(fd); }
+    static void put_varint(std::string& o, uint32_t v) { while (v >= 128) { o.push_back(static_cast<char>((v & 127) | 128)); v >>= 7; } o.push_back(static_cast<char>(v)); }
+};
+
+// finish() for kernel 1: the same Result interface read from the spill. The counts are one value per (barcode, site), so prepare only
+// sums the per-site totals and notes the kept barcodes; entries are saturated at 65535 as prepare's merge does. pairs_fn yields the
+// entries site by site (rows ascend across the member, so they ascend within each barcode), which every reader accepts.
+inline void finish_spill(Result& res, std::shared_ptr<std::vector<PerTid>> out_sp, std::shared_ptr<Spill> sp, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {
+    auto& out = *out_sp;
+    for (uint32_t t = 0; t < n_tid; ++t) { for (const auto& s : out[t].sites) res.sites.push_back(s);
+        res.mismatch_obs += out[t].obs; res.molecules += out[t].st.snp_molecules; res.ambiguous += out[t].st.snp_molecules_ambiguous; res.other += out[t].st.snp_molecules_other;
+        res.ad_records += out[t].ad_rec; res.dp_records += out[t].dp_rec; }
+    out_sp.reset();
+    struct Keep { bool prepared = false, all = true; std::vector<uint8_t> v; };
+    auto kp = std::make_shared<Keep>();
+    const unsigned nth = std::max(1u, P.threads);
+    auto kept = [n_barcodes](const Keep& k, uint32_t bc) { return !k.prepared || (bc < n_barcodes && (k.all || (bc < k.v.size() && k.v[bc]))); };
+    res.prepare_fn = [sp, kp, nth, n_barcodes](Result& r, const std::vector<uint8_t>* keep) {
+        const size_t nrow = r.sites.size();
+        r.site_ad.assign(nrow, 0); r.site_dp.assign(nrow, 0); r.kept_ad.assign(nrow, 0); r.kept_dp.assign(nrow, 0);
+        kp->prepared = true; kp->all = keep == nullptr; if (keep) kp->v = *keep; else kp->v.clear();
+        const Keep& k = *kp;
+        std::atomic<size_t> next{0};
+        auto work = [&]() {   // units own disjoint rows
+            std::string buf;
+            for (size_t i; (i = next.fetch_add(1)) < sp->u.size();)
+                sp->each(i, buf, [&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) {
+                    r.site_ad[row] += ad; r.site_dp[row] += dp;
+                    if (bc < n_barcodes && (k.all || (bc < k.v.size() && k.v[bc]))) { r.kept_ad[row] += ad; r.kept_dp[row] += dp; }
+                });
+        };
+        std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work);
+        work(); for (auto& x : th) x.join();
+    };
+    res.pairs_fn = [sp, kp, kept](const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>& f) {
+        std::string buf; const Keep& k = *kp;
+        for (size_t i = 0; i < sp->u.size(); ++i)
+            sp->each(i, buf, [&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) { if (kept(k, bc)) f(bc, row, std::min<uint32_t>(ad, 65535), std::min<uint32_t>(dp, 65535)); });
+    };
+    res.emit_fn = [sp, kp, kept, n_barcodes](Result& r, bool is_ad, const std::vector<uint8_t>* keep_rows, uint64_t& entries) -> bool {
+        auto& m = is_ad ? r.ad : r.dp;
+        m = {}; m.nrows = r.sites.size(); m.ncols = n_barcodes;
+        const Keep& k = *kp; std::string buf;
+        auto use = [&](uint32_t bc, uint32_t row, uint32_t ad) {
+            return bc < n_barcodes && kept(k, bc) && (!is_ad || ad > 0) && (!keep_rows || (row < keep_rows->size() && (*keep_rows)[row])); };
+        std::vector<uint64_t> cnt(static_cast<size_t>(n_barcodes) + 1, 0);
+        entries = 0;
+        for (size_t i = 0; i < sp->u.size(); ++i)
+            sp->each(i, buf, [&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t) { if (use(bc, row, ad)) { ++cnt[bc + 1]; ++entries; } });
+        if (entries >= r.max_entries) {
+            std::cerr << "[allsite] " << (is_ad ? "AD" : "DP") << ": " << entries << " (barcode, site) entries do not fit the int32 column pointers\n";
+            return false;
+        }
+        m.indptr.assign(static_cast<size_t>(n_barcodes) + 1, 0);
+        for (uint32_t c = 0; c < n_barcodes; ++c) { cnt[c + 1] += cnt[c]; m.indptr[c + 1] = static_cast<int32_t>(cnt[c + 1]); }
+        m.indices.resize(entries); m.data.resize(entries);
+        std::vector<int32_t> pos(m.indptr.begin(), m.indptr.end() - 1);
+        for (size_t i = 0; i < sp->u.size(); ++i)   // rows ascend through the units, so they ascend within a column
+            sp->each(i, buf, [&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) {
+                if (!use(bc, row, ad)) return;
+                const int32_t q = pos[bc]++; m.indices[q] = static_cast<int32_t>(row); m.data[q] = static_cast<uint16_t>(std::min<uint32_t>(is_ad ? ad : dp, 65535)); });
+        return true;
+    };
+    res.release_fn = [sp]() { sp->clear(); };
     if (!P.defer_build) res.finalize(nullptr);
 }
 }  // namespace detail
@@ -665,10 +782,13 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     u0[n_tid] = units.size();
     std::vector<uint32_t> uorder(units.size()); for (size_t i = 0; i < units.size(); ++i) uorder[i] = static_cast<uint32_t>(i);
     std::sort(uorder.begin(), uorder.end(), [&](uint32_t a, uint32_t b) { return units[a].w != units[b].w ? units[a].w > units[b].w : a < b; });
-    struct UnitOut { std::vector<Tri> ad, dp; Stats st; uint64_t adr = 0, dpr = 0; };
+    struct UnitOut { Stats st; uint64_t adr = 0, dpr = 0; };
     std::vector<UnitOut> uout(units.size());
+    std::vector<uint32_t> grow0(n_tid + 1, 0);   // the member's first row of each contig
+    for (uint32_t t = 0; t < n_tid; ++t) grow0[t + 1] = grow0[t] + static_cast<uint32_t>(out[t].sites.size());
+    auto sp = std::make_shared<Spill>(); sp->open(P.spill_dir, units.size());
     struct Hit { uint64_t key; uint32_t site; };
-    struct WS { std::vector<Hit> hits; std::vector<uint64_t> keys; std::vector<uint64_t> off; rec::Scratch sc; };
+    struct WS { std::vector<Hit> hits; std::vector<uint64_t> keys; std::vector<uint64_t> off; rec::Scratch sc; std::string enc, site; };
     std::vector<WS> ws(nth);
     ProgressLine pl; std::atomic<uint64_t> done{0};
     pfor(nth, units.size(), [&](size_t ui, unsigned id) {
@@ -712,13 +832,16 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
           for (size_t i = ns; i > 0; --i) w[i] = w[i - 1]; w[0] = 0; }
         const uint64_t v2 = TM ? now_ns() : 0;
         rec::Counts cn;
-        for (size_t i = 0; i < ns; ++i) {
-            const uint32_t row = static_cast<uint32_t>(s0 + i);
+        W.enc.clear();
+        for (size_t i = 0; i < ns; ++i) {   // barcodes come out ascending
+            uint32_t nbc = 0, prev = 0; W.site.clear();
             rec::collapse_site_unsorted(W.keys.data() + W.off[i], W.off[i + 1] - W.off[i], Y, P.directional != 0, W.sc, cn, [&](uint32_t bc, uint32_t dp, uint32_t ad) {
-                o.dp.push_back({bc, row, dp}); o.dpr += dp;
-                if (ad) { o.ad.push_back({bc, row, ad}); o.adr += ad; }
+                Spill::put_varint(W.site, bc - prev); Spill::put_varint(W.site, dp); Spill::put_varint(W.site, ad); prev = bc; ++nbc;
+                o.dpr += dp; o.adr += ad;
             });
+            Spill::put_varint(W.enc, nbc); W.enc += W.site;
         }
+        sp->put(un, grow0[t] + static_cast<uint32_t>(s0), static_cast<uint32_t>(ns), W.enc);
         o.st.snp_molecules = cn.molecules; o.st.snp_molecules_ambiguous = cn.ambiguous; o.st.snp_molecules_other = cn.other;
         if (TM) { g_1 += cn.g1; g_8 += cn.g8; g_64 += cn.g64; g_512 += cn.g512; g_big += cn.gbig; g_m2 += cn.m2; }
         const uint64_t nh = W.hits.size(); n_hits += nh;
@@ -730,16 +853,13 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     std::vector<WS>().swap(ws);
     for (uint32_t t = 0; t < n_tid; ++t) {   // units back in (contig, block) order
         PerTid& pt = out[t];
-        size_t na = 0, nd = 0; for (size_t u = u0[t]; u < u0[t + 1]; ++u) { na += uout[u].ad.size(); nd += uout[u].dp.size(); }
-        pt.ad.reserve(na); pt.dp.reserve(nd);
         for (size_t u = u0[t]; u < u0[t + 1]; ++u) {
-            UnitOut& o = uout[u];
-            pt.ad.insert(pt.ad.end(), o.ad.begin(), o.ad.end()); pt.dp.insert(pt.dp.end(), o.dp.begin(), o.dp.end());
+            const UnitOut& o = uout[u];
             pt.st.snp_molecules += o.st.snp_molecules; pt.st.snp_molecules_ambiguous += o.st.snp_molecules_ambiguous; pt.st.snp_molecules_other += o.st.snp_molecules_other;
             pt.ad_rec += o.adr; pt.dp_rec += o.dpr;
-            std::vector<Tri>().swap(o.ad); std::vector<Tri>().swap(o.dp);
         }
     }
+    if (TM) std::cerr << "[allsite-timing] merged counts: " << sp->bytes << " bytes in " << sp->where << "\n";
     if (TM) {
         const double sec = 1e-9; const uint64_t T_b = now_ns();
         std::cerr << "[allsite-timing] kernel sorted, threads " << nth << ", reads " << res.reads_used << ", units " << units.size() << ", hits " << n_hits.load()
@@ -749,7 +869,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
                   << "; groups (molecules per barcode and site) 1: " << g_1.load() << ", 2-8: " << g_8.load() << ", 9-64: " << g_64.load() << ", 65-512: " << g_512.load()
                   << ", >512: " << g_big.load() << ", sum m^2 (m >= 2) " << g_m2.load() << "\n";
     }
-    finish(res, out_sp, n_tid, n_barcodes, P);
+    finish_spill(res, out_sp, sp, n_tid, n_barcodes, P);
     return res;
 }
 

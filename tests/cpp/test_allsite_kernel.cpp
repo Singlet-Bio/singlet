@@ -4,6 +4,8 @@
 // and deleted alignments on both strands, secondary alignments, low MAPQ, chrM, barcodes outside the set, UMI collisions one base apart,
 // a (barcode, site) with more than 512 UMIs (the indexed directional path) and a molecule with more than 255 reads (saturated counts).
 
+#include <array>
+#include <unordered_map>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -134,11 +136,17 @@ int main() {
         for (int kernel : {0, 1}) for (unsigned th : {1u, 2u, 3u, 8u}) for (uint64_t bh : {uint64_t(300), uint64_t(8000000)}) {
             if (kernel == 0 && (th != 1 || bh != 300)) continue;
             A::Params P; P.min_mapq = 20; P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = 2; P.skip_n = c.skip_n;
-            P.umi_dedup = c.umi_dedup; P.umi_len = c.umi_len; P.directional = c.directional; P.threads = th; P.block_hits = bh; P.kernel = kernel;
+            P.umi_dedup = c.umi_dedup; P.umi_len = c.umi_len; P.directional = c.directional; P.threads = th; P.block_hits = bh; P.kernel = kernel; P.spill_dir = th == 2 ? "-" : "";
             P.defer_build = true;
             A::Result r = A::run(rec, G, 3, nbc, P);
             r.prepare(nullptr);
-            A::replay::Fnv fp; r.for_each_pair([&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) { fp.s(bc); fp.s(row); fp.s(ad); fp.s(dp); });
+            // the pairs as a set (kernel 0 gives them barcode by barcode within a contig, kernel 1 site by site); rows ascend within a barcode
+            std::vector<std::array<uint32_t, 4>> pv; std::unordered_map<uint32_t, uint32_t> last; bool asc = true;
+            r.for_each_pair([&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) {
+                pv.push_back({bc, row, ad, dp}); auto it = last.find(bc); if (it != last.end() && it->second >= row) asc = false; last[bc] = row; });
+            std::sort(pv.begin(), pv.end());
+            A::replay::Fnv fp; for (const auto& q : pv) { fp.s(q[0]); fp.s(q[1]); fp.s(q[2]); fp.s(q[3]); }
+            CHECK(asc, "rows ascend within each barcode");
             uint64_t e = 0; const bool ok = r.emit(true, nullptr, e) && r.emit(false, nullptr, e); r.release();
             const std::string d = A::replay::digest(r), pd = std::to_string(fp.h);
             const std::string tag = "umi_dedup " + std::to_string(c.umi_dedup) + " umi_len " + std::to_string(c.umi_len) + " directional " + std::to_string(c.directional)
