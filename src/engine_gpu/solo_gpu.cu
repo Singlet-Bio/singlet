@@ -1330,12 +1330,13 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
     const double inBytes = kN * 20.0 + kR * (double)sizeof(RecAnn);
 
     // Where Solo runs. One shot on the device when its working set fits in what is free now (the kept inputs included when they are still on the
-    // host) and nothing asks otherwise. In two passes over read chunks (soloRunTwoPass: device memory independent of the number of reads) when it
-    // does not fit, when the reads are past the one-shot path's 2^31 - 2, when the one-shot path runs out of memory after all, or when
-    // SINGLET_SOLO_CHUNK (reads per chunk), SINGLET_SOLO_BUCKET (keys per bucket) or SINGLET_SOLO_BUCKETS (about this many buckets) is set. On the
-    // host with the same source (E9: soloRun(false), OpenMP loops and parallel sorts, the same counts) only as the last resort, when even the
-    // two-pass path cannot get its memory, or when SINGLET_SOLO_HOST=1 says so; it runs from the host copies of the kept inputs.
-    std::string hostWhy, twoWhy;
+    // host) and nothing asks otherwise. In two passes over read chunks (soloRunTwoPass: chunks sized from free device memory) when it does not
+    // fit, at the one-shot path's 2^31 - 2 edge, when the one-shot path runs out of memory after all, or when SINGLET_SOLO_CHUNK (reads per
+    // chunk), SINGLET_SOLO_BUCKET (keys per bucket) or SINGLET_SOLO_BUCKETS (about this many buckets) is set. On the host with the same source
+    // (E9: soloRun(false), OpenMP loops and parallel sorts, the same counts) when even the two-pass path cannot get its memory, when
+    // SINGLET_SOLO_HOST=1 says so, or past 2^31 - 1 reads (the depth the device paths are proven at); it runs from the host copies of the kept
+    // inputs. Each path writes one stderr line naming itself and the reason.
+    std::string hostWhy, twoWhy, oneWhy = "the free device memory could not be read";
     u64 envChunk = 0, envBucket = 0, envBuckets = 0;
     const bool setChunk = envU64("SINGLET_SOLO_CHUNK", envChunk) && envChunk > 0;
     const bool setBucket = envU64("SINGLET_SOLO_BUCKET", envBucket) && envBucket > 0;
@@ -1347,11 +1348,15 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
         const double need = (double)soloDeviceNeed(kN, nHost, M) + (K.onHost ? inBytes : 0.0);
         const char* fh = getenv("SINGLET_SOLO_HOST");
         if (fh && fh[0] == '1') hostWhy = "SINGLET_SOLO_HOST=1";
+        else if (kN > 0x7fffffffULL) hostWhy = std::to_string(kN) + " reads are past the device paths' 2^31 - 1";
         else if (setChunk || setBucket || setBuckets) twoWhy = "SINGLET_SOLO_CHUNK, _BUCKET or _BUCKETS is set";
         else if (kN + 1 >= 0x7fffffffULL) twoWhy = std::to_string(kN) + " reads are past the one-shot path's 2^31 - 2";
         else if (gotFree && need > 0.97 * (double)fr) {
             snprintf(lb, sizeof lb, "the one-shot device path needs about %.1f GB and %.1f GB are free (%.0f M reads)", need / 1e9, fr / 1e9, kN / 1e6);
             twoWhy = lb;
+        } else if (gotFree) {
+            snprintf(lb, sizeof lb, "needs about %.1f GB, %.1f GB free, %.0f M reads", need / 1e9, fr / 1e9, kN / 1e6);
+            oneWhy = lb;
         }
     }
 
@@ -1468,7 +1473,7 @@ bool soloRunKept(int device, const SoloParams& S, const SoloModel& M, u64 nHost,
     }
     out.nRecOverflow = K.nOverflow;
     if (ok) {
-        fprintf(stderr, "[engine_gpu] Solo path: one shot on the device, 1 chunk, 1 bucket\n");
+        fprintf(stderr, "[engine_gpu] Solo path: one shot on the device, 1 chunk, 1 bucket (%s)\n", oneWhy.c_str());
         fflush(stderr);
     }
     soloKeepRelease();
