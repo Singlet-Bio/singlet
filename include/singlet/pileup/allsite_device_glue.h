@@ -25,7 +25,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
     const auto t0 = std::chrono::steady_clock::now();
     dev::Input in;
     in.min_alt_molecules = P.min_alt_molecules; in.min_alt_cells = P.min_alt_cells; in.use_qual = P.use_qual; in.skip_n = P.skip_n;
-    in.directional = P.directional; in.umi_len = P.umi_len; in.n_barcodes = n_barcodes; in.progress = P.progress;
+    in.directional = P.directional; in.umi_len = P.umi_len; in.n_barcodes = n_barcodes; in.threads = std::max(1u, P.threads); in.progress = P.progress;
     std::vector<uint32_t> ctid;
     for (uint32_t oi = 0; oi < n_tid; ++oi) { const uint32_t t = order[oi]; if (cnt[t + 1] > cnt[t]) ctid.push_back(t); }
     if (ctid.empty()) return false;

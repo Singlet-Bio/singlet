@@ -24,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "singlet/engine_gpu.h"
@@ -279,23 +280,39 @@ struct GOut { u32 bc, row, dp, ad; };
 __global__ void kGroups(const u64* ehi, const u32* gS, const int* nE_, const int* nG_, const u32* par, const u32* agg,
                         u32 s0, const u32* sOff, u32 nC, int bcBits, GOut* go, u8* fdp, u8* fad, u64* stat) {
     const int nE = *nE_, nG = *nG_;
-    const int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= nG) return;
-    const u32 e0 = gS[g], e1 = g + 1 < nG ? gS[g + 1] : (u32) nE;
+    const int g = blockIdx.x * blockDim.x + threadIdx.x;
     u32 dp = 0, ad = 0, amb = 0, oth = 0;
-    for (u32 e = e0; e < e1; ++e) {
-        if (par[e] != e) continue;
-        const u32* n = agg + 3 * (size_t) e;
-        int best = 0; for (int c = 1; c < 3; ++c) if (n[c] > n[best]) best = c;
-        bool tie = false; for (int c = 0; c < 3; ++c) if (c != best && n[c] == n[best]) tie = true;
-        if (tie) ++amb; else if (best == 2) ++oth; else { ++dp; if (best == 1) ++ad; }
+    if (g < nG) {
+        const u32 e0 = gS[g], e1 = g + 1 < nG ? gS[g + 1] : (u32) nE;
+        for (u32 e = e0; e < e1; ++e) {
+            if (par[e] != e) continue;
+            const u32* n = agg + 3 * (size_t) e;
+            int best = 0; for (int c = 1; c < 3; ++c) if (n[c] > n[best]) best = c;
+            bool tie = false; for (int c = 0; c < 3; ++c) if (c != best && n[c] == n[best]) tie = true;
+            if (tie) ++amb; else if (best == 2) ++oth; else { ++dp; if (best == 1) ++ad; }
+        }
+        const u64 h = ehi[e0];
+        const u32 s = s0 + (u32) (h >> bcBits);
+        u32 a = 0, b = nC; while (a + 1 < b) { const u32 m = (a + b) >> 1; if (sOff[m] <= s) a = m; else b = m; }   // the site's contig
+        go[g] = GOut{(u32) (h & ((1ull << bcBits) - 1)), s - sOff[a], dp, ad};
+        fdp[g] = dp > 0; fad[g] = ad > 0;
     }
-    if (amb) atomicAdd(&stat[0], (u64) amb);
-    if (oth) atomicAdd(&stat[1], (u64) oth);
-    const u64 h = ehi[e0];
-    const u32 s = s0 + (u32) (h >> bcBits);
-    u32 a = 0, b = nC; while (a + 1 < b) { const u32 m = (a + b) >> 1; if (sOff[m] <= s) a = m; else b = m; }   // the site's contig
-    go[g] = GOut{(u32) (h & ((1ull << bcBits) - 1)), s - sOff[a], dp, ad};
-    fdp[g] = dp > 0; fad[g] = ad > 0;
+    u64 v[4] = {amb, oth, dp, ad};   // warp sums, one atomic per warp and counter
+    for (int k = 0; k < 4; ++k) {
+        for (int o = 16; o > 0; o >>= 1) v[k] += __shfl_down_sync(0xffffffffu, v[k], o);
+        if ((threadIdx.x & 31) == 0 && v[k]) atomicAdd((unsigned long long*) &stat[k], (unsigned long long) v[k]);
+    }
+}
+// per group g: dp and ad flags packed as (ad << 32 | dp), and 0 at g == nG, for one exclusive scan giving both output offsets
+struct FlagPair { const u8* fdp; const u8* fad; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? ((u64) fad[i] << 32) | fdp[i] : 0ull; } };
+__global__ void kPick(const u64* pre, const u32* idx, u32 nq, u64* outv) {
+    const u32 q = blockIdx.x * blockDim.x + threadIdx.x; if (q < nq) outv[q] = pre[idx[q]];
+}
+__global__ void kScatter(const GOut* go, const u8* fdp, const u8* fad, const u64* pre, const int* nG_, AD::Count* dpo, AD::Count* ado) {
+    const int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= *nG_) return;
+    const GOut x = go[g]; const u64 p = pre[g];
+    if (fdp[g]) { AD::Count* d = dpo + (u32) p; d->cell = x.bc; d->row = x.row; d->val = x.dp; }
+    if (fad[g]) { AD::Count* d = ado + (u32) (p >> 32); d->cell = x.bc; d->row = x.row; d->val = x.ad; }
 }
 __global__ void kFirstGroupOfSite(const u64* ehi, const u32* gS, const int* nG_, const u32* sites, u32 nq, u32 s0, int bcBits, u32* outIdx) {
     const u32 q = blockIdx.x * blockDim.x + threadIdx.x; if (q >= nq) return;
@@ -308,9 +325,55 @@ __global__ void kFirstGroupOfSite(const u64* ehi, const u32* gS, const int* nG_,
 struct ToU64 { const u32* c; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? (u64) c[i] : 0ull; } };
 struct ShrOp { int s; __host__ __device__ u64 operator()(u64 v) const { return v >> s; } };
 struct U8ToU32 { __host__ __device__ u32 operator()(u8 v) const { return v; } };
-struct TriOut { u32 cell, row, val; };
-struct DpTri { __host__ __device__ TriOut operator()(const GOut& g) const { return TriOut{g.bc, g.row, g.dp}; } };
-struct AdTri { __host__ __device__ TriOut operator()(const GOut& g) const { return TriOut{g.bc, g.row, g.ad}; } };
+// Device to host through two pinned slices: the device fills one while host threads copy the other out
+struct PinnedCopy {
+    size_t SL = 64ull << 20, minPer = 4ull << 20;   // test knob SINGLET_ALLSITE_GPU_SLICE_KB shrinks both
+    char* buf = nullptr; cudaEvent_t ev[2] = {nullptr, nullptr}; unsigned nth = 1; size_t turn = 0;
+    void init(unsigned th) {
+        nth = std::max(1u, std::min(th, 16u));
+        if (const char* k = std::getenv("SINGLET_ALLSITE_GPU_SLICE_KB")) { SL = std::max<size_t>(1, std::strtoull(k, nullptr, 10)) << 10; minPer = 256; }
+        if (cudaMallocHost(&buf, 2 * SL) != cudaSuccess) { buf = nullptr; cudaGetLastError(); return; }
+        for (auto& e : ev) if (cudaEventCreateWithFlags(&e, cudaEventDisableTiming) != cudaSuccess) { release(); cudaGetLastError(); return; }
+    }
+    void release() { for (auto& e : ev) if (e) { cudaEventDestroy(e); e = nullptr; } if (buf) { cudaFreeHost(buf); buf = nullptr; } }
+    void pcopy(char* d, const char* s, size_t n) const {
+        const unsigned t = (unsigned) std::min<size_t>(nth, n / minPer);
+        if (t <= 1) { std::memcpy(d, s, n); return; }
+        const size_t per = (n / t + 63) & ~size_t(63);
+        std::vector<std::thread> th;
+        for (unsigned i = 1; i < t; ++i) { const size_t a = i * per; if (a >= n) break; th.emplace_back([=] { std::memcpy(d + a, s + a, std::min(per, n - a)); }); }
+        std::memcpy(d, s, std::min(per, n));
+        for (auto& x : th) x.join();
+    }
+    void drain() { for (auto& e : ev) if (e) AS_CK(cudaEventSynchronize(e)); }
+    void up(void* dst, const void* src, size_t bytes, cudaStream_t st) {   // host to device; the caller syncs the stream before reading dst
+        if (!bytes) return;
+        if (!buf) { AS_CK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyHostToDevice, st)); return; }
+        char* d = (char*) dst; const char* s = (const char*) src;
+        for (size_t k = 0, n = (bytes + SL - 1) / SL; k < n; ++k) {
+            const size_t len = std::min(SL, bytes - k * SL);
+            const int slot = (int) (turn++ & 1);
+            AS_CK(cudaEventSynchronize(ev[slot]));   // the slot's last transfer is done (an unrecorded event returns at once)
+            pcopy(buf + slot * SL, s + k * SL, len);
+            AS_CK(cudaMemcpyAsync(d + k * SL, buf + slot * SL, len, cudaMemcpyHostToDevice, st));
+            AS_CK(cudaEventRecord(ev[slot], st));
+        }
+    }
+    void copy(void* dst, const void* src, size_t bytes, cudaStream_t st) {
+        if (!bytes) return;
+        if (buf) drain();
+        if (!buf) { AS_CK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st)); return; }
+        char* d = (char*) dst; const char* s = (const char*) src;
+        const size_t n = (bytes + SL - 1) / SL;
+        for (size_t k = 0; k <= n; ++k) {
+            if (k < n) {   // slot k & 1 was emptied by the host in step k - 1
+                AS_CK(cudaMemcpyAsync(buf + (k & 1) * SL, s + k * SL, std::min(SL, bytes - k * SL), cudaMemcpyDeviceToHost, st));
+                AS_CK(cudaEventRecord(ev[k & 1], st));
+            }
+            if (k > 0) { const size_t j = k - 1; AS_CK(cudaEventSynchronize(ev[j & 1])); pcopy(d + j * SL, buf + (j & 1) * SL, std::min(SL, bytes - j * SL)); }
+        }
+    }
+};
 
 inline unsigned gridFor(u64 n, unsigned b = 256) { return (unsigned) std::max<u64>(1, (n + b - 1) / b); }
 
@@ -341,8 +404,11 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
     struct Free { Arena& a; ~Free() { if (a.base) cudaFree(a.base); } } freeA{A};
     cudaStream_t st = nullptr;
     struct SFree { cudaStream_t& s; ~SFree() { if (s) cudaStreamDestroy(s); } } freeS{st};
+    PinnedCopy d2h;
+    struct PFree { PinnedCopy& p; ~PFree() { p.release(); } } freeP{d2h};
     try {
         AS_CK(cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking));
+        d2h.init(in.threads);
         size_t fr = 0, tot = 0;
         AS_CK(cudaMemGetInfo(&fr, &tot));
         double frac = 0.6, maxGB = 24.0;
@@ -384,7 +450,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         std::unique_ptr<AD::Read[]> hR(new AD::Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
         std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<uint64_t[]> hQ(new uint64_t[mxQ + 1]);
 
-        u64 stat[2] = {0, 0};
+        u64 stat[4] = {0, 0, 0, 0};
         const bool TM = std::getenv("SINGLET_ALLSITE_GPU_TIMING") != nullptr;
         auto tStage = std::chrono::steady_clock::now();
         auto stage = [&](double& acc) { if (!TM) return; AS_CK(cudaStreamSynchronize(st)); const auto t = std::chrono::steady_clock::now();
@@ -406,19 +472,19 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             auto tu = std::chrono::steady_clock::now();
             AD::Read* dR = A.get<AD::Read>(nR); u32* dO = A.get<u32>(nO + 1); u8* dS = A.get<u8>(nS + 1); u64* dQ = A.get<u64>(nQ + 1);
             u8* dRef = A.get<u8>(refOff[nC] + 1); u64* dRefOff = A.get<u64>(nC + 1); u64* dRefLen = A.get<u64>(nC + 1);
-            AS_CK(cudaMemcpyAsync(dR, hR.get(), nR * sizeof(AD::Read), cudaMemcpyHostToDevice, st));
-            if (nO) AS_CK(cudaMemcpyAsync(dO, hO.get(), nO * 4, cudaMemcpyHostToDevice, st));
-            if (nS) AS_CK(cudaMemcpyAsync(dS, hS.get(), nS, cudaMemcpyHostToDevice, st));
-            if (nQ) AS_CK(cudaMemcpyAsync(dQ, hQ.get(), nQ * 8, cudaMemcpyHostToDevice, st));
-            for (u32 c = c0; c < c1; ++c) if (refLen[c - c0]) AS_CK(cudaMemcpyAsync(dRef + refOff[c - c0], in.contigs[c].ref, refLen[c - c0], cudaMemcpyHostToDevice, st));
+            d2h.up(dR, hR.get(), nR * sizeof(AD::Read), st);
+            d2h.up(dO, hO.get(), (size_t) nO * 4, st);
+            d2h.up(dS, hS.get(), (size_t) nS, st);
+            d2h.up(dQ, hQ.get(), (size_t) nQ * 8, st);
+            for (u32 c = c0; c < c1; ++c) if (refLen[c - c0]) d2h.up(dRef + refOff[c - c0], in.contigs[c].ref, refLen[c - c0], st);
             AS_CK(cudaMemcpyAsync(dRefOff, refOff.data(), (nC + 1) * 8, cudaMemcpyHostToDevice, st));
             AS_CK(cudaMemcpyAsync(dRefLen, refLen.data(), nC * 8, cudaMemcpyHostToDevice, st));
             AS_CK(cudaStreamSynchronize(st));
             out.sec_upload += secSince(tu);
             ChunkV C{dR, dO, dS, dQ, dRef, dRefOff, dRefLen, in.skip_n, in.use_qual};
             u32* dCnt = A.get<u32>(nR + 1); u64* dOff = A.get<u64>(nR + 1); u32* dRf = A.get<u32>(nR + 1); u32* dRl = A.get<u32>(nR + 1);
-            int* dNum = A.get<int>(4); u64* dStat = A.get<u64>(2);
-            AS_CK(cudaMemsetAsync(dStat, 0, 16, st));
+            int* dNum = A.get<int>(4); u64* dStat = A.get<u64>(4);
+            AS_CK(cudaMemsetAsync(dStat, 0, 32, st));
             auto scanCounts = [&](u64& total) {   // dOff = exclusive prefix of dCnt over [0, n], total = dOff[n]
                 cub::CountingInputIterator<u64> ci(0);
                 cub::TransformInputIterator<u64, ToU64, cub::CountingInputIterator<u64>> it(ci, ToU64{dCnt, n});
@@ -566,46 +632,52 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 AS_CK(cudaMemsetAsync(agg, 0, 3 * (size_t) nE * 4, st));
                 kRootAgg<<<gridFor(nE), 256, 0, st>>>(par, en, dNum, agg);
                                 stage(out.sec_r9);
-                GOut* go = A.get<GOut>(nG); TriOut* tri = A.get<TriOut>(nG); u8* fad = A.get<u8>(nG);
+                GOut* go = A.get<GOut>(nG); u8* fad = A.get<u8>(nG);
                 kGroups<<<gridFor(nG), 256, 0, st>>>(ehi, gS, dNum, dNum + 1, par, agg, s0, dSoff, nC, bcBits, go, f8, fad, dStat);
-                // per contig of the block: its groups [first group of the contig's first site, ...), selected into DP and AD triplets
+                // one exclusive scan of the (AD, DP) flag pair gives every group's output slot; the contigs of the block split the
+                // selected records at the scan's value at their first group
                 std::vector<u32> cs;   // the contigs whose site ranges meet [s0, s1)
                 for (u32 c = 0; c < nC; ++c) if (sOff[c] < s1 && sOff[c + 1] > s0 && sOff[c + 1] > sOff[c]) cs.push_back(c);
                 std::vector<u32> q; for (u32 c : cs) q.push_back(std::max(sOff[c], s0));
                 q.push_back(s1);
-                u32* dq = A.get<u32>(q.size()); u32* dqi = A.get<u32>(q.size());
-                AS_CK(cudaMemcpyAsync(dq, q.data(), q.size() * 4, cudaMemcpyHostToDevice, st));
-                kFirstGroupOfSite<<<gridFor(q.size()), 256, 0, st>>>(ehi, gS, dNum + 1, dq, (u32) q.size(), s0, bcBits, dqi);
-                std::vector<u32> qi(q.size());
-                AS_CK(cudaMemcpyAsync(qi.data(), dqi, q.size() * 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
-                for (size_t z = 0; z < cs.size(); ++z) {
-                    const u32 ga = qi[z], gb = qi[z + 1]; if (gb <= ga) continue;
-                    AD::ContigOut& co = out.contigs[c0 + cs[z]];
-                    for (int w = 0; w < 2; ++w) {
-                        const u8* fl = w == 0 ? f8 : fad;
-                        size_t ts = 0;
-                        if (w == 0) { cub::TransformInputIterator<TriOut, DpTri, const GOut*> it(go + ga, DpTri{}); AS_CK(cub::DeviceSelect::Flagged(nullptr, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
-                        else { cub::TransformInputIterator<TriOut, AdTri, const GOut*> it(go + ga, AdTri{}); AS_CK(cub::DeviceSelect::Flagged(nullptr, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
-                        tm = A.top; tmp = A.get<char>(ts);
-                        if (w == 0) { cub::TransformInputIterator<TriOut, DpTri, const GOut*> it(go + ga, DpTri{}); AS_CK(cub::DeviceSelect::Flagged(tmp, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
-                        else { cub::TransformInputIterator<TriOut, AdTri, const GOut*> it(go + ga, AdTri{}); AS_CK(cub::DeviceSelect::Flagged(tmp, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
-                        A.top = tm;
-                        int ns = 0; AS_CK(cudaMemcpyAsync(&ns, dNum + 2, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
-                        if (ns == 0) continue;
-                        std::vector<AD::Count>& dst = w == 0 ? co.dp : co.ad;
-                        const size_t base = dst.size(); dst.resize(base + ns);
-                        static_assert(sizeof(AD::Count) == sizeof(TriOut), "AD::Count and TriOut share one layout");
-                        AS_CK(cudaMemcpyAsync(dst.data() + base, tri, ns * sizeof(TriOut), cudaMemcpyDeviceToHost, st));
-                        AS_CK(cudaStreamSynchronize(st));
-                        u64 sum = 0; for (size_t z2 = base; z2 < dst.size(); ++z2) sum += dst[z2].val;
-                        (w == 0 ? out.molecules : out.ad_molecules) += sum;
+                const u32 nq = (u32) q.size();
+                u32* dq = A.get<u32>(nq); u32* dqi = A.get<u32>(nq); u64* dqv = A.get<u64>(nq);
+                u64* pre = A.get<u64>((size_t) nG + 1);
+                AS_CK(cudaMemcpyAsync(dq, q.data(), nq * 4, cudaMemcpyHostToDevice, st));
+                kFirstGroupOfSite<<<gridFor(nq), 256, 0, st>>>(ehi, gS, dNum + 1, dq, nq, s0, bcBits, dqi);
+                {
+                    cub::TransformInputIterator<u64, FlagPair, cub::CountingInputIterator<u64>> fp(cub::CountingInputIterator<u64>(0), FlagPair{f8, fad, (u32) nG});
+                    size_t ts = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, ts, fp, pre, nG + 1, st));
+                    tm = A.top; tmp = A.get<char>(ts);
+                    AS_CK(cub::DeviceScan::ExclusiveSum(tmp, ts, fp, pre, nG + 1, st)); A.top = tm;
+                }
+                kPick<<<gridFor(nq), 256, 0, st>>>(pre, dqi, nq, dqv);
+                std::vector<u64> qv(nq);
+                AS_CK(cudaMemcpyAsync(qv.data(), dqv, nq * 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                const u32 nDp = (u32) qv[nq - 1], nAd = (u32) (qv[nq - 1] >> 32);
+                AD::Count* dpo = A.get<AD::Count>(std::max<u32>(nDp, 1)); AD::Count* ado = A.get<AD::Count>(std::max<u32>(nAd, 1));
+                kScatter<<<gridFor(nG), 256, 0, st>>>(go, f8, fad, pre, dNum + 1, dpo, ado);
+                for (int w = 0; w < 2; ++w) {
+                    const AD::Count* src = w == 0 ? dpo : ado;
+                    for (size_t z = 0; z < cs.size(); ++z) {
+                        const u32 c = cs[z];
+                        const u32 ra = w == 0 ? (u32) qv[z] : (u32) (qv[z] >> 32), rb = w == 0 ? (u32) qv[z + 1] : (u32) (qv[z + 1] >> 32);
+                        if (rb <= ra) continue;
+                        std::vector<AD::Count>& dst = w == 0 ? out.contigs[c0 + c].dp : out.contigs[c0 + c].ad;
+                        const size_t base = dst.size(), ns = rb - ra;
+                        if (base + ns > dst.capacity() && sOff[c + 1] > s1) {   // the contig goes on past this block: reserve in proportion to its sites
+                            const double f = double(sOff[c + 1] - sOff[c]) / double(s1 - sOff[c]);
+                            dst.reserve((size_t) (double(base + ns) * f * 1.1) + 1024);
+                        }
+                        dst.resize(base + ns);   // Count's empty constructor: no zero fill
+                        d2h.copy(dst.data() + base, src + ra, ns * sizeof(AD::Count), st);
                     }
                 }
                 stage(out.sec_out);
                 if (in.progress) in.progress();
             }
-            AS_CK(cudaMemcpyAsync(stat, dStat, 16, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
-            out.ambiguous += stat[0]; out.other += stat[1];
+            AS_CK(cudaMemcpyAsync(stat, dStat, 32, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+            out.ambiguous += stat[0]; out.other += stat[1]; out.molecules += stat[2]; out.ad_molecules += stat[3];
             out.sec_count += secSince(tc);
             A.top = mark0;
         }

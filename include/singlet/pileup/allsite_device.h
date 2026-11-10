@@ -38,7 +38,11 @@ struct Contig {           // one contig with reads, in the order the host gather
     const uint8_t* ref = nullptr; uint64_t ref_len = 0;   // reference bases (STAR Genome bytes: 0-3 ACGT, else N)
 };
 
-struct Count { uint32_t cell, row, val; };   // one (barcode, site) entry: row is the site's index within its contig, val its molecules
+struct Count {   // trivially copyable; the empty default constructor lets the device route grow vectors without zero-filling them
+    uint32_t cell, row, val;
+    Count() {}
+    Count(uint32_t c, uint32_t r, uint32_t v) : cell(c), row(r), val(v) {}
+};   // one (barcode, site) entry: row is the site's index within its contig, val its molecules
 
 struct ContigOut {
     std::vector<int32_t> pos; std::vector<uint8_t> ref, alt; std::vector<uint32_t> mol, cells;   // sites, by position
@@ -53,6 +57,7 @@ struct Input {
     std::function<void()> progress;
     int min_alt_molecules = 2, min_alt_cells = 2, use_qual = 0, skip_n = 0, directional = 1, umi_len = 12;
     uint32_t n_barcodes = 0;
+    unsigned threads = 1;   // host threads for copying the results out
 };
 
 struct Output {
