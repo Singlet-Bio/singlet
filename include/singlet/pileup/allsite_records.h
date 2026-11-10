@@ -63,7 +63,8 @@ struct Ent { uint64_t umi; uint32_t bc, reads; uint32_t n[3]; };
 
 struct Scratch {
     std::vector<Ent> e, e2;
-    std::vector<uint32_t> root, merged;
+    std::vector<uint32_t> root, merged, hi;
+    std::vector<uint64_t> hk;
     struct Slot { uint64_t k; uint32_t stamp; uint8_t c[3]; };
     struct BSlot { uint32_t bc, stamp, head, n; };
     std::vector<Slot> tab;
@@ -73,8 +74,10 @@ struct Scratch {
 };
 
 // The group interface: the molecules of one (barcode, site), in any order. Adds the barcode's REF-or-ALT molecules to dp (ALT ones to ad)
-// and every molecule to st, as SnpConsensus::finalize with R9 (r9_molecules without a gene store): UMIs by reads descending then UMI,
-// directional roots, class counts summed per root, strict-majority vote.
+// and every molecule to st, as SnpConsensus::finalize with R9 (r9_molecules without a gene store, umi3_directional_roots). R9 joins UMI j
+// to an earlier UMI i (reads descending, then UMI) when they differ at one base and reads_i >= 2 reads_j - 1. With that order the rule is
+// symmetric (the larger count against the smaller), and the molecules are the connected components of these joins, whatever the order
+// of the joins; so no sort is needed. Class counts are summed per component and each component takes the strict-majority vote.
 inline void collapse_group(Ent* p, size_t m, bool directional, Scratch& S, Counts& st, uint32_t& dp, uint32_t& ad) {
     auto vote = [&](const uint32_t* c) {
         uint8_t best = 0;
@@ -85,11 +88,43 @@ inline void collapse_group(Ent* p, size_t m, bool directional, Scratch& S, Count
     };
     if (m == 1) ++st.g1; else { (m <= 8 ? st.g8 : m <= 64 ? st.g64 : m <= 512 ? st.g512 : st.gbig)++; st.m2 += static_cast<uint64_t>(m) * m; }
     if (m == 1 || !directional) { for (size_t i = 0; i < m; ++i) vote(p[i].n); return; }
-    std::sort(p, p + m, [](const Ent& a, const Ent& b) { return a.reads != b.reads ? a.reads > b.reads : a.umi < b.umi; });
-    umi3_directional_roots(m, [&](size_t i) { return p[i].umi; }, [&](size_t i) { return p[i].reads; }, S.root);
+    constexpr uint64_t kGroups = 0x1249249249249249ULL;   // the low bit of every 3-bit base
+    auto one_mm = [](uint64_t a, uint64_t b) { const uint64_t d = a ^ b; const uint64_t x = (d | (d >> 1) | (d >> 2)) & kGroups; return x != 0 && (x & (x - 1)) == 0; };
+    auto counts_ok = [&](size_t a, size_t b) { const uint32_t ca = p[a].reads, cb = p[b].reads; return ca >= cb ? ca + 1 >= 2 * cb : cb + 1 >= 2 * ca; };
+    if (m == 2) {
+        if (one_mm(p[0].umi, p[1].umi) && counts_ok(0, 1)) { const uint32_t c[3] = {p[0].n[0] + p[1].n[0], p[0].n[1] + p[1].n[1], p[0].n[2] + p[1].n[2]}; vote(c); }
+        else { vote(p[0].n); vote(p[1].n); }
+        return;
+    }
+    auto& root = S.root; root.resize(m);
+    for (size_t i = 0; i < m; ++i) root[i] = static_cast<uint32_t>(i);
+    auto find = [&](uint32_t x) { while (root[x] != x) { root[x] = root[root[x]]; x = root[x]; } return x; };
+    auto join = [&](size_t a, size_t b) { const uint32_t ra = find(static_cast<uint32_t>(a)), rb = find(static_cast<uint32_t>(b)); if (ra != rb) root[std::max(ra, rb)] = std::min(ra, rb); };
+    if (m <= 256) {
+        for (size_t i = 0; i + 1 < m; ++i) { const uint64_t u = p[i].umi;
+            for (size_t j = i + 1; j < m; ++j) if (one_mm(u, p[j].umi) && counts_ok(i, j)) join(i, j); }
+    } else {   // each UMI's single-base neighbours looked up in a hash of the group's UMIs (codes 0-4: A C G T and N/other)
+        int bits = 4; while ((1ull << bits) < 2 * m) ++bits;
+        const size_t mask = (size_t(1) << bits) - 1;
+        S.hk.assign(mask + 1, 0); S.hi.resize(mask + 1);
+        auto slot = [&](uint64_t u) { size_t h = static_cast<size_t>((u * 0x9E3779B97F4A7C15ull) >> (64 - bits)); while (S.hk[h] && S.hk[h] != u) h = (h + 1) & mask; return h; };
+        for (size_t i = 0; i < m; ++i) { const size_t h = slot(p[i].umi); S.hk[h] = p[i].umi; S.hi[h] = static_cast<uint32_t>(i); }
+        const int L = (63 - __builtin_clzll(p[0].umi)) / 3;
+        for (size_t i = 0; i < m; ++i) {
+            const uint64_t u = p[i].umi;
+            for (int q = 0; q < L; ++q) {
+                const uint64_t cur = (u >> (3 * q)) & 7;
+                for (uint64_t b = 0; b < 5; ++b) {
+                    if (b == cur) continue;
+                    const size_t h = slot(u ^ ((cur ^ b) << (3 * q)));
+                    if (S.hk[h] && S.hi[h] > i && counts_ok(i, S.hi[h])) join(i, S.hi[h]);
+                }
+            }
+        }
+    }
     S.merged.assign(3 * m, 0);
-    for (size_t i = 0; i < m; ++i) for (int j = 0; j < 3; ++j) S.merged[3 * S.root[i] + j] += p[i].n[j];
-    for (size_t i = 0; i < m; ++i) if (S.root[i] == i) vote(&S.merged[3 * i]);
+    for (size_t i = 0; i < m; ++i) { const uint32_t r = find(static_cast<uint32_t>(i)); for (int j = 0; j < 3; ++j) S.merged[3 * r + j] += p[i].n[j]; }
+    for (size_t i = 0; i < m; ++i) if (root[i] == i) vote(&S.merged[3 * i]);
 }
 
 // One site's keys k[0, n), sorted ascending. emit(bc, dp, ad) once per barcode with at least one REF or ALT molecule (dp >= 1, ad <= dp).
