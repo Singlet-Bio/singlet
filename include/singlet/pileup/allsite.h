@@ -139,6 +139,11 @@ struct Result {
     // contigs) and by barcode then row within one. The delta store (allsite_store.h) reads the member through this.
     std::function<void(const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>&)> pairs_fn;
     void for_each_pair(const std::function<void(uint32_t, uint32_t, uint32_t, uint32_t)>& f) const { if (pairs_fn) pairs_fn(f); }
+    // Kernel 1 also gives the same entries unit by unit: unit_fn(i, v) fills v with unit i's entries. Units hold disjoint row ranges that
+    // ascend with i, so readers may take units in parallel (threads workers) and still see rows ascend within a barcode in unit order.
+    struct Pair { uint32_t cell, row, ad, dp; };
+    size_t n_units = 0; unsigned threads = 1;
+    std::function<void(size_t, std::vector<Pair>&)> unit_fn;
     // Both matrices over every site for the barcodes marked in keep (null: all); false when either does not fit.
     bool finalize(const std::vector<uint8_t>* keep) {
         if (!prepare_fn) return true;
@@ -378,6 +383,12 @@ inline void finish_spill(Result& res, std::shared_ptr<std::vector<PerTid>> out_s
                 if (!use(bc, row, ad)) return;
                 const int32_t q = pos[bc]++; m.indices[q] = static_cast<int32_t>(row); m.data[q] = static_cast<uint16_t>(std::min<uint32_t>(is_ad ? ad : dp, 65535)); });
         return true;
+    };
+    res.n_units = sp->u.size(); res.threads = nth;
+    res.unit_fn = [sp, kp, kept](size_t i, std::vector<Result::Pair>& v) {
+        v.clear(); if (i >= sp->u.size()) return;
+        std::string buf; const Keep& k = *kp;
+        sp->each(i, buf, [&](uint32_t bc, uint32_t row, uint32_t ad, uint32_t dp) { if (kept(k, bc)) v.push_back({bc, row, std::min<uint32_t>(ad, 65535), std::min<uint32_t>(dp, 65535)}); });
     };
     res.release_fn = [sp]() { sp->clear(); };
     if (!P.defer_build) res.finalize(nullptr);

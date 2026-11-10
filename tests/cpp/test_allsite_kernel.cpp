@@ -16,6 +16,7 @@
 
 #include "singlet/pileup/allsite.h"
 #include "singlet/pileup/allsite_replay.h"
+#include "singlet/pileup/allsite_store.h"
 
 namespace A = singlet::allsite;
 static int n_fail = 0;
@@ -147,6 +148,19 @@ int main() {
             std::sort(pv.begin(), pv.end());
             A::replay::Fnv fp; for (const auto& q : pv) { fp.s(q[0]); fp.s(q[1]); fp.s(q[2]); fp.s(q[3]); }
             CHECK(asc, "rows ascend within each barcode");
+            {   // the donor calls and the delta store read the pairs (kernel 1: unit by unit, in parallel)
+                std::vector<uint32_t> cells; for (const auto& x : rec.R) if (x.bc >= 0 && static_cast<uint32_t>(x.bc) < nbc) cells.push_back(static_cast<uint32_t>(x.bc));
+                std::sort(cells.begin(), cells.end()); cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+                std::vector<uint32_t> half; for (size_t j = 0; j < cells.size(); j += 2) half.push_back(cells[j]);
+                std::vector<int32_t> donor_of(nbc, -1); for (uint32_t b : cells) donor_of[b] = static_cast<int32_t>((b / 7) % 3) - 1;
+                const A::DonorCalls dc = A::donor_calls(r, donor_of, 2);
+                A::DeltaStore st; A::build_store(r, nbc, half, donor_of, dc, st);
+                for (size_t i = 0; i < dc.gt.size(); ++i) { fp.s(static_cast<uint32_t>(dc.gt[i] + 1)); fp.s(dc.sad[i]); fp.s(dc.sdp[i]); }
+                for (uint64_t o : st.off) fp.s(static_cast<uint32_t>(o));
+                for (size_t i = 0; i < st.row.size(); ++i) { fp.s(st.row[i]); fp.s(st.ad[i]); fp.s(st.dp[i]); }
+                fp.s(static_cast<uint32_t>(st.full_entries)); fp.s(static_cast<uint32_t>(dc.sites_variant));
+                CHECK(st.row.size() > 0, "the store keeps entries");
+            }
             uint64_t e = 0; const bool ok = r.emit(true, nullptr, e) && r.emit(false, nullptr, e); r.release();
             const std::string d = A::replay::digest(r), pd = std::to_string(fp.h);
             const std::string tag = "umi_dedup " + std::to_string(c.umi_dedup) + " umi_len " + std::to_string(c.umi_len) + " directional " + std::to_string(c.directional)
