@@ -31,7 +31,7 @@ static void copyT3(const std::vector<T3>& a, std::vector<PileupTriplet>& b) {
 struct PileupWiden {
     std::vector<int> fds;          // the other slots' locks, held until release()
     int slots = 1, held = 1;       // slots of the device; slots this pileup counts as its own (its first plus the ones in fds)
-    unsigned long long evicted = 0, freedB = 0; int holders = 0; double seconds = 0;
+    unsigned long long evicted = 0, freedB = 0, free0 = 0, free1 = 0; int holders = 0; double seconds = 0;
     void release() { for (int fd : fds) { flock(fd, LOCK_UN); close(fd); } fds.clear(); }
     ~PileupWiden() { release(); }
 };
@@ -73,7 +73,7 @@ static size_t pileupWiden(int device, size_t totB, size_t prevArena, PileupWiden
         if (W.holders == 0 || f1 >= f0 + (size_t) (0.9 * (double) W.evicted)) break;
         usleep(100000);
     }
-    W.freedB = f1 > f0 ? f1 - f0 : 0;
+    W.freedB = f1 > f0 ? f1 - f0 : 0; W.free0 = f0; W.free1 = f1;
     size_t arena = f1 > (size_t(3) << 30) ? f1 - (size_t(3) << 30) : f1 / 2;
     if (const uint64_t bud = singlet_engine_gpu::memBudget(tt)) {   // the budget of the slots this pileup now holds
         const uint64_t mine_b = bud * (uint64_t) W.held;
@@ -135,8 +135,9 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     else if (attempt == 1) {
         const size_t arena = pileupWiden(device, totB, arenaB, W);
-        char nb[256]; snprintf(nb, sizeof nb, "wider arena: %d holder(s) asked to leave (%.1f GB freed), %d of %d slots held, %.2f s: ", W.holders, W.freedB / 1e9, W.held, W.slots, W.seconds);
-        notes += nb;
+        char nb[256]; snprintf(nb, sizeof nb, "wider arena: %d holder(s) asked to leave (free %.1f -> %.1f GB), %d of %d slots held, %.2f s: ", W.holders, W.free0 / 1e9, W.free1 / 1e9, W.held, W.slots, W.seconds);
+        notes += nb; fprintf(stderr, "[pileup] %s
+", nb);
         if (arena == 0) { notes += "no gain; "; W.release(); continue; }
         size_t a = arena;
         while (!A.try_init(a)) { a -= a / 16; if (a < arenaB) break; }   // the free memory moved: a little less
@@ -312,7 +313,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     } catch (const ArenaExhausted& e) {
         cudaDeviceSynchronize();
         cudaFree(A.base);
-        { char nb[160]; snprintf(nb, sizeof nb, "attempt %d: %zu MB needed, %zu MB arena; ", attempt, e.need >> 20, e.cap >> 20); notes += nb; }
+        { char nb[160]; snprintf(nb, sizeof nb, "attempt %d: %zu MB needed, %zu MB arena; ", attempt, e.need >> 20, e.cap >> 20); notes += nb; fprintf(stderr, "[pileup] %s
+", nb); }
         if (attempt > 1) {
             po.log += "GPU memory: " + std::to_string(e.need >> 20) + " MB needed, " + std::to_string(e.cap >> 20) + " MB unified arena";
             cudaDeviceReset();
