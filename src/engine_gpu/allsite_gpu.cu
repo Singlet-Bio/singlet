@@ -276,7 +276,7 @@ __global__ void kRootAgg(u32* par, const u32* en, const int* nE_, u32* agg) {
     if ((n >> 16) & 0xff) atomicAdd(&agg[3 * r + 2], (n >> 16) & 0xff);
 }
 // per (barcode, site): the vote of each component (SnpConsensus::finalize's vote), DP and AD molecules, ambiguous and other molecules
-struct GOut { u32 bc, row, dp, ad; };
+struct GOut { u32 bc, bs, dp, ad; };   // barcode, site index within the block, DP and AD molecules
 __global__ void kGroups(const u64* ehi, const u32* gS, const int* nE_, const int* nG_, const u32* par, const u32* agg,
                         u32 s0, const u32* sOff, u32 nC, int bcBits, GOut* go, u8* fdp, u8* fad, u64* stat) {
     const int nE = *nE_, nG = *nG_;
@@ -293,8 +293,7 @@ __global__ void kGroups(const u64* ehi, const u32* gS, const int* nE_, const int
         }
         const u64 h = ehi[e0];
         const u32 s = s0 + (u32) (h >> bcBits);
-        u32 a = 0, b = nC; while (a + 1 < b) { const u32 m = (a + b) >> 1; if (sOff[m] <= s) a = m; else b = m; }   // the site's contig
-        go[g] = GOut{(u32) (h & ((1ull << bcBits) - 1)), s - sOff[a], dp, ad};
+        go[g] = GOut{(u32) (h & ((1ull << bcBits) - 1)), s - s0, dp, ad};
         fdp[g] = dp > 0; fad[g] = ad > 0;
     }
     u64 v[4] = {amb, oth, dp, ad};   // warp sums, one atomic per warp and counter
@@ -303,28 +302,39 @@ __global__ void kGroups(const u64* ehi, const u32* gS, const int* nE_, const int
         if ((threadIdx.x & 31) == 0 && v[k]) atomicAdd((unsigned long long*) &stat[k], (unsigned long long) v[k]);
     }
 }
-// per group g: dp and ad flags packed as (ad << 32 | dp), and 0 at g == nG, for one exclusive scan giving both output offsets
-struct FlagPair { const u8* fdp; const u8* fad; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? ((u64) fad[i] << 32) | fdp[i] : 0ull; } };
-__global__ void kPick(const u64* pre, const u32* idx, u32 nq, u64* outv) {
-    const u32 q = blockIdx.x * blockDim.x + threadIdx.x; if (q < nq) outv[q] = pre[idx[q]];
-}
-__global__ void kScatter(const GOut* go, const u8* fdp, const u8* fad, const u64* pre, const int* nG_, AD::Count* dpo, AD::Count* ado) {
-    const int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= *nG_) return;
-    const GOut x = go[g]; const u64 p = pre[g];
-    if (fdp[g]) { AD::Count* d = dpo + (u32) p; d->cell = x.bc; d->row = x.row; d->val = x.dp; }
-    if (fad[g]) { AD::Count* d = ado + (u32) (p >> 32); d->cell = x.bc; d->row = x.row; d->val = x.ad; }
-}
-__global__ void kFirstGroupOfSite(const u64* ehi, const u32* gS, const int* nG_, const u32* sites, u32 nq, u32 s0, int bcBits, u32* outIdx) {
-    const u32 q = blockIdx.x * blockDim.x + threadIdx.x; if (q >= nq) return;
-    const int nG = *nG_;
-    const u32 want = sites[q];
-    u32 a = 0, b = (u32) nG;
-    while (a < b) { const u32 m = (a + b) >> 1; if (s0 + (u32) (ehi[gS[m]] >> bcBits) < want) a = m + 1; else b = m; }
-    outIdx[q] = a;
-}
+// The block's counts in the spill layout, built on the device: records (groups with DP > 0, in (site, barcode) order), their varint
+// lengths, per-site barcode counts and byte offsets, then the bytes
 struct ToU64 { const u32* c; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? (u64) c[i] : 0ull; } };
 struct ShrOp { int s; __host__ __device__ u64 operator()(u64 v) const { return v >> s; } };
 struct U8ToU32 { __host__ __device__ u32 operator()(u8 v) const { return v; } };
+struct ToU32Flag { const u8* f; u32 n; __host__ __device__ u32 operator()(u32 i) const { return i < n ? (u32) f[i] : 0u; } };
+struct ToU64Plain { const u64* c; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? c[i] : 0ull; } };
+__device__ __forceinline__ u32 vlen(u32 v) { return v < (1u << 7) ? 1 : v < (1u << 14) ? 2 : v < (1u << 21) ? 3 : v < (1u << 28) ? 4 : 5; }
+__device__ __forceinline__ u8* vput(u8* p, u32 v) { while (v >= 128) { *p++ = (u8) ((v & 127) | 128); v >>= 7; } *p++ = (u8) v; return p; }
+__global__ void kRecs(const GOut* go, const u8* f, const u32* pre, const int* nG_, GOut* rec, u32* cntS) {
+    const int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= *nG_ || !f[g]) return;
+    const GOut x = go[g]; rec[pre[g]] = x; atomicAdd(&cntS[x.bs], 1u);
+}
+__global__ void kRecLen(const GOut* rec, u32 n, u32* len) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const GOut x = rec[i]; const u32 prev = (i > 0 && rec[i - 1].bs == x.bs) ? rec[i - 1].bc : 0u;
+    len[i] = vlen(x.bc - prev) + vlen(x.dp) + vlen(x.ad);
+}
+// per site: its bytes = varint(count) + its records' bytes (records [rs[s], rs[s + 1]) of the exclusive length sums lx)
+__global__ void kSiteBytes(const u32* cntS, const u32* rs, const u64* lx, u32 nsb, u64* tb) {
+    const u32 b = blockIdx.x * blockDim.x + threadIdx.x; if (b >= nsb) return;
+    tb[b] = vlen(cntS[b]) + (lx[rs[b + 1]] - lx[rs[b]]);
+}
+__global__ void kSiteHead(const u32* cntS, const u64* so, u32 nsb, u8* bytes) {
+    const u32 b = blockIdx.x * blockDim.x + threadIdx.x; if (b >= nsb) return;
+    vput(bytes + so[b], cntS[b]);
+}
+__global__ void kRecWrite(const GOut* rec, u32 n, const u32* cntS, const u32* rs, const u64* lx, const u64* so, u8* bytes) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const GOut x = rec[i]; const u32 prev = (i > 0 && rec[i - 1].bs == x.bs) ? rec[i - 1].bc : 0u;
+    u8* p = bytes + so[x.bs] + vlen(cntS[x.bs]) + (lx[i] - lx[rs[x.bs]]);
+    p = vput(p, x.bc - prev); p = vput(p, x.dp); vput(p, x.ad);
+}
 // Device to host through two pinned slices: the device fills one while host threads copy the other out
 struct PinnedCopy {
     size_t SL = 64ull << 20, minPer = 4ull << 20;   // test knob SINGLET_ALLSITE_GPU_SLICE_BYTES shrinks both
@@ -634,44 +644,47 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                                 stage(out.sec_r9);
                 GOut* go = A.get<GOut>(nG); u8* fad = A.get<u8>(nG);
                 kGroups<<<gridFor(nG), 256, 0, st>>>(ehi, gS, dNum, dNum + 1, par, agg, s0, dSoff, nC, bcBits, go, f8, fad, dStat);
-                // one exclusive scan of the (AD, DP) flag pair gives every group's output slot; the contigs of the block split the
-                // selected records at the scan's value at their first group
-                std::vector<u32> cs;   // the contigs whose site ranges meet [s0, s1)
-                for (u32 c = 0; c < nC; ++c) if (sOff[c] < s1 && sOff[c + 1] > s0 && sOff[c + 1] > sOff[c]) cs.push_back(c);
-                std::vector<u32> q; for (u32 c : cs) q.push_back(std::max(sOff[c], s0));
-                q.push_back(s1);
-                const u32 nq = (u32) q.size();
-                u32* dq = A.get<u32>(nq); u32* dqi = A.get<u32>(nq); u64* dqv = A.get<u64>(nq);
-                u64* pre = A.get<u64>((size_t) nG + 1);
-                AS_CK(cudaMemcpyAsync(dq, q.data(), nq * 4, cudaMemcpyHostToDevice, st));
-                kFirstGroupOfSite<<<gridFor(nq), 256, 0, st>>>(ehi, gS, dNum + 1, dq, nq, s0, bcBits, dqi);
+                // the block's counts in the spill layout: records (groups with DP > 0) by an exclusive scan of the flags, then per site its
+                // barcode count and byte offset, then the bytes; each contig of the block takes the bytes of its sites
+                const u32 nsb = s1 - s0;
+                u32* pre = A.get<u32>((size_t) nG + 1); u32* cntS = A.get<u32>(nsb); u32* rs = A.get<u32>((size_t) nsb + 1);
+                u64* so = A.get<u64>((size_t) nsb + 1); u64* tb = A.get<u64>(nsb);
+                AS_CK(cudaMemsetAsync(cntS, 0, (size_t) nsb * 4, st));
                 {
-                    cub::TransformInputIterator<u64, FlagPair, cub::CountingInputIterator<u64>> fp(cub::CountingInputIterator<u64>(0), FlagPair{f8, fad, (u32) nG});
-                    size_t ts = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, ts, fp, pre, nG + 1, st));
-                    tm = A.top; tmp = A.get<char>(ts);
-                    AS_CK(cub::DeviceScan::ExclusiveSum(tmp, ts, fp, pre, nG + 1, st)); A.top = tm;
+                    cub::TransformInputIterator<u32, ToU32Flag, cub::CountingInputIterator<u32>> fi(cub::CountingInputIterator<u32>(0), ToU32Flag{f8, (u32) nG});
+                    size_t ts = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, ts, fi, pre, nG + 1, st));
+                    tm = A.top; tmp = A.get<char>(ts); AS_CK(cub::DeviceScan::ExclusiveSum(tmp, ts, fi, pre, nG + 1, st)); A.top = tm;
                 }
-                kPick<<<gridFor(nq), 256, 0, st>>>(pre, dqi, nq, dqv);
-                std::vector<u64> qv(nq);
-                AS_CK(cudaMemcpyAsync(qv.data(), dqv, nq * 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
-                const u32 nDp = (u32) qv[nq - 1], nAd = (u32) (qv[nq - 1] >> 32);
-                AD::Count* dpo = A.get<AD::Count>(std::max<u32>(nDp, 1)); AD::Count* ado = A.get<AD::Count>(std::max<u32>(nAd, 1));
-                kScatter<<<gridFor(nG), 256, 0, st>>>(go, f8, fad, pre, dNum + 1, dpo, ado);
-                for (int w = 0; w < 2; ++w) {
-                    const AD::Count* src = w == 0 ? dpo : ado;
-                    for (size_t z = 0; z < cs.size(); ++z) {
-                        const u32 c = cs[z];
-                        const u32 ra = w == 0 ? (u32) qv[z] : (u32) (qv[z] >> 32), rb = w == 0 ? (u32) qv[z + 1] : (u32) (qv[z + 1] >> 32);
-                        if (rb <= ra) continue;
-                        std::vector<AD::Count>& dst = w == 0 ? out.contigs[c0 + c].dp : out.contigs[c0 + c].ad;
-                        const size_t base = dst.size(), ns = rb - ra;
-                        if (base + ns > dst.capacity() && sOff[c + 1] > s1) {   // the contig goes on past this block: reserve in proportion to its sites
-                            const double f = double(sOff[c + 1] - sOff[c]) / double(s1 - sOff[c]);
-                            dst.reserve((size_t) (double(base + ns) * f * 1.1) + 1024);
-                        }
-                        dst.resize(base + ns);   // Count's empty constructor: no zero fill
-                        d2h.copy(dst.data() + base, src + ra, ns * sizeof(AD::Count), st);
-                    }
+                u32 nRec = 0; AS_CK(cudaMemcpyAsync(&nRec, pre + nG, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                GOut* rec = A.get<GOut>(std::max<u32>(nRec, 1)); u32* len = A.get<u32>(std::max<u32>(nRec, 1)); u64* lx = A.get<u64>((size_t) nRec + 1);
+                kRecs<<<gridFor(nG), 256, 0, st>>>(go, f8, pre, dNum + 1, rec, cntS);
+                if (nRec) kRecLen<<<gridFor(nRec), 256, 0, st>>>(rec, nRec, len);
+                {
+                    cub::TransformInputIterator<u64, ToU64, cub::CountingInputIterator<u64>> li(cub::CountingInputIterator<u64>(0), ToU64{len, nRec});
+                    size_t t1 = 0, t2 = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, t1, li, lx, (int) nRec + 1, st));
+                    AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, t2, cntS, rs, (int) nsb, st));
+                    tm = A.top; tmp = A.get<char>(std::max(t1, t2));
+                    AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t1, li, lx, (int) nRec + 1, st));
+                    AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t2, cntS, rs, (int) nsb, st));
+                    A.top = tm;
+                    AS_CK(cudaMemcpyAsync(rs + nsb, &nRec, 4, cudaMemcpyHostToDevice, st));
+                    kSiteBytes<<<gridFor(nsb), 256, 0, st>>>(cntS, rs, lx, nsb, tb);
+                    cub::TransformInputIterator<u64, ToU64Plain, cub::CountingInputIterator<u64>> bi(cub::CountingInputIterator<u64>(0), ToU64Plain{tb, nsb});
+                    size_t t3 = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, t3, bi, so, (int) nsb + 1, st));
+                    tm = A.top; tmp = A.get<char>(t3); AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t3, bi, so, (int) nsb + 1, st)); A.top = tm;
+                }
+                std::vector<u64> hso((size_t) nsb + 1);
+                AS_CK(cudaMemcpyAsync(hso.data(), so, ((size_t) nsb + 1) * 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                u8* bytes = A.get<u8>(std::max<u64>(hso[nsb], 1));
+                kSiteHead<<<gridFor(nsb), 256, 0, st>>>(cntS, so, nsb, bytes);
+                if (nRec) kRecWrite<<<gridFor(nRec), 256, 0, st>>>(rec, nRec, cntS, rs, lx, so, bytes);
+                for (u32 c = 0; c < nC; ++c) {   // the contigs whose site ranges meet [s0, s1), in site order
+                    const u32 a0 = std::max(sOff[c], s0), a1 = std::min(sOff[c + 1], s1); if (a1 <= a0) continue;
+                    const u64 b0 = hso[a0 - s0], b1 = hso[a1 - s0];
+                    std::string buf; buf.resize(b1 - b0);
+                    d2h.copy(&buf[0], bytes + b0, b1 - b0, st);
+                    out.spill_bytes += b1 - b0;
+                    if (in.sink) in.sink(c0 + c, a0 - sOff[c], a1 - a0, buf);
                 }
                 stage(out.sec_out);
                 if (in.progress) in.progress();
@@ -683,7 +696,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         }
     } catch (const std::exception& e) {
         out.why = e.what();
-        for (auto& c : out.contigs) c = AD::ContigOut{};
+        for (auto& c : out.contigs) c = AD::ContigOut{};   // the caller drops any spill units already put
         return false;
     }
     out.sec = secSince(T0);

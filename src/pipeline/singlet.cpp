@@ -1294,6 +1294,39 @@ static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
     return hr.ran || hr.deferred ? 0 : 1;
 }
 
+// Speed work on the all-site pass: the pass alone on an input written by SINGLET_ALLSITE_DUMP_DIR (allsite_replay.h).
+//   singlet allsite-replay DIR [--threads N] [--kernel old|new] [--block-hits N]
+// Prints the pass's log line, wall seconds and a digest of the result over every barcode (sites, statistics, matrices).
+static int cmd_allsite_replay(int argc, char* argv[]) {
+    if (argc < 1) { std::cerr << "usage: singlet allsite-replay DIR [--threads N] [--kernel old|new] [--block-hits N]\n"; return 2; }
+    namespace A = singlet::allsite;
+    A::replay::Input in; std::string err;
+    if (!in.load(argv[0], &err)) { std::cerr << "[allsite-replay] cannot read " << err << "\n"; return 1; }
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--threads" && i + 1 < argc) in.P.threads = static_cast<unsigned>(std::atoi(argv[++i]));
+        else if (a == "--kernel" && i + 1 < argc) { const std::string k = argv[++i]; in.P.kernel = k == "old" ? 0 : 1; }
+        else if (a == "--block-hits" && i + 1 < argc) in.P.block_hits = std::strtoull(argv[++i], nullptr, 10);
+        else { std::cerr << "[allsite-replay] unknown argument " << a << "\n"; return 2; }
+    }
+    A::Genome G;
+    if (!G.open(in.genome_dir, in.tids, &err)) { std::cerr << "[allsite-replay] cannot read the reference (" << err << ")\n"; return 1; }
+    in.P.defer_build = true;
+    const auto t0 = std::chrono::steady_clock::now();
+    A::Result r = A::run(in, G, in.n_tid, in.n_barcodes, in.P);
+    const double pass_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    std::cerr << "[allsite] " << r.sites.size() << " sites (>= " << in.P.min_alt_molecules << " ALT molecules in >= " << in.P.min_alt_cells
+              << " barcodes), DP records " << r.dp_records << ", AD records " << r.ad_records << "; reads " << r.reads_used
+              << ", mismatch observations " << r.mismatch_obs << ", molecules " << r.molecules << " (ambiguous " << r.ambiguous
+              << ", other " << r.other << ") in " << pass_s << " s\n";
+    const auto t1 = std::chrono::steady_clock::now();
+    const bool ok = r.finalize(nullptr);
+    const double fin_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
+    std::cout << "replay kernel " << (in.P.kernel == 0 ? "old" : "new") << " threads " << in.P.threads << " pass_s " << pass_s << " build_s " << fin_s
+              << " fits " << (ok ? 1 : 0) << " " << A::replay::digest(r) << std::endl;
+    return 0;
+}
+
 static int cmd_decode(int argc, char* argv[]) {
     std::string input_path;
     std::string r1_path, r2_path;
@@ -3406,6 +3439,8 @@ static int singlet_main(int argc, char* argv[]) {
                 return cmd_encode(argc - 2, argv + 2);
             if (sub == "atac")
                 return cmd_atac(argc - 2, argv + 2);
+            if (sub == "allsite-replay")
+                return cmd_allsite_replay(argc - 2, argv + 2);
             if (sub == "decode")
                 return cmd_decode(argc - 2, argv + 2);
             if (sub == "hla")

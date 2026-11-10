@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-// singlet-pileup: allsite_device_glue.h, included by allsite.h before run()
-// run()'s device hook (Params::device): the reads of each contig gathered into flat arrays, the device route called, and its sites and
-// (barcode, site) counts written where run()'s contig workers write theirs. One record per (barcode, site) holds the summed DP (or AD)
-// molecules; Result::prepare sums records per (barcode, site) in any case, so the matrices, the per-site sums and the stored member are
-// the ones the per-molecule records give. dp_mol and ad_mol return the molecule counts that run() reports as DP and AD records.
+// singlet-pileup: allsite_device_glue.h, included by allsite.h before run_sorted()
+// run_sorted()'s device hook (Params::device): the reads of each contig gathered into flat arrays, the device route called, its sites
+// written where the host kernel writes them and its (barcode, site) counts sent block by block into the spill (Spill units, put in block
+// order and then renumbered into row order), so host memory holds one block of counts at a time whatever the record count.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -20,7 +19,7 @@ namespace singlet { namespace allsite { namespace detail {
 template <class Rec, class Out>
 inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t n_tid, uint32_t n_barcodes,
                         const std::vector<uint8_t>& sig_p, const std::vector<uint64_t>& cnt, const std::vector<uint64_t>& by_tid,
-                        const std::vector<uint32_t>& order, Out& out, uint64_t& obs, uint64_t& dp_mol, uint64_t& ad_mol, uint64_t t_run0) {
+                        const std::vector<uint32_t>& order, Out& out, Spill& spl, uint64_t t_run0) {
     using dev::Read;
     const auto t0 = std::chrono::steady_clock::now();
     dev::Input in;
@@ -96,28 +95,40 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         for (unsigned s = 0; s < ns; ++s) { sz[s + 1].ops += sz[s].ops; sz[s + 1].seq += sz[s].seq; sz[s + 1].lq += sz[s].lq; }
         run_all(true);
     };
+    std::vector<std::pair<uint32_t, uint32_t>> ukey;   // per spill unit: (contig index of in.contigs, first site within the contig)
+    in.sink = [&](uint32_t c, uint32_t s0, uint32_t ns, std::string& b) {
+        spl.u.emplace_back(); ukey.push_back({c, s0}); spl.put(spl.u.size() - 1, 0, ns, b);
+    };
     dev::Output o;
     if (!P.device(in, o)) {
         std::cerr << "[allsite-gpu] host pass: " << o.why << "\n";
         return false;
     }
-    obs = o.obs; dp_mol = o.molecules; ad_mol = o.ad_molecules;
     for (size_t k = 0; k < ctid.size(); ++k) {
         auto& pt = out[ctid[k]]; dev::ContigOut& co = o.contigs[k];
         const int32_t t = static_cast<int32_t>(ctid[k]);
         pt.sites.resize(co.pos.size());
         for (size_t i = 0; i < co.pos.size(); ++i)
             pt.sites[i] = Site{t, co.pos[i], "ACGT"[co.ref[i] & 3], "ACGT"[co.alt[i] & 3], co.mol[i], co.cells[i]};
-        pt.dp.swap(co.dp); pt.ad.swap(co.ad);   // Tri is dev::Count
     }
-    auto& st = out[ctid[0]].st;   // run() sums the statistics over contigs
-    st.snp_molecules += o.molecules; st.snp_molecules_ambiguous += o.ambiguous; st.snp_molecules_other += o.other;
+    {   // the units' rows (contigs in index order, sites by position), then the units in row order as the readers expect
+        std::vector<uint32_t> grow0(n_tid + 1, 0);
+        for (uint32_t t = 0; t < n_tid; ++t) grow0[t + 1] = grow0[t] + static_cast<uint32_t>(out[t].sites.size());
+        for (size_t i = 0; i < spl.u.size(); ++i) spl.u[i].row0 = grow0[ctid[ukey[i].first]] + ukey[i].second;
+        std::vector<uint32_t> perm(spl.u.size()); for (size_t i = 0; i < perm.size(); ++i) perm[i] = static_cast<uint32_t>(i);
+        std::sort(perm.begin(), perm.end(), [&](uint32_t a, uint32_t b) { return spl.u[a].row0 < spl.u[b].row0; });
+        std::vector<Spill::U> su(spl.u.size()); for (size_t i = 0; i < perm.size(); ++i) su[i] = std::move(spl.u[perm[i]]);
+        spl.u.swap(su);
+    }
+    auto& p0 = out[ctid[0]];   // finish_spill sums the statistics over contigs; DP and AD records are the summed molecules, as kernel 1's
+    p0.st.snp_molecules += o.molecules; p0.st.snp_molecules_ambiguous += o.ambiguous; p0.st.snp_molecules_other += o.other;
+    p0.obs += o.obs; p0.dp_rec += o.molecules; p0.ad_rec += o.ad_molecules;
     const double s_sel = 1e-9 * static_cast<double>(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count()) - t_run0);
     std::cerr << "[allsite-gpu] selection " << s_sel
               << " s, sizes " << s_sizes << " s; " << o.chunks << " chunks, " << o.blocks << " blocks; hits " << o.hits << ", entries " << o.entries << ", groups " << o.groups
               << "; device arena " << (o.arena_bytes >> 20) << " MiB; s: gather " << o.sec_gather << ", upload " << o.sec_upload << ", discovery " << o.sec_disc
               << ", counting " << o.sec_count << " (hits " << o.sec_hits << ", sort " << o.sec_sort << ", entries " << o.sec_entries << ", R9 and vote " << o.sec_r9
-              << ", out " << o.sec_out << "), device total " << o.sec << ", hook total "
+              << ", out " << o.sec_out << "); spill " << (spl.bytes >> 20) << " MiB in " << spl.where << ", " << spl.u.size() << " units; device total " << o.sec << ", hook total "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
     return true;
 }

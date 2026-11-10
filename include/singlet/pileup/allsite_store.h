@@ -61,18 +61,31 @@ struct DonorCalls {
 
 // Per-donor sums over the cells assigned to a single donor (donor_of[barcode] >= 0), and the donors' genotype calls. The sums are the rule
 // of genotype::write_donors_vcf, so the genotypes are those of donors.vcf.gz at the same sites.
+// f(unit, entries, worker) over every unit of a kernel 1 result, r.threads workers taking units in order
+template <class F> inline void par_units(const Result& r, F&& f) {
+    const unsigned nth = static_cast<unsigned>(std::max<size_t>(1, std::min<size_t>(r.threads, r.n_units)));
+    std::atomic<size_t> next{0};
+    auto work = [&](unsigned w) { std::vector<Result::Pair> v; for (size_t i; (i = next.fetch_add(1)) < r.n_units;) { r.unit_fn(i, v); f(i, v, w); } };
+    std::vector<std::thread> th; for (unsigned w = 1; w < nth; ++w) th.emplace_back(work, w);
+    work(0); for (auto& x : th) x.join();
+}
+
 inline DonorCalls donor_calls(const Result& r, const std::vector<int32_t>& donor_of, int K) {
     DonorCalls d; d.K = K; d.sites = static_cast<uint32_t>(r.sites.size());
     d.differs.assign(d.sites, 0); d.variant.assign(d.sites, 0);
     if (K <= 0) return d;
     std::vector<uint64_t> sad(static_cast<size_t>(d.sites) * K, 0), sdp(static_cast<size_t>(d.sites) * K, 0);
-    r.for_each_pair([&](uint32_t cell, uint32_t row, uint32_t ad, uint32_t dp) {
+    auto add = [&](uint32_t cell, uint32_t row, uint32_t ad, uint32_t dp) {
         if (cell >= donor_of.size() || donor_of[cell] < 0) return;
         const size_t i = static_cast<size_t>(row) * K + static_cast<size_t>(donor_of[cell]);
         sad[i] += ad; sdp[i] += dp;
-    });
+    };
+    if (r.n_units && r.unit_fn) par_units(r, [&](size_t, const std::vector<Result::Pair>& v, unsigned) { for (const auto& p : v) add(p.cell, p.row, p.ad, p.dp); });   // units own their rows
+    else r.for_each_pair(add);
     d.gt.assign(sad.size(), -1); d.sad.resize(sad.size()); d.sdp.resize(sad.size());
-    for (uint32_t s = 0; s < d.sites; ++s) {
+    const uint32_t chunk = 1u << 16, nch = (d.sites + chunk - 1) / chunk;
+    std::atomic<uint32_t> next{0};
+    auto call = [&](uint32_t s) {
         int lo = 3, hi = -1;
         for (int k = 0; k < K; ++k) {
             const size_t i = static_cast<size_t>(s) * K + k;
@@ -83,8 +96,12 @@ inline DonorCalls donor_calls(const Result& r, const std::vector<int32_t>& donor
             if (g >= 1) d.variant[s] = 1;
         }
         d.differs[s] = (hi >= 0 && lo != hi) ? 1 : 0;
-        d.sites_variant += d.variant[s];
-    }
+    };
+    auto work = [&]() { for (uint32_t c; (c = next.fetch_add(1)) < nch;) for (uint32_t s = c * chunk, e = std::min(d.sites, s + chunk); s < e; ++s) call(s); };
+    const unsigned nth = std::max(1u, std::min<unsigned>(r.threads, nch));
+    std::vector<std::thread> th; for (unsigned w = 1; w < nth; ++w) th.emplace_back(work);
+    work(); for (auto& x : th) x.join();
+    for (uint32_t s = 0; s < d.sites; ++s) d.sites_variant += d.variant[s];
     return d;
 }
 
@@ -111,6 +128,29 @@ inline void build_store(const Result& r, uint32_t n_barcodes, const std::vector<
         return keep_entry(calls.g_of(row, d), calls.differs[row] != 0, ad, dp);
     };
     std::vector<uint64_t> cnt(cells.size() + 1, 0);
+    if (r.n_units && r.unit_fn) {   // units in parallel: each keeps its stored entries, then they are placed in unit order (rows ascend)
+        struct E { uint32_t col, row; uint16_t ad, dp; };
+        std::vector<std::vector<E>> ue(r.n_units); std::vector<uint64_t> full(r.n_units, 0);
+        par_units(r, [&](size_t u, const std::vector<Result::Pair>& v, unsigned) {
+            auto& o = ue[u];
+            for (const auto& p : v) {
+                if (p.cell >= n_barcodes || col_of[p.cell] < 0) continue;
+                ++full[u];
+                if (keep(p.cell, p.row, p.ad, p.dp)) o.push_back({static_cast<uint32_t>(col_of[p.cell]), p.row, static_cast<uint16_t>(p.ad), static_cast<uint16_t>(p.dp)});
+            }
+            o.shrink_to_fit();
+        });
+        for (size_t u = 0; u < r.n_units; ++u) { s.full_entries += full[u]; for (const auto& e : ue[u]) ++cnt[static_cast<size_t>(e.col) + 1]; }
+        for (size_t j = 0; j < cells.size(); ++j) cnt[j + 1] += cnt[j];
+        s.off = cnt;
+        s.row.resize(cnt.back()); s.ad.resize(cnt.back()); s.dp.resize(cnt.back());
+        std::vector<uint64_t> pos(cnt.begin(), cnt.end() - 1);
+        for (size_t u = 0; u < r.n_units; ++u) {
+            for (const auto& e : ue[u]) { const uint64_t k = pos[e.col]++; s.row[k] = e.row; s.ad[k] = e.ad; s.dp[k] = e.dp; }
+            std::vector<E>().swap(ue[u]);
+        }
+        return;
+    }
     r.for_each_pair([&](uint32_t cell, uint32_t row, uint32_t ad, uint32_t dp) {
         if (cell >= n_barcodes || col_of[cell] < 0) return;
         ++s.full_entries;

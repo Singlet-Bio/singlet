@@ -38,15 +38,8 @@ struct Contig {           // one contig with reads, in the order the host gather
     const uint8_t* ref = nullptr; uint64_t ref_len = 0;   // reference bases (STAR Genome bytes: 0-3 ACGT, else N)
 };
 
-struct Count {   // trivially copyable; the empty default constructor lets the device route grow vectors without zero-filling them
-    uint32_t cell, row, val;
-    Count() {}
-    Count(uint32_t c, uint32_t r, uint32_t v) : cell(c), row(r), val(v) {}
-};   // one (barcode, site) entry: row is the site's index within its contig, val its molecules
-
 struct ContigOut {
     std::vector<int32_t> pos; std::vector<uint8_t> ref, alt; std::vector<uint32_t> mol, cells;   // sites, by position
-    std::vector<Count> dp, ad;                                                                   // (barcode, site) entries with DP (AD) > 0
 };
 
 struct Input {
@@ -55,9 +48,13 @@ struct Input {
     // from the start of those arrays and Read::ci = contig index - c0
     std::function<void(uint32_t c0, uint32_t c1, Read* reads, uint32_t* ops, uint8_t* seq, uint64_t* lq)> gather;
     std::function<void()> progress;
+    // the counts of sites [s0, s0 + ns) of contig c (indices within the contig), in the spill's unit layout (allsite.h Spill): per site
+    // the number of barcodes, then per barcode (ascending) the gap from the previous one, DP and AD, all varints. Called once per block
+    // and contig, in block order; the device route holds no more than one block of counts.
+    std::function<void(uint32_t c, uint32_t s0, uint32_t ns, std::string& bytes)> sink;
     int min_alt_molecules = 2, min_alt_cells = 2, use_qual = 0, skip_n = 0, directional = 1, umi_len = 12;
     uint32_t n_barcodes = 0;
-    unsigned threads = 1;   // host threads for copying the results out
+    unsigned threads = 1;   // host threads for the pinned copies
 };
 
 struct Output {
@@ -65,7 +62,7 @@ struct Output {
     uint64_t obs = 0, molecules = 0, ambiguous = 0, other = 0, ad_molecules = 0, hits = 0, entries = 0, groups = 0;
     double sec = 0, sec_gather = 0, sec_upload = 0, sec_disc = 0, sec_count = 0;
     double sec_hits = 0, sec_sort = 0, sec_entries = 0, sec_r9 = 0, sec_out = 0;   // counting stages (SINGLET_ALLSITE_GPU_TIMING=1)
-    uint64_t arena_bytes = 0, chunks = 0, blocks = 0;
+    uint64_t arena_bytes = 0, chunks = 0, blocks = 0, spill_bytes = 0;
     std::string why;                  // why the device route declined or failed (the host pass then runs)
 };
 
