@@ -643,12 +643,29 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         }
     });
     auto use = [&](const auto& x) { return x.bc >= 0 && static_cast<uint32_t>(x.bc) < n_barcodes && sig_tid[x.sig] >= 0; };
+    // reads per contig in read order, from equal slices of the reads: slice-local counts, then each slice scatters its reads from its own
+    // offsets, which gives the serial order on any thread count
     std::vector<uint64_t> cnt(n_tid + 1, 0);
-    for (uint64_t r = 0; r < nR; ++r) { const auto& x = R.read(r); if (use(x)) cnt[sig_tid[x.sig] + 1]++; }
-    for (uint32_t t = 0; t < n_tid; ++t) cnt[t + 1] += cnt[t];
-    std::vector<uint64_t> by_tid(cnt[n_tid]);
-    { std::vector<uint64_t> w(cnt.begin(), cnt.end() - 1);
-      for (uint64_t r = 0; r < nR; ++r) { const auto& x = R.read(r); if (use(x)) by_tid[w[sig_tid[x.sig]]++] = r; } }
+    std::vector<uint64_t> by_tid;
+    {
+        const unsigned sth = static_cast<unsigned>(std::max<uint64_t>(1, std::min<uint64_t>(nth, nR / 65536)));
+        std::vector<std::vector<uint64_t>> sc(sth, std::vector<uint64_t>(n_tid, 0));
+        auto slice = [&](unsigned k, bool write) {
+            const uint64_t a = nR * k / sth, b = nR * (k + 1) / sth;
+            std::vector<uint64_t>& w = sc[k];
+            for (uint64_t r = a; r < b; ++r) {
+                if (r + 16 < b) __builtin_prefetch(&sig_tid[R.read(r + 16).sig]);
+                const auto& x = R.read(r); if (!use(x)) continue;
+                const int32_t t = sig_tid[x.sig];
+                if (write) by_tid[w[t]++] = r; else w[t]++;
+            }
+        };
+        pfor(sth, sth, [&](size_t k, unsigned) { slice(static_cast<unsigned>(k), false); });
+        for (uint32_t t = 0; t < n_tid; ++t) { uint64_t sum = 0; for (unsigned k = 0; k < sth; ++k) sum += sc[k][t]; cnt[t + 1] = cnt[t] + sum; }
+        for (uint32_t t = 0; t < n_tid; ++t) { uint64_t o = cnt[t]; for (unsigned k = 0; k < sth; ++k) { const uint64_t n = sc[k][t]; sc[k][t] = o; o += n; } }
+        by_tid.resize(cnt[n_tid]);
+        pfor(sth, sth, [&](size_t k, unsigned) { slice(static_cast<unsigned>(k), true); });
+    }
     res.reads_used = by_tid.size();
     std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
     std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { const uint64_t na = cnt[a + 1] - cnt[a], nb = cnt[b + 1] - cnt[b]; return na != nb ? na > nb : a < b; });
