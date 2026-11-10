@@ -9052,7 +9052,7 @@ static int singlet_main(int argc, char* argv[]) {
                               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
                 hla_bg.on = true;
                 hla_bg.sw = StopWatch();
-                hla_bg.th = std::thread([&hla_bg] { singlet::hla::sample_stage(hla_bg.s); });
+                hla_bg.th = std::thread([&hla_bg] { singlet::set_thread_name("sg-hla"); singlet::hla::sample_stage(hla_bg.s); });
                 std::cerr << "[hla] sample stage started in the background (" << c.tmp_dir << ")\n";
             }
         }
