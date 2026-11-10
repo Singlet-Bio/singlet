@@ -442,12 +442,15 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         u64 chunkReads = 0x7fffffffull, blockHits = 0;   // test knobs: smaller chunks and blocks than memory allows
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_CHUNK_READS")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) chunkReads = v; }
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_BLOCK_HITS")) blockHits = strtoull(e, nullptr, 10);
-        { const u64 lim = (u64) (0.45 * (double) A.cap); u64 acc = 0; u64 nr = 0;
+        // a chunk's op and sequence offsets are 32-bit (Read::ops, Read::seq): chunks also end before either array reaches 2^31
+        { const u64 lim = (u64) (0.45 * (double) A.cap), lim32 = 0x7fffffffull; u64 acc = 0, nr = 0, no = 0, ns = 0;
           for (u32 c = 0; c < nCt; ++c) {
-              const u64 b = dataBytes(in.contigs[c]);
-              if (b > (u64) (0.7 * (double) A.cap) || in.contigs[c].reads >= 0x7fffffffull) { out.why = "a contig's reads exceed the device budget"; return false; }
-              if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + in.contigs[c].reads > chunkReads)) { cut.push_back(c); acc = 0; nr = 0; }
-              acc += b; nr += in.contigs[c].reads;
+              const AD::Contig& C = in.contigs[c];
+              const u64 b = dataBytes(C);
+              if (b > (u64) (0.7 * (double) A.cap) || C.reads >= lim32 || C.ops >= lim32 || C.seqb >= lim32) { out.why = "a contig's reads exceed the device budget"; return false; }
+              if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + C.reads > chunkReads || no + C.ops >= lim32 || ns + C.seqb >= lim32)) {
+                  cut.push_back(c); acc = 0; nr = 0; no = 0; ns = 0; }
+              acc += b; nr += C.reads; no += C.ops; ns += C.seqb;
           }
           cut.push_back(nCt); }
         out.chunks = cut.size() - 1;
