@@ -157,7 +157,7 @@ int main() {
     std::cout << "records: " << R.S.size() << " signatures, " << R.R.size() << " reads\n";
 
     struct Cfg { int use_qual, skip_n, directional; const char* chunk; const char* block; const char* split; };
-    const Cfg cfgs[] = {{1, 0, 1, nullptr, nullptr, nullptr}, {0, 1, 1, "40000", "200000", "3000000"}, {1, 0, 0, nullptr, "150000", "8000000"}, {0, 0, 1, "1", nullptr, nullptr}};
+    const Cfg cfgs[] = {{1, 0, 1, nullptr, nullptr, nullptr}, {0, 1, 1, "40000", "200000", "3000000"}, {1, 0, 0, nullptr, "150000", "8000000"}, {0, 0, 1, "1", nullptr, "f0.7"}};
     int ran = 0;
     const int pcts[] = {1, 0, 25, 1};   // the ALT-fraction floor: default, off, one that drops many sites, default
     int ci = 0;
@@ -165,7 +165,8 @@ int main() {
         const int pct = pcts[ci++];
         if (c.chunk) setenv("SINGLET_ALLSITE_GPU_CHUNK_READS", c.chunk, 1); else unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS");
         if (c.block) setenv("SINGLET_ALLSITE_GPU_BLOCK_HITS", c.block, 1); else unsetenv("SINGLET_ALLSITE_GPU_BLOCK_HITS");
-        if (c.split) setenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES", c.split, 1); else unsetenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES");   // contigs in windows
+        unsetenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES"); unsetenv("SINGLET_ALLSITE_GPU_SPLIT_FRAC");   // contigs in windows: a byte limit, or "f<share of the largest>"
+        if (c.split) setenv(c.split[0] == 'f' ? "SINGLET_ALLSITE_GPU_SPLIT_FRAC" : "SINGLET_ALLSITE_GPU_SPLIT_BYTES", c.split[0] == 'f' ? c.split + 1 : c.split, 1);
         if (c.block) setenv("SINGLET_ALLSITE_GPU_SLICE_BYTES", "1027", 1); else unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES");   // 4 threads x 256 + 3: slices split records and leave a remainder
         A::Params P;
         P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = qwords; P.skip_n = c.skip_n; P.directional = c.directional; P.umi_len = 12; P.threads = 4; P.min_alt_pct = pct;
@@ -201,7 +202,7 @@ int main() {
     }
     fs::remove_all(dir);
     if (ran > 0) {   // a failure after counts reached the sink: the device route declines and the host pass gives the same result
-        unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS"); unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES"); unsetenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES");
+        unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS"); unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES"); unsetenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES"); unsetenv("SINGLET_ALLSITE_GPU_SPLIT_FRAC");
         setenv("SINGLET_ALLSITE_GPU_BLOCK_HITS", "150000", 1); setenv("SINGLET_ALLSITE_GPU_FAIL_BLOCK", "2", 1);
         A::Params P;
         P.skip_tid = 1; P.use_qual = 1; P.qwords = qwords; P.umi_len = 12; P.threads = 4; P.min_alt_pct = 1;
