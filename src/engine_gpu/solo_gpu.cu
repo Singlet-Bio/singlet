@@ -1097,7 +1097,7 @@ void soloTwoPassOnce(const SoloParams& S0, const SoloModel& M, const SoloRecs& R
              (unsigned long long)nCandSum, (unsigned long long)nK, (unsigned long long)nT, (unsigned long long)plan.size(), (unsigned long long)maxBucket,
              (unsigned long long)nSeg, (unsigned long long)nMM, (unsigned long long)out.nMultiAccepted, out.perReadQual ? "per-read CB qualities" : "one CB quality factor");
     log += b;
-    if (g_use.on) log += "\n" + devUseLine("device memory beyond the inputs, peak per stage (GiB):");
+    if (g_use.on) log += "\n" + devUseLine("device memory beyond the inputs, peak per stage (GiB):") + "\n";
 }
 
 bool soloRunTwoPass(const SoloParams& S, const SoloModel& M, const SoloRecs& R, const SoloReads& Rd, SoloResult& out, std::string& log, const SoloTwoPass& opt) {
