@@ -162,7 +162,7 @@ int main() {
     for (const Cfg& c : cfgs) {
         if (c.chunk) setenv("SINGLET_ALLSITE_GPU_CHUNK_READS", c.chunk, 1); else unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS");
         if (c.block) setenv("SINGLET_ALLSITE_GPU_BLOCK_HITS", c.block, 1); else unsetenv("SINGLET_ALLSITE_GPU_BLOCK_HITS");
-        if (c.block) setenv("SINGLET_ALLSITE_GPU_SLICE_KB", "1", 1); else unsetenv("SINGLET_ALLSITE_GPU_SLICE_KB");
+        if (c.block) setenv("SINGLET_ALLSITE_GPU_SLICE_BYTES", "1027", 1); else unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES");   // 4 threads x 256 + 3: slices split records and leave a remainder
         A::Params P;
         P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = qwords; P.skip_n = c.skip_n; P.directional = c.directional; P.umi_len = 12; P.threads = 4;
         const A::Result h = A::run(R, G, 4, nBc, P);

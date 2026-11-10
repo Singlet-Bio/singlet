@@ -327,11 +327,11 @@ struct ShrOp { int s; __host__ __device__ u64 operator()(u64 v) const { return v
 struct U8ToU32 { __host__ __device__ u32 operator()(u8 v) const { return v; } };
 // Device to host through two pinned slices: the device fills one while host threads copy the other out
 struct PinnedCopy {
-    size_t SL = 64ull << 20, minPer = 4ull << 20;   // test knob SINGLET_ALLSITE_GPU_SLICE_KB shrinks both
+    size_t SL = 64ull << 20, minPer = 4ull << 20;   // test knob SINGLET_ALLSITE_GPU_SLICE_BYTES shrinks both
     char* buf = nullptr; cudaEvent_t ev[2] = {nullptr, nullptr}; unsigned nth = 1; size_t turn = 0;
     void init(unsigned th) {
         nth = std::max(1u, std::min(th, 16u));
-        if (const char* k = std::getenv("SINGLET_ALLSITE_GPU_SLICE_KB")) { SL = std::max<size_t>(1, std::strtoull(k, nullptr, 10)) << 10; minPer = 256; }
+        if (const char* k = std::getenv("SINGLET_ALLSITE_GPU_SLICE_BYTES")) { SL = std::max<size_t>(64, std::strtoull(k, nullptr, 10)); minPer = 64; }
         if (cudaMallocHost(&buf, 2 * SL) != cudaSuccess) { buf = nullptr; cudaGetLastError(); return; }
         for (auto& e : ev) if (cudaEventCreateWithFlags(&e, cudaEventDisableTiming) != cudaSuccess) { release(); cudaGetLastError(); return; }
     }
@@ -339,7 +339,7 @@ struct PinnedCopy {
     void pcopy(char* d, const char* s, size_t n) const {
         const unsigned t = (unsigned) std::min<size_t>(nth, n / minPer);
         if (t <= 1) { std::memcpy(d, s, n); return; }
-        const size_t per = (n / t + 63) & ~size_t(63);
+        const size_t per = ((n + t - 1) / t + 63) & ~size_t(63);   // t * per >= n
         std::vector<std::thread> th;
         for (unsigned i = 1; i < t; ++i) { const size_t a = i * per; if (a >= n) break; th.emplace_back([=] { std::memcpy(d + a, s + a, std::min(per, n - a)); }); }
         std::memcpy(d, s, std::min(per, n));
