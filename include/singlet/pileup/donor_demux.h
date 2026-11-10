@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -193,6 +194,32 @@ static void parallel_det_chunks(int n, int nthreads, Fn&& fn) {
 }
 
 // ============================================================================
+// Phase timers (SINGLET_DEMUX_PROFILE=1 prints them at the end of run_demux). Each counter adds the time the calling thread
+// spent in a phase, so concurrent fits add up like core-seconds.
+// ============================================================================
+enum DemuxPhase {
+    kPhM = 0, kPhBeta, kPhDigamma, kPhE, kPhElboData, kPhElboKl, kPhTables, kPhScore, kPhValid, kPhInit, kPhPca,
+    kPhReduce, kPhExtract, kPhFold, kPhCount
+};
+static const char* const kDemuxPhaseName[kPhCount] = {
+    "vb_mstep", "vb_beta", "vb_digamma", "vb_estep", "vb_elbo_data", "vb_elbo_kl", "allele_tables", "score_cells",
+    "count_valid", "init_pca_seeded", "pca_cache", "reduce_snps", "extract_covered", "ksel_fold_total"};
+inline std::atomic<long long>* demux_phase_ns() {
+    static std::atomic<long long> v[kPhCount];
+    return v;
+}
+struct PhaseScope {
+    int id;
+    std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+    explicit PhaseScope(int i) : id(i) {}
+    ~PhaseScope() {
+        demux_phase_ns()[id].fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
+            std::memory_order_relaxed);
+    }
+};
+
+// ============================================================================
 // Internal: sparse AD/DP representation for covered SNPs only
 // ============================================================================
 struct CoveredSNPData {
@@ -215,6 +242,7 @@ static CoveredSNPData extract_covered_snps(
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
     const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data)
 {
+    PhaseScope ph_extract(kPhExtract);
     // Find SNPs with any coverage
     std::vector<bool> has_coverage(n_features, false);
     for (uint32_t j = 0; j < n_barcodes; ++j) {
@@ -505,6 +533,7 @@ static void run_vb_inplace(
         // ── M-step ─────────────────────────────────────────────────────────
         // Each chunk of cells accumulates into its own s1_tl/s2_tl (no mutex); the chunks
         // are added in order, so the sums are the same for any thread count.
+        { PhaseScope ps(kPhM);
         parallel_det_chunks(nc, nthreads, [&](int ch, int c_start, int c_end) {
             float* s1t = s1_tl[ch].data();
             float* s2t = s2_tl[ch].data();
@@ -534,8 +563,10 @@ static void run_vb_inplace(
                 s1[i] = a;  s2[i] = b;
             }
         });
+        }
 
         // Update beta_mu / beta_sum (stored for output)
+        { PhaseScope ps(kPhBeta);
         parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
             for (int j = j0; j < j1; ++j) {
                 const float* s1j = s1.data() + j * K;
@@ -546,10 +577,12 @@ static void run_vb_inplace(
                 }
             }
         });
+        }
 
         // ── Precompute digamma cache (KEY OPTIMISATION) ─────────────────────
         // Costs O(ns × K) digamma calls once per iter instead of O(nc × snps/cell × K).
         // For ns=5000 K=5: 75K calls vs 67.5M calls in the old inner loop. ~900× speedup.
+        { PhaseScope ps(kPhDigamma);
         parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
             for (int j = j0; j < j1; ++j) {
                 const float* s1j = s1.data() + j * K;
@@ -564,6 +597,7 @@ static void run_vb_inplace(
                 }
             }
         });
+        }
 
         // ── E-step ─────────────────────────────────────────────────────────
         auto e_worker = [&](int c_start, int c_end) {
@@ -598,17 +632,20 @@ static void run_vb_inplace(
             }
         };
 
-        if (nthreads == 1) {
-            e_worker(0, nc);
-        } else {
-            std::vector<std::thread> ts;
-            ts.reserve(nthreads);
-            for (int t = 0; t < nthreads; ++t) {
-                const int cs = t * nc / nthreads;
-                const int ce = (t + 1) * nc / nthreads;
-                ts.emplace_back(e_worker, cs, ce);
+        {
+            PhaseScope ps(kPhE);
+            if (nthreads == 1) {
+                e_worker(0, nc);
+            } else {
+                std::vector<std::thread> ts;
+                ts.reserve(nthreads);
+                for (int t = 0; t < nthreads; ++t) {
+                    const int cs = t * nc / nthreads;
+                    const int ce = (t + 1) * nc / nthreads;
+                    ts.emplace_back(e_worker, cs, ce);
+                }
+                for (auto& t : ts) t.join();
             }
-            for (auto& t : ts) t.join();
         }
 
         // ── ELBO ───────────────────────────────────────────────────────────
@@ -617,6 +654,7 @@ static void run_vb_inplace(
 
         // E[log p(x | z, theta)] — uses precomputed d1/d2/d12 (no digamma calls here)
         // and -KL[q(z) || p(z)]
+        { PhaseScope ps(kPhElboData);
         parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
             double e = 0.0;
             for (int c = c0; c < c1; ++c) {
@@ -643,7 +681,9 @@ static void run_vb_inplace(
             }
             e_part[t] += e;
         });
+        }
         // -KL[q(theta) || p(theta)] — uses precomputed d1/d2 (3 lgamma + d1 + d2 + d12 per j,k)
+        { PhaseScope ps(kPhElboKl);
         parallel_det_chunks(ns, nthreads, [&](int t, int j0, int j1) {
             double e = 0.0;
             for (int j = j0; j < j1; ++j) {
@@ -662,6 +702,7 @@ static void run_vb_inplace(
             }
             e_part2[t] += e;
         });
+        }
         double elbo = 0.0;
         for (double v : e_part) elbo += v;
         for (double v : e_part2) elbo += v;
@@ -978,6 +1019,7 @@ struct PcaCache {
 static PcaCache compute_pca_cache(const CoveredSNPData& data, int n_pcs,
                                   int nthreads, uint64_t seed)
 {
+    PhaseScope ph_pca(kPhPca);
     PcaCache pc;
     // A SNP must be informative in ~1% of the cells (20 for large inputs, >= 5 for small ones).
     pc.inf = find_informative_snps(data, std::max(5, std::min(20, data.n_cells / 100)));
@@ -996,6 +1038,7 @@ static VBResult init_vb_pca_seeded(
     const PcaCache* cache = nullptr, bool quiet = false,
     int mode = 2)   // 1 = legacy (k-means++ on K-1 PCs), 2 = Ward-merged k-means on K+2 PCs
 {
+    PhaseScope ph_init(kPhInit);
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
 
@@ -1191,6 +1234,7 @@ struct ReducedSNPs {
 static ReducedSNPs reduce_snps(const CoveredSNPData& src,
                                const std::vector<int>& cells, int min_cells)
 {
+    PhaseScope ph_reduce(kPhReduce);
     std::vector<int32_t> cnt(src.n_covered_snps, 0);
     for (int c : cells)
         for (int32_t j : src.cells[c].snp_idx) ++cnt[j];
@@ -1297,6 +1341,7 @@ static AlleleTables build_allele_tables(
     const std::vector<uint8_t>* use,            // optional mask: cells that contribute counts
     int K, const DonorDemuxConfig& cfg, float eps_fixed = -1.0f)
 {
+    PhaseScope ph_tables(kPhTables);
     const int nc = d.n_cells, ns = d.n_covered_snps;
     const int nthreads = std::max(1, cfg.threads);
     AlleleTables T;
@@ -1465,6 +1510,7 @@ static void score_cells(
     float temper = 1.0f)                     // < 1 flattens the read likelihood (reads of one cell are
                                              // not independent: PCR, bursting) so posteriors are calibrated
 {
+    PhaseScope ph_score(kPhScore);
     const int K = T.K;
     const int npair = K * (K - 1) / 2;
     const int W = K + npair;
@@ -1698,6 +1744,7 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                                   const DonorDemuxConfig& cfg,
                                   std::vector<char>* alive_out = nullptr)
 {
+    PhaseScope ph_valid(kPhValid);
     const int npair = K * (K - 1) / 2;
     const int W = K + npair;
     std::vector<int> pa(npair), pb(npair);
@@ -1835,6 +1882,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
         int valid_f[2] = {1, 1};
 
         auto do_fold = [&](int f) {
+            PhaseScope ph_fold(kPhFold);
             const std::vector<int> kinds = (K == 1) ? std::vector<int>{0}
                                                     : std::vector<int>(cfg.k_select_inits, 2);
             VBResult fit = fit_vb_k(D[f], K, fcfg, kinds, std::min(cfg.max_iter_pre, 30),
@@ -2093,6 +2141,7 @@ inline DemuxResult run_demux(
 {
     std::cerr << "[demux] Starting donor demultiplexing: "
               << n_snps << " SNPs, " << n_cells << " cells\n";
+    for (int i = 0; i < kPhCount; ++i) demux_phase_ns()[i].store(0);
 
     auto cov = extract_covered_snps(n_snps, n_cells,
         ad_indptr, ad_indices, ad_data,
@@ -2407,6 +2456,12 @@ inline DemuxResult run_demux(
                   << n_unassigned_ambient << " unassigned\n";
     }
 
+    if (const char* pe = std::getenv("SINGLET_DEMUX_PROFILE"); pe && std::atoi(pe) != 0) {
+        std::cerr << "[demux] profile (thread-seconds):";
+        for (int i = 0; i < kPhCount; ++i)
+            std::cerr << " " << kDemuxPhaseName[i] << "=" << static_cast<double>(demux_phase_ns()[i].load()) * 1e-9;
+        std::cerr << "\n";
+    }
     demux_result.assignments = std::move(assignments);
     // Move beta arrays after back-assignment is complete (d1a/d2a/d12a hold copies)
     demux_result.beta_mu             = std::move(best_result.beta_mu);
