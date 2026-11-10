@@ -1566,6 +1566,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     in.release();
     singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
+    if (singlet_tail::on()) {   // what STAR's child holds after the engine (sizes only)
+        double a, sh; singlet_tail::rss(a, sh);
+        const double G = 1073741824.0;
+        singlet_tail::mark("prefill: host anon %.1f GB, shmem %.1f GB; records seq %.1f, blob %.1f, offsets %.1f; reads seq %.1f, off %.1f, aux %.1f; "
+                           "planes qual %.1f, r1 %.1f, seq %.1f, aux %.1f; readRecord %.1f GB", a, sh, out.seq.size() / G, out.blob.size() / G,
+                           (out.seqOff.size() + out.blobOff.size()) * 8 / G, in.seq.size() / G, in.off.size() * 8 / G, in.e10.aux.size() * 8 / G,
+                           ing.qual.size() / G, ing.r1.size() * 8 / G, ing.seq.size() / G, ing.aux.size() * 8 / G, out.readRecord.size() * 4 / G);
+    }
     time_t tGpu = time(nullptr);
     if (ok && tableMode) {   // per table sequence -> per read, in file order
         const uint64 nR = unitOfRead.size();
