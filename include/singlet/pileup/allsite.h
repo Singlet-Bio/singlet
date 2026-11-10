@@ -160,7 +160,7 @@ inline uint8_t aligned_base(const uint8_t* seq, int rlen, int qp, bool rev) {
 template <class Rec> inline bool low_q(const Rec& R, int qwords, uint64_t r, uint32_t idx) {
     return (R.lowq_word(static_cast<uint64_t>(qwords) * r + (idx >> 6)) >> (idx & 63)) & 1ull;
 }
-struct Tri { uint32_t cell, row; uint32_t val; };
+using Tri = dev::Count;   // (cell, row, val); the device route returns these records as they are
 struct TriAcc {   // SnpConsensus::finalize's accumulator: increment(feature, barcode, delta)
     std::vector<Tri> v;
     void increment(uint32_t f, uint32_t bc, uint32_t d) { v.push_back({bc, f, d}); }
@@ -188,27 +188,48 @@ template <class Rec>
 inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {
     using namespace detail;
     Result res;
+    const uint64_t T_run0 = now_ns();
     const uint64_t nS = R.n_sigs(), nR = R.n_reads();
     // 1. per signature: its primary alignment's contig when the alignment qualifies, else -1
+    // 2. reads per contig, ordered by signature then read index (deterministic)
+    // Both in equal slices on P.threads threads: slice-local counts per contig, then each slice scatters its reads in read order, so
+    // by_tid is the serial order. sig_tid is read at random (one miss per read), so the reads' signatures are prefetched.
+    const unsigned sel_th = std::max(1u, std::min<unsigned>(P.threads, static_cast<unsigned>(std::max<uint64_t>(1, nR / 65536))));
+    auto par = [&](auto&& f) { std::vector<std::thread> th; for (unsigned i = 1; i < sel_th; ++i) th.emplace_back(f, i); f(0u); for (auto& x : th) x.join(); };
     std::vector<int32_t> sig_tid(nS, -1);
     std::vector<uint8_t> sig_p(nS, 0);
-    for (uint64_t s = 0; s < nS; ++s) {
-        const auto& sg = R.sig(s);
-        for (int k = 0; k < sg.n_aln; ++k) {
-            const auto& a = R.aln(sg.aln_off + k);
-            if (!(a.flags & 2)) continue;
-            if (a.mapq >= P.min_mapq && a.tid >= 0 && static_cast<uint32_t>(a.tid) < n_tid && a.tid != P.skip_tid) { sig_tid[s] = a.tid; sig_p[s] = static_cast<uint8_t>(k); }
-            break;
+    par([&](unsigned i) {
+        for (uint64_t s = nS * i / sel_th, e = nS * (i + 1) / sel_th; s < e; ++s) {
+            const auto& sg = R.sig(s);
+            for (int k = 0; k < sg.n_aln; ++k) {
+                const auto& a = R.aln(sg.aln_off + k);
+                if (!(a.flags & 2)) continue;
+                if (a.mapq >= P.min_mapq && a.tid >= 0 && static_cast<uint32_t>(a.tid) < n_tid && a.tid != P.skip_tid) { sig_tid[s] = a.tid; sig_p[s] = static_cast<uint8_t>(k); }
+                break;
+            }
         }
-    }
-    // 2. reads per contig, ordered by signature then read index (deterministic)
+    });
+    std::vector<int32_t> read_tid(nR);   // the read's contig when it is used, else -1
+    std::vector<std::vector<uint64_t>> slice_cnt(sel_th, std::vector<uint64_t>(n_tid, 0));
+    par([&](unsigned i) {
+        auto& c = slice_cnt[i];
+        const uint64_t b = nR * i / sel_th, e = nR * (i + 1) / sel_th;
+        for (uint64_t r = b; r < e; ++r) {
+            if (r + 16 < e) __builtin_prefetch(&sig_tid[R.read(r + 16).sig]);
+            const auto& x = R.read(r);
+            const int32_t t = (x.bc >= 0 && static_cast<uint32_t>(x.bc) < n_barcodes) ? sig_tid[x.sig] : -1;
+            read_tid[r] = t; if (t >= 0) c[t]++;
+        }
+    });
     std::vector<uint64_t> cnt(n_tid + 1, 0);
-    auto use = [&](const auto& x) { return x.bc >= 0 && static_cast<uint32_t>(x.bc) < n_barcodes && sig_tid[x.sig] >= 0; };
-    for (uint64_t r = 0; r < nR; ++r) { const auto& x = R.read(r); if (use(x)) cnt[sig_tid[x.sig] + 1]++; }
-    for (uint32_t t = 0; t < n_tid; ++t) cnt[t + 1] += cnt[t];
+    for (uint32_t t = 0; t < n_tid; ++t) { uint64_t n = 0; for (unsigned i = 0; i < sel_th; ++i) n += slice_cnt[i][t]; cnt[t + 1] = cnt[t] + n; }
     std::vector<uint64_t> by_tid(cnt[n_tid]);
-    { std::vector<uint64_t> w(cnt.begin(), cnt.end() - 1);
-      for (uint64_t r = 0; r < nR; ++r) { const auto& x = R.read(r); if (use(x)) by_tid[w[sig_tid[x.sig]]++] = r; } }
+    for (uint32_t t = 0; t < n_tid; ++t) { uint64_t w = cnt[t]; for (unsigned i = 0; i < sel_th; ++i) { const uint64_t n = slice_cnt[i][t]; slice_cnt[i][t] = w; w += n; } }
+    par([&](unsigned i) {
+        auto& w = slice_cnt[i];
+        for (uint64_t r = nR * i / sel_th, e = nR * (i + 1) / sel_th; r < e; ++r) { const int32_t t = read_tid[r]; if (t >= 0) by_tid[w[t]++] = r; }
+    });
+    std::vector<int32_t>().swap(read_tid);
     res.reads_used = by_tid.size();
     std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
     std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { const uint64_t na = cnt[a + 1] - cnt[a], nb = cnt[b + 1] - cnt[b]; return na != nb ? na > nb : a < b; });
@@ -221,7 +242,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
     // the device route (allsite_device.h) computes the same sites and counts; when it declines, the contig workers below run
     bool dev_used = false; uint64_t dev_obs = 0, dev_dp = 0, dev_ad = 0;
     if (P.device && P.umi_dedup && P.umi_len >= 1 && P.umi_len <= 20)
-        dev_used = device_pass(R, G, P, n_tid, n_barcodes, sig_p, cnt, by_tid, order, out, dev_obs, dev_dp, dev_ad);
+        dev_used = device_pass(R, G, P, n_tid, n_barcodes, sig_p, cnt, by_tid, order, out, dev_obs, dev_dp, dev_ad, T_run0);
     std::atomic<uint32_t> next{0};
     auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };   // as k_lists + q_pass
     auto walk = [&](uint64_t r, auto&& on_base) {   // on_base(pos, nt16 code, record index) for every aligned base of read r (quality: pass_q)

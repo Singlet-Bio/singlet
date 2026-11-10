@@ -20,7 +20,7 @@ namespace singlet { namespace allsite { namespace detail {
 template <class Rec, class Out>
 inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t n_tid, uint32_t n_barcodes,
                         const std::vector<uint8_t>& sig_p, const std::vector<uint64_t>& cnt, const std::vector<uint64_t>& by_tid,
-                        const std::vector<uint32_t>& order, Out& out, uint64_t& obs, uint64_t& dp_mol, uint64_t& ad_mol) {
+                        const std::vector<uint32_t>& order, Out& out, uint64_t& obs, uint64_t& dp_mol, uint64_t& ad_mol, uint64_t t_run0) {
     using dev::Read;
     const auto t0 = std::chrono::steady_clock::now();
     dev::Input in;
@@ -31,25 +31,31 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
     if (ctid.empty()) return false;
     in.contigs.resize(ctid.size());
     const unsigned nth = std::max(1u, P.threads);
-    auto aln_of = [&](uint64_t r) -> decltype(R.aln(0)) { const auto& x = R.read(r); return R.aln(R.sig(x.sig).aln_off + sig_p[x.sig]); };
     auto nlq_of = [&](uint16_t rlen) { return P.use_qual ? static_cast<uint64_t>((rlen + 63) / 64) : 0ull; };
-    {   // per contig: the sizes of its gathered arrays
-        std::atomic<size_t> next{0};
-        auto work = [&]() {
-            for (;;) {
-                const size_t k = next.fetch_add(1); if (k >= ctid.size()) return;
-                const uint32_t t = ctid[k]; dev::Contig& c = in.contigs[k];
-                c.tid = static_cast<int32_t>(t); c.reads = cnt[t + 1] - cnt[t];
-                for (uint64_t j = cnt[t]; j < cnt[t + 1]; ++j) {
-                    const uint64_t r = by_tid[j]; const auto& x = R.read(r); const uint16_t rlen = R.sig(x.sig).rlen;
-                    c.ops += aln_of(r).n_ops; c.seqb += (rlen + 1u) / 2u; c.lqw += nlq_of(rlen);
-                }
-                c.ref = G.contig(static_cast<int32_t>(t), &c.ref_len);
+    {   // per contig: the sizes of its gathered arrays, from equal slices of the selected reads (per-thread sums per contig)
+        const uint64_t nsel = cnt[n_tid];
+        std::vector<std::vector<uint64_t>> part(nth, std::vector<uint64_t>(3 * static_cast<size_t>(n_tid), 0));
+        auto work = [&](unsigned s) {
+            const uint64_t a = nsel * s / nth, b = nsel * (s + 1) / nth;
+            if (a >= b) return;
+            uint32_t t = static_cast<uint32_t>(std::upper_bound(cnt.begin(), cnt.end(), a) - cnt.begin()) - 1;
+            std::vector<uint64_t>& v = part[s];
+            for (uint64_t j = a; j < b; ++j) {
+                while (j >= cnt[t + 1]) ++t;
+                const uint64_t r = by_tid[j]; const auto& x = R.read(r); const auto& sg = R.sig(x.sig);
+                v[3 * t] += R.aln(sg.aln_off + sig_p[x.sig]).n_ops; v[3 * t + 1] += (sg.rlen + 1u) / 2u; v[3 * t + 2] += nlq_of(sg.rlen);
             }
         };
-        std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work);
-        work(); for (auto& x : th) x.join();
+        std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work, i);
+        work(0); for (auto& x : th) x.join();
+        for (size_t k = 0; k < ctid.size(); ++k) {
+            const uint32_t t = ctid[k]; dev::Contig& c = in.contigs[k];
+            c.tid = static_cast<int32_t>(t); c.reads = cnt[t + 1] - cnt[t];
+            for (unsigned i = 0; i < nth; ++i) { c.ops += part[i][3 * t]; c.seqb += part[i][3 * t + 1]; c.lqw += part[i][3 * t + 2]; }
+            c.ref = G.contig(static_cast<int32_t>(t), &c.ref_len);
+        }
     }
+    const double s_sizes = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     in.gather = [&](uint32_t c0, uint32_t c1, Read* rd, uint32_t* ops, uint8_t* seq, uint64_t* lq) {
         // the reads of contigs [c0, c1) in slices, one per thread: sizes, then offsets, then the copy
         std::vector<uint64_t> list_off{0};
@@ -102,16 +108,16 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         pt.sites.resize(co.pos.size());
         for (size_t i = 0; i < co.pos.size(); ++i)
             pt.sites[i] = Site{t, co.pos[i], "ACGT"[co.ref[i] & 3], "ACGT"[co.alt[i] & 3], co.mol[i], co.cells[i]};
-        static_assert(sizeof(Tri) == sizeof(dev::Count), "Tri and dev::Count share one layout (cell, row, val)");
-        pt.dp.resize(co.dp.size()); if (!co.dp.empty()) std::memcpy(pt.dp.data(), co.dp.data(), co.dp.size() * sizeof(Tri));
-        pt.ad.resize(co.ad.size()); if (!co.ad.empty()) std::memcpy(pt.ad.data(), co.ad.data(), co.ad.size() * sizeof(Tri));
-        std::vector<dev::Count>().swap(co.dp); std::vector<dev::Count>().swap(co.ad);
+        pt.dp.swap(co.dp); pt.ad.swap(co.ad);   // Tri is dev::Count
     }
     auto& st = out[ctid[0]].st;   // run() sums the statistics over contigs
     st.snp_molecules += o.molecules; st.snp_molecules_ambiguous += o.ambiguous; st.snp_molecules_other += o.other;
-    std::cerr << "[allsite-gpu] " << o.chunks << " chunks, " << o.blocks << " blocks; hits " << o.hits << ", entries " << o.entries << ", groups " << o.groups
+    const double s_sel = 1e-9 * static_cast<double>(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count()) - t_run0);
+    std::cerr << "[allsite-gpu] selection " << s_sel
+              << " s, sizes " << s_sizes << " s; " << o.chunks << " chunks, " << o.blocks << " blocks; hits " << o.hits << ", entries " << o.entries << ", groups " << o.groups
               << "; device arena " << (o.arena_bytes >> 20) << " MiB; s: gather " << o.sec_gather << ", upload " << o.sec_upload << ", discovery " << o.sec_disc
-              << ", counting " << o.sec_count << ", device total " << o.sec << ", hook total "
+              << ", counting " << o.sec_count << " (hits " << o.sec_hits << ", sort " << o.sec_sort << ", entries " << o.sec_entries << ", R9 and vote " << o.sec_r9
+              << ", out " << o.sec_out << "), device total " << o.sec << ", hook total "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
     return true;
 }

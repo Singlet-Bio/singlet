@@ -59,6 +59,7 @@ struct Output {
     std::vector<ContigOut> contigs;   // parallel to Input::contigs
     uint64_t obs = 0, molecules = 0, ambiguous = 0, other = 0, ad_molecules = 0, hits = 0, entries = 0, groups = 0;
     double sec = 0, sec_gather = 0, sec_upload = 0, sec_disc = 0, sec_count = 0;
+    double sec_hits = 0, sec_sort = 0, sec_entries = 0, sec_r9 = 0, sec_out = 0;   // counting stages (SINGLET_ALLSITE_GPU_TIMING=1)
     uint64_t arena_bytes = 0, chunks = 0, blocks = 0;
     std::string why;                  // why the device route declined or failed (the host pass then runs)
 };

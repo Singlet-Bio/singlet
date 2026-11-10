@@ -385,6 +385,10 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<uint64_t[]> hQ(new uint64_t[mxQ + 1]);
 
         u64 stat[2] = {0, 0};
+        const bool TM = std::getenv("SINGLET_ALLSITE_GPU_TIMING") != nullptr;
+        auto tStage = std::chrono::steady_clock::now();
+        auto stage = [&](double& acc) { if (!TM) return; AS_CK(cudaStreamSynchronize(st)); const auto t = std::chrono::steady_clock::now();
+                                         acc += std::chrono::duration<double>(t - tStage).count(); tStage = t; };
         for (size_t k = 0; k + 1 < cut.size(); ++k) {
             const u32 c0 = cut[k], c1 = cut[k + 1], nC = c1 - c0;
             u64 nR = 0, nO = 0, nS = 0, nQ = 0, maxRef = 1;
@@ -514,6 +518,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             while (!todo.empty()) {
                 const u32 s0 = todo.back().first, s1 = todo.back().second; todo.pop_back();
                 A.top = workMark;
+                if (TM) { AS_CK(cudaStreamSynchronize(st)); tStage = std::chrono::steady_clock::now(); }
                 kHits<false><<<gridFor(n), 256, 0, st>>>(C, n, dSpos, dSra, dRf, dRl, s0, s1, dCnt, nullptr, nullptr, nullptr, bcBits, L);
                 u64 N = 0; scanCounts(N);
                 if (N > capHitsUse) {
@@ -526,6 +531,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 const int sBits = bitsFor(s1 - s0 - 1) + bcBits;
                 u64* h1 = A.get<u64>(N); u64* h2 = A.get<u64>(N); u64* l1 = A.get<u64>(N); u64* l2 = A.get<u64>(N);
                 kHits<true><<<gridFor(n), 256, 0, st>>>(C, n, dSpos, dSra, dRf, dRl, s0, s1, nullptr, dOff, h1, l1, bcBits, L);
+                stage(out.sec_hits);
                 cub::DoubleBuffer<u64> dbL(l1, l2), dbH(h1, h2);
                 size_t tb = 0; AS_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, dbL, dbH, (int) N, 0, loBits, st));
                 size_t tb2 = 0; AS_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb2, dbH, dbL, (int) N, 0, sBits, st));
@@ -533,6 +539,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 AS_CK(cub::DeviceRadixSort::SortPairs(tmp, tb, dbL, dbH, (int) N, 0, loBits, st));    // by (UMI, class), then (stable) by (site, barcode)
                 AS_CK(cub::DeviceRadixSort::SortPairs(tmp, tb2, dbH, dbL, (int) N, 0, sBits, st));
                 A.top = tm;
+                stage(out.sec_sort);
                 const u64* H = dbH.Current(); const u64* Lo = dbL.Current();
                 u64* ehi = dbH.Alternate(); u64* eumi = dbL.Alternate();
                 u8* f8 = A.get<u8>(N); u32* eS = A.get<u32>(N + 1);
@@ -554,10 +561,12 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 AS_CK(cub::DeviceSelect::Flagged(tmp, t3, cnt0, f8, gS, dNum + 1, nE, st)); A.top = tm;
                 int nG = 0; AS_CK(cudaMemcpyAsync(&nG, dNum + 1, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
                 out.entries += (u64) nE; out.groups += (u64) nG;
+                stage(out.sec_entries);
                 if (in.directional) kUnion<<<gridFor(nE), 256, 0, st>>>(eumi, er, gid, gS, dNum, dNum + 1, par, L);
                 AS_CK(cudaMemsetAsync(agg, 0, 3 * (size_t) nE * 4, st));
                 kRootAgg<<<gridFor(nE), 256, 0, st>>>(par, en, dNum, agg);
-                                GOut* go = A.get<GOut>(nG); TriOut* tri = A.get<TriOut>(nG); u8* fad = A.get<u8>(nG);
+                                stage(out.sec_r9);
+                GOut* go = A.get<GOut>(nG); TriOut* tri = A.get<TriOut>(nG); u8* fad = A.get<u8>(nG);
                 kGroups<<<gridFor(nG), 256, 0, st>>>(ehi, gS, dNum, dNum + 1, par, agg, s0, dSoff, nC, bcBits, go, f8, fad, dStat);
                 // per contig of the block: its groups [first group of the contig's first site, ...), selected into DP and AD triplets
                 std::vector<u32> cs;   // the contigs whose site ranges meet [s0, s1)
@@ -592,6 +601,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                         (w == 0 ? out.molecules : out.ad_molecules) += sum;
                     }
                 }
+                stage(out.sec_out);
                 if (in.progress) in.progress();
             }
             AS_CK(cudaMemcpyAsync(stat, dStat, 16, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
