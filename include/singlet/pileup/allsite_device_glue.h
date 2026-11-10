@@ -72,7 +72,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         auto par = [&](auto&& f) { std::vector<std::thread> th; for (unsigned s = 1; s < nth; ++s) th.emplace_back(f, s); f(0u); for (auto& x : th) x.join(); };
         for (size_t k = 0; k < base.size(); ++k) {
             const dev::Contig& c = base[k];
-            if (dev::contig_bytes(c) <= max_bytes && c.reads < max_items && c.ops < max_items && c.seqb < max_items) {
+            if (dev::contig_bytes(c) <= max_bytes && c.reads < max_items) {
                 nc.push_back(c); nk.push_back(static_cast<uint32_t>(k)); nl.emplace_back(); continue;
             }
             // windows of 1 kb bins by read start, each with about a third of the budget in its own reads (reads overlapping its start and
@@ -91,16 +91,22 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
             });
             const uint64_t fix = c.ref_len + 4096;
             const uint64_t target = max_bytes / 3 > fix ? max_bytes / 3 - fix : 1;
-            const uint64_t tgt_items = max_items / 3;
             std::vector<int32_t> bnd;   // window w owns [bnd[w-1], bnd[w]), open at both ends
             { uint64_t acc = 0;
               for (uint64_t b = 0; b < nb; ++b) {
                   uint64_t h = 0; for (unsigned s = 0; s < nth; ++s) h += hist[s][b];
                   if (h == 0) continue;
-                  if (acc > 0 && (acc + h > target || acc + h > tgt_items)) { bnd.push_back(static_cast<int32_t>(b << sh)); acc = 0; }
+                  if (acc > 0 && acc + h > target) { bnd.push_back(static_cast<int32_t>(b << sh)); acc = 0; }
                   acc += h;
               } }
-            if (bnd.empty()) return false;
+            auto fail = [&](const char* what, uint64_t wr, uint64_t wb) {   // sizes only
+                uint64_t hb = 0; for (uint64_t b = 0; b < nb; ++b) { uint64_t h = 0; for (unsigned s = 0; s < nth; ++s) h += hist[s][b]; hb = std::max(hb, h); }
+                std::cerr << "[allsite-gpu] window split failed (" << what << "): contig " << t << " length " << c.ref_len << ", " << c.reads << " reads, "
+                          << (dev::contig_bytes(c) >> 20) << " MiB; largest 1 kb bin " << (hb >> 20) << " MiB; " << bnd.size() + 1 << " windows; window "
+                          << wr << " reads, " << (wb >> 20) << " MiB; budget " << (max_bytes >> 20) << " MiB" << std::endl;
+                return false;
+            };
+            if (bnd.empty()) return fail("one bin", c.reads, dev::contig_bytes(c));
             const size_t nw = bnd.size() + 1;
             auto win = [&](int64_t p) { return static_cast<size_t>(std::upper_bound(bnd.begin(), bnd.end(), p) - bnd.begin()); };
             // reads per (slice, window), then each slice's offsets, then the lists and sizes
@@ -130,7 +136,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
             for (size_t w = 0; w < nw; ++w) {
                 for (unsigned s = 0; s < nth; ++s) { wcs[w].ops += wsz[s][3 * w]; wcs[w].seqb += wsz[s][3 * w + 1]; wcs[w].lqw += wsz[s][3 * w + 2]; }
                 const dev::Contig& v = wcs[w];
-                if (v.reads == 0 || dev::contig_bytes(v) > max_bytes || v.reads >= max_items || v.ops >= max_items || v.seqb >= max_items) return false;
+                if (v.reads == 0 || dev::contig_bytes(v) > max_bytes || v.reads >= max_items) return fail("window", v.reads, dev::contig_bytes(v));
                 nc.push_back(v); nk.push_back(static_cast<uint32_t>(k)); nl.push_back(std::move(wl[w]));
             }
             ++n_split;
@@ -161,7 +167,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
                 const uint64_t sb = (sg.rlen + 1u) / 2u, nl = nlq_of(sg.rlen);
                 if (write) {
                     Read& d = rd[i];
-                    d.pos = al.pos; d.bc = x.bc; d.umi3 = x.umi3; d.lq = o.lq; d.ops = static_cast<uint32_t>(o.ops); d.seq = static_cast<uint32_t>(o.seq);
+                    d.pos = al.pos; d.bc = x.bc; d.umi3 = x.umi3; d.lq = o.lq; d.ops = o.ops; d.seq = o.seq;
                     d.rlen = sg.rlen; d.nops = al.n_ops; d.ci = static_cast<uint16_t>(c); d.rev = (al.flags & 1) ? 1 : 0; d.nlq = static_cast<uint8_t>(nl);
                     const uint32_t* op = R.ops_at(al.ops_off); for (uint32_t k = 0; k < al.n_ops; ++k) ops[o.ops + k] = op[k];
                     std::memcpy(seq + o.seq, R.seq_at(sg.seq_off), sb);

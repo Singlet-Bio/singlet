@@ -445,7 +445,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             u64 hard = (u64) (0.7 * (double) A.cap); const u64 lim32 = 0x7fffffffull;
             if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) hard = std::min(hard, v); }   // test knob
             bool over = false;
-            for (const AD::Contig& C : in.contigs) over = over || dataBytes(C) > hard || C.reads >= lim32 || C.ops >= lim32 || C.seqb >= lim32;
+            for (const AD::Contig& C : in.contigs) over = over || dataBytes(C) > hard || C.reads >= lim32;
             if (over && in.resplit) {
                 if (!in.resplit(hard, lim32)) { out.why = "a contig could not be split to fit the arena (" + std::to_string(A.cap >> 20) + " MiB)"; return false; }
                 nCt = (u32) in.contigs.size(); out.contigs.assign(nCt, AD::ContigOut{});
@@ -455,16 +455,15 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         u64 chunkReads = 0x7fffffffull, blockHits = 0;   // test knobs: smaller chunks and blocks than memory allows
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_CHUNK_READS")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) chunkReads = v; }
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_BLOCK_HITS")) blockHits = strtoull(e, nullptr, 10);
-        // a chunk's op and sequence offsets are 32-bit (Read::ops, Read::seq): chunks also end before either array reaches 2^31
-        { const u64 lim = (u64) (0.45 * (double) A.cap), lim32 = 0x7fffffffull; u64 acc = 0, nr = 0, no = 0, ns = 0;
+        { const u64 lim = (u64) (0.45 * (double) A.cap), lim32 = 0x7fffffffull; u64 acc = 0, nr = 0;
           for (u32 c = 0; c < nCt; ++c) {
               const AD::Contig& C = in.contigs[c];
               const u64 b = dataBytes(C);
-              if (b > (u64) (0.7 * (double) A.cap) || C.reads >= lim32 || C.ops >= lim32 || C.seqb >= lim32) {
+              if (b > (u64) (0.7 * (double) A.cap) || C.reads >= lim32) {
                   out.why = "a contig's reads exceed the device budget (arena " + std::to_string(A.cap >> 20) + " MiB)"; return false; }
-              if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + C.reads > chunkReads || no + C.ops >= lim32 || ns + C.seqb >= lim32)) {
-                  cut.push_back(c); acc = 0; nr = 0; no = 0; ns = 0; }
-              acc += b; nr += C.reads; no += C.ops; ns += C.seqb;
+              if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + C.reads > chunkReads)) {
+                  cut.push_back(c); acc = 0; nr = 0; }
+              acc += b; nr += C.reads;
           }
           cut.push_back(nCt); }
         out.chunks = cut.size() - 1;
@@ -476,7 +475,6 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             for (u32 c = cut[k]; c < cut[k + 1]; ++c) { r += in.contigs[c].reads; o += in.contigs[c].ops; s += in.contigs[c].seqb; q += in.contigs[c].lqw; }
             mxR = std::max(mxR, r); mxO = std::max(mxO, o); mxS = std::max(mxS, s); mxQ = std::max(mxQ, q);
         }
-        if (mxO >= 0xffffffffull || mxS >= 0xffffffffull) { out.why = "chunk arrays past 32-bit offsets"; return false; }
         std::unique_ptr<AD::Read[]> hR(new AD::Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
         std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<uint64_t[]> hQ(new uint64_t[mxQ + 1]);
 

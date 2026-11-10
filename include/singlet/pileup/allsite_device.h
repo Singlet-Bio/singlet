@@ -26,12 +26,12 @@ namespace singlet { namespace allsite { namespace dev {
 struct Read {
     int32_t pos; int32_t bc; uint64_t umi3;
     uint64_t lq;          // first mask word (nlq words follow)
-    uint32_t ops, seq;    // first op, first sequence byte
+    uint64_t ops, seq;    // first op, first sequence byte (64-bit: a deep contig passes 2^32 sequence bytes)
     uint16_t rlen, nops;
     uint16_t ci;          // the contig's index within the chunk
     uint8_t rev, nlq;
 };
-static_assert(sizeof(Read) == 40, "dev::Read layout");
+static_assert(sizeof(Read) == 48, "dev::Read layout");
 
 struct Contig {           // one contig with reads, in the order the host gathers them
     int32_t tid = -1;
@@ -54,8 +54,8 @@ struct Input {
     // from the start of those arrays and Read::ci = contig index - c0
     std::function<void(uint32_t c0, uint32_t c1, Read* reads, uint32_t* ops, uint8_t* seq, uint64_t* lq)> gather;
     std::function<void()> progress;
-    // called once, after the arena is sized, when an entry exceeds max_bytes (contig_bytes) or has max_items or more reads, ops or
-    // sequence bytes: the caller replaces such contigs by windows (consecutive entries in position order) that fit; false = it cannot
+    // called once, after the arena is sized, when an entry exceeds max_bytes (contig_bytes) or has max_items or more reads: the caller
+    // replaces such contigs by windows (consecutive entries in position order) that fit; false = it cannot
     std::function<bool(uint64_t max_bytes, uint64_t max_items)> resplit;
     // whether a counted site stays, from its ALT and depth molecules summed over every barcode (the host's rec::floor_keep); null keeps all
     std::function<bool(uint64_t ad, uint64_t dp)> keep_site;
