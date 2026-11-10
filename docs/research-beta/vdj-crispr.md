@@ -29,7 +29,7 @@ the authors' published outputs) and TRUST4. MiXCR was dropped because it needs a
   compare, Replogle and Norman guide-table preparation).
 - **Results contract:** `bench/public/capabilities/{vdj,crispr_guides}.py`. The interim JSONs are in
   `bench/public/results/`.
-- **Docs:** `docs/vdj-crispr-modalities.md` (method and CRISPR results) and `docs/format-v2.md` §14 (storage proposal).
+- **Docs:** `docs/vdj-crispr-modalities.md` (method and CRISPR results) and `docs/format-store.md` §14 (storage proposal).
 
 ## Results so far
 

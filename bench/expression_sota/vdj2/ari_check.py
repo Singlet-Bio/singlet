@@ -43,6 +43,10 @@ ab, cb_ = ari(kb)
 print(f"ARI {da} {aa:.4f}  {db} {ab:.4f}  diff {ab - aa:+.4f}  common cells {len(ca_)} {len(cb_)}")
 diff = sorted(set(ka.index.symmetric_difference(kb.index)) | {b for b in ka.index.intersection(kb.index) if ka[b] != kb[b]})
 print("cells that differ:", len(diff))
+# Addendum 1: a drop is tolerated when it comes from cells whose new chain set equals Cell Ranger's
+eqb = sum(kb.get(b) == ca.get(b) for b in diff)
+eqa = sum(ka.get(b) == ca.get(b) for b in diff)
+print(f"of them: new equals Cell Ranger {eqb}, old equals Cell Ranger {eqa}, neither {len(diff) - eqa - eqb}")
 for b in diff:
     x, _ = ari(ka, [b])
     y, _ = ari(kb, [b])

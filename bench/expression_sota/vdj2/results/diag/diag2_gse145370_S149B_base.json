@@ -1,0 +1,136 @@
+{
+ "lib": "gse145370_S149B",
+ "sdir": "singlet_base",
+ "reference_paired_cells": 1291,
+ "correct_pairing": 0.855151045701007,
+ "stats": {
+  "read_pairs": 43204688,
+  "umis": 224836,
+  "umi_read_threshold": 47,
+  "umi_reads_median": 2347.0,
+  "umis_low_support": 194632,
+  "barcodes_assembled": 2798,
+  "contigs": 4652,
+  "contigs_kept": 4178
+ },
+ "miss_classes": {
+  "TRA:diff_other": 20,
+  "TRA:exact_ambient": 44,
+  "TRA:exact_kept_not_top": 18,
+  "TRA:exact_low_support": 3,
+  "TRA:no_chain": 9,
+  "TRB:diff_other": 14,
+  "TRB:exact_ambient": 66,
+  "TRB:exact_kept_not_top": 7,
+  "TRB:exact_low_support": 1,
+  "TRB:no_chain": 16
+ },
+ "miss_class_totals": {
+  "no_chain": 25,
+  "diff_other": 34,
+  "exact_ambient": 110,
+  "exact_kept_not_top": 25,
+  "exact_low_support": 4
+ },
+ "ref_umis_of_missed_by_class": {
+  "diff_other": {
+   "count": 34.0,
+   "25%": 2.25,
+   "50%": 6.0,
+   "75%": 9.0
+  },
+  "exact_ambient": {
+   "count": 110.0,
+   "25%": 1.0,
+   "50%": 1.0,
+   "75%": 2.0
+  },
+  "exact_kept_not_top": {
+   "count": 25.0,
+   "25%": 1.0,
+   "50%": 2.0,
+   "75%": 5.0
+  },
+  "exact_low_support": {
+   "count": 4.0,
+   "25%": 3.25,
+   "50%": 4.0,
+   "75%": 7.5
+  },
+  "no_chain": {
+   "count": 25.0,
+   "25%": 1.0,
+   "50%": 3.0,
+   "75%": 5.0
+  }
+ },
+ "ref_umis_all_tops": {
+  "count": 2981.0,
+  "25%": 2.0,
+  "50%": 4.0,
+  "75%": 7.0
+ },
+ "exact_filtered_detail": {
+  "exact_ambient": {
+   "umis": 1.0,
+   "reads": 2486.0,
+   "junction_umis": 1.0,
+   "ref_umis": 1.0,
+   "jmax": 23.0,
+   "top_umis": 0.0,
+   "top_reads": 0.0
+  },
+  "exact_kept_not_top": {
+   "umis": 2.0,
+   "reads": 2711.0,
+   "junction_umis": 2.0,
+   "ref_umis": 2.0,
+   "jmax": 3.0,
+   "top_umis": 3.0,
+   "top_reads": 3150.0
+  },
+  "exact_low_support": {
+   "umis": 1.5,
+   "reads": 106.0,
+   "junction_umis": 0.5,
+   "ref_umis": 4.0,
+   "jmax": 7.0,
+   "top_umis": 0.0,
+   "top_reads": 0.0
+  }
+ },
+ "exact_filtered_shares": {
+  "exact_ambient": {
+   "other_kept": 0.05454545454545454,
+   "tie": 0.02727272727272727,
+   "more_reads": 0.05454545454545454
+  },
+  "exact_kept_not_top": {
+   "other_kept": 1.0,
+   "tie": 0.4,
+   "more_reads": 0.28
+  },
+  "exact_low_support": {
+   "other_kept": 0.0,
+   "tie": 0.0,
+   "more_reads": 0.0
+  }
+ },
+ "exact_matches": 2746,
+ "v_agreement_equiv": 0.9996358339402768,
+ "v_agreement_raw": 0.9996358339402768,
+ "j_agreement": 1.0,
+ "v_disagree_top": [
+  [
+   "TRAV3->TRAV2",
+   1
+  ]
+ ],
+ "j_disagree_top": [],
+ "v_raw_disagree_top": [
+  [
+   "TRAV3->TRAV2",
+   1
+  ]
+ ]
+}

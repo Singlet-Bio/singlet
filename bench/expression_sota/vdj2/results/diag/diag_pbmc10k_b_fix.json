@@ -1,0 +1,278 @@
+{
+ "lib": "pbmc10k_b",
+ "sdir": "singlet_fix",
+ "reference_paired_cells": 961,
+ "correct_pairing": 0.9698231009365245,
+ "stats": {
+  "read_pairs": 38870183,
+  "umis": 375612,
+  "umi_read_threshold": 3,
+  "umi_reads_median": 146.0,
+  "umis_low_support": 136135,
+  "barcodes_assembled": 1503,
+  "contigs": 2795,
+  "contigs_kept": 2408
+ },
+ "miss_classes": {
+  "IGH:diff_other": 4,
+  "IGH:exact_low_support": 2,
+  "IGH:no_barcode": 7,
+  "IGH:no_chain": 4,
+  "IGK:diff_other": 2,
+  "IGK:exact_ambient": 1,
+  "IGK:no_barcode": 4,
+  "IGK:no_chain": 3,
+  "IGL:exact_ambient": 4,
+  "IGL:no_barcode": 3,
+  "IGL:no_chain": 2
+ },
+ "miss_class_totals": {
+  "no_chain": 9,
+  "no_barcode": 14,
+  "exact_low_support": 2,
+  "diff_other": 6,
+  "exact_ambient": 5
+ },
+ "ref_umis_of_missed_by_class": {
+  "diff_other": {
+   "count": 6.0,
+   "25%": 15.0,
+   "50%": 21.0,
+   "75%": 24.0
+  },
+  "exact_ambient": {
+   "count": 5.0,
+   "25%": 4.0,
+   "50%": 5.0,
+   "75%": 9.0
+  },
+  "exact_low_support": {
+   "count": 2.0,
+   "25%": 57.25,
+   "50%": 57.5,
+   "75%": 57.75
+  },
+  "no_barcode": {
+   "count": 14.0,
+   "25%": 2.25,
+   "50%": 5.0,
+   "75%": 14.0
+  },
+  "no_chain": {
+   "count": 9.0,
+   "25%": 19.0,
+   "50%": 54.0,
+   "75%": 90.0
+  }
+ },
+ "ref_umis_all_tops": {
+  "count": 1971.0,
+  "25%": 23.0,
+  "50%": 35.0,
+  "75%": 52.0
+ },
+ "exact_filtered_detail": {
+  "exact_ambient": {
+   "umis": 5.0,
+   "reads": 530.0,
+   "junction_umis": 5.0,
+   "ref_umis": 5.0
+  },
+  "exact_low_support": {
+   "umis": 29.0,
+   "reads": 179.5,
+   "junction_umis": 11.5,
+   "ref_umis": 57.5
+  }
+ },
+ "exact_matches": 1931,
+ "v_agreement_equiv": 0.92594510616261,
+ "v_agreement_raw": 0.8493008803728638,
+ "j_agreement": 0.9715173485240808,
+ "v_disagree_top": [
+  [
+   "IGHV3-33->IGHV3-30",
+   47
+  ],
+  [
+   "IGHV1-8->IGHV1-2",
+   26
+  ],
+  [
+   "IGHV3-43->IGHV3-20",
+   14
+  ],
+  [
+   "IGHV4-30-4->IGHV4-30-2",
+   12
+  ],
+  [
+   "IGHV3-43->IGHV3-23",
+   9
+  ],
+  [
+   "IGHV4-30-4->IGHV4-55",
+   8
+  ],
+  [
+   "IGHV3-30->IGHV3-33",
+   5
+  ],
+  [
+   "IGHV3-7->IGHV3-41",
+   3
+  ],
+  [
+   "IGKV3D-15->IGKV3-15",
+   3
+  ],
+  [
+   "IGHV3-66->IGHV3-53",
+   3
+  ],
+  [
+   "IGHV3-7->IGHV3-23",
+   2
+  ],
+  [
+   "IGHV4-59->IGHV4-34",
+   2
+  ],
+  [
+   "IGKV1-8->IGKV1-33",
+   1
+  ],
+  [
+   "IGHV3-48->IGHV3-21",
+   1
+  ],
+  [
+   "IGHV3-53->IGHV3-21",
+   1
+  ]
+ ],
+ "j_disagree_top": [
+  [
+   "IGLJ2->IGLJ3",
+   12
+  ],
+  [
+   "IGHJ4->IGHJ6",
+   9
+  ],
+  [
+   "IGHJ4->IGHJ1",
+   7
+  ],
+  [
+   "IGHJ4->IGHJ5",
+   4
+  ],
+  [
+   "IGHJ4->IGHJ3",
+   3
+  ],
+  [
+   "IGLJ3->IGLJ6",
+   2
+  ],
+  [
+   "IGHJ1->IGHJ4",
+   2
+  ],
+  [
+   "IGHJ4->IGHJ2",
+   2
+  ],
+  [
+   "IGKJ2->IGKJ5",
+   2
+  ],
+  [
+   "IGLJ3->IGLJ7",
+   1
+  ],
+  [
+   "IGKJ4->IGKJ2",
+   1
+  ],
+  [
+   "IGKJ2->IGKJ3",
+   1
+  ],
+  [
+   "IGKJ4->IGKJ3",
+   1
+  ],
+  [
+   "IGLJ3->IGKJ4",
+   1
+  ],
+  [
+   "IGLJ2->IGLJ4",
+   1
+  ]
+ ],
+ "v_raw_disagree_top": [
+  [
+   "IGKV1D-39->IGKV1-39",
+   97
+  ],
+  [
+   "IGHV3-33->IGHV3-30",
+   47
+  ],
+  [
+   "IGHV1-69D->IGHV1-69",
+   33
+  ],
+  [
+   "IGHV1-8->IGHV1-2",
+   26
+  ],
+  [
+   "IGHV3-43->IGHV3-20",
+   14
+  ],
+  [
+   "IGHV4-30-4->IGHV4-30-2",
+   12
+  ],
+  [
+   "IGHV3-43->IGHV3-23",
+   9
+  ],
+  [
+   "IGHV4-31->IGHV4-30-2",
+   9
+  ],
+  [
+   "IGKV2D-28->IGKV2-28",
+   8
+  ],
+  [
+   "IGHV4-30-4->IGHV4-55",
+   8
+  ],
+  [
+   "IGHV3-30->IGHV3-33",
+   5
+  ],
+  [
+   "IGHV3-7->IGHV3-41",
+   3
+  ],
+  [
+   "IGKV3D-15->IGKV3-15",
+   3
+  ],
+  [
+   "IGHV3-66->IGHV3-53",
+   3
+  ],
+  [
+   "IGHV3-7->IGHV3-23",
+   2
+  ]
+ ]
+}

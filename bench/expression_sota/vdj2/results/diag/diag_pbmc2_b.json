@@ -1,0 +1,305 @@
+{
+ "lib": "pbmc2_b",
+ "sdir": "singlet",
+ "reference_paired_cells": 1116,
+ "correct_pairing": 0.9301075268817204,
+ "stats": {
+  "read_pairs": 12165324,
+  "umis": 338228,
+  "umi_read_threshold": 3,
+  "umi_reads_median": 113.0,
+  "umis_low_support": 86114,
+  "barcodes_assembled": 2497,
+  "contigs": 4888,
+  "contigs_kept": 3515
+ },
+ "miss_classes": {
+  "IGH:diff_other": 2,
+  "IGH:diff_sub": 1,
+  "IGH:exact_ambient": 1,
+  "IGH:exact_kept_not_top": 19,
+  "IGH:no_barcode": 14,
+  "IGH:no_chain": 1,
+  "IGK:diff_other": 10,
+  "IGK:exact_ambient": 5,
+  "IGK:exact_kept_not_top": 16,
+  "IGK:exact_low_support": 1,
+  "IGK:no_barcode": 8,
+  "IGK:no_chain": 5,
+  "IGL:diff_other": 2,
+  "IGL:exact_ambient": 2,
+  "IGL:exact_kept_not_top": 1,
+  "IGL:exact_low_support": 4,
+  "IGL:no_barcode": 6,
+  "IGL:no_chain": 2
+ },
+ "miss_class_totals": {
+  "no_barcode": 28,
+  "exact_kept_not_top": 36,
+  "exact_ambient": 8,
+  "exact_low_support": 5,
+  "no_chain": 8,
+  "diff_other": 14,
+  "diff_sub": 1
+ },
+ "ref_umis_of_missed_by_class": {
+  "diff_other": {
+   "count": 14.0,
+   "25%": 18.25,
+   "50%": 49.0,
+   "75%": 62.75
+  },
+  "diff_sub": {
+   "count": 1.0,
+   "25%": 2.0,
+   "50%": 2.0,
+   "75%": 2.0
+  },
+  "exact_ambient": {
+   "count": 8.0,
+   "25%": 4.0,
+   "50%": 5.0,
+   "75%": 7.0
+  },
+  "exact_kept_not_top": {
+   "count": 36.0,
+   "25%": 18.0,
+   "50%": 30.5,
+   "75%": 51.75
+  },
+  "exact_low_support": {
+   "count": 5.0,
+   "25%": 68.0,
+   "50%": 87.0,
+   "75%": 106.0
+  },
+  "no_barcode": {
+   "count": 28.0,
+   "25%": 3.0,
+   "50%": 5.0,
+   "75%": 9.25
+  },
+  "no_chain": {
+   "count": 8.0,
+   "25%": 23.0,
+   "50%": 40.5,
+   "75%": 67.5
+  }
+ },
+ "ref_umis_all_tops": {
+  "count": 2442.0,
+  "25%": 16.0,
+  "50%": 27.5,
+  "75%": 43.0
+ },
+ "exact_filtered_detail": {
+  "exact_ambient": {
+   "umis": 4.5,
+   "reads": 401.0,
+   "junction_umis": 4.0,
+   "ref_umis": 5.0
+  },
+  "exact_kept_not_top": {
+   "umis": 21.0,
+   "reads": 1904.0,
+   "junction_umis": 20.5,
+   "ref_umis": 30.5
+  },
+  "exact_low_support": {
+   "umis": 0.0,
+   "reads": 0.0,
+   "junction_umis": 0.0,
+   "ref_umis": 87.0
+  }
+ },
+ "exact_matches": 2324,
+ "v_agreement_equiv": 0.8709122203098106,
+ "v_agreement_raw": 0.8016351118760757,
+ "j_agreement": 0.9819277108433735,
+ "v_disagree_top": [
+  [
+   "IGHV1-69-2->IGHV1-69",
+   51
+  ],
+  [
+   "IGHV3-33->IGHV3-30",
+   35
+  ],
+  [
+   "IGLV1-51->IGLV1-41",
+   34
+  ],
+  [
+   "IGHV4-61->IGHV4-55",
+   28
+  ],
+  [
+   "IGLV2-11->IGLV2-8",
+   22
+  ],
+  [
+   "IGHV4-59->IGHV4-55",
+   16
+  ],
+  [
+   "IGHV3-43->IGHV3-23",
+   15
+  ],
+  [
+   "IGHV4-39->IGHV4-55",
+   12
+  ],
+  [
+   "IGHV4-31->IGHV4-55",
+   11
+  ],
+  [
+   "IGHV4-4->IGHV4-34",
+   9
+  ],
+  [
+   "IGHV4-61->IGHV4-34",
+   7
+  ],
+  [
+   "IGHV3-43->IGHV3-20",
+   7
+  ],
+  [
+   "IGKV1-9->IGKV1-6",
+   6
+  ],
+  [
+   "IGHV2-70->IGHV2-70D",
+   6
+  ],
+  [
+   "IGHV3-7->IGHV3-13",
+   5
+  ]
+ ],
+ "j_disagree_top": [
+  [
+   "IGHJ4->IGHJ5",
+   7
+  ],
+  [
+   "IGHJ4->IGHJ2",
+   4
+  ],
+  [
+   "IGHJ4->IGHJ3",
+   4
+  ],
+  [
+   "IGLJ2->IGKJ4",
+   3
+  ],
+  [
+   "IGHJ4->IGHJ6",
+   3
+  ],
+  [
+   "IGKJ2->IGKJ4",
+   3
+  ],
+  [
+   "IGHJ4->IGHJ1",
+   3
+  ],
+  [
+   "IGLJ2->IGLJ1",
+   3
+  ],
+  [
+   "IGLJ2->IGLJ3",
+   2
+  ],
+  [
+   "IGLJ3->IGLJ5",
+   1
+  ],
+  [
+   "IGKJ1->IGKJ4",
+   1
+  ],
+  [
+   "IGLJ3->IGLJ2",
+   1
+  ],
+  [
+   "IGKJ2->IGKJ3",
+   1
+  ],
+  [
+   "IGLJ2->IGLJ4",
+   1
+  ],
+  [
+   "IGHJ5->IGHJ4",
+   1
+  ]
+ ],
+ "v_raw_disagree_top": [
+  [
+   "IGKV1D-39->IGKV1-39",
+   101
+  ],
+  [
+   "IGHV1-69-2->IGHV1-69",
+   51
+  ],
+  [
+   "IGKV2D-28->IGKV2-28",
+   41
+  ],
+  [
+   "IGHV3-33->IGHV3-30",
+   35
+  ],
+  [
+   "IGLV1-51->IGLV1-41",
+   34
+  ],
+  [
+   "IGHV4-61->IGHV4-55",
+   28
+  ],
+  [
+   "IGLV2-11->IGLV2-8",
+   22
+  ],
+  [
+   "IGKV1D-13->IGKV1-13",
+   17
+  ],
+  [
+   "IGHV4-59->IGHV4-55",
+   16
+  ],
+  [
+   "IGHV3-43->IGHV3-23",
+   15
+  ],
+  [
+   "IGHV4-39->IGHV4-55",
+   12
+  ],
+  [
+   "IGHV4-31->IGHV4-55",
+   11
+  ],
+  [
+   "IGHV4-4->IGHV4-34",
+   9
+  ],
+  [
+   "IGHV4-61->IGHV4-34",
+   7
+  ],
+  [
+   "IGHV3-43->IGHV3-20",
+   7
+  ]
+ ]
+}

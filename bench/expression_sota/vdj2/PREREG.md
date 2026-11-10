@@ -156,3 +156,114 @@ Cell Ranger V agreement on pbmc2_b / pbmc10k_b.
 - The anchor follows the convention of each library's Cell Ranger version (`vdj_human_imgtcys.tsv.gz` for CR >= 5).
 - The held-out run uses these defaults, with no `PARAMS`, at the frozen SHA recorded in `RESULTS.md`.
 - Held-out pass rule: unchanged, with the Addendum 1 ARI tolerance applied in the same way.
+
+
+## Addendum 3 (2026-11-01): BCR study, pre-registered before any download or run of its libraries
+
+**Why.** The single held-out run of the frozen code (`08279d8d`, RESULTS.md) failed on BCR. Pooled BCR pairing was
+Singlet minus TRUST4 = -0.051 [-0.057, -0.045]. Pooled wrong lineage was +0.0061 against Cell Ranger, with 207 of 293 contigs
+in ngpbmc3_b.
+
+**The 11 libraries of that run are spent.** They are never scored again and never looked at for diagnosis.
+
+**Fresh libraries.** All are 10x Genomics public datasets with Cell Ranger contigs as the truth, and none has been run by
+this study before. All URLs are under `cf.10xgenomics.com/samples/cell-vdj`, checked by HTTP HEAD. The anchor follows rule 3:
+cr3 for Cell Ranger < 5, cr5 for Cell Ranger >= 5.
+
+Development (diagnosis and tuning allowed):
+
+| library | dataset | Cell Ranger | anchor | GEX | note |
+|---|---|---|---|---|---|
+| melv11_b | 4.0.0 `sc5p_v1p1_hs_melanoma_10k` (5' v1.1) | 4.0 | cr3 | yes | Probably the same tumour as the spent melanoma_b (v2 chemistry), so development only. |
+| nsclc22_b | 2.2.0 `vdj_v1_hs_nsclc_b` (NSCLC tumour, 5' v1) | 2.2 | cr3 | yes (CR 2 h5) | |
+| chx10k_b | 6.1.0 `10k_PBMC_5pv2_nextgem_Chromium_X` (VDJ-B member of the multiplex tar) | 6.1 | cr5 | yes | Probably the same PBMC donor as the burned ctrl10k_b (Chromium Controller run), so development only. |
+| pbmc2_b, pbmc10k_b | as before | | | | Existing development libraries. |
+
+New held-out (run once, after the freeze):
+
+| library | dataset | Cell Ranger | anchor | GEX |
+|---|---|---|---|---|
+| pbmc22_b | 2.2.0 `vdj_v1_hs_pbmc_b` (healthy PBMC, 5' v1) | 2.2 | cr3 | yes (CR 2 h5) |
+| cd19_b | 2.2.0 `vdj_v1_hs_cd19_b` (CD19+ B cells, 5' v1) | 2.2 | cr3 | no |
+| b1k_b | 5.0.0 `sc5p_v2_hs_B_1k_multi_5gex_b` (B cells, 5' v2) | 5.0 | cr5 | yes |
+
+Notes on the held-out set:
+- None of the three is in the spent 11, the burned 6, development, or S15's pilot (which has no 10x-hosted data).
+- No fresh human BCR library from Cell Ranger 3.x was found on the 10x site. Those had the largest spent-set losses.
+- Of 10x's 20k HT library, the FASTQs are not served, so it is not used.
+- pbmc22_b and cd19_b come from the same Cell Ranger 2.2 release. They may share a donor.
+
+**Downloads.** `download.sbatch SET=bcrdev` and `SET=bcrho`. The held-out download prints only file sizes and the
+denominators.
+
+**Metric and pass rules for the new held-out set (unchanged from this PREREG).**
+- Pairing accuracy with 2,000 bootstrap resamples (seed 0) over the BCR group. Pass when Singlet minus TRUST4 >= -0.01 on the
+  pooled point estimate. A 95% CI entirely below -0.01 is a clear fail.
+- Wrong lineage pooled over pbmc22_b and b1k_b: Singlet minus Cell Ranger <= 0.005.
+- Secondary: contig F1 and ARI against TRUST4 per library, V and J agreement, and speed.
+
+**Dev rule.** The same as before, with the Addendum 1 ARI tolerance, on the 5 development BCR libraries. The literal verdict
+is always reported. The old defaults (`ambient_rescue=none`, `v_open_frac=0`, the references without the AIRR-C genes) are
+run on development too, so the effect of the frozen changes is separated from the baseline.
+
+**Downloaded** by jobs 795813 (bcrdev) and 795841 (bcrho). The held-out job printed only sizes and denominators.
+
+| set | library | Cell Ranger cells | reference-paired cells |
+|---|---|---|---|
+| dev | melv11_b | 4,205 | 3,903 |
+| dev | nsclc22_b | 2,977 | 1,560 |
+| dev | chx10k_b | 494 | 472 |
+| held-out | pbmc22_b | 1,363 | 1,218 |
+| held-out | cd19_b | 9,465 | 8,951 |
+| held-out | b1k_b | 1,102 | 1,071 |
+
+The new held-out set totals 11,240 reference-paired cells.
+
+## Addendum 4 (2026-11-01, development data only, before any run of the new held-out set): BCR freeze
+
+**Anchor convention for Cell Ranger 4.x.** On melv11_b (Cell Ranger 4.0), 72 IGL losses against TRUST4 were junctions that
+differ from Cell Ranger's only in the Cys anchor. Re-assembled with the first-Cys reference (cr5), melv11_b pairing gains
++0.019. So Cell Ranger 4.x is scored with cr5 from now on: cr3 is for Cell Ranger < 4, and cr5 is for Cell Ranger >= 4. No
+new held-out library is from 4.x (pbmc22_b and cd19_b are 2.2, which stays cr3; b1k_b is 5.0, which stays cr5), so the
+held-out runs do not change. `score.sbatch SET=bcrdev` now scores melv11_b with cr5.
+
+**Diagnosis on development.** The frozen phase-1 defaults have no effect on BCR. Pooled BCR pairing, Singlet minus TRUST4,
+is -0.021 [-0.028, -0.015].
+
+The losses come from three sources:
+- light chains removed by the cross-barcode filter (`umis < 0.1 * max`) in B cells of clones that also have plasma cells;
+- the Cys anchor (above);
+- selection on nsclc22_b.
+
+Wrong lineage (pooled +0.0046 against Cell Ranger) is caused by lone light chains with 1 to 9 UMIs on T barcodes. Their
+junctions are in hundreds to 2,653 barcodes, but their junction maximum is too low for the cross filter.
+
+**Frozen BCR rules** (`python/singlet/vdj/assemble.py` defaults; IG chains only, no effect on TCR):
+- `ig_top_min_umis=2`, `ig_top_paired=True`, `ig_top_light_only=True`: a light chain removed by the cross filter comes back
+  when it is the barcode's strongest high-confidence light chain, has >= 2 UMIs, the barcode has no kept light chain, and
+  it has a kept heavy chain;
+- `ig_lone_spread=5`: an IG contig in a barcode with no kept partner chain is ambient when its junction is in >= 5 barcodes.
+
+**Development results.** Variant `_l2s5` against `_frz` (melv11_b from the cr5 re-assembly), score job 796615 and ari
+job 796616.
+
+| library | pairing | d pairing | d F1 | d ARI | d wrong lineage |
+|---|---|---|---|---|---|
+| melv11_b | 0.9272 | +0.0415 | +0.0144 | -0.0000 | -0.0004 |
+| nsclc22_b | 0.8346 | +0.0038 | -0.0031 | +0.0274 | -0.0098 |
+| chx10k_b | 0.9407 | 0 | 0 | 0 | 0 |
+| pbmc2_b | 0.9328 | +0.0027 | -0.0001 | -0.0000 | -0.0000 |
+| pbmc10k_b | 0.9740 | +0.0042 | +0.0007 | +0.0000 | -0.0000 |
+
+- BCR pooled, Singlet minus TRUST4: +0.0005 [-0.005, +0.006].
+- Wrong lineage: Singlet 59/19,872 = 0.0030, Cell Ranger 14/16,967 = 0.0008, diff +0.0021.
+- Literal dev rule: pooled +0.0218, no per-library loss > 0.005, so KEEP. No Addendum 1 tolerance was needed.
+
+**Variants tried and rejected:**
+- `q2s5`/`q3s5` (the heavy chain given back too): an ambient plasma-cell IGH was rescued into light-only cells. nsclc22_b
+  ARI changed by -0.052 and -0.039, so the literal rule rejects them.
+- `ls5` alone: no pairing gain.
+- `ambient_rescue=pair`: nsclc22_b F1 -0.02 and ARI -0.10.
+- `_l3s5` / `_l3s10`: these were within 0.0013 of `_l2s5` and also KEEP.
+
+`_l2s5` was chosen on pooled pairing, the primary metric.

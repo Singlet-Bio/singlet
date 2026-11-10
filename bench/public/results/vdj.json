@@ -1,0 +1,1358 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.0.0",
+ "capability": "vdj",
+ "title": "V(D)J clonotypes (TCR / BCR)",
+ "conclusion": "",
+ "methods": "Singlet assembles V(D)J libraries itself (singlet.vdj: segment reference from the GENCODE genome the pipeline uses, 15-mer read classification, per-UMI-consensus junction assembly between codon-checked Cys104 and Phe/Trp118, Cell Ranger barcode and UMI correction). Truth is Cell Ranger vdj's productive high-confidence contigs as published by 10x (pbmc5p_v1: Cell Ranger 3.0.0; pbmc10k_5p_v2: 5.0.0) or by the authors (GSE145370: 3.0.1); Cell Ranger was not re-run. TRUST4 ran on the same FASTQs with 8 threads, its IMGT reference and the 10x whitelist. Metrics are on Cell Ranger's V(D)J cells; V(D)J cells of Singlet and TRUST4 are restricted to the called GEX cells where the dataset has a GEX matrix. V genes that are identical (or 1 nt apart) up to Cys104 count as one (IGKV1-39 / IGKV1D-39 ...). Wrong lineage uses T / B labels from GEX markers (CD3D/E/G, CD2 vs MS4A1, CD79A/B), independent of every V(D)J caller.",
+ "status": "draft",
+ "generated_at": "2026-10-26T13:30:49+00:00",
+ "owner": "vdj-crispr",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "5d39eb23a3ec3c414f4f7a17cee1b721fe1d6563",
+  "branch": "claude/vdj-crispr-benchmark-721d3a"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "bench/vdj/run_vdj.py --threads 8 (singlet.vdj defaults)"
+  },
+  {
+   "name": "trust4",
+   "version": "1.1.5",
+   "role": "competitor",
+   "url": "https://github.com/liulab-dfci/TRUST4",
+   "params": "run-trust4 -f hg38_bcrtcr.fa --ref human_IMGT+C.fa (-1 R1 -2 R2 --readFormat r1:39:-1,bc:0:15,um:16:25 for 150-nt R1, else -u R2 --readFormat bc:0:15,um:16:25) --barcode R1 --UMI R1 --barcodeWhitelist 737K-august-2016.txt -t 8"
+  },
+  {
+   "name": "cellranger-vdj",
+   "version": "3.0.0 / 5.0.0 / 3.0.1",
+   "role": "truth",
+   "url": "https://cf.10xgenomics.com/samples/cell-vdj/",
+   "params": "published filtered_contig_annotations.csv (10x datasets, GEO GSE145370 supplementary)"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "pbmc5p_v1",
+   "title": "10x vdj_v1_hs_pbmc2 T and B libraries (5' v1, 150x150)",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_t/"
+   },
+   "truth": "10x Cell Ranger 3.0.0 filtered contigs",
+   "data_kind": "real",
+   "notes": "development data: assembler parameters were set while looking at it"
+  },
+  {
+   "id": "pbmc10k_5p_v2",
+   "title": "10x sc5p_v2_hs_PBMC_10k T and B libraries (5' v2, 26x90)",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-vdj/5.0.0/sc5p_v2_hs_PBMC_10k/"
+   },
+   "truth": "10x Cell Ranger 5.0.0 filtered contigs",
+   "data_kind": "real"
+  },
+  {
+   "id": "gse145370_tcr",
+   "title": "GSE145370 ESCC TCR libraries held out from development (10x 5' V(D)J)",
+   "accessions": {
+    "gse": "GSE145370",
+    "other": []
+   },
+   "truth": "authors' Cell Ranger 3.0.1 filtered contigs (GEO supplementary)",
+   "data_kind": "real"
+  },
+  {
+   "id": "tenx_pbmc10k_5pv2_controller",
+   "title": "10x 10k PBMC 5' v2 (Chromium Controller) T and B libraries",
+   "data_kind": "real",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/10k_PBMC_5pv2_nextgem_Chromium_Controller_Multiplex/"
+   },
+   "truth": "10x Cell Ranger 6.1.0 filtered contigs",
+   "notes": "held out: downloaded after the code was frozen"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "bcr_contig_f1",
+   "name": "BCR: Productive contigs (cell, chain, junction nt) against Cell Ranger's: F1 of recovery and precision",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9693
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.8347
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0064
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "notes": "recovery / precision / extra contigs per Cell Ranger contig: singlet 0.970 / 0.969 / 0.031; trust4 0.975 / 0.730 / 0.362",
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_cdr3_nt_accuracy",
+   "name": "BCR: Top junction per cell and chain identical to Cell Ranger's (nt)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9846
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9948
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0039
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "bcr_correct_pairing",
+   "name": "BCR: Cell Ranger paired cells whose top junctions of both chains are reproduced",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9511
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.974
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.01
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "bcr_v_gene_agreement",
+   "name": "BCR: V gene as Cell Ranger's on identical junctions (indistinguishable genes as one)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9252
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9313
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0077
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_j_gene_agreement",
+   "name": "BCR: J gene as Cell Ranger's on identical junctions",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9718
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9849
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0066
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "bcr_clonotype_ari",
+   "name": "BCR: Clonotypes (exact chain sets) vs Cell Ranger's, adjusted Rand index",
+   "unit": "ARI",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.6667
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_wrong_lineage",
+   "name": "BCR: Contigs of the wrong lineage (TCR in GEX B cells, BCR in GEX T cells)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0094
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.0841
+    },
+    {
+     "tool": "cellranger-vdj",
+     "value": 0.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "tcr_contig_f1",
+   "name": "TCR: Productive contigs (cell, chain, junction nt) against Cell Ranger's: F1 of recovery and precision",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9712
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.7976
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0022
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "notes": "recovery / precision / extra contigs per Cell Ranger contig: singlet 0.981 / 0.962 / 0.039; trust4 0.991 / 0.667 / 0.494",
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_cdr3_nt_accuracy",
+   "name": "TCR: Top junction per cell and chain identical to Cell Ranger's (nt)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9847
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9737
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0026
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_correct_pairing",
+   "name": "TCR: Cell Ranger paired cells whose top junctions of both chains are reproduced",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.943
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9436
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0061
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_v_gene_agreement",
+   "name": "TCR: V gene as Cell Ranger's on identical junctions (indistinguishable genes as one)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9998
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9993
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0003
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_j_gene_agreement",
+   "name": "TCR: J gene as Cell Ranger's on identical junctions",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9997
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9998
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0003
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_clonotype_ari",
+   "name": "TCR: Clonotypes (exact chain sets) vs Cell Ranger's, adjusted Rand index",
+   "unit": "ARI",
+   "category": "agreement",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9763
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.113
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_wrong_lineage",
+   "name": "TCR: Contigs of the wrong lineage (TCR in GEX B cells, BCR in GEX T cells)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0009
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.0054
+    },
+    {
+     "tool": "cellranger-vdj",
+     "value": 0.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "bcr_contig_f1",
+   "name": "BCR: Productive contigs (cell, chain, junction nt) against Cell Ranger's: F1 of recovery and precision",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9289
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.7235
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0063
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "notes": "recovery / precision / extra contigs per Cell Ranger contig: singlet 0.973 / 0.889 / 0.122; trust4 0.888 / 0.611 / 0.566",
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_cdr3_nt_accuracy",
+   "name": "BCR: Top junction per cell and chain identical to Cell Ranger's (nt)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.975
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9607
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0055
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_correct_pairing",
+   "name": "BCR: Cell Ranger paired cells whose top junctions of both chains are reproduced",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9346
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.8978
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.013
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_v_gene_agreement",
+   "name": "BCR: V gene as Cell Ranger's on identical junctions (indistinguishable genes as one)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8722
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.8772
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0065
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_j_gene_agreement",
+   "name": "BCR: J gene as Cell Ranger's on identical junctions",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9816
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9895
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0044
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "bcr_clonotype_ari",
+   "name": "BCR: Clonotypes (exact chain sets) vs Cell Ranger's, adjusted Rand index",
+   "unit": "ARI",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8571
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "bcr_wrong_lineage",
+   "name": "BCR: Contigs of the wrong lineage (TCR in GEX B cells, BCR in GEX T cells)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc5p_v1",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0173
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.0742
+    },
+    {
+     "tool": "cellranger-vdj",
+     "value": 0.0004
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "tcr_contig_f1",
+   "name": "TCR: Productive contigs (cell, chain, junction nt) against Cell Ranger's: F1 of recovery and precision",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.943
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.6834
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0052
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "notes": "recovery / precision / extra contigs per Cell Ranger contig: singlet 0.968 / 0.920 / 0.085; trust4 0.981 / 0.524 / 0.890",
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_cdr3_nt_accuracy",
+   "name": "TCR: Top junction per cell and chain identical to Cell Ranger's (nt)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9814
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9668
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0063
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_correct_pairing",
+   "name": "TCR: Cell Ranger paired cells whose top junctions of both chains are reproduced",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.927
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9262
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0132
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_v_gene_agreement",
+   "name": "TCR: V gene as Cell Ranger's on identical junctions (indistinguishable genes as one)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9998
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9998
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0004
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_j_gene_agreement",
+   "name": "TCR: J gene as Cell Ranger's on identical junctions",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9996
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.9987
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0009
+    },
+    "rationale": "95% half-width of the Singlet - TRUST4 difference, from 40 random halves of the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_clonotype_ari",
+   "name": "TCR: Clonotypes (exact chain sets) vs Cell Ranger's, adjusted Rand index",
+   "unit": "ARI",
+   "category": "agreement",
+   "dataset": "pbmc5p_v1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8789
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.0386
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "tcr_wrong_lineage",
+   "name": "TCR: Contigs of the wrong lineage (TCR in GEX B cells, BCR in GEX T cells)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pbmc5p_v1",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0057
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 0.1624
+    },
+    {
+     "tool": "cellranger-vdj",
+     "value": 0.0004
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "wall_time",
+   "name": "Wall time, all libraries of the dataset (8 threads)",
+   "unit": "s",
+   "category": "resources",
+   "dataset": "pbmc10k_5p_v2",
+   "direction": "lower",
+   "singlet": {
+    "value": 563.4
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 4467.6
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "Cell Ranger vdj was not run (its outputs are 10x's and the authors'); no time for it",
+   "pass": "pass"
+  },
+  {
+   "id": "wall_time",
+   "name": "Wall time, all libraries of the dataset (8 threads)",
+   "unit": "s",
+   "category": "resources",
+   "dataset": "pbmc5p_v1",
+   "direction": "lower",
+   "singlet": {
+    "value": 916.7
+   },
+   "competitors": [
+    {
+     "tool": "trust4",
+     "value": 9670.3
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "Cell Ranger vdj was not run (its outputs are 10x's and the authors'); no time for it",
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "pbmc5p_v1",
+   "wall_s": 916.7,
+   "max_rss_gb": 17.54,
+   "threads": 8,
+   "cpu_h": 2.037
+  },
+  {
+   "tool": "trust4",
+   "dataset": "pbmc5p_v1",
+   "wall_s": 9670.3,
+   "max_rss_gb": 47.5,
+   "threads": 8,
+   "cpu_h": 21.49
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc10k_5p_v2",
+   "wall_s": 563.4,
+   "max_rss_gb": 12.04,
+   "threads": 8,
+   "cpu_h": 1.252
+  },
+  {
+   "tool": "trust4",
+   "dataset": "pbmc10k_5p_v2",
+   "wall_s": 4467.6,
+   "max_rss_gb": 26.01,
+   "threads": 8,
+   "cpu_h": 9.928
+  }
+ ],
+ "figures": [
+  {
+   "id": "pbmc10k_5p_v2_bcr_agreement",
+   "title": "BCR agreement with Cell Ranger, pbmc10k_5p_v2",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "contig_recovery",
+     "cdr3_nt_accuracy",
+     "v_gene_agreement_equivalent",
+     "clonotype_ari"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.97,
+      0.9846,
+      0.9252,
+      1.0
+     ]
+    },
+    {
+     "name": "trust4",
+     "tool": "trust4",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.9753,
+      0.9948,
+      0.9313,
+      0.6667
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pbmc10k_5p_v2_tcr_agreement",
+   "title": "TCR agreement with Cell Ranger, pbmc10k_5p_v2",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "contig_recovery",
+     "cdr3_nt_accuracy",
+     "v_gene_agreement_equivalent",
+     "clonotype_ari"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.981,
+      0.9847,
+      0.9998,
+      0.9763
+     ]
+    },
+    {
+     "name": "trust4",
+     "tool": "trust4",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.9912,
+      0.9737,
+      0.9993,
+      0.113
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pbmc5p_v1_bcr_agreement",
+   "title": "BCR agreement with Cell Ranger, pbmc5p_v1",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "contig_recovery",
+     "cdr3_nt_accuracy",
+     "v_gene_agreement_equivalent",
+     "clonotype_ari"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.9728,
+      0.975,
+      0.8722,
+      0.8571
+     ]
+    },
+    {
+     "name": "trust4",
+     "tool": "trust4",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.8877,
+      0.9607,
+      0.8772,
+      0.0
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pbmc5p_v1_tcr_agreement",
+   "title": "TCR agreement with Cell Ranger, pbmc5p_v1",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "contig_recovery",
+     "cdr3_nt_accuracy",
+     "v_gene_agreement_equivalent",
+     "clonotype_ari"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.9676,
+      0.9814,
+      0.9998,
+      0.8789
+     ]
+    },
+    {
+     "name": "trust4",
+     "tool": "trust4",
+     "x": [
+      "contig_recovery",
+      "cdr3_nt_accuracy",
+      "v_gene_agreement_equivalent",
+      "clonotype_ari"
+     ],
+     "y": [
+      0.9811,
+      0.9668,
+      0.9998,
+      0.0386
+     ]
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "gse145370_S135A.cellranger.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/gse145370_S135A.cellranger.csv.gz",
+   "kind": "truth",
+   "sha256": "2451e3f0843c24b9ef1b3e04926f91cae954d170a269a887d8d8085c270c353f",
+   "bytes": 61834,
+   "format": "gz"
+  },
+  {
+   "name": "gse145370_S135A.cellranger_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/gse145370_S135A.cellranger_cells.txt",
+   "kind": "truth",
+   "sha256": "d91bb730fb51d9260749b938cdfb53fefd5577f9b61b8faea41f9fcba3da03cd",
+   "bytes": 36613,
+   "format": "txt"
+  },
+  {
+   "name": "gse145370_S149A.cellranger.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/gse145370_S149A.cellranger.csv.gz",
+   "kind": "truth",
+   "sha256": "c57b4d42be854e7c96000d27d8b86bf2b49c1ebe8af54188c44ef577cc6e4607",
+   "bytes": 159671,
+   "format": "gz"
+  },
+  {
+   "name": "gse145370_S149A.cellranger_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/gse145370_S149A.cellranger_cells.txt",
+   "kind": "truth",
+   "sha256": "57ca3619faf4681c1f03802b85fe79625228d15a9db7a86704f385827a7c30bf",
+   "bytes": 110181,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc10k_b.cellranger.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_b.cellranger.csv.gz",
+   "kind": "truth",
+   "sha256": "f4a8c71e0cda6fcc79105876c8f5d5367175892e717d8b8cf4469c68f1c07dcc",
+   "bytes": 47922,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc10k_b.cellranger_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_b.cellranger_cells.txt",
+   "kind": "truth",
+   "sha256": "2524742d557033045221057383aa3edac91e699c21b2e5d43f590064f0a7c5c7",
+   "bytes": 18658,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc10k_b.gex_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_b.gex_cells.txt",
+   "kind": "truth",
+   "sha256": "e0044eec55d8d8c5564ff218f0fca253cc993130d6cb4b7622db57bb26d29aac",
+   "bytes": 200412,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc10k_b.gex_lineage.csv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_b.gex_lineage.csv",
+   "kind": "truth",
+   "sha256": "b0473c09a76234392c61797e0a830a5f7f7162b958d8fc6a840c017ada953e80",
+   "bytes": 240692,
+   "format": "csv"
+  },
+  {
+   "name": "pbmc10k_b.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_b.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "d4f45574bd3224b63fecb06c6210a9b932b9325e51e3bcad9cea098b185669cf",
+   "bytes": 53134,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc10k_b.trust4.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_b.trust4.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "59aa05fae6c9f1e3c48b03d4c5dc07cf5d3fec2c7a103c2f6713f345ae4aca0c",
+   "bytes": 105044,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc10k_t.cellranger.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_t.cellranger.csv.gz",
+   "kind": "truth",
+   "sha256": "7673c8c3a6c12c7cc28dac2f4d14dedf1adf6dc8c35682e62071da9fcdbc6863",
+   "bytes": 236316,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc10k_t.cellranger_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_t.cellranger_cells.txt",
+   "kind": "truth",
+   "sha256": "9fcc0e736d18208cb3d8e54a7f011c07255aebbbe4a3232f909aefbba618d1fa",
+   "bytes": 101232,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc10k_t.gex_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_t.gex_cells.txt",
+   "kind": "truth",
+   "sha256": "e0044eec55d8d8c5564ff218f0fca253cc993130d6cb4b7622db57bb26d29aac",
+   "bytes": 200412,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc10k_t.gex_lineage.csv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_t.gex_lineage.csv",
+   "kind": "truth",
+   "sha256": "b0473c09a76234392c61797e0a830a5f7f7162b958d8fc6a840c017ada953e80",
+   "bytes": 240692,
+   "format": "csv"
+  },
+  {
+   "name": "pbmc10k_t.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_t.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "66c3ebb2f5a66e677d352f73241b8942c4427adf1e0933173e4e0e938d0a0e51",
+   "bytes": 250010,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc10k_t.trust4.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc10k_t.trust4.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "36cb214049c1d3836e08e04a723c2eedd15b2c6b6316a37ec5d1be1cfbffc78a",
+   "bytes": 410990,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc2_b.cellranger.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_b.cellranger.csv.gz",
+   "kind": "truth",
+   "sha256": "1b48c7618c18c551d4dcd681dd2f7cf8d526103e964e493373839ff89a3f8077",
+   "bytes": 63703,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc2_b.cellranger_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_b.cellranger_cells.txt",
+   "kind": "truth",
+   "sha256": "5214c7d98ca6ad97da03029bec0962b4d0a6a087a8483adc9cc7a8cd0db106e5",
+   "bytes": 23389,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc2_b.gex_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_b.gex_cells.txt",
+   "kind": "truth",
+   "sha256": "9c0cc68ab6be6356f836939a4001099729c33ac3b6f483a3a18f615cbe192410",
+   "bytes": 156902,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc2_b.gex_lineage.csv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_b.gex_lineage.csv",
+   "kind": "truth",
+   "sha256": "2877790e22cac5be7071d7bb3c0602006eaec2346e0f584642a1e8270ed22aaf",
+   "bytes": 189922,
+   "format": "csv"
+  },
+  {
+   "name": "pbmc2_b.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_b.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "19076c543017335fd5cf147246fa02a9a587de416a21c6651c239f090fbb5aa5",
+   "bytes": 82247,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc2_b.trust4.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_b.trust4.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "f12d9e834960281f6e63b70bbd81c6cc74c9be38a288d86c7a2b81bea69ee775",
+   "bytes": 176625,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc2_t.cellranger.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_t.cellranger.csv.gz",
+   "kind": "truth",
+   "sha256": "cb218bb208f32e5e3b728c56b9ca7eb8b9ee73fdc9ab9116a9b516d96fac6214",
+   "bytes": 127833,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc2_t.cellranger_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_t.cellranger_cells.txt",
+   "kind": "truth",
+   "sha256": "54be4b1011fe221de0f7690b4cb9db64c3b0fc05a2b3b5741b933967d2675640",
+   "bytes": 62814,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc2_t.gex_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_t.gex_cells.txt",
+   "kind": "truth",
+   "sha256": "9c0cc68ab6be6356f836939a4001099729c33ac3b6f483a3a18f615cbe192410",
+   "bytes": 156902,
+   "format": "txt"
+  },
+  {
+   "name": "pbmc2_t.gex_lineage.csv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_t.gex_lineage.csv",
+   "kind": "truth",
+   "sha256": "2877790e22cac5be7071d7bb3c0602006eaec2346e0f584642a1e8270ed22aaf",
+   "bytes": 189922,
+   "format": "csv"
+  },
+  {
+   "name": "pbmc2_t.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_t.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "f5a2818b59e423c953d3ee4271d01f247baba68dcabe0f419f7af5ab5833d5b7",
+   "bytes": 142790,
+   "format": "gz"
+  },
+  {
+   "name": "pbmc2_t.trust4.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/pbmc2_t.trust4.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "34d780f720605e0bf2d8f5008f1389fa6b21767ea019c111780117f1b0984a97",
+   "bytes": 858791,
+   "format": "gz"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/vdj/provenance.json",
+   "kind": "derived",
+   "sha256": "18288f23a93c3d135b692c3fe52576145e058af492c23aeb07d3cd2bfb3a4f79",
+   "bytes": 2620,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/vdj",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/5d39eb23a3ec3c414f4f7a17cee1b721fe1d6563/python/singlet/vdj",
+   "role": "implementation"
+  },
+  {
+   "path": "bench/vdj",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/5d39eb23a3ec3c414f4f7a17cee1b721fe1d6563/bench/vdj",
+   "role": "harness"
+  },
+  {
+   "path": "bench/vdj/compare_vdj.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/5d39eb23a3ec3c414f4f7a17cee1b721fe1d6563/bench/vdj/compare_vdj.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/vdj.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch bench/vdj/hpc/run.sbatch (per library), then bench/vdj/make_artifacts.py"
+ },
+ "caveats": [
+  "Cell Ranger vdj was not run here (no licence accepted); its published outputs are the reference, so agreement metrics measure agreement with Cell Ranger, not with ground truth.",
+  "pbmc5p_v1 and pbmc10k_5p_v2 are development data: the assembler's filters and fixes were made while comparing with their Cell Ranger contigs (and with GSE145370 S133A / S158A, which are therefore left out). The GSE145370 libraries scored here and the Chromium Controller set were downloaded after the code was frozen.",
+  "Neither GENCODE nor RefSeq annotates IGHV1-8 and IGHV4-30-4 on GRCh38 (Cell Ranger and TRUST4 have them from IMGT): their rearrangements are not assembled or named, which costs BCR pairing and V agreement.",
+  "MiXCR was not run: it needs a licence key."
+ ]
+}
