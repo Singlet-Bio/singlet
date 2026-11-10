@@ -173,15 +173,72 @@ class RunSet {
         const double c0 = tm ? thread_cpu_now() : 0.0;
         const size_t raw_size = read_block(r, r.file_descriptor(), r.block_offset(bi), r.block_comp_size(bi), bh, sc);
         const double c1 = tm ? thread_cpu_now() : 0.0;
-        scan_payload(r, sc.raw.data(), raw_size, bh, o, h, sc);
+        // The probe's offers and R11's counts take each read's barcode read and cDNA codes; the decode below builds the same bytes
+        // (scan_payload's comments: "as decode_payload builds it"), so here they are read from the decoded block instead of being
+        // unpacked a second time. Only where the two constructions provably agree: a fixed UMI length of at most 64 (scan_payload's
+        // R11 buffer) and the barcode inside the barcode read. SINGLET_FUSED_SCAN_FROM_BLOCK=0 keeps the scan's own unpacking.
+        const bool fromBlock = (o.sampler || o.r11) && scan_from_block_ok(r);
+        HeadScanOptions o2 = o;
+        if (fromBlock) { o2.sampler = nullptr; o2.r11 = false; }
+        scan_payload(r, sc.raw.data(), raw_size, bh, o2, h, sc);
         const double c2 = tm ? thread_cpu_now() : 0.0;
         blk.clear();
         r.decode_payload(sc.raw.data(), raw_size, bh, blk);
+        const double c3 = tm ? thread_cpu_now() : 0.0;
+        if (fromBlock) scan_block_reads(r, blk, o, h);
         if (tm) {
-            const double c3 = thread_cpu_now();
+            const double c4 = thread_cpu_now();
             IngestTiming& t = ingest_timing();
-            t.add(t.read_ns, c1 - c0); t.add(t.scan_ns, c2 - c1); t.add(t.decode_ns, c3 - c2);
+            t.add(t.read_ns, c1 - c0); t.add(t.scan_ns, (c2 - c1) + (c4 - c3)); t.add(t.decode_ns, c3 - c2);
         }
+    }
+    static bool scan_from_block_ok(const Reader& r) {
+        static const bool off = [] { const char* v = std::getenv("SINGLET_FUSED_SCAN_FROM_BLOCK"); return v && v[0] == '0'; }();
+        if (off) return false;
+        const Header& hd = r.header();
+        const uint16_t r1_len = hd.stream_lengths[0];
+        const uint16_t umi_fixed = r.umi_length();
+        uint16_t bc_start = 0;
+        for (const auto& spec : known_protocols())
+            if (spec.protocol_id == hd.protocol_id) { bc_start = spec.bc_offset; break; }
+        return r1_len > 0 && umi_fixed > 0 && umi_fixed <= 64 && static_cast<uint32_t>(bc_start) + r.bc_length() <= r1_len;
+    }
+    // scan_payload's probe offers and R11 counts, from the decoded block (decode_payload's barcode read and cDNA codes, which are the
+    // bytes scan_payload assembles itself): the same reads in the same order, the same bytes offered, the same counts
+    static void scan_block_reads(const Reader& r, const DecodedBlock& blk, const HeadScanOptions& o, BlockHead& h) {
+        const uint32_t n = blk.n_reads;
+        const uint32_t dict_n = r.bc_dict_size();
+        const uint16_t r1_len = r.header().stream_lengths[0];
+        static constexpr char kNt[5] = {'A', 'C', 'G', 'T', 'N'};
+        uint32_t last = UINT32_MAX;
+        uint64_t run = 0;
+        auto flush11 = [&]() { if (run && o.r11_dict) __atomic_fetch_add(&o.r11_dict[last], run, __ATOMIC_RELAXED); run = 0; };
+        const size_t n2 = blk.r2_lengths.size();
+        for (uint32_t i = 0; i < n; ++i) {
+            const uint16_t l2 = i < n2 ? blk.r2_lengths[i] : 0;
+            if (r1_len == 0 || l2 == 0) continue;   // not given to STAR (format_block)
+            const uint8_t* r1 = blk.r1_seq(i);
+            if (o.sampler) o.sampler->offer(r1, r1_len, blk.r2_seq(i), l2);
+            if (!o.r11) continue;
+            if (r1_len < o.cb0 + o.cbl || r1_len < o.umi0 + o.umil) continue;
+            bool umi_ok = true, homo = true;
+            for (int j = 0; j < o.umil; ++j) {
+                const uint8_t c = r1[o.umi0 + j];
+                if (c > 3) { umi_ok = false; break; }
+                if (c != r1[o.umi0]) homo = false;
+            }
+            if (!umi_ok || homo) continue;
+            const uint32_t idx = blk.bc_indices[i];
+            if (idx < dict_n && o.r11_dict) {
+                if (idx != last) { flush11(); last = idx; }
+                ++run;
+            } else {
+                std::string cb(o.cbl, 'N');
+                for (int j = 0; j < o.cbl; ++j) cb[j] = kNt[std::min<uint8_t>(r1[o.cb0 + j], 4)];
+                h.r11_raw.push_back(std::move(cb));
+            }
+        }
+        flush11();
     }
     // SINGLET_INGEST_TIMING=1: thread CPU of the fused pass's parts, summed over blocks (no output change)
     struct IngestTiming {
