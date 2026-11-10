@@ -1273,14 +1273,10 @@ bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std:
         for (uint64 r = nReads * t / T, e = nReads * (t + 1) / T; r < e; r++) {
             if (readRecord[r] != 0xFFFFFFFFu) continue;
             if (!e10Record(r, x)) { q.bad = true; return; }
-            const std::string line1 = e10ReadName(P, r, x, false) + ' ' + std::to_string(r + 1) + ' ' + x.filter + ' ' + std::to_string(P.readFilesIndex) + '
-';
+            const std::string line1 = e10ReadName(P, r, x, false) + ' ' + std::to_string(r + 1) + ' ' + x.filter + ' ' + std::to_string(P.readFilesIndex) + '\n';
             for (int im = 0; im < 2; im++) {
                 std::string &o = q.buf[im];
-                o += line1; o.append(x.seq[im], x.seqLen[im]); o += "
-+
-"; o.append(x.qual[im], x.qualLen[im]); o += '
-';
+                o += line1; o.append(x.seq[im], x.seqLen[im]); o += "\n+\n"; o.append(x.qual[im], x.qualLen[im]); o += '\n';
                 q.end[im].push_back(o.size());
             }
             q.iRead.push_back(r + 1);
