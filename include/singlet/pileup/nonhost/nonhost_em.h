@@ -327,12 +327,26 @@ inline EmFit em_fit(
             kcut[t] = k;
         }
     }
+    // The patterns' terms and counts as flat arrays (the same terms in the same order as groups[gi].hits): the iterations read them
+    // contiguously instead of through each pattern's own vector. The sums are the same operations in the same order.
+    std::vector<size_t> gh_off(G + 1, 0);
+    for (size_t gi = 0; gi < G; ++gi) gh_off[gi + 1] = gh_off[gi] + groups[gi].hits.size();
+    std::vector<uint32_t> gh_k(gh_off[G]);
+    std::vector<float> gh_r(gh_off[G]);
+    std::vector<double> gcnt(G);
+    em_detail::par_ranges(G, nt, nullptr, [&](size_t b, size_t e) {
+        for (size_t gi = b; gi < e; ++gi) {
+            size_t q = gh_off[gi];
+            for (const auto& kh : groups[gi].hits) { gh_k[q] = kh.first; gh_r[q] = kh.second; ++q; }
+            gcnt[gi] = groups[gi].count;
+        }
+    });
     std::vector<double> denom(G);
     auto compute_denoms = [&](const std::vector<double>& th) {
         em_detail::par_ranges(G, nt, nullptr, [&](size_t b, size_t e) {
             for (size_t gi = b; gi < e; ++gi) {
                 double d = 0.0;
-                for (const auto& kh : groups[gi].hits) d += th[kh.first] * static_cast<double>(kh.second);
+                for (size_t q = gh_off[gi], qe = gh_off[gi + 1]; q < qe; ++q) d += th[gh_k[q]] * static_cast<double>(gh_r[q]);
                 denom[gi] = d;
             }
         });
@@ -355,7 +369,7 @@ inline EmFit em_fit(
                 for (size_t q = inv_off[k]; q < inv_off[k + 1]; ++q) {
                     const double d = denom[inv[q].first];
                     if (d <= 0.0) continue;  // numerical safety
-                    acc += groups[inv[q].first].count * (theta[k] * static_cast<double>(inv[q].second) / d);
+                    acc += gcnt[inv[q].first] * (theta[k] * static_cast<double>(inv[q].second) / d);
                 }
                 theta_new[k] = acc;
             }
