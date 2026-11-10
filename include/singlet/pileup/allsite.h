@@ -19,6 +19,8 @@
 // Output rows are sites in (contig index, position) order, named "chrom:pos1:REF>ALT" (1-based position, as the panel's names).
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -157,6 +159,15 @@ struct TriAcc {   // SnpConsensus::finalize's accumulator: increment(feature, ba
 struct Stats { uint64_t snp_molecules = 0, snp_molecules_ambiguous = 0, snp_molecules_other = 0; };
 }  // namespace detail
 
+namespace detail {
+// SINGLET_ALLSITE_TIMING=1: thread-seconds per stage of the pass (stderr only; counts and seconds)
+struct Timers {
+    std::atomic<uint64_t> walk{0}, sort{0}, scan{0}, member{0}, count{0}, fin{0}, wall{0}, hits{0}, blocks{0}, records{0}, distinct{0}, contigs{0};
+    std::atomic<uint64_t> max_wall{0}, max_reads{0}, max_tid{0}, max_sites{0};
+};
+inline uint64_t now_ns() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); }
+}  // namespace detail
+
 // Records: n_sigs(), n_reads(), sig(i), aln(i), read(i) (SigRec / AlnRec / ReadRec of pileup_rec.h, or structs with the same fields),
 // ops_at(off) and seq_at(off) (pointers to a record's CIGAR ops and packed sequence) and lowq_word(i) (64-bit mask word i). The engine
 // adapts PileupInput (PileupCat over its split arrays); the unit test feeds hand-made records.
@@ -189,6 +200,8 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
     std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
     std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { const uint64_t na = cnt[a + 1] - cnt[a], nb = cnt[b + 1] - cnt[b]; return na != nb ? na > nb : a < b; });
 
+    const bool TM = std::getenv("SINGLET_ALLSITE_TIMING") != nullptr;
+    Timers tmr; const uint64_t T_start = now_ns();
     struct PerTid { std::vector<Site> sites; std::vector<Tri> ad, dp; uint64_t obs = 0; Stats st; };
     auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
     auto& out = *out_sp;
@@ -218,6 +231,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
             const uint32_t oi = next.fetch_add(1); if (oi >= n_tid) return;
             const uint32_t t = order[oi]; const uint64_t b0 = cnt[t], b1 = cnt[t + 1]; if (b0 == b1) continue;
             PerTid& pt = out[t];
+            const uint64_t t0 = TM ? now_ns() : 0; uint64_t tw = 0, ts = 0, tc = 0, tf = 0, nhit = 0;
             // 3a. discovery: (pos, alt) observations with their molecule
             struct Obs { uint64_t key; int32_t bc; uint64_t umi; };
             std::vector<Obs> obs;
@@ -230,8 +244,10 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                 });
             }
             pt.obs = obs.size();
+            const uint64_t t1 = TM ? now_ns() : 0;
             std::sort(obs.begin(), obs.end(), [](const Obs& a, const Obs& b) {
                 if (a.key != b.key) return a.key < b.key; if (a.bc != b.bc) return a.bc < b.bc; return a.umi < b.umi; });
+            const uint64_t t2 = TM ? now_ns() : 0;
             for (size_t s = 0; s < obs.size();) {   // one position at a time; the best passing alternate base
                 const uint64_t pos = obs[s].key >> 2; size_t e = s;
                 uint32_t best_m = 0, best_c = 0; int best_b = -1;
@@ -252,7 +268,10 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                 s = e;
             }
             std::vector<Obs>().swap(obs);
-            if (pt.sites.empty()) continue;
+            const uint64_t t3 = TM ? now_ns() : 0;
+            if (TM) { tmr.walk += t1 - t0; tmr.sort += t2 - t1; tmr.scan += t3 - t2; }
+            if (pt.sites.empty()) { if (TM) { tmr.contigs++; const uint64_t w = now_ns() - t0; tmr.wall += w;
+                if (w > tmr.max_wall) { tmr.max_wall = w; tmr.max_reads = b1 - b0; tmr.max_tid = t; tmr.max_sites = 0; } } continue; }
             // 3b. counting: R1 consensus per (barcode, site, UMI), R9 per (barcode, site), in blocks of sites. Every molecule of a
             // (barcode, site) falls in that site's block and the consensus sorts before it collapses, so blocks change no count.
             const size_t nsite = pt.sites.size();
@@ -286,10 +305,12 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
             { std::vector<uint64_t> w(boff.begin(), boff.end() - 1);
               for (uint64_t k = b0; k < b1; ++k) { if (rf[k - b0] >= rl[k - b0]) continue;
                   const size_t fb = block_of(rf[k - b0]), lb = block_of(rl[k - b0] - 1); for (size_t b = fb; b <= lb; ++b) bread[w[b]++] = static_cast<uint32_t>(k - b0); } }
+            const uint64_t t4 = TM ? now_ns() : 0; if (TM) tmr.member += t4 - t3;
             if (P.progress) P.progress();
             SnpConsensus cons; char ub[24]; TriAcc ad, dp;
             for (size_t bi = 0; bi + 1 < cuts.size(); ++bi) {
                 const size_t s0 = cuts[bi], s1 = cuts[bi + 1];
+                const uint64_t u0 = TM ? now_ns() : 0;
                 for (uint64_t j = boff[bi]; j < boff[bi + 1]; ++j) {
                     const uint64_t k = b0 + bread[j];
                     const uint64_t r = by_tid[k]; const auto& x = R.read(r);
@@ -300,20 +321,35 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                         while (cur < s1 && spos[cur] < pos) ++cur;
                         if (cur >= s1 || spos[cur] != pos || !pass_q(r, ri, code)) return;
                         const size_t si = cur;
+                        ++nhit;
                         cons.add(static_cast<uint32_t>(x.bc), static_cast<uint32_t>(si), P.umi_dedup ? ub : nullptr, P.umi_len,
                                  SnpConsensus::base_class(kNt16[code], pt.sites[si].ref, pt.sites[si].alt));
                     });
                 }
+                const uint64_t u1 = TM ? now_ns() : 0;
+                const size_t rec0 = ad.v.size() + dp.v.size();
                 cons.finalize(ad, dp, pt.st, P.directional != 0);
+                if (TM) { const uint64_t u2 = now_ns(); tc += u1 - u0; tf += u2 - u1; tmr.blocks++; tmr.records += ad.v.size() + dp.v.size() - rec0; }
                 cons.clear();
                 if (P.progress) P.progress();
             }
             pt.ad.swap(ad.v); pt.dp.swap(dp.v);
+            if (TM) { tmr.count += tc; tmr.fin += tf; tmr.hits += nhit; tmr.contigs++; const uint64_t w = now_ns() - t0; tmr.wall += w;
+                if (w > tmr.max_wall) { tmr.max_wall = w; tmr.max_reads = b1 - b0; tmr.max_tid = t; tmr.max_sites = nsite; } }
         }
     };
     const unsigned nth = std::max(1u, std::min<unsigned>(P.threads, n_tid));
     std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work);
     work(); for (auto& x : th) x.join();
+    if (TM) {
+        const double sec = 1e-9, wall = (now_ns() - T_start) * sec;
+        std::cerr << "[allsite-timing] threads " << nth << " contigs " << tmr.contigs << " reads " << res.reads_used << " wall " << wall << " s; thread-seconds: discovery walk "
+                  << tmr.walk * sec << ", discovery sort " << tmr.sort * sec << ", discovery scan " << tmr.scan * sec << ", block membership " << tmr.member * sec
+                  << ", counting walk+inserts " << tmr.count * sec << ", finalize " << tmr.fin * sec << "; busy " << tmr.wall * sec << " of " << wall * nth
+                  << "; largest contig (index " << tmr.max_tid << ", " << tmr.max_reads << " reads, " << tmr.max_sites << " sites) " << tmr.max_wall * sec
+                  << " s; hits " << tmr.hits << ", blocks " << tmr.blocks << ", records (ad+dp) " << tmr.records << "
+";
+    }
 
     // 4. rows in (contig, position) order; CSC by barcode
     std::vector<uint32_t> row0(n_tid + 1, 0);
