@@ -697,6 +697,26 @@ static std::string g_laneLog;   // E12: per lane and chunk, its configuration (l
 static inline cudaError_t d2h(void* h, const void* d, size_t nbytes) { return cudaMemcpy(h, d, nbytes, cudaMemcpyDeviceToHost); }
 // E12: called after each batch with the batch's statuses (lane B: its overflows go to the host lane while the device runs on)
 typedef std::function<void(u64 b0, u64 nb, const uint8_t* status)> BatchFn;
+// SINGLET_LANE_PROF=1: per-kernel device time inside the lanes (cudaEvent pairs around each launch; no change to results). The
+// step names are in kProfName; the totals per lane go into the lane log line.
+enum { K_P1S, K_P1W, K_SCAN, K_P2, K_WPLAN, K_WKEY, K_WSCAN, K_P3, K_COST, K_SORT, K_P3A, K_P3W, K_CSTAT, K_N };
+static const char* const kProfName[K_N] = {"p1s", "p1w", "scan", "p2", "wplan", "wkey", "wscan", "p3", "cost", "sort", "p3a", "p3w", "cstat"};
+struct LaneProf {
+    bool on = false;
+    struct Ev { cudaEvent_t a, b; int id; };
+    std::vector<Ev> ev;
+    double sec[K_N] = {}; u64 cnt[K_N] = {};
+    double hostCb = 0, hostSync = 0; u64 nBatch = 0;
+    void init() { const char* e = std::getenv("SINGLET_LANE_PROF"); on = e && e[0] == '1'; }
+    void begin(int id) { if (!on) return; Ev e; e.id = id; cudaEventCreate(&e.a); cudaEventCreate(&e.b); cudaEventRecord(e.a); ev.push_back(e); }
+    void end() { if (!on) return; cudaEventRecord(ev.back().b); }
+    void collect() {
+        for (auto& e : ev) { float ms = 0; cudaEventSynchronize(e.b); cudaEventElapsedTime(&ms, e.a, e.b); sec[e.id] += ms * 1e-3; cnt[e.id]++; cudaEventDestroy(e.a); cudaEventDestroy(e.b); }
+        ev.clear();
+    }
+};
+#define PK(PR, ID, STMT) do { (PR).begin(ID); STMT; (PR).end(); } while (0)
+
 template <class C, bool WARP = false, int MAXREG = 0>
 bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* dOff, const std::vector<uint32_t>& idx, u64 NB, u64 budget,
              Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch = nullptr) {
@@ -763,54 +783,59 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     }
     devNote();
     const double tK = now(); stepAdd(sn + ".alloc", tK - tA);
+    LaneProf pr; pr.init();
     for (u64 b0 = 0; b0 < n; b0 += NB) {
+        pr.nBatch++;
         u64 nb = std::min(NB, n - b0);
         int T = 128; unsigned G = (unsigned)((nb + T - 1) / T);
         if (!NEW) k_p1<C><<<G, T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dNent);
         else {
             EG_CK(cudaMemset(dCtr, 0, 16));
-            k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dCtr);
-            if constexpr (p1WinPers<C>()) k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1);
-            else k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent);
+            PK(pr, K_P1S, (k_p1s<C><<<(unsigned)std::min<u64>((u64)nSm * bpsS, G), T>>>(P, D, dSeq, dOff, dIdx, b0, nb, dWork, dRbuf, dBst, dCtr)));
+            if constexpr (p1WinPers<C>()) PK(pr, K_P1W, (k_p1wp<C><<<(unsigned)std::min<u64>((u64)nSm * bpsW, G), T>>>(P, D, nb, dWork, dBst, dNent, dCtr + 1)));
+            else PK(pr, K_P1W, (k_p1w<C><<<G, T>>>(P, D, nb, dWork, dBst, dNent)));
         }
-        thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
+        PK(pr, K_SCAN, thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase)));
         u64 lastB, lastN; EG_CK(d2h(&lastB, dBase + nb - 1, 8)); EG_CK(d2h(&lastN, dNent + nb - 1, 8));
         u64 words = (lastB + lastN) / 32 + 2;
         if (words > bitsCap) { dfree(dBits); bitsCap = words * 2; EG_CK(dmal(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
-        k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
+        PK(pr, K_P2, (k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits)));
         if (!NEW) k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
         else {
             if constexpr (C::COMPACT) {
-                k_wplan<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst, dNeed);
+                PK(pr, K_WPLAN, (k_wplan<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst, dNeed)));
                 EG_CK(cudaMemset(dPend, 1, nb));
                 for (int rd = 0;; rd++) {
                     EG_CK(cudaMemset(dWcnt, 0, 8));
-                    k_wkey<C><<<G, T>>>(nb, dNeed, dPend, dWkey, dWcnt);
+                    PK(pr, K_WKEY, (k_wkey<C><<<G, T>>>(nb, dNeed, dPend, dWkey, dWcnt)));
                     unsigned long long pendN = 0; EG_CK(d2h(&pendN, dWcnt, 8));
                     if (!pendN) break;
                     if (rd > 0) nDeferred += pendN;
                     nRounds++;
-                    thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dWkey), thrust::device_ptr<u64>(dWkey + nb), thrust::device_ptr<u64>(dWb));
-                    k_p3c<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPend, dNeed, dWb, dPool, poolAl);
+                    PK(pr, K_WSCAN, thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dWkey), thrust::device_ptr<u64>(dWkey + nb), thrust::device_ptr<u64>(dWb)));
+                    PK(pr, K_P3, (k_p3c<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPend, dNeed, dWb, dPool, poolAl)));
                     EG_CK(cudaGetLastError());
                 }
             } else if constexpr (WARP) {
-                k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm);
-                thrust::sort_by_key(TP, thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm));
-                k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst);
+                PK(pr, K_COST, (k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm)));
+                PK(pr, K_SORT, thrust::sort_by_key(TP, thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
+                PK(pr, K_P3A, (k_p3a<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst)));
                 const int wt = g_wthreads; const unsigned GW = (unsigned)((nb * 32 + wt - 1) / wt);
                 const size_t sh = (size_t)wt * sizeof(AssignEnt) + (size_t)(wt / 32) * C::NW * sizeof(uint16_t);
-                k_p3w<C, LWM><<<GW, wt, sh>>>(P, D, b0, nb, budget, dWork, dRbuf, dBst, dOut, dLen, dPerm);
-            } else if constexpr (MAXREG == 64) k_p3lb<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
-            else k_p3e<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen);
-            k_copy_status<<<G, T>>>(dBst, dSt + b0, nb);
+                PK(pr, K_P3W, (k_p3w<C, LWM><<<GW, wt, sh>>>(P, D, b0, nb, budget, dWork, dRbuf, dBst, dOut, dLen, dPerm)));
+            } else if constexpr (MAXREG == 64) PK(pr, K_P3, (k_p3lb<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen)));
+            else PK(pr, K_P3, (k_p3e<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen)));
+            PK(pr, K_CSTAT, (k_copy_status<<<G, T>>>(dBst, dSt + b0, nb)));
         }
         EG_CK(cudaGetLastError());
         if (onBatch && *onBatch) {   // the batch's statuses now (the next batch's kernels wait for the host for this copy's duration)
             std::vector<uint8_t> hs(nb);
+            const double tc0 = now();
             EG_CK(d2h(hs.data(), dSt + b0, nb));
+            const double tc1 = now();
             (*onBatch)(b0, nb, hs.data());
+            pr.hostSync += tc1 - tc0; pr.hostCb += now() - tc1;
             if (g_autoBudget && nm[0] == 'B') budget = g_autoBudget->load();
         }
     }
@@ -828,6 +853,13 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     dfree(dIdx); dfree(dWork); dfree(dRbuf); dfree(dBst); dfree(dNent); dfree(dBase); dfree(dBits);   // E17: before the packed results
     if (stack0) { cudaDeviceSetLimit(cudaLimitStackSize, stack0); g_bud.used -= std::min(g_bud.used, stackRes); }
     const double tP = now(); stepAdd(sn + ".kernels", tP - tK);
+    if (pr.on) {   // SINGLET_LANE_PROF: the lane's device seconds per step, launches, the rest of the kernels' wall time (gaps: launch, host syncs, callback)
+        pr.collect();
+        double sum = 0; for (int i = 0; i < K_N; i++) sum += pr.sec[i];
+        char b[700]; int o = snprintf(b, sizeof b, "[prof %s: wall %.2f s, in kernels %.2f s, gaps %.2f s (status copy wait %.2f, callback %.2f), %llu batches:", nm, tP - tK, sum, tP - tK - sum, pr.hostSync, pr.hostCb, (unsigned long long)pr.nBatch);
+        for (int i = 0; i < K_N; i++) if (pr.cnt[i]) o += snprintf(b + o, sizeof b - o, " %s %.2f s x%llu;", kProfName[i], pr.sec[i], (unsigned long long)pr.cnt[i]);
+        snprintf(b + o, sizeof b - o, "] "); g_laneLog += b;
+    }
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
         u64* dPoff; EG_CK(dmal(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
         thrust::transform_inclusive_scan(TP, thrust::device_ptr<uint16_t>(dLen), thrust::device_ptr<uint16_t>(dLen + n), thrust::device_ptr<u64>(dPoff + 1),
