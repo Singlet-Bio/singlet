@@ -351,6 +351,35 @@ cudaError_t d2h(void* dst, const void* src, u64 n, bool keep = false) {
     if (pin && !keep) cudaHostUnregister(dst);
     return e;
 }
+// the region's page-locking for e2ePass: one range, or (split: E16 keepPinned with the trim) the records the pileup reads in place afterwards
+// (signatures, alignments, CIGAR ops, NM, sequences: [lo, hi) in whole pages) apart from the other pages (the per-read arrays: read -> record,
+// entries, masks), which are unlocked after the pass so that the pipeline can return them (E2ERegion::drop; a locked page stays until unlocked)
+struct RegionPin {
+    std::vector<std::pair<uint8_t*, u64>> rec, other;
+    bool pin(const E2ERegion& R, const E2EHeader& H, bool split) {
+        const u64 end = std::min<u64>(R.cap, (H.used + 4095) & ~4095ull);
+        u64 lo = end, hi = 0;
+        if (split) {
+            const u64 r[5][2] = {{H.oSigs, H.nRec * 16}, {H.oAlns, H.nAln * 16}, {H.oOps, H.nOps * 4}, {H.oNm, H.nAln * 2}, {H.oSeq, H.nSeq}};
+            for (const auto& x : r) if (x[0] && x[1]) { lo = std::min(lo, x[0]); hi = std::max(hi, x[0] + x[1]); }
+            lo &= ~4095ull; hi = std::min(end, (hi + 4095) & ~4095ull);
+        }
+        if (!split || lo >= hi) rec.push_back({R.base, end});
+        else {
+            if (lo > 0) other.push_back({R.base, lo});
+            rec.push_back({R.base + lo, hi - lo});
+            if (hi < end) other.push_back({R.base + hi, end - hi});
+        }
+        for (auto* v : {&rec, &other})
+            for (size_t k = 0; k < v->size(); k++)
+                if (cudaHostRegister((*v)[k].first, (*v)[k].second, cudaHostRegisterDefault) != cudaSuccess) {
+                    cudaGetLastError(); v->resize(k); unpinAll(); return false;
+                }
+        return true;
+    }
+    void unpinOther() { for (auto& x : other) cudaHostUnregister(x.first); other.clear(); }
+    void unpinAll() { unpinOther(); for (auto& x : rec) cudaHostUnregister(x.first); rec.clear(); }
+};
 // device buffers of one e2ePass call, freed on every return
 struct PassBufs {
     std::vector<void*> p;
@@ -370,10 +399,11 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const E2EHeader& H = *R.hdr();
     const u64 n = H.nReads, nRec = H.nRec, nAln = H.nAln, nOps = H.nOps;
     bool pinned = false;
+    RegionPin RP;
     double e16reg = 0, e16pre = -1, e16dl = -1;
     auto fail = [&](const char* what, cudaError_t e) {
         out.log += std::string(what) + ": " + cudaGetErrorString(e) + "; ";
-        if (pinned) cudaHostUnregister(R.base);
+        if (pinned) RP.unpinAll();
         return false;
     };
 #define EP_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) return fail(#x, e_); } while (0)
@@ -395,8 +425,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         // E16 "regpar" (keepPinned, level 5): this process's mapping of the region populated by several threads before the page-locking
         if (in.keepPinned && singlet_tail::cut("regpar")) { e16Touch(R.base, std::min<u64>(R.cap, H.used), false); e16pre = now() - tu; }
         const double tr = now();
-        pinned = cudaHostRegister(R.base, std::min<u64>(R.cap, (H.used + 4095) & ~4095ull), cudaHostRegisterDefault) == cudaSuccess;
-        if (!pinned) cudaGetLastError();
+        pinned = RP.pin(R, H, in.keepPinned && singlet_tail::cut("trim"));
         e16reg = now() - tr;
         EP_CK(B.alloc(dS, nRec * 16)); EP_CK(cudaMemcpy(dS, R.at<uint8_t>(H.oSigs), nRec * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dA, nAln * 16)); EP_CK(cudaMemcpy(dA, R.at<uint8_t>(H.oAlns), nAln * 16, cudaMemcpyHostToDevice));
@@ -442,7 +471,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
             const u64 m = std::min(m0, n - i0);
             EP_CK(upChunk(i0, m, false));
             std::vector<uint64_t> kc;
-            if (!singlet_records_gpu::distinctBarcodes(dRR, dE, m, H.cbL, kc, ms, err)) { out.log += err + "; "; if (pinned) cudaHostUnregister(R.base); return false; }
+            if (!singlet_records_gpu::distinctBarcodes(dRR, dE, m, H.cbL, kc, ms, err)) { out.log += err + "; "; if (pinned) RP.unpinAll(); return false; }
             if (nCh == 1) keys.swap(kc); else keys.insert(keys.end(), kc.begin(), kc.end());
         }
         if (nCh > 1) { std::sort(keys.begin(), keys.end()); keys.erase(std::unique(keys.begin(), keys.end()), keys.end()); }
@@ -550,7 +579,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         if (nCh > 1) out.log += "read chunks " + std::to_string(nCh) + " of " + std::to_string(m0) + " (P3-MEM-03); ";
     }
 #undef EP_CK
-    { const double tq = now(); if (pinned && !in.keepPinned) cudaHostUnregister(R.base); e16unreg = now() - tq; }
+    { const double tq = now(); if (pinned) { if (!in.keepPinned) RP.unpinAll(); else RP.unpinOther(); } e16unreg = now() - tq; }
     out.totalAln = pc[PC_ALN]; out.secondary = pc[PC_SEC]; out.rrnaSampled = pc[PC_RSAMP]; out.rrnaHook = pc[PC_RHOOK]; out.chrm = pc[PC_CHRM];
     out.noBarcode = pc[PC_NOBC]; out.barcoded = pc[PC_BARCODED]; out.multimapper = pc[PC_MULTI]; out.lowMapq = pc[PC_LOWMAPQ];
     out.nDone = pc[PC_DONE]; out.nUnwritten = pc[PC_UNWRITTEN]; out.nBigClip = pc[PC_BIGCLIP]; out.nNoHook = pc[PC_NOHOOK]; out.nNoKey = pc[PC_NOKEY];
