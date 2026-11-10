@@ -7,6 +7,9 @@
 #include "singlet/engine_gpu.h"
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include <cstring>
+#include <glob.h>
+#include <signal.h>
+#include <sys/file.h>
 #include "singlet/tail_trace.h"   // E16: the level-5 switches (digest)
 #include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
@@ -19,6 +22,66 @@ namespace singlet_engine_gpu {
 static void copyT3(const std::vector<T3>& a, std::vector<PileupTriplet>& b) {
     b.resize(a.size());
     if (!a.empty()) memcpy(b.data(), a.data(), a.size() * sizeof(T3));
+}
+
+
+// A deep sample's pileup needs more than its slot's share of the device (E17 budget) and than the free memory while the shared genome index
+// (SINGLET_GPU_SHARED_INDEX holder) still sits on it. Second attempt: ask the holders of this device to leave (they exit when no sample maps the
+// index), take the device's other slots so that no other sample's prefill races for the memory, and size the arena from what is free.
+struct PileupWiden {
+    std::vector<int> fds;          // the other slots' locks, held until release()
+    int slots = 1, held = 1;       // slots of the device; slots this pileup counts as its own (its first plus the ones in fds)
+    unsigned long long evicted = 0, freedB = 0; int holders = 0; double seconds = 0;
+    void release() { for (int fd : fds) { flock(fd, LOCK_UN); close(fd); } fds.clear(); }
+    ~PileupWiden() { release(); }
+};
+static size_t pileupWiden(int device, size_t totB, size_t prevArena, PileupWiden& W) {
+    const double t0 = now_s();
+    size_t f0 = 0, tt = 0; cudaMemGetInfo(&f0, &tt);
+    // (1) the holders of this device leave
+    glob_t g{};
+    const std::string pat = "/tmp/singlet_gpu_holder." + deviceId(device) + ".*.info";
+    if (glob(pat.c_str(), 0, nullptr, &g) == 0) {
+        for (size_t i = 0; i < g.gl_pathc; i++) {
+            FILE* f = fopen(g.gl_pathv[i], "r"); if (!f) continue;
+            long pid = 0; unsigned long long b = 0;
+            if (fscanf(f, "%ld %llu", &pid, &b) == 2 && pid > 0 && kill((pid_t) pid, 0) == 0 && kill((pid_t) pid, SIGUSR1) == 0) { W.evicted += b; W.holders++; }
+            fclose(f);
+        }
+    }
+    globfree(&g);
+    // (2) the other slots (flock on a new descriptor conflicts with this process's own slot, so that one is never taken: S - 1 are wanted)
+    W.slots = gpuSlots();
+    const char* we = getenv("SINGLET_GPU_PILEUP_SLOT_WAIT_S");
+    const double waitS = we ? atof(we) : 20.0;
+    std::vector<char> mine(W.slots, 0);
+    for (;;) {
+        for (int k = 0; k < W.slots && (int) W.fds.size() < W.slots - 1; k++) {
+            if (mine[k]) continue;
+            const int fd = open(slotLockPath(device, k).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
+            if (fd >= 0 && flock(fd, LOCK_EX | LOCK_NB) == 0) { W.fds.push_back(fd); mine[k] = 1; }
+            else if (fd >= 0) close(fd);
+        }
+        if ((int) W.fds.size() >= W.slots - 1 || now_s() - t0 >= waitS) break;
+        usleep(50000);
+    }
+    W.held = 1 + (int) W.fds.size();
+    // (3) the holders' memory comes back when their processes end
+    size_t f1 = f0;
+    for (int i = 0; i < 100; i++) {
+        cudaMemGetInfo(&f1, &tt);
+        if (W.holders == 0 || f1 >= f0 + (size_t) (0.9 * (double) W.evicted)) break;
+        usleep(100000);
+    }
+    W.freedB = f1 > f0 ? f1 - f0 : 0;
+    size_t arena = f1 > (size_t(3) << 30) ? f1 - (size_t(3) << 30) : f1 / 2;
+    if (const uint64_t bud = singlet_engine_gpu::memBudget(tt)) {   // the budget of the slots this pileup now holds
+        const uint64_t mine_b = bud * (uint64_t) W.held;
+        arena = std::min<size_t>(arena, mine_b > (uint64_t(3) << 30) ? mine_b - (uint64_t(3) << 30) : mine_b / 2);
+    }
+    if (const char* ag = getenv("SINGLET_GPU_PILEUP_ARENA_GB")) arena = std::min<size_t>(arena, (size_t) (atof(ag) * (1ull << 30)));
+    W.seconds = now_s() - t0;
+    return arena > prevArena + (size_t(256) << 20) ? arena : 0;   // 0: nothing gained
 }
 
 bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
@@ -57,7 +120,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // a sample whose working set exceeds the device (GSM7656149: 223 M barcoded reads needed ~100 GB of 94) runs again in unified
     // memory twice the device's size: the part beyond the device pages to the host, the results are the same
     size_t arenaB = 0;   // E17: the device arena's size (logged)
-    for (int attempt = 0; attempt < 2; attempt++) {
+    PileupWiden W; std::string notes;
+    for (int attempt = 0; attempt < 3; attempt++) {
     Arena A;
     try {
     if (attempt == 0) {
@@ -68,6 +132,16 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         // SINGLET_GPU_PILEUP_ARENA_GB: cap the arena (samples sharing the GPU; the partitions K adapt to it)
         if (const char* ag = getenv("SINGLET_GPU_PILEUP_ARENA_GB")) arena = std::min<size_t>(arena, (size_t) (atof(ag) * (1ull << 30)));
         A.init(arena); arenaB = arena;
+    }
+    else if (attempt == 1) {
+        const size_t arena = pileupWiden(device, totB, arenaB, W);
+        char nb[256]; snprintf(nb, sizeof nb, "wider arena: %d holder(s) asked to leave (%.1f GB freed), %d of %d slots held, %.2f s: ", W.holders, W.freedB / 1e9, W.held, W.slots, W.seconds);
+        notes += nb;
+        if (arena == 0) { notes += "no gain; "; W.release(); continue; }
+        size_t a = arena;
+        while (!A.try_init(a)) { a -= a / 16; if (a < arenaB) break; }   // the free memory moved: a little less
+        if (A.base == nullptr) { notes += "allocation failed; "; W.release(); continue; }
+        arenaB = A.cap; snprintf(nb, sizeof nb, "arena %.1f GB; ", A.cap / 1e9); notes += nb;
     }
     else A.init_managed(2 * totB);
     e16step("arena");
@@ -140,6 +214,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // the last device work is done (run_pipeline downloaded every output): free the arena and let the next sample have the GPU while the host
     // post-processing (digest, result copies) runs. E16 "resetbg" (level 5) leaves the reset and the unlock to the caller's thread instead.
     cudaFree(A.base);
+    W.release();
     e16step("arena freed");
     if (singlet_tail::cut("resetbg")) po.resetDeferred = true;   // the caller's thread resets it (pileupRelease) and then unlocks the device
     else { cudaDeviceReset(); if (pi.release) pi.release(); }
@@ -220,8 +295,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     }
     po.snpMolecules = g_snp_stat[0]; po.snpAmbiguous = g_snp_stat[1]; po.snpOther = g_snp_stat[2];
     po.editHits = g_edit_stat[0]; po.editMolecules = g_edit_stat[1]; po.editAmbiguous = g_edit_stat[2]; po.editOther = g_edit_stat[3];
-    if (attempt == 0) { char ab[96]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
-                                              singlet_engine_gpu::memBudget(totB) / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
+    if (attempt < 2) { char ab[160]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB, free at start %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
+                                              singlet_engine_gpu::memBudget(totB) / 1073741824.0, freeB / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
     e16step("outputs copied");
@@ -231,12 +306,14 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     e16step("multimap reads joined");
     po.msTotal = (now_s() - t0) * 1e3;
     po.log += "e16 steps (s): " + e16 + "; ";
-    if (attempt > 0) po.log += "unified memory (the device arena was too small); ";
+    if (attempt == 1) po.log += notes + "device arena, no unified memory; ";
+    if (attempt > 1) po.log += notes + "unified memory (the device arena was too small); ";
     return true;
     } catch (const ArenaExhausted& e) {
         cudaDeviceSynchronize();
         cudaFree(A.base);
-        if (attempt > 0) {
+        { char nb[160]; snprintf(nb, sizeof nb, "attempt %d: %zu MB needed, %zu MB arena; ", attempt, e.need >> 20, e.cap >> 20); notes += nb; }
+        if (attempt > 1) {
             po.log += "GPU memory: " + std::to_string(e.need >> 20) + " MB needed, " + std::to_string(e.cap >> 20) + " MB unified arena";
             cudaDeviceReset();
             return false;
