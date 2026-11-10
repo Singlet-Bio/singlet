@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -1290,8 +1291,12 @@ static VBResult fit_vb_k(
     // the others sat idle. The fit does not depend on the thread count (parallel_det_chunks), so outputs are unchanged.
     const int per_t = std::max(1, threads / nw);
 
-    auto run_batch = [&](int start, int end) {
-        for (int i = start; i < end; ++i) {
+    get_snp_major(cov, threads);   // built once, with all threads, before the restarts that share it start
+    std::atomic<int> next_restart{0};
+    // Workers claim restarts one at a time (a restart that converges early frees its worker for the next); every result is
+    // stored by its restart index, so nothing depends on which worker ran it.
+    auto run_batch = [&]() {
+        for (int i; (i = next_restart.fetch_add(1)) < n_inits;) {
             const uint64_t init_seed = seed_base
                 + static_cast<uint64_t>(i) * 1000ULL
                 + static_cast<uint64_t>(K) * 100000ULL;
@@ -1307,17 +1312,11 @@ static VBResult fit_vb_k(
     };
 
     if (nw <= 1) {
-        run_batch(0, n_inits);
+        run_batch();
     } else {
         std::vector<std::thread> workers;
         workers.reserve(nw);
-        const int per = n_inits / nw, rem = n_inits % nw;
-        int start = 0;
-        for (int w = 0; w < nw; ++w) {
-            const int cnt = per + (w < rem ? 1 : 0);
-            workers.emplace_back(run_batch, start, start + cnt);
-            start += cnt;
-        }
+        for (int w = 0; w < nw; ++w) workers.emplace_back(run_batch);
         for (auto& t : workers) t.join();
     }
 
@@ -1414,19 +1413,34 @@ static VBResult fit_vb_k_staged(
                   << " SNPs in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
                   << " s; reduced ELBO best " << all_res[order[0]].elbo << " (kind " << kinds[order[0]]
                   << "), median " << all_res[order[order.size() / 2]].elbo << "\n";
-    VBResult best;
-    best.elbo = -std::numeric_limits<double>::infinity();
-    for (int t = 0; t < top; ++t) {
+    // The continued candidates are independent: run them side by side, each on its share of the threads, then pick in order.
+    get_snp_major(cov, cfg.threads);
+    std::vector<VBResult> cand(top);
+    auto run_cand = [&](int t, int th) {
         VBResult r;
         r.elbo = -std::numeric_limits<double>::infinity();
         r.n_iter = 0;
         r.beta_mu.assign(cov.n_covered_snps, std::vector<float>(K, 0.5f));
         r.beta_sum.assign(cov.n_covered_snps, std::vector<float>(K, 2.0f));
         r.id_prob = std::move(all_res[order[t]].id_prob);
-        run_vb_inplace(cov, K, cfg, r, cfg.explore_full_iters, cfg.threads);
+        run_vb_inplace(cov, K, cfg, r, cfg.explore_full_iters, th);
+        cand[t] = std::move(r);
+    };
+    if (top > 1 && cfg.threads >= 2) {
+        const int th = std::max(1, cfg.threads / top);
+        std::vector<std::thread> ts;
+        for (int t = 1; t < top; ++t) ts.emplace_back(run_cand, t, th);
+        run_cand(0, th);
+        for (auto& t : ts) t.join();
+    } else {
+        for (int t = 0; t < top; ++t) run_cand(t, cfg.threads);
+    }
+    VBResult best;
+    best.elbo = -std::numeric_limits<double>::infinity();
+    for (int t = 0; t < top; ++t) {
         if (!quiet)
-            std::cerr << "[demux]   candidate " << t << " (kind " << kinds[order[t]] << "): full ELBO " << r.elbo << "\n";
-        if (r.elbo > best.elbo) best = std::move(r);
+            std::cerr << "[demux]   candidate " << t << " (kind " << kinds[order[t]] << "): full ELBO " << cand[t].elbo << "\n";
+        if (cand[t].elbo > best.elbo) best = std::move(cand[t]);
     }
     run_vb_inplace(cov, K, cfg, best, cfg.max_iter, cfg.threads);
     return best;
@@ -1988,16 +2002,28 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
     for (int f = 0; f < 2; ++f)
         pca[f] = compute_pca_cache(D[f], n_pcs, cfg.threads, cfg.seed + 17ULL + f);
 
-    DonorDemuxConfig fcfg = cfg;                 // per-fold thread budget (folds run side by side)
-    fcfg.threads = std::max(1, cfg.threads / 2);
+    // The K evaluations are independent of each other (a fit depends on K, the fold and the restart index only, never on what
+    // another K found); only the acceptance chain below is sequential. K values are evaluated in waves of `wave` concurrent
+    // evaluations, each with the thread budget one serial evaluation had at 8 threads, and the chain is then replayed in K
+    // order, so the chosen K, the trace and every number in it are those of the serial loop. Work past the stopping point
+    // (the rest of the wave that stops the search) is discarded. Thread counts above 8 go to the wave size.
+    const int wave = std::max(1, std::min(kmax, cfg.threads / 8));
+    const int kthreads = std::max(1, cfg.threads / wave);   // threads of one K evaluation (its two folds side by side)
+    DonorDemuxConfig fcfg = cfg;                 // per-fold thread budget
+    fcfg.threads = std::max(1, kthreads / 2);
+    for (int f = 0; f < 2; ++f) get_snp_major(D[f], cfg.threads);   // built once, before the fits that share it start
     const double delta = multiplet_prior(cfg, cov.n_cells);
-    std::vector<double> prev_ll;
-    int best_v = 1, stall = 0;
 
-    for (int K = 1; K <= kmax; ++K) {
-        const auto tk = std::chrono::steady_clock::now();
-        std::vector<double> ll(n, 0.0);
+    struct KEval {
+        std::vector<double> ll;
         int valid_f[2] = {1, 1};
+        double seconds = 0.0;
+    };
+    auto eval_k = [&](int K, KEval& out) {
+        const auto tk = std::chrono::steady_clock::now();
+        out.ll.assign(n, 0.0);
+        std::vector<double>& ll = out.ll;
+        int* valid_f = out.valid_f;
 
         auto do_fold = [&](int f) {
             PhaseScope ph_fold(kPhFold);
@@ -2028,7 +2054,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
-        if (cfg.threads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
+        if (kthreads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
             do_fold(0);
             t1.join();
@@ -2036,41 +2062,62 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             do_fold(0);
             do_fold(1);
         }
+        out.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tk).count();
+    };
 
-        double mean = 0.0;
-        for (double v : ll) mean += v;
-        mean /= n;
-        KSelectRow row;
-        row.K = K; row.ll_per_cell = mean;
-        row.valid = std::min(valid_f[0], valid_f[1]);
-        if (!prev_ll.empty()) {   // paired gain over the best accepted model so far
-            double md = 0.0, m2 = 0.0;
-            for (int i = 0; i < n; ++i) {
-                const double dd = ll[i] - prev_ll[i];
-                md += dd; m2 += dd * dd;
-            }
-            md /= n;
-            const double var = std::max(1e-12, (m2 / n - md * md) * n / (n - 1.0));
-            row.gain = md;
-            row.z = md / std::sqrt(var / n);
-        }
-        if (K == 1) {
-            prev_ll = ll;
-        } else if (row.valid > best_v && row.z > cfg.k_select_z &&
-                   row.gain * n >= cfg.k_select_min_gain) {
-            // more distinct donors AND the held-out likelihood really improved: a component that
-            // only fragments a donor (e.g. by cell type, whose SNP coverage differs) passes the
-            // distinctness test but does not predict held-out cells better.
-            best_v = row.valid; prev_ll = ll; stall = 0; row.accepted = true;
+    std::vector<double> prev_ll;
+    int best_v = 1, stall = 0;
+    bool stopped = false;
+
+    for (int K0 = 1; K0 <= kmax && !stopped; K0 += wave) {
+        const int K1 = std::min(kmax, K0 + wave - 1);
+        std::vector<KEval> ev(K1 - K0 + 1);
+        if (K1 == K0) {
+            eval_k(K0, ev[0]);
         } else {
-            ++stall;
+            std::vector<std::thread> ts;
+            for (int K = K0 + 1; K <= K1; ++K) ts.emplace_back(eval_k, K, std::ref(ev[K - K0]));
+            eval_k(K0, ev[0]);
+            for (auto& t : ts) t.join();
         }
-        row.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tk).count();
-        std::cerr << "[demux] auto-K K=" << K << ": held-out ll/cell=" << mean
-                  << " gain=" << row.gain << " z=" << row.z << " distinct donors=" << valid_f[0]
-                  << "/" << valid_f[1] << (row.accepted ? " *" : "") << " (" << row.seconds << " s)\n";
-        if (trace) trace->push_back(row);
-        if (stall >= cfg.k_select_patience) break;
+        for (int K = K0; K <= K1 && !stopped; ++K) {
+            const std::vector<double>& ll = ev[K - K0].ll;
+            const int* valid_f = ev[K - K0].valid_f;
+            double mean = 0.0;
+            for (double v : ll) mean += v;
+            mean /= n;
+            KSelectRow row;
+            row.K = K; row.ll_per_cell = mean;
+            row.valid = std::min(valid_f[0], valid_f[1]);
+            if (!prev_ll.empty()) {   // paired gain over the best accepted model so far
+                double md = 0.0, m2 = 0.0;
+                for (int i = 0; i < n; ++i) {
+                    const double dd = ll[i] - prev_ll[i];
+                    md += dd; m2 += dd * dd;
+                }
+                md /= n;
+                const double var = std::max(1e-12, (m2 / n - md * md) * n / (n - 1.0));
+                row.gain = md;
+                row.z = md / std::sqrt(var / n);
+            }
+            if (K == 1) {
+                prev_ll = ll;
+            } else if (row.valid > best_v && row.z > cfg.k_select_z &&
+                       row.gain * n >= cfg.k_select_min_gain) {
+                // more distinct donors AND the held-out likelihood really improved: a component that
+                // only fragments a donor (e.g. by cell type, whose SNP coverage differs) passes the
+                // distinctness test but does not predict held-out cells better.
+                best_v = row.valid; prev_ll = ll; stall = 0; row.accepted = true;
+            } else {
+                ++stall;
+            }
+            row.seconds = ev[K - K0].seconds;
+            std::cerr << "[demux] auto-K K=" << K << ": held-out ll/cell=" << mean
+                      << " gain=" << row.gain << " z=" << row.z << " distinct donors=" << valid_f[0]
+                      << "/" << valid_f[1] << (row.accepted ? " *" : "") << " (" << row.seconds << " s)\n";
+            if (trace) trace->push_back(row);
+            if (stall >= cfg.k_select_patience) stopped = true;
+        }
     }
     std::cerr << "[demux] auto-K: selected K=" << best_v << " in "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
