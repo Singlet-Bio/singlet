@@ -33,4 +33,6 @@ def test_other_members_pass_through():
 def test_reads_modalities_are_registered_after_the_counts():
     names = list(bundle.MODALITIES)
     i = names.index("intron_counts")
-    assert names[i + 1 : i + 4] == ["exon_reads", "intron_reads", "reads_per_umi_hist"]
+    # the multi-mapping record sits between the counts and the reads layers
+    assert names[i + 1] == "multimap_counts"
+    assert names[i + 2 : i + 5] == ["exon_reads", "intron_reads", "reads_per_umi_hist"]
