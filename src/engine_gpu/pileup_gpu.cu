@@ -90,7 +90,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     const double t0 = now_s();
     // E16: wall time of each host-side step (the GPU time is po.msGpu); appended to po.log
     std::string e16; double e16t = t0;
-    auto e16step = [&](const char* nm) { const double t = now_s(); char b[64]; snprintf(b, sizeof b, "%s %.3f, ", nm, t - e16t); e16 += b; e16t = t; };
+    auto e16step = [&](const char* nm) { const double t = now_s(); char b[64]; snprintf(b, sizeof b, "%s %.3f, ", nm, t - e16t); e16 += b; e16t = t; fprintf(stderr, "[pileup] step %s\n", b); };
     cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());
     cudaGetLastError();   // E16: the hand-off pass may have kept its context (E2EPassIn::keepPinned): then the initialisation fails, harmlessly
     if (cudaSetDevice(device) != cudaSuccess) { po.log = "cannot select device"; return false; }
