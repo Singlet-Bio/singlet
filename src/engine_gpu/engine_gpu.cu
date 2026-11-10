@@ -515,11 +515,21 @@ __global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, ui
     key[k] = ~(nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0);
     perm[k] = (uint32_t)k;
 }
-__global__ void k_cost_need(u64 n, const u64* need, u64* key, uint32_t* perm) {
+// lane B's phase 3 cost estimate per read (after planWA: waOff rows are valid for the reads with need > 0): mode 1 aligns, 2 sum of squared window rows,
+// 3 sum of cubed rows, 4 sum of 2^(row/2); descending order by key = ~cost
+template <class C>
+__global__ void k_cost_b(u64 n, const Work<C>* work, const u64* need, int mode, u64* key, uint32_t* perm) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
-    key[k] = ~need[k];
     perm[k] = (uint32_t)k;
+    u64 c = 0;
+    if (need[k]) {
+        const Work<C>& w = work[k];
+        if (mode == 1) c = need[k];
+        else if (mode == 4) { float a = 0; for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) a += exp2f(0.5f * (float)(w.waOff[i + 1] - w.waOff[i])); c = (u64)(a * 16.f); }
+        else for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; c += mode == 3 ? r * r * r : r * r; }
+    }
+    key[k] = ~c;
 }
 // warp lane (E3): the assignment thread per read, then k_p3w: warp per read, the read's windows stitched across the lanes
 // (stitch.cuh warpStitch), selection and encoding on lane 0
@@ -586,10 +596,11 @@ __global__ void k_feat(u64 n, const Work<C>* work, const u64* need, const u64* n
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     const Work<C>& w = work[k];
-    u64 sq = 0, mxr = 0;
-    for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; sq += r * r; if (r > mxr) mxr = r; }
-    f[6 * k + 0] = (uint32_t)min(w.nSteps, (u64)0xFFFFFFFFull); f[6 * k + 1] = w.nW; f[6 * k + 2] = (uint32_t)min(need[k], (u64)0xFFFFFFFFull);
-    f[6 * k + 3] = (uint32_t)min(nEnt[k], (u64)0xFFFFFFFFull); f[6 * k + 4] = (uint32_t)min(sq, (u64)0xFFFFFFFFull); f[6 * k + 5] = (uint32_t)mxr;
+    u64 sq = 0, mxr = 0, cu = 0; float ex = 0;
+    if (need[k]) for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; sq += r * r; cu += r * r * r; ex += exp2f(0.5f * (float)r); if (r > mxr) mxr = r; }
+    f[8 * k + 0] = (uint32_t)min(w.nSteps, (u64)0xFFFFFFFFull); f[8 * k + 1] = w.nW; f[8 * k + 2] = (uint32_t)min(need[k], (u64)0xFFFFFFFFull);
+    f[8 * k + 3] = (uint32_t)min(nEnt[k], (u64)0xFFFFFFFFull); f[8 * k + 4] = (uint32_t)min(sq, (u64)0xFFFFFFFFull); f[8 * k + 5] = (uint32_t)mxr;
+    f[8 * k + 6] = (uint32_t)min(cu, (u64)0xFFFFFFFFull); f[8 * k + 7] = (uint32_t)min(ex * 16.f, 4.0e9f);
 }
 typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
 static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
@@ -682,7 +693,7 @@ struct Budget {
 };
 static Budget g_bud;
 static std::vector<void*> g_ipcPtrs;   // shared index: mappings imported from the holder (shared_index.cuh); cudaFree is invalid on them, so dfree leaves them alone
-static int g_bSort = 0;   // SINGLET_B_SORT: lane B's phase 3 thread order (0: batch order; 1: aligns of the read, most first)
+static int g_bSort = 0;   // SINGLET_B_SORT: lane B's phase 3 thread order (0: batch order; 1: aligns of the read, 2: sum of squared window rows, 3: cubed, 4: 2^(row/2); most expensive first)
 static int g_waSlice = 160;   // aligns per read of lane B's pool (SINGLET_BOLD_WASLICE)
 static inline u64 budRound(u64 b) { return b < (1u << 20) ? (b + 511) & ~511ull : (b + (2u << 20) - 1) & ~((2ull << 20) - 1); }   // the driver's granularity
 static cudaError_t dmalv(void** p, u64 b) {
@@ -740,23 +751,23 @@ struct LaneProf {
     void init() { const char* e = std::getenv("SINGLET_LANE_PROF"); on = e && (e[0] == '1' || e[0] == '2'); lvl = on ? e[0] - '0' : 0; }
     // lvl 2: SIMT model of a COMPACT lane's phase 3. Cost of a read = its stitching steps (+ a fixed part); a warp costs its largest read; efficiency = sum of costs / (32 x sum of warp maxima)
     // for the batch order and for the reads sorted by a feature (descending): f[6k+0] steps, 1 windows, 2 aligns, 3 SA hits, 4 sum of squared rows, 5 largest row.
-    static constexpr int NK = 7;   // identity, then features 2, 3, 4, 1, 5, and the oracle (steps)
+    static constexpr int NK = 9;   // identity, then features 2, 3, 4, 1, 5, 6, 7, and the oracle (steps)
     double mSum[2] = {}, mMax[2][NK] = {}; u64 mReads = 0; double mStepsMax = 0, mStepsMean = 0;
     void model(const std::vector<uint32_t>& f, u64 n) {
-        static const int feat[NK] = {-1, 2, 3, 4, 1, 5, 0};
+        static const int feat[NK] = {-1, 2, 3, 4, 1, 5, 6, 7, 0};
         std::vector<uint32_t> ord(n);
         for (int kk = 0; kk < NK; kk++) {
             for (u64 i = 0; i < n; i++) ord[i] = (uint32_t)i;
-            if (feat[kk] >= 0) { const int ft = feat[kk]; std::stable_sort(ord.begin(), ord.end(), [&](uint32_t a, uint32_t b) { return f[6 * a + ft] > f[6 * b + ft]; }); }
+            if (feat[kk] >= 0) { const int ft = feat[kk]; std::stable_sort(ord.begin(), ord.end(), [&](uint32_t a, uint32_t b) { return f[8 * a + ft] > f[8 * b + ft]; }); }
             for (int m = 0; m < 2; m++) {
                 const double c0 = m ? 50.0 : 0.0; double sum = 0, mx = 0;
-                for (u64 i = 0; i < n; i += 32) { double wm = 0; for (u64 j = i; j < std::min(n, i + 32); j++) { const double c = f[6 * ord[j]] + c0; sum += c; wm = std::max(wm, c); } mx += wm; }
+                for (u64 i = 0; i < n; i += 32) { double wm = 0; for (u64 j = i; j < std::min(n, i + 32); j++) { const double c = f[8 * ord[j]] + c0; sum += c; wm = std::max(wm, c); } mx += wm; }
                 if (kk == 0) mSum[m] += sum;
                 mMax[m][kk] += mx;
             }
         }
         mReads += n;
-        double mxs = 0, sm = 0; for (u64 i = 0; i < n; i++) { mxs = std::max<double>(mxs, f[6 * i]); sm += f[6 * i]; }
+        double mxs = 0, sm = 0; for (u64 i = 0; i < n; i++) { mxs = std::max<double>(mxs, f[8 * i]); sm += f[8 * i]; }
         mStepsMax = std::max(mStepsMax, mxs); mStepsMean += sm;
     }
     void begin(int id) { if (!on) return; Ev e; e.id = id; cudaEventCreate(&e.a); cudaEventCreate(&e.b); cudaEventRecord(e.a); ev.push_back(e); }
@@ -862,7 +873,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                 EG_CK(cudaMemset(dPend, 1, nb));
                 const uint32_t* dPm = nullptr;
                 if (bSort) {
-                    PK(pr, K_COST, (k_cost_need<<<G, T>>>(nb, dNeed, dKey, dPerm)));
+                    PK(pr, K_COST, (k_cost_b<C><<<G, T>>>(nb, dWork, dNeed, bSort, dKey, dPerm)));
                     PK(pr, K_SORT, thrust::sort_by_key(TP, thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
                     dPm = dPerm;
                 }
@@ -878,9 +889,9 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                     EG_CK(cudaGetLastError());
                 }
                 if (pr.lvl >= 2) {   // SINGLET_LANE_PROF=2: the work features of this batch's reads, and the SIMT model
-                    uint32_t* dF; EG_CK(dmal(&dF, nb * 24));
+                    uint32_t* dF; EG_CK(dmal(&dF, nb * 32));
                     k_feat<C><<<G, T>>>(nb, dWork, dNeed, dNent, dF);
-                    std::vector<uint32_t> hf(nb * 6); EG_CK(d2h(hf.data(), dF, nb * 24)); dfree(dF);
+                    std::vector<uint32_t> hf(nb * 8); EG_CK(d2h(hf.data(), dF, nb * 32)); dfree(dF);
                     pr.model(hf, nb);
                 }
             } else if constexpr (WARP) {
@@ -938,7 +949,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         }
         if (dClk) dfree(dClk);
         if (pr.lvl >= 2 && pr.mReads) {
-            static const char* const nmk[LaneProf::NK] = {"batch order", "aligns", "SA hits", "sum row^2", "windows", "max row", "oracle"};
+            static const char* const nmk[LaneProf::NK] = {"batch order", "aligns", "SA hits", "sum row^2", "windows", "max row", "sum row^3", "sum 2^(row/2)", "oracle"};
             char m2[900]; int o2 = snprintf(m2, sizeof m2, "[model %s: %llu reads, mean steps %.0f, largest %.0f; SIMT efficiency by order (steps | steps+50):", nm, (unsigned long long)pr.mReads, pr.mStepsMean / pr.mReads, pr.mStepsMax);
             for (int kk = 0; kk < LaneProf::NK; kk++) o2 += snprintf(m2 + o2, sizeof m2 - o2, " %s %.2f|%.2f;", nmk[kk], pr.mSum[0] / (32.0 * pr.mMax[0][kk]), pr.mSum[1] / (32.0 * pr.mMax[1][kk]));
             snprintf(m2 + o2, sizeof m2 - o2, "] "); g_laneLog += m2;
