@@ -63,6 +63,7 @@ struct ArenaExhausted { size_t need, cap; };
 struct Arena {
     char* base = nullptr; size_t cap = 0, off = 0, peak = 0;
     void init(size_t c) { cap = c; CK(cudaMalloc(&base, c)); }
+    bool try_init(size_t c) { cap = c; if (cudaMalloc(&base, c) != cudaSuccess) { cudaGetLastError(); base = nullptr; return false; } return true; }   // the engine's second attempt: a failed allocation is reported, not fatal
     void init_managed(size_t c) { cap = c; CK(cudaMallocManaged(&base, c)); }   // unified memory: may exceed the device's
     template <class T> T* alloc(size_t n) {
         size_t b = (n * sizeof(T) + 255) & ~size_t(255); if (b == 0) b = 256;
