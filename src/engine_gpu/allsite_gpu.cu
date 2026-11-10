@@ -11,6 +11,7 @@
 // The pass runs in its own driver context (a cudaDeviceReset of the primary context by another stage of the process leaves it alone),
 // under the engine's device lock, and frees everything before it returns.
 #include <cuda.h>
+#include <dlfcn.h>
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
 
@@ -49,17 +50,18 @@ struct DrvCtx {
     typedef CUresult (*FnPop)(CUcontext*);
     CUcontext ctx = nullptr; FnCtx destroy = nullptr; FnPop pop = nullptr;
     bool make(int device, std::string& why) {
-        const char* names[4] = {"cuDeviceGet", "cuCtxCreate", "cuCtxDestroy", "cuCtxPopCurrent"};
+        // the versioned symbols from the driver library cudart already loaded (no link-time dependency on libcuda)
+        void* h = dlopen("libcuda.so.1", RTLD_NOW | RTLD_NOLOAD);
+        if (!h) h = dlopen("libcuda.so.1", RTLD_NOW);
+        if (!h) { why = "no libcuda.so.1"; return false; }
+        const char* names[4] = {"cuDeviceGet", "cuCtxCreate_v2", "cuCtxDestroy_v2", "cuCtxPopCurrent_v2"};
         void* f[4] = {nullptr, nullptr, nullptr, nullptr};
-        for (int i = 0; i < 4; ++i) {
-            cudaDriverEntryPointQueryResult q;
-            if (cudaGetDriverEntryPoint(names[i], &f[i], cudaEnableDefault, &q) != cudaSuccess || f[i] == nullptr || q != cudaDriverEntryPointSuccess) {
-                cudaGetLastError(); why = std::string("no driver entry point ") + names[i]; return false;
-            }
-        }
+        for (int i = 0; i < 4; ++i) if (!(f[i] = dlsym(h, names[i]))) { why = std::string("no driver symbol ") + names[i]; return false; }
         CUdevice d;
-        if (((FnDevGet) f[0])(&d, device) != CUDA_SUCCESS) { why = "cuDeviceGet"; return false; }
-        if (((FnCreate) f[1])(&ctx, CU_CTX_SCHED_BLOCKING_SYNC, d) != CUDA_SUCCESS) { ctx = nullptr; why = "cuCtxCreate"; return false; }
+        CUresult r = ((FnDevGet) f[0])(&d, device);
+        if (r != CUDA_SUCCESS) { why = "cuDeviceGet " + std::to_string((int) r); return false; }
+        r = ((FnCreate) f[1])(&ctx, CU_CTX_SCHED_BLOCKING_SYNC, d);
+        if (r != CUDA_SUCCESS) { ctx = nullptr; why = "cuCtxCreate " + std::to_string((int) r); return false; }
         destroy = (FnCtx) f[2]; pop = (FnPop) f[3];   // cuCtxCreate made the context current on this thread
         return true;
     }
