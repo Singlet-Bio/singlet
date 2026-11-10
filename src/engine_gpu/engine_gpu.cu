@@ -499,6 +499,21 @@ __global__ void k_p3c(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>
     p3one<C>(P, g, b0, k, budget, work, rbuf, base, bits, bst, out, outLen);
     pend[k] = 0;
 }
+// k_p3c under __launch_bounds__(128, MINB) (SINGLET_B_MINB): at most 65536 / (128 x MINB) registers per thread
+template <class C, int MINB>
+__global__ void __launch_bounds__(128, MINB) k_p3cb(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
+                                                   const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen, uint8_t* pend, const u64* need, const u64* wb,
+                                                   m5::uint* pool, u64 poolAl, const uint32_t* perm) {
+    const u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    const u64 k = perm ? perm[t] : t;
+    if (!pend[k]) return;
+    const u64 nd = need[k];
+    if (nd && wb[k] + nd > poolAl) return;
+    work[k].waP = pool + (nd ? wb[k] * WA_SIZE : 0);
+    p3one<C>(P, g, b0, k, budget, work, rbuf, base, bits, bst, out, outLen);
+    pend[k] = 0;
+}
 // the same under __launch_bounds__(BT, MINB): at most 65536 / (BT x MINB) registers per thread (128 x 8: 64)
 template <class C, int BT, int MINB>
 __global__ void __launch_bounds__(BT, MINB) k_p3lb(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf,
@@ -522,14 +537,16 @@ __global__ void k_cost_b(u64 n, const Work<C>* work, const u64* need, int mode, 
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     perm[k] = (uint32_t)k;
+    if (mode == 5) { key[k] = k; return; }                                  // control: the sort leaves the batch order
+    if (mode == 6) { key[k] = (k * 0x9E3779B97F4A7C15ull) >> 20; return; }   // control: a fixed shuffle
     u64 c = 0;
     if (need[k]) {
         const Work<C>& w = work[k];
         if (mode == 1) c = need[k];
         else if (mode == 4) { float a = 0; for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) a += exp2f(0.5f * (float)(w.waOff[i + 1] - w.waOff[i])); c = (u64)(a * 16.f); }
-        else for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; c += mode == 3 ? r * r * r : r * r; }
+        else for (unsigned i = 0; i < w.nWall && i < (unsigned)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; c += mode == 3 ? r * r * r : r * r; }   // modes 2, 3, 7
     }
-    key[k] = ~c;
+    key[k] = mode == 7 ? c : ~c;
 }
 // warp lane (E3): the assignment thread per read, then k_p3w: warp per read, the read's windows stitched across the lanes
 // (stitch.cuh warpStitch), selection and encoding on lane 0
@@ -693,6 +710,7 @@ struct Budget {
 };
 static Budget g_bud;
 static std::vector<void*> g_ipcPtrs;   // shared index: mappings imported from the holder (shared_index.cuh); cudaFree is invalid on them, so dfree leaves them alone
+static int g_bMinB = 0;   // SINGLET_B_MINB: lane B phase 3 register cap through __launch_bounds__(128, MINB) (0: none; 6, 7, 8, 10)
 static int g_bSort = 0;   // SINGLET_B_SORT: lane B's phase 3 thread order (0: batch order; 1: aligns of the read, 2: sum of squared window rows, 3: cubed, 4: 2^(row/2); most expensive first)
 static int g_waSlice = 160;   // aligns per read of lane B's pool (SINGLET_BOLD_WASLICE)
 static inline u64 budRound(u64 b) { return b < (1u << 20) ? (b + 511) & ~511ull : (b + (2u << 20) - 1) & ~((2ull << 20) - 1); }   // the driver's granularity
@@ -784,7 +802,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
              Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch = nullptr) {
     const double tA = now();
     const std::string sn = std::string("lane") + nm;
-    const int bSort = g_bSort;
+    const int bSort = g_bSort, bMinB = g_bMinB;
     g_bud.at = sn;
     u64 n = idx.size();
     L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0); L.off.resize(n + 1); L.off[0] = 0;   // off: every entry copied below
@@ -826,7 +844,13 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         }
         int regs = 0;
         { cudaFuncAttributes fa{};
-          if constexpr (C::COMPACT) cudaFuncGetAttributes(&fa, (const void*)k_p3c<C>);
+          if constexpr (C::COMPACT) {
+              if (bMinB == 6) cudaFuncGetAttributes(&fa, (const void*)k_p3cb<C, 6>);
+              else if (bMinB == 7) cudaFuncGetAttributes(&fa, (const void*)k_p3cb<C, 7>);
+              else if (bMinB == 8) cudaFuncGetAttributes(&fa, (const void*)k_p3cb<C, 8>);
+              else if (bMinB == 10) cudaFuncGetAttributes(&fa, (const void*)k_p3cb<C, 10>);
+              else cudaFuncGetAttributes(&fa, (const void*)k_p3c<C>);
+          }
           else if constexpr (WARP) cudaFuncGetAttributes(&fa, (const void*)k_p3w<C, LWM>);
           else if constexpr (MAXREG == 64) cudaFuncGetAttributes(&fa, (const void*)k_p3lb<C, 128, 8>);
           else cudaFuncGetAttributes(&fa, (const void*)k_p3e<C>);
@@ -885,7 +909,13 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                     if (rd > 0) nDeferred += pendN;
                     nRounds++;
                     PK(pr, K_WSCAN, thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dWkey), thrust::device_ptr<u64>(dWkey + nb), thrust::device_ptr<u64>(dWb)));
-                    PK(pr, K_P3, (k_p3c<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPend, dNeed, dWb, dPool, poolAl, dPm)));
+#define P3C_ARGS P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPend, dNeed, dWb, dPool, poolAl, dPm
+                    if (bMinB == 6) PK(pr, K_P3, (k_p3cb<C, 6><<<G, T>>>(P3C_ARGS)));
+                    else if (bMinB == 7) PK(pr, K_P3, (k_p3cb<C, 7><<<G, T>>>(P3C_ARGS)));
+                    else if (bMinB == 8) PK(pr, K_P3, (k_p3cb<C, 8><<<G, T>>>(P3C_ARGS)));
+                    else if (bMinB == 10) PK(pr, K_P3, (k_p3cb<C, 10><<<G, T>>>(P3C_ARGS)));
+                    else PK(pr, K_P3, (k_p3c<C><<<G, T>>>(P3C_ARGS)));
+#undef P3C_ARGS
                     EG_CK(cudaGetLastError());
                 }
                 if (pr.lvl >= 2) {   // SINGLET_LANE_PROF=2: the work features of this batch's reads, and the SIMT model
@@ -2106,6 +2136,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const char* wsV = std::getenv("SINGLET_BOLD_WSHRINK");
     const bool wshrink = NEW && !(wsV && wsV[0] == '0');
     if (const char* sbs = std::getenv("SINGLET_B_SORT")) g_bSort = std::atoi(sbs);
+    if (const char* sbm = std::getenv("SINGLET_B_MINB")) g_bMinB = std::atoi(sbm);
     if (const char* wsE = std::getenv("SINGLET_BOLD_WASLICE")) g_waSlice = (int)std::max<u64>(8, std::strtoull(wsE, nullptr, 10));
     const u64 perB = wshrink ? lanePerB<LaneBc, false>() + 25 + (u64)g_waSlice * WA_SIZE * sizeof(m5::uint) : perB0;
     const u64 RES = 112;   // E8: per sequence its packed result and offsets kept on the device for the records' gather (~70 bytes of result on pbmc1k_v3)
