@@ -786,7 +786,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     std::vector<UnitOut> uout(units.size());
     std::vector<uint32_t> grow0(n_tid + 1, 0);   // the member's first row of each contig
     for (uint32_t t = 0; t < n_tid; ++t) grow0[t + 1] = grow0[t] + static_cast<uint32_t>(out[t].sites.size());
-    auto sp = std::make_shared<Spill>(); sp->open(P.spill_dir, units.size());
+    auto spl = std::make_shared<Spill>(); spl->open(P.spill_dir, units.size());
     struct Hit { uint64_t key; uint32_t site; };
     struct WS { std::vector<Hit> hits; std::vector<uint64_t> keys; std::vector<uint64_t> off; rec::Scratch sc; std::string enc, site; };
     std::vector<WS> ws(nth);
@@ -841,7 +841,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
             });
             Spill::put_varint(W.enc, nbc); W.enc += W.site;
         }
-        sp->put(un, grow0[t] + static_cast<uint32_t>(s0), static_cast<uint32_t>(ns), W.enc);
+        spl->put(un, grow0[t] + static_cast<uint32_t>(s0), static_cast<uint32_t>(ns), W.enc);
         o.st.snp_molecules = cn.molecules; o.st.snp_molecules_ambiguous = cn.ambiguous; o.st.snp_molecules_other = cn.other;
         if (TM) { g_1 += cn.g1; g_8 += cn.g8; g_64 += cn.g64; g_512 += cn.g512; g_big += cn.gbig; g_m2 += cn.m2; }
         const uint64_t nh = W.hits.size(); n_hits += nh;
@@ -859,7 +859,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
             pt.ad_rec += o.adr; pt.dp_rec += o.dpr;
         }
     }
-    if (TM) std::cerr << "[allsite-timing] merged counts: " << sp->bytes << " bytes in " << sp->where << "\n";
+    if (TM) std::cerr << "[allsite-timing] merged counts: " << spl->bytes << " bytes in " << spl->where << "\n";
     if (TM) {
         const double sec = 1e-9; const uint64_t T_b = now_ns();
         std::cerr << "[allsite-timing] kernel sorted, threads " << nth << ", reads " << res.reads_used << ", units " << units.size() << ", hits " << n_hits.load()
@@ -869,7 +869,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
                   << "; groups (molecules per barcode and site) 1: " << g_1.load() << ", 2-8: " << g_8.load() << ", 9-64: " << g_64.load() << ", 65-512: " << g_512.load()
                   << ", >512: " << g_big.load() << ", sum m^2 (m >= 2) " << g_m2.load() << "\n";
     }
-    finish_spill(res, out_sp, sp, n_tid, n_barcodes, P);
+    finish_spill(res, out_sp, spl, n_tid, n_barcodes, P);
     return res;
 }
 
