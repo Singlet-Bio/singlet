@@ -12,6 +12,7 @@
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/nvtx.h"
+#include "singlet/tail_trace.h"   // E16 marks (SINGLET_E16_TRACE): host memory per step
 #include "singlet/thread_name.h"
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
@@ -1155,7 +1156,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const bool NEW0 = !(cfgE && std::string(cfgE) == "old");
     const double tF0 = now();
     double tS = tF0;   // E12: start of the current step
-    auto step = [&](const char* k) { const double t = now(); stepAdd(k, t - tS); tS = t; };
+    auto step = [&](const char* k) {
+        const double t = now(); stepAdd(k, t - tS); tS = t;
+        if (singlet_tail::on()) { double a, sh; singlet_tail::rss(a, sh); singlet_tail::mark("engine: step %s, host anon %.1f GB, shmem %.1f GB", k, a, sh); }
+    };
     const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
     if (initRc != cudaSuccess) cudaGetLastError();
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
@@ -2384,6 +2388,16 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             else { keepTally = budRound(std::max<u64>(1, n) * 8) * 2; g_bud.used += keepTally; g_bud.note(); }
             dfree(dA2);
             stepAdd("e2e.keep", now() - tk);
+        }
+        if (singlet_tail::on()) {   // what the host holds as the records' phase starts (sizes only)
+            u64 hb = 0; for (auto& cr : chunks) hb += cr.hBlob.size() + cr.hOff.size() * 8;
+            double a, sh; singlet_tail::rss(a, sh);
+            singlet_tail::mark("engine: records phase: host anon %.1f GB; records seq %.1f, blob %.1f, offsets %.1f, recSrc+recRead %.1f, host lane %.1f, "
+                               "reads seq %.1f, off %.1f, aux %.1f, readRecord %.1f, clip %.1f GB (%llu records, %llu reads, gatherDev %d)", a,
+                               out.seq.size() / 1073741824.0, out.blob.size() / 1073741824.0, (out.seqOff.size() + out.blobOff.size()) * 8 / 1073741824.0,
+                               nRec * 12 / 1073741824.0, hb / 1073741824.0, in.seq.size() / 1073741824.0, in.off.size() * 8 / 1073741824.0,
+                               in.e10.aux.size() * 8 / 1073741824.0, out.readRecord.size() * 4 / 1073741824.0, (out.clip5.size() + out.clip3.size()) * 2 / 1073741824.0,
+                               (unsigned long long) nRec, (unsigned long long) n, (int) gatherDev);
         }
         const double tg = now();
         LaneSrc* dTab = nullptr; u64 *dSrc = nullptr, *dBOff = nullptr, *dSOff = nullptr; uint32_t* dRd = nullptr; uint8_t* dBlob = nullptr; char* dRS = nullptr;
