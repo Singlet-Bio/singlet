@@ -1756,12 +1756,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 8 * g_handoffQWords) : 0;
             }
             if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; gpuFallback(P, "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs"); }
-            else {   // align-w2: on every thread (each faults in its part of the region's pages)
-                const int tc = (int) std::max<uint64>(1, std::min<uint64>((uint64) nt, nR / (1u << 20) + 1));
-                std::vector<std::thread> tv;
-                for (int t = 0; t < tc; t++) tv.emplace_back([&, t]() { const uint64 a = nR * t / tc, b = nR * (t + 1) / tc; if (b > a) memcpy(e2r.base + e2eR + a * 4, out.readRecord.data() + a, (b - a) * 4); });
-                for (auto &x : tv) x.join();
-            }
+            else memcpy(e2r.base + e2eR, out.readRecord.data(), nR * 4);   // one thread: faults on the shared region's pages serialize (threads were 2.3x slower)
         }
         e10ok = e10ok && e2eRec;
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
