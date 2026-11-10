@@ -514,6 +514,15 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     const uint64_t T_prep = now_ns();
 
     auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };
+    // staged prefetch of the records of the reads ahead of position j (read, then signature, then alignment and sequence, then CIGAR):
+    // the walks are bound by these misses when reads arrive in stream order
+    auto pf = [&](auto id, uint64_t j, uint64_t end) {
+        if (j + 16 < end) __builtin_prefetch(&R.read(id(j + 16)));
+        if (j + 8 < end) { const auto& x = R.read(id(j + 8)); __builtin_prefetch(&R.sig(x.sig)); __builtin_prefetch(&sig_p[x.sig]); }
+        if (j + 4 < end) { const auto& x = R.read(id(j + 4)); const auto& sg = R.sig(x.sig); __builtin_prefetch(&R.aln(sg.aln_off + sig_p[x.sig])); __builtin_prefetch(R.seq_at(sg.seq_off)); }
+        if (j + 2 < end) { const auto& x = R.read(id(j + 2)); const auto& sg = R.sig(x.sig); __builtin_prefetch(R.ops_at(R.aln(sg.aln_off + sig_p[x.sig]).ops_off)); }
+    };
+    auto by_id = [&](uint64_t k) { return by_tid[k]; };
     auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
     auto& out = *out_sp;
     std::atomic<uint64_t> t_walk{0}, t_sort{0}, t_member{0}, t_cwalk{0}, t_csort{0}, t_coll{0}, n_hits{0};
@@ -531,6 +540,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         const Chunk& C = chunks[ci]; const int32_t t = static_cast<int32_t>(C.t); auto& obs = cobs[ci];
         static const int8_t bidx[16] = {-1, 0, 1, -1, 2, -1, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1};   // base_idx
         for (uint64_t k = C.k0; k < C.k1; ++k) {
+            pf(by_id, k, C.k1);
             const uint64_t r = by_tid[k]; const auto& x = R.read(r);
             const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
             const bool rev = (a.flags & 1) != 0; const uint32_t* o = R.ops_at(a.ops_off); const uint8_t* seq = R.seq_at(sg.seq_off);
@@ -608,6 +618,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         const uint64_t u0 = TM ? now_ns() : 0;
         const Chunk& Ch = chunks[ci]; const auto& spos = plan[Ch.t].spos; if (spos.empty()) return;
         for (uint64_t k = Ch.k0; k < Ch.k1; ++k) {
+            pf(by_id, k, Ch.k1);
             const auto& x = R.read(by_tid[k]); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
             const uint32_t* o = R.ops_at(a.ops_off); int64_t end = a.pos;
             for (int i = 0; i < a.n_ops; ++i) { const int op = o[i] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[i] >> 4; }
@@ -668,7 +679,9 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         const size_t s0 = C.cuts[U.b], s1 = C.cuts[U.b + 1], ns = s1 - s0; const uint64_t b0 = cnt[t];
         const int32_t* sp = C.spos.data();
         W.hits.clear();
+        auto bid = [&](uint64_t jj) { return by_tid[b0 + C.bread[jj]]; };
         for (uint64_t j = C.boff[U.b]; j < C.boff[U.b + 1]; ++j) {
+            pf(bid, j, C.boff[U.b + 1]);
             const uint64_t r = by_tid[b0 + C.bread[j]]; const auto& x = R.read(r);
             const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
             const uint64_t uf = Y.umi ? rec::umi_field(x.umi3, Y.L) : 0; const uint32_t bc = static_cast<uint32_t>(x.bc);

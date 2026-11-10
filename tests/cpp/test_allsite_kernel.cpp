@@ -166,6 +166,7 @@ int main() {
             A::rec::Scratch S; A::rec::Counts ca, cb; std::vector<uint64_t> ea, eb;
             A::rec::collapse_site(a.data(), a.size(), y, dir, S, ca, [&](uint32_t bc, uint32_t dp, uint32_t ad) { ea.push_back((uint64_t(bc) << 40) | (uint64_t(dp) << 20) | ad); });
             A::rec::collapse_site_unsorted(b.data(), b.size(), y, dir, S, cb, [&](uint32_t bc, uint32_t dp, uint32_t ad) { eb.push_back((uint64_t(bc) << 40) | (uint64_t(dp) << 20) | ad); });
+            std::sort(ea.begin(), ea.end()); std::sort(eb.begin(), eb.end());
             CHECK(ea == eb && ca.molecules == cb.molecules && ca.ambiguous == cb.ambiguous && ca.other == cb.other && !ea.empty(), "unsorted site collapse, directional " << dir);
         }
     }

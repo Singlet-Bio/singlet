@@ -61,8 +61,12 @@ struct Ent { uint64_t umi; uint32_t bc, reads; uint32_t n[3]; };
 struct Scratch {
     std::vector<Ent> e, e2;
     std::vector<uint32_t> root, merged;
-    struct Slot { uint64_t k; uint8_t c[3]; };
+    struct Slot { uint64_t k; uint32_t stamp; uint8_t c[3]; };
+    struct BSlot { uint32_t bc, stamp, head, n; };
     std::vector<Slot> tab;
+    std::vector<BSlot> btab;
+    std::vector<uint32_t> used, next, bused;
+    uint32_t stamp = 0;
 };
 
 // The group interface: the molecules of one (barcode, site), in any order. Adds the barcode's REF-or-ALT molecules to dp (ALT ones to ad)
@@ -111,48 +115,52 @@ inline void collapse_site(const uint64_t* k, size_t n, const Layout& y, bool dir
     }
 }
 
-// The same result from one site's keys in any order (the host kernel): exact molecules through a small hash table, grouped by barcode with
-// a radix pass over the barcode bits, then collapse_group per barcode. Barcodes come out ascending. Small sites and keys without UMIs are
-// sorted in place and go through collapse_site.
+// The same result from one site's keys in any order (the host kernel): exact molecules through a stamped hash table, chained by barcode
+// through a second one, then collapse_group per barcode. Barcodes come out in first-seen order (the pass sums per (barcode, site), so the
+// order changes nothing). Small sites and keys without UMIs are sorted in place and go through collapse_site.
 template <class Emit>
 inline void collapse_site_unsorted(uint64_t* k, size_t n, const Layout& y, bool directional, Scratch& S, Counts& st, Emit&& emit) {
-    if (!y.umi || n < 48) { std::sort(k, k + n); collapse_site(k, n, y, directional, S, st, emit); return; }
+    if (!y.umi || n < 32) { std::sort(k, k + n); collapse_site(k, n, y, directional, S, st, emit); return; }
+    if (++S.stamp == 0) { for (auto& s : S.tab) s.stamp = 0; for (auto& s : S.btab) s.stamp = 0; S.stamp = 1; }
+    const uint32_t stamp = S.stamp;
     int bits = 6; while ((1ull << bits) < 2 * n) ++bits;
-    const size_t cap = size_t(1) << bits, mask = cap - 1;
-    S.tab.assign(cap, Scratch::Slot{0, {0, 0, 0}});
-    for (size_t i = 0; i < n; ++i) {   // key >> 2 + 1: never 0, so 0 marks an empty slot
-        const uint64_t mk = (k[i] >> 2) + 1; const uint8_t c = k[i] & 3;
+    const size_t mask = (size_t(1) << bits) - 1;
+    if (S.tab.size() <= mask) S.tab.resize(mask + 1);
+    S.used.clear();
+    for (size_t i = 0; i < n; ++i) {   // exact molecules: slots of this site carry its stamp, so no table is cleared between sites
+        const uint64_t mk = k[i] >> 2; const uint8_t c = k[i] & 3;
         size_t h = static_cast<size_t>((mk * 0x9E3779B97F4A7C15ull) >> (64 - bits));
-        while (S.tab[h].k != mk && S.tab[h].k != 0) h = (h + 1) & mask;
-        Scratch::Slot& sl = S.tab[h]; sl.k = mk; if (sl.c[c] < 255) ++sl.c[c];
+        while (S.tab[h].stamp == stamp && S.tab[h].k != mk) h = (h + 1) & mask;
+        Scratch::Slot& sl = S.tab[h];
+        if (sl.stamp != stamp) { sl.k = mk; sl.stamp = stamp; sl.c[0] = sl.c[1] = sl.c[2] = 0; S.used.push_back(static_cast<uint32_t>(h)); }
+        if (sl.c[c] < 255) ++sl.c[c];
     }
-    S.e.clear();
-    const int ub = 3 * y.L; uint32_t bor = 0, band = ~0u;
-    for (const auto& sl : S.tab) {
-        if (!sl.k) continue;
-        const uint64_t u = sl.k - 1;
-        Ent en; en.umi = (u & (y.umi_lead - 1)) | y.umi_lead; en.bc = static_cast<uint32_t>(u >> ub);
+    // molecules chained by barcode through a second stamped table; each barcode's chain is one group
+    const size_t m = S.used.size();
+    S.e.resize(m); S.next.resize(m); S.bused.clear();
+    int bb = 4; while ((1ull << bb) < 2 * m) ++bb;
+    const size_t bmask = (size_t(1) << bb) - 1;
+    if (S.btab.size() <= bmask) S.btab.resize(bmask + 1);
+    const int ub = 3 * y.L;
+    for (size_t i = 0; i < m; ++i) {
+        const Scratch::Slot& sl = S.tab[S.used[i]];
+        Ent& en = S.e[i]; en.umi = (sl.k & (y.umi_lead - 1)) | y.umi_lead; en.bc = static_cast<uint32_t>(sl.k >> ub);
         en.n[0] = sl.c[0]; en.n[1] = sl.c[1]; en.n[2] = sl.c[2]; en.reads = en.n[0] + en.n[1] + en.n[2];
-        bor |= en.bc; band &= en.bc;
-        S.e.push_back(en);
+        size_t h = static_cast<size_t>((static_cast<uint64_t>(en.bc) * 0x9E3779B97F4A7C15ull) >> (64 - bb));
+        while (S.btab[h].stamp == stamp && S.btab[h].bc != en.bc) h = (h + 1) & bmask;
+        Scratch::BSlot& b = S.btab[h];
+        if (b.stamp != stamp) { b.bc = en.bc; b.stamp = stamp; b.head = static_cast<uint32_t>(i); b.n = 1; S.next[i] = UINT32_MAX; S.bused.push_back(static_cast<uint32_t>(h)); }
+        else { S.next[i] = b.head; b.head = static_cast<uint32_t>(i); ++b.n; }
     }
-    // LSD radix by barcode over the bytes that differ
-    const uint32_t diff = bor ^ band; S.e2.resize(S.e.size());
-    for (int sh = 0; sh < 32; sh += 8) {
-        if (!((diff >> sh) & 0xff)) continue;
-        uint32_t cnt[257] = {0};
-        for (const auto& en : S.e) ++cnt[((en.bc >> sh) & 0xff) + 1];
-        for (int i = 0; i < 256; ++i) cnt[i + 1] += cnt[i];
-        for (const auto& en : S.e) S.e2[cnt[(en.bc >> sh) & 0xff]++] = en;
-        S.e.swap(S.e2);
-    }
-    const size_t m = S.e.size();
-    for (size_t g = 0; g < m;) {
-        size_t ge = g + 1; while (ge < m && S.e[ge].bc == S.e[g].bc) ++ge;
+    for (uint32_t bh : S.bused) {
+        const Scratch::BSlot& b = S.btab[bh];
         uint32_t dp = 0, ad = 0;
-        collapse_group(S.e.data() + g, ge - g, directional, S, st, dp, ad);
-        if (dp) emit(S.e[g].bc, dp, ad);
-        g = ge;
+        if (b.n == 1) collapse_group(&S.e[b.head], 1, directional, S, st, dp, ad);
+        else {
+            S.e2.clear(); for (uint32_t i = b.head; i != UINT32_MAX; i = S.next[i]) S.e2.push_back(S.e[i]);
+            collapse_group(S.e2.data(), S.e2.size(), directional, S, st, dp, ad);
+        }
+        if (dp) emit(b.bc, dp, ad);
     }
 }
 
