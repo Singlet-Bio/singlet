@@ -39,6 +39,7 @@
 #include <zlib.h>
 #include <cstdio>
 
+#include "allsite_device.h"
 #include "sparse_accumulator.h"
 #include "umi_dedup.h"
 
@@ -79,6 +80,13 @@ public:
         const uint8_t v = static_cast<const uint8_t*>(map_)[o];
         return v < 4 ? v : 4;
     }
+    // contig t's bases as stored (base() maps values over 3 to N), *len of them; nullptr when the contig has none (the device route)
+    const uint8_t* contig(int32_t t, uint64_t* len) const {
+        *len = 0;
+        if (t < 0 || static_cast<size_t>(t) >= off_.size() || off_[t] == UINT64_MAX || off_[t] >= size_) return nullptr;
+        *len = std::min<uint64_t>(len_[t], size_ - off_[t]);
+        return static_cast<const uint8_t*>(map_) + off_[t];
+    }
 private:
     int fd_ = -1; void* map_ = nullptr; size_t size_ = 0;
     std::vector<uint64_t> off_, len_;
@@ -97,6 +105,7 @@ struct Params {
     bool defer_build = false;        // keep the counts as triplets; Result::finalize builds the matrices (for the called cells only)
     std::function<void()> progress;  // called (from worker threads) after each contig's discovery and each counting block; the
                                      // engine re-arms its stall watchdog here, since an LCL's pass runs well past an hour
+    std::function<bool(const dev::Input&, dev::Output&)> device;   // the device route (allsite_device.h); false: the host pass runs
 };
 
 struct Site { int32_t tid, pos; char ref, alt; uint32_t alt_molecules, alt_cells; };
@@ -168,6 +177,10 @@ struct Timers {
 inline uint64_t now_ns() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); }
 }  // namespace detail
 
+}}  // namespace singlet::allsite
+#include "allsite_device_glue.h"   // Params::device: the device route's hook
+namespace singlet { namespace allsite {
+
 // Records: n_sigs(), n_reads(), sig(i), aln(i), read(i) (SigRec / AlnRec / ReadRec of pileup_rec.h, or structs with the same fields),
 // ops_at(off) and seq_at(off) (pointers to a record's CIGAR ops and packed sequence) and lowq_word(i) (64-bit mask word i). The engine
 // adapts PileupInput (PileupCat over its split arrays); the unit test feeds hand-made records.
@@ -205,6 +218,10 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
     struct PerTid { std::vector<Site> sites; std::vector<Tri> ad, dp; uint64_t obs = 0; Stats st; };
     auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
     auto& out = *out_sp;
+    // the device route (allsite_device.h) computes the same sites and counts; when it declines, the contig workers below run
+    bool dev_used = false; uint64_t dev_obs = 0, dev_dp = 0, dev_ad = 0;
+    if (P.device && P.umi_dedup && P.umi_len >= 1 && P.umi_len <= 20)
+        dev_used = device_pass(R, G, P, n_tid, n_barcodes, sig_p, cnt, by_tid, order, out, dev_obs, dev_dp, dev_ad);
     std::atomic<uint32_t> next{0};
     auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };   // as k_lists + q_pass
     auto walk = [&](uint64_t r, auto&& on_base) {   // on_base(pos, nt16 code, record index) for every aligned base of read r (quality: pass_q)
@@ -339,9 +356,9 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
         }
     };
     const unsigned nth = std::max(1u, std::min<unsigned>(P.threads, n_tid));
-    std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work);
-    work(); for (auto& x : th) x.join();
-    if (TM) {
+    if (!dev_used) { std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work);
+        work(); for (auto& x : th) x.join(); }
+    if (TM && !dev_used) {
         const double sec = 1e-9, wall = (now_ns() - T_start) * sec;
         std::cerr << "[allsite-timing] threads " << nth << " contigs " << tmr.contigs << " reads " << res.reads_used << " wall " << wall << " s; thread-seconds: discovery walk "
                   << tmr.walk * sec << ", discovery sort " << tmr.sort * sec << ", discovery scan " << tmr.scan * sec << ", block membership " << tmr.member * sec
@@ -357,6 +374,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
     for (uint32_t t = 0; t < n_tid; ++t) { for (const auto& s : out[t].sites) res.sites.push_back(s);
         res.mismatch_obs += out[t].obs; res.molecules += out[t].st.snp_molecules; res.ambiguous += out[t].st.snp_molecules_ambiguous; res.other += out[t].st.snp_molecules_other; }
     for (uint32_t t = 0; t < n_tid; ++t) { res.ad_records += out[t].ad.size(); res.dp_records += out[t].dp.size(); }
+    if (dev_used) { res.mismatch_obs = dev_obs; res.dp_records = dev_dp; res.ad_records = dev_ad; }   // its records hold summed molecules
     auto row0_sp = std::make_shared<std::vector<uint32_t>>(std::move(row0));
     const unsigned build_threads = std::max(1u, std::min<unsigned>(P.threads, n_tid));
     auto cmp = [](const Tri& a, const Tri& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };

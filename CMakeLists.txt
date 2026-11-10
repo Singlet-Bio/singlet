@@ -124,7 +124,7 @@ if(SINGLET_BUILD_PIPELINE)
     add_subdirectory(src/star)
     if(SINGLET_ENGINE_GPU_ENABLED)
         add_library(singlet_engine_gpu STATIC src/engine_gpu/engine_gpu.cu src/engine_gpu/nonhost_gpu.cu src/engine_gpu/pileup_gpu.cu src/engine_gpu/records_gpu.cu src/engine_gpu/hostloop_gpu.cu
-                    src/engine_gpu/solo_gpu.cu)
+                    src/engine_gpu/solo_gpu.cu src/engine_gpu/allsite_gpu.cu)
         # E11 (docs/gpu-engine/fable/E11-solowire.md): E9's Solo library runs its rules through __host__ __device__ lambdas, on the host with OpenMP
         set_source_files_properties(src/engine_gpu/solo_gpu.cu PROPERTIES COMPILE_OPTIONS "--extended-lambda;-Xcompiler=-fopenmp")
         set_target_properties(singlet_engine_gpu PROPERTIES

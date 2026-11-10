@@ -2346,6 +2346,10 @@ public:
         P.threads = static_cast<unsigned>(std::max(1, std::max(config_.finalize_threads, config_.threads)));
         P.progress = [] { singlet::rearm_stall_watchdog("allsite pass"); };
         P.defer_build = true;   // finalize_allsite builds the matrices for the called cells once they are known
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        // the device route (allsite_device.h; SINGLET_ALLSITE_GPU=0 turns it off): the same sites and counts, the host pass when it declines
+        P.device = [](const allsite::dev::Input& i, allsite::dev::Output& o) { return singlet_engine_gpu::allsiteDeviceRun(i, o); };
+#endif
         AllSiteView v(in);
         allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
         allsite_ok_ = true;

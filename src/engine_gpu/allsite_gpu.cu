@@ -1,0 +1,604 @@
+// SPDX-License-Identifier: MIT
+// singlet GPU engine: the all-site pass on the device (D-101; API and rules: include/singlet/pileup/allsite_device.h, the host pass:
+// include/singlet/pileup/allsite.h run()).
+//
+// Per chunk of contigs (the host gathers their reads into flat arrays, sized to the memory free on the device):
+//  1. discovery: each read's mismatch observations against the reference -> (contig, pos, alt, barcode | UMI), radix-sorted; distinct
+//     molecules and barcodes per (pos, alt) by reduce-by-key; per position the best passing alternate base.
+//  2. counting, in blocks of sites that fit: each read's hits at the sites -> ((site, barcode), (UMI, class)), radix-sorted (two stable
+//     passes); class counts per (barcode, site, UMI) saturated at 255; R9 components per (barcode, site) by a lock-free union-find over
+//     the pairs that umi3_directional_roots joins; the vote per component; per (barcode, site) the DP and AD molecules.
+// The pass runs in its own driver context (a cudaDeviceReset of the primary context by another stage of the process leaves it alone),
+// under the engine's device lock, and frees everything before it returns.
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cub/cub.cuh>
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "singlet/engine_gpu.h"
+#include "singlet/pileup/allsite_device.h"
+
+namespace singlet_engine_gpu {
+namespace {
+using namespace singlet::allsite::dev;
+using u64 = unsigned long long;
+using u32 = uint32_t;
+using u8 = uint8_t;
+
+#define AS_CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { cudaGetLastError(); \
+    throw std::runtime_error(std::string("cuda: ") + cudaGetErrorString(e_) + " at " #x); } } while (0)
+
+double secSince(std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); }
+int bitsFor(u64 v) { return v == 0 ? 1 : 64 - __builtin_clzll(v); }   // bits that hold 0..v
+
+// ---------------------------------------------------------------------------------------------------------------- driver context
+struct DrvCtx {
+    typedef CUresult (*FnDevGet)(CUdevice*, int);
+    typedef CUresult (*FnCreate)(CUcontext*, unsigned int, CUdevice);
+    typedef CUresult (*FnCtx)(CUcontext);
+    typedef CUresult (*FnPop)(CUcontext*);
+    CUcontext ctx = nullptr; FnCtx destroy = nullptr; FnPop pop = nullptr;
+    bool make(int device, std::string& why) {
+        const char* names[4] = {"cuDeviceGet", "cuCtxCreate", "cuCtxDestroy", "cuCtxPopCurrent"};
+        void* f[4] = {nullptr, nullptr, nullptr, nullptr};
+        for (int i = 0; i < 4; ++i) {
+            cudaDriverEntryPointQueryResult q;
+            if (cudaGetDriverEntryPoint(names[i], &f[i], cudaEnableDefault, &q) != cudaSuccess || f[i] == nullptr || q != cudaDriverEntryPointSuccess) {
+                cudaGetLastError(); why = std::string("no driver entry point ") + names[i]; return false;
+            }
+        }
+        CUdevice d;
+        if (((FnDevGet) f[0])(&d, device) != CUDA_SUCCESS) { why = "cuDeviceGet"; return false; }
+        if (((FnCreate) f[1])(&ctx, CU_CTX_SCHED_BLOCKING_SYNC, d) != CUDA_SUCCESS) { ctx = nullptr; why = "cuCtxCreate"; return false; }
+        destroy = (FnCtx) f[2]; pop = (FnPop) f[3];   // cuCtxCreate made the context current on this thread
+        return true;
+    }
+    ~DrvCtx() { if (ctx) { CUcontext c; pop(&c); destroy(ctx); } }
+};
+
+// ---------------------------------------------------------------------------------------------------------------- arena
+struct Arena {
+    char* base = nullptr; size_t cap = 0, top = 0;
+    template <class T> T* get(size_t n) {
+        const size_t b = (n * sizeof(T) + 255) & ~size_t(255);
+        if (top + b > cap) throw std::runtime_error("arena: " + std::to_string((top + b) >> 20) + " MiB of " + std::to_string(cap >> 20));
+        T* p = reinterpret_cast<T*>(base + top); top += b; return p;
+    }
+    size_t left() const { return cap - top; }
+};
+
+// ---------------------------------------------------------------------------------------------------------------- device helpers
+struct ChunkV {
+    const Read* rd; const u32* ops; const u8* seq; const u64* lq; const u8* ref; const u64* refOff; const u64* refLen;
+    int skipN, useQual;
+};
+__constant__ u8 kComp16[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
+__device__ __forceinline__ int baseIdx(u8 c) { return c == 1 ? 0 : c == 2 ? 1 : c == 4 ? 2 : c == 8 ? 3 : -1; }
+__device__ __forceinline__ u8 refBase(const ChunkV& C, u32 ci, int32_t pos) {
+    if (pos < 0 || (u64) pos >= C.refLen[ci]) return 4;
+    const u8 v = C.ref[C.refOff[ci] + (u64) pos];
+    return v < 4 ? v : 4;
+}
+__device__ __forceinline__ bool passQ(const ChunkV& C, const Read& x, u32 ri, u8 code) {   // allsite.h pass_q
+    if (C.skipN && code == 15) return false;
+    if (C.useQual && (ri >> 6) < x.nlq && ((C.lq[x.lq + (ri >> 6)] >> (ri & 63)) & 1ull)) return false;
+    return true;
+}
+// f(pos, nt16 code, record index) for every aligned base in order (allsite.h walk); f returns false to stop
+template <class F> __device__ __forceinline__ void walkRead(const ChunkV& C, const Read& x, F&& f) {
+    const u32* o = C.ops + x.ops; const u8* s = C.seq + x.seq;
+    int32_t rpos = x.pos; int qpos = 0;
+    for (int i = 0; i < x.nops; ++i) {
+        const u32 c = o[i]; const int op = c & 15; const int32_t len = (int32_t) (c >> 4);
+        if (op == 0 || op == 7 || op == 8) {
+            for (int32_t j = 0; j < len; ++j) {
+                const int qp = qpos + j; const int idx = x.rev ? (int) x.rlen - 1 - qp : qp;
+                u8 code = 15;
+                if (idx >= 0 && idx < (int) x.rlen) { code = (s[idx >> 1] >> ((idx & 1) * 4)) & 15; if (x.rev) code = kComp16[code]; }
+                if (!f(rpos + j, code, (u32) idx)) return;
+            }
+            rpos += len; qpos += len;
+        } else if (op == 1 || op == 4) qpos += len;
+        else if (op == 2 || op == 3) rpos += len;
+    }
+}
+
+// ---- discovery
+__global__ void kDiscCount(ChunkV C, u32 n, u32* cnt) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const Read x = C.rd[i]; u32 k = 0;
+    walkRead(C, x, [&](int32_t pos, u8 code, u32 ri) {
+        const int bi = baseIdx(code); if (bi < 0) return true;
+        const u8 rf = refBase(C, x.ci, pos); if (rf > 3 || bi == rf || !passQ(C, x, ri, code)) return true;
+        ++k; return true;
+    });
+    cnt[i] = k;
+}
+__global__ void kDiscWrite(ChunkV C, u32 n, const u64* off, u64* keyB, u64* umi, int shPos, int shCi, int bcBits) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const Read x = C.rd[i]; u64 o = off[i];
+    const u64 hiPart = ((u64) x.ci << shCi) | (u64) (u32) x.bc;
+    walkRead(C, x, [&](int32_t pos, u8 code, u32 ri) {
+        const int bi = baseIdx(code); if (bi < 0) return true;
+        const u8 rf = refBase(C, x.ci, pos); if (rf > 3 || bi == rf || !passQ(C, x, ri, code)) return true;
+        keyB[o] = hiPart | ((u64) (u32) pos << shPos) | ((u64) bi << bcBits); umi[o] = x.umi3; ++o; return true;
+    });
+}
+// per sorted observation: a new barcode (new key or barcode) in the low half... new molecule in bit 0, new barcode in bit 32
+__global__ void kDiscVals(const u64* B, const u64* U, u32 n, u64* val) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const bool cell = i == 0 || B[i] != B[i - 1];
+    const bool mol = cell || U[i] != U[i - 1];
+    val[i] = (u64) mol | ((u64) cell << 32);
+}
+struct DSite { u64 cp; u32 mol, cells, alt, pad; };
+// one thread per (contig, pos, alt) key: the first key of each position picks the passing alternate base with the most molecules
+// (ties: the lower base code, as the host's scan in key order)
+__global__ void kSites(const u64* K, const u64* agg, const int* nU_, int minM, int minC, u8* flag, DSite* sit) {
+    const int nU = *nU_;
+    const int u = blockIdx.x * blockDim.x + threadIdx.x; if (u >= nU) return;
+    const u64 posK = K[u] >> 2;
+    flag[u] = 0;
+    if (u > 0 && (K[u - 1] >> 2) == posK) return;
+    u32 bm = 0, bc = 0; int bb = -1;
+    for (int v = u; v < nU && (K[v] >> 2) == posK; ++v) {
+        const u32 mol = (u32) (agg[v] & 0xffffffffull), cells = (u32) (agg[v] >> 32);
+        if ((int) mol >= minM && (int) cells >= minC && mol > bm) { bm = mol; bc = cells; bb = (int) (K[v] & 3); }
+    }
+    if (bb >= 0) { flag[u] = 1; sit[u] = DSite{posK, bm, bc, (u32) bb, 0}; }
+}
+
+// ---- counting
+__global__ void kRange(ChunkV C, u32 n, const int32_t* spos, const u32* sOff, u32* rf, u32* rl) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const Read x = C.rd[i];
+    const u32* o = C.ops + x.ops; long long end = x.pos;
+    for (int k = 0; k < x.nops; ++k) { const int op = o[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[k] >> 4; }
+    const u32 lo = sOff[x.ci], hi = sOff[x.ci + 1];
+    auto lb = [&](long long v) { u32 a = lo, b = hi; while (a < b) { const u32 m = (a + b) >> 1; if ((long long) spos[m] < v) a = m + 1; else b = m; } return a; };
+    const u32 f = lb(x.pos), l = lb(end);
+    rf[i] = f < l ? f : 0; rl[i] = f < l ? l : 0;
+}
+__device__ __forceinline__ u64 umiPack3(u64 u3, int L) {   // umi_pack3 of allsite.h's umi_chars (codes over 3 are N)
+    u64 p = 1;
+    for (int i = 0; i < L; ++i) { const u64 c = (u3 >> (3 * i)) & 7; p = (p << 3) | (c < 4 ? c : 4); }
+    return p;
+}
+template <bool Write>
+__global__ void kHits(ChunkV C, u32 n, const int32_t* spos, const u8* sra, const u32* rf, const u32* rl, u32 s0, u32 s1,
+                      u32* cnt, const u64* off, u64* hi, u64* lo, int bcBits, int L) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    const u32 a = max(rf[i], s0), b = min(rl[i], s1);
+    if (a >= b) { if (!Write) cnt[i] = 0; return; }
+    const Read x = C.rd[i];
+    u32 cur = a, k = 0; u64 o = Write ? off[i] : 0;
+    const u64 p3 = Write ? (umiPack3(x.umi3, L) << 2) : 0;
+    walkRead(C, x, [&](int32_t pos, u8 code, u32 ri) {
+        while (cur < b && spos[cur] < pos) ++cur;
+        if (cur >= b) return false;
+        if (spos[cur] != pos || !passQ(C, x, ri, code)) return true;
+        if (Write) {
+            const int bi = baseIdx(code); const u32 ra = sra[cur];
+            const u64 cls = bi == (int) (ra >> 2) ? 1 : (bi == (int) (ra & 3) ? 0 : 2);
+            hi[o] = ((u64) (cur - s0) << bcBits) | (u64) (u32) x.bc; lo[o] = p3 | cls; ++o;
+        } else ++k;
+        return true;
+    });
+    if (!Write) cnt[i] = k;
+}
+__global__ void kHist(const u32* rf, const u32* rl, const u32* cnt, u32 n, u64* hist) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    if (rf[i] < rl[i] && cnt[i]) atomicAdd(&hist[rf[i]], (u64) cnt[i]);
+}
+__global__ void kEntryHead(const u64* hi, const u64* lo, u32 n, u8* f) {
+    const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
+    f[i] = i == 0 || hi[i] != hi[i - 1] || (lo[i] >> 2) != (lo[i - 1] >> 2);
+}
+// per (barcode, site, UMI): the class counts of its hits, each saturated at 255 (SnpConsensus::add), and their sum (the read count R9 sorts by)
+__global__ void kEntries(const u64* hi, const u64* lo, const u32* eS, const int* nE_, u32 nHits, u64* ehi, u64* eumi, u32* en, u32* er, u32* par) {
+    const int nE = *nE_;
+    const int e = blockIdx.x * blockDim.x + threadIdx.x; if (e >= nE) return;
+    const u32 i0 = eS[e], i1 = e + 1 < nE ? eS[e + 1] : nHits;
+    u32 c[3] = {0, 0, 0};
+    for (u32 i = i0; i < i1; ++i) { const u32 k = (u32) (lo[i] & 3); if (k < 3 && c[k] < 255) ++c[k]; }
+    ehi[e] = hi[i0]; eumi[e] = lo[i0] >> 2; en[e] = c[0] | (c[1] << 8) | (c[2] << 16); er[e] = c[0] + c[1] + c[2]; par[e] = (u32) e;
+}
+__global__ void kGroupHead(const u64* ehi, const int* nE_, u8* f) {
+    const int nE = *nE_;
+    const int e = blockIdx.x * blockDim.x + threadIdx.x; if (e >= nE) return;
+    f[e] = e == 0 || ehi[e] != ehi[e - 1];
+}
+__device__ __forceinline__ bool oneMismatch(u64 a, u64 b) {   // umi3_one_mismatch
+    if (a == b || __clzll((long long) a) != __clzll((long long) b)) return false;
+    const u64 d = a ^ b;
+    return __popcll((d | (d >> 1) | (d >> 2)) & 0x1249249249249249ULL) == 1;
+}
+// umi3_directional_roots joins i before j (reads descending) when count_i >= 2 count_j - 1: for two UMIs, larger >= 2 smaller - 1
+__device__ __forceinline__ bool joins(u32 ca, u32 cb) { const long long mx = max(ca, cb), mn = min(ca, cb); return mx >= 2 * mn - 1; }
+__device__ __forceinline__ u32 ufFind(u32* p, u32 x) {
+    volatile u32* vp = p;
+    u32 y;
+    while ((y = vp[x]) != x) { const u32 z = vp[y]; if (z != y) vp[x] = z; x = y; }
+    return x;
+}
+__device__ __forceinline__ void ufUnite(u32* p, u32 a, u32 b) {
+    for (;;) {
+        a = ufFind(p, a); b = ufFind(p, b);
+        if (a == b) return;
+        if (a < b) { const u32 t = a; a = b; b = t; }   // the larger root hooks under the smaller
+        const u32 old = atomicCAS(&p[a], a, b);
+        if (old == a) return;
+        a = old;
+    }
+}
+__global__ void kUnion(const u64* eumi, const u32* er, const u32* gid, const u32* gS, const int* nE_, const int* nG_, u32* par, int L) {
+    const int nE = *nE_, nG = *nG_;
+    const int e = blockIdx.x * blockDim.x + threadIdx.x; if (e >= nE) return;
+    const u32 g = gid[e] - 1;
+    const u32 g0 = gS[g], g1 = (int) g + 1 < nG ? gS[g + 1] : (u32) nE;
+    if (g1 - g0 < 2) return;
+    const u64 ui = eumi[e]; const u32 ci = er[e];
+    if (g1 - g0 <= 64) {
+        for (u32 j = e + 1; j < g1; ++j) if (oneMismatch(ui, eumi[j]) && joins(ci, er[j])) ufUnite(par, (u32) e, j);
+        return;
+    }
+    for (int p = 0; p < L; ++p) {   // a deep group: the UMIs one base away, by binary search (the group's UMIs ascend)
+        const u64 cur = (ui >> (3 * p)) & 7ull;
+        for (u64 bb = 0; bb < 8; ++bb) {
+            if (bb == cur) continue;
+            const u64 cand = ui ^ ((cur ^ bb) << (3 * p));
+            u32 a = g0, b = g1;
+            while (a < b) { const u32 m = (a + b) >> 1; if (eumi[m] < cand) a = m + 1; else b = m; }
+            if (a < g1 && eumi[a] == cand && a > (u32) e && joins(ci, er[a])) ufUnite(par, (u32) e, a);
+        }
+    }
+}
+__global__ void kRootAgg(u32* par, const u32* en, const int* nE_, u32* agg) {
+    const int nE = *nE_;
+    const int e = blockIdx.x * blockDim.x + threadIdx.x; if (e >= nE) return;
+    const u32 r = ufFind(par, (u32) e);
+    const u32 n = en[e];
+    if (n & 0xff) atomicAdd(&agg[3 * r + 0], n & 0xff);
+    if ((n >> 8) & 0xff) atomicAdd(&agg[3 * r + 1], (n >> 8) & 0xff);
+    if ((n >> 16) & 0xff) atomicAdd(&agg[3 * r + 2], (n >> 16) & 0xff);
+}
+// per (barcode, site): the vote of each component (SnpConsensus::finalize's vote), DP and AD molecules, ambiguous and other molecules
+struct GOut { u32 bc, row, dp, ad; };
+__global__ void kGroups(const u64* ehi, const u32* gS, const int* nE_, const int* nG_, const u32* par, const u32* agg,
+                        u32 s0, const u32* sOff, u32 nC, int bcBits, GOut* go, u8* fdp, u8* fad, u64* stat) {
+    const int nE = *nE_, nG = *nG_;
+    const int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= nG) return;
+    const u32 e0 = gS[g], e1 = g + 1 < nG ? gS[g + 1] : (u32) nE;
+    u32 dp = 0, ad = 0, amb = 0, oth = 0;
+    for (u32 e = e0; e < e1; ++e) {
+        if (par[e] != e) continue;
+        const u32* n = agg + 3 * (size_t) e;
+        int best = 0; for (int c = 1; c < 3; ++c) if (n[c] > n[best]) best = c;
+        bool tie = false; for (int c = 0; c < 3; ++c) if (c != best && n[c] == n[best]) tie = true;
+        if (tie) ++amb; else if (best == 2) ++oth; else { ++dp; if (best == 1) ++ad; }
+    }
+    if (amb) atomicAdd(&stat[0], (u64) amb);
+    if (oth) atomicAdd(&stat[1], (u64) oth);
+    const u64 h = ehi[e0];
+    const u32 s = s0 + (u32) (h >> bcBits);
+    u32 a = 0, b = nC; while (a + 1 < b) { const u32 m = (a + b) >> 1; if (sOff[m] <= s) a = m; else b = m; }   // the site's contig
+    go[g] = GOut{(u32) (h & ((1ull << bcBits) - 1)), s - sOff[a], dp, ad};
+    fdp[g] = dp > 0; fad[g] = ad > 0;
+}
+__global__ void kFirstGroupOfSite(const u64* ehi, const u32* gS, const int* nG_, const u32* sites, u32 nq, u32 s0, int bcBits, u32* outIdx) {
+    const u32 q = blockIdx.x * blockDim.x + threadIdx.x; if (q >= nq) return;
+    const int nG = *nG_;
+    const u32 want = sites[q];
+    u32 a = 0, b = (u32) nG;
+    while (a < b) { const u32 m = (a + b) >> 1; if (s0 + (u32) (ehi[gS[m]] >> bcBits) < want) a = m + 1; else b = m; }
+    outIdx[q] = a;
+}
+struct ToU64 { const u32* c; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? (u64) c[i] : 0ull; } };
+struct ShrOp { int s; __host__ __device__ u64 operator()(u64 v) const { return v >> s; } };
+struct U8ToU32 { __host__ __device__ u32 operator()(u8 v) const { return v; } };
+struct TriOut { u32 cell, row, val; };
+struct DpTri { __host__ __device__ TriOut operator()(const GOut& g) const { return TriOut{g.bc, g.row, g.dp}; } };
+struct AdTri { __host__ __device__ TriOut operator()(const GOut& g) const { return TriOut{g.bc, g.row, g.ad}; } };
+
+inline unsigned gridFor(u64 n, unsigned b = 256) { return (unsigned) std::max<u64>(1, (n + b - 1) / b); }
+
+}  // namespace
+
+bool allsiteDeviceRun(const Input& in, Output& out) {
+    const auto T0 = std::chrono::steady_clock::now();
+    out = Output{};
+    out.contigs.resize(in.contigs.size());
+    if (const char* e = std::getenv("SINGLET_ALLSITE_GPU")) if (e[0] == '0') { out.why = "SINGLET_ALLSITE_GPU=0"; return false; }
+    if (deviceCount() <= 0) { out.why = "no CUDA device"; return false; }
+    if (in.umi_len < 1 || in.umi_len > 20) { out.why = "UMI length " + std::to_string(in.umi_len); return false; }
+    if (in.n_barcodes == 0 || in.contigs.empty()) { out.why = "no barcodes or reads"; return false; }
+    const int bcBits = bitsFor(in.n_barcodes - 1), L = in.umi_len, loBits = 3 * L + 3;
+    const u32 nCt = (u32) in.contigs.size();
+
+    int lockFd = -1;
+    const int device = lockDevice(&lockFd);
+    struct Unlock { int fd; ~Unlock() { unlockDevice(fd); } } unlock{lockFd};
+    DrvCtx ctx;
+    if (!ctx.make(device, out.why)) return false;
+    Arena A;
+    struct Free { Arena& a; ~Free() { if (a.base) cudaFree(a.base); } } freeA{A};
+    cudaStream_t st = nullptr;
+    struct SFree { cudaStream_t& s; ~SFree() { if (s) cudaStreamDestroy(s); } } freeS{st};
+    try {
+        AS_CK(cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking));
+        size_t fr = 0, tot = 0;
+        AS_CK(cudaMemGetInfo(&fr, &tot));
+        double frac = 0.6, maxGB = 24.0;
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_FRAC")) { const double v = atof(e); if (v > 0 && v <= 0.95) frac = v; }
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_MAXGB")) { const double v = atof(e); if (v > 0) maxGB = v; }
+        size_t want = (size_t) std::min<double>(frac * (double) fr - 512.0 * 1048576.0, maxGB * 1073741824.0);
+        const size_t minBytes = (size_t) 1536 << 20;
+        if ((double) want < (double) minBytes) { out.why = "device memory: " + std::to_string(fr >> 20) + " MiB free"; return false; }
+        while (cudaMalloc((void**) &A.base, want) != cudaSuccess) {
+            cudaGetLastError(); A.base = nullptr; want = want / 4 * 3;
+            if (want < minBytes) { out.why = "device memory: arena allocation failed"; return false; }
+        }
+        A.cap = want; out.arena_bytes = want;
+
+        // chunks of consecutive contigs whose gathered reads take at most ~45% of the arena
+        auto dataBytes = [&](const Contig& c) { return c.reads * (sizeof(Read) + 20) + c.ops * 4 + c.seqb + c.lqw * 8 + c.ref_len + 4096; };
+        std::vector<u32> cut{0};
+        u64 chunkReads = 0x7fffffffull, blockHits = 0;   // test knobs: smaller chunks and blocks than memory allows
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_CHUNK_READS")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) chunkReads = v; }
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_BLOCK_HITS")) blockHits = strtoull(e, nullptr, 10);
+        { const u64 lim = (u64) (0.45 * (double) A.cap); u64 acc = 0; u64 nr = 0;
+          for (u32 c = 0; c < nCt; ++c) {
+              const u64 b = dataBytes(in.contigs[c]);
+              if (b > (u64) (0.7 * (double) A.cap) || in.contigs[c].reads >= 0x7fffffffull) { out.why = "a contig's reads exceed the device budget"; return false; }
+              if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + in.contigs[c].reads > chunkReads)) { cut.push_back(c); acc = 0; nr = 0; }
+              acc += b; nr += in.contigs[c].reads;
+          }
+          cut.push_back(nCt); }
+        out.chunks = cut.size() - 1;
+
+        // host staging for the largest chunk (pageable: page-locking GBs costs more than the copy saves)
+        u64 mxR = 0, mxO = 0, mxS = 0, mxQ = 0;
+        for (size_t k = 0; k + 1 < cut.size(); ++k) {
+            u64 r = 0, o = 0, s = 0, q = 0;
+            for (u32 c = cut[k]; c < cut[k + 1]; ++c) { r += in.contigs[c].reads; o += in.contigs[c].ops; s += in.contigs[c].seqb; q += in.contigs[c].lqw; }
+            mxR = std::max(mxR, r); mxO = std::max(mxO, o); mxS = std::max(mxS, s); mxQ = std::max(mxQ, q);
+        }
+        if (mxO >= 0xffffffffull || mxS >= 0xffffffffull) { out.why = "chunk arrays past 32-bit offsets"; return false; }
+        std::unique_ptr<Read[]> hR(new Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
+        std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<u64[]> hQ(new u64[mxQ + 1]);
+
+        u64 stat[2] = {0, 0};
+        for (size_t k = 0; k + 1 < cut.size(); ++k) {
+            const u32 c0 = cut[k], c1 = cut[k + 1], nC = c1 - c0;
+            u64 nR = 0, nO = 0, nS = 0, nQ = 0, maxRef = 1;
+            std::vector<u64> refOff(nC + 1, 0), refLen(nC, 0);
+            for (u32 c = c0; c < c1; ++c) {
+                const Contig& g = in.contigs[c];
+                nR += g.reads; nO += g.ops; nS += g.seqb; nQ += g.lqw;
+                refLen[c - c0] = g.ref ? g.ref_len : 0; refOff[c - c0 + 1] = refOff[c - c0] + refLen[c - c0]; maxRef = std::max<u64>(maxRef, refLen[c - c0]);
+            }
+            const u32 n = (u32) nR;
+            auto tg = std::chrono::steady_clock::now();
+            in.gather(c0, c1, hR.get(), hO.get(), hS.get(), hQ.get());
+            out.sec_gather += secSince(tg);
+            const size_t mark0 = A.top;
+            auto tu = std::chrono::steady_clock::now();
+            Read* dR = A.get<Read>(nR); u32* dO = A.get<u32>(nO + 1); u8* dS = A.get<u8>(nS + 1); u64* dQ = A.get<u64>(nQ + 1);
+            u8* dRef = A.get<u8>(refOff[nC] + 1); u64* dRefOff = A.get<u64>(nC + 1); u64* dRefLen = A.get<u64>(nC + 1);
+            AS_CK(cudaMemcpyAsync(dR, hR.get(), nR * sizeof(Read), cudaMemcpyHostToDevice, st));
+            if (nO) AS_CK(cudaMemcpyAsync(dO, hO.get(), nO * 4, cudaMemcpyHostToDevice, st));
+            if (nS) AS_CK(cudaMemcpyAsync(dS, hS.get(), nS, cudaMemcpyHostToDevice, st));
+            if (nQ) AS_CK(cudaMemcpyAsync(dQ, hQ.get(), nQ * 8, cudaMemcpyHostToDevice, st));
+            for (u32 c = c0; c < c1; ++c) if (refLen[c - c0]) AS_CK(cudaMemcpyAsync(dRef + refOff[c - c0], in.contigs[c].ref, refLen[c - c0], cudaMemcpyHostToDevice, st));
+            AS_CK(cudaMemcpyAsync(dRefOff, refOff.data(), (nC + 1) * 8, cudaMemcpyHostToDevice, st));
+            AS_CK(cudaMemcpyAsync(dRefLen, refLen.data(), nC * 8, cudaMemcpyHostToDevice, st));
+            AS_CK(cudaStreamSynchronize(st));
+            out.sec_upload += secSince(tu);
+            ChunkV C{dR, dO, dS, dQ, dRef, dRefOff, dRefLen, in.skip_n, in.use_qual};
+            u32* dCnt = A.get<u32>(nR + 1); u64* dOff = A.get<u64>(nR + 1); u32* dRf = A.get<u32>(nR + 1); u32* dRl = A.get<u32>(nR + 1);
+            int* dNum = A.get<int>(4); u64* dStat = A.get<u64>(2);
+            AS_CK(cudaMemsetAsync(dStat, 0, 16, st));
+            auto scanCounts = [&](u64& total) {   // dOff = exclusive prefix of dCnt over [0, n], total = dOff[n]
+                cub::CountingInputIterator<u64> ci(0);
+                cub::TransformInputIterator<u64, ToU64, cub::CountingInputIterator<u64>> it(ci, ToU64{dCnt, n});
+                size_t tb = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, tb, it, dOff, (int) n + 1, st));
+                const size_t m = A.top; void* tmp = A.get<char>(tb);
+                AS_CK(cub::DeviceScan::ExclusiveSum(tmp, tb, it, dOff, (int) n + 1, st)); A.top = m;
+                AS_CK(cudaMemcpyAsync(&total, dOff + n, 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+            };
+
+            // ---- 1. discovery
+            auto td = std::chrono::steady_clock::now();
+            const int posBits = bitsFor(maxRef - 1), ciBits = bitsFor(nC - 1);
+            if (ciBits + posBits + 2 + bcBits > 64) { out.why = "discovery key past 64 bits"; return false; }
+            const int shPos = bcBits + 2, shCi = shPos + posBits, keyBits = shCi + ciBits;
+            kDiscCount<<<gridFor(n), 256, 0, st>>>(C, n, dCnt);
+            u64 nObs = 0; scanCounts(nObs);
+            out.obs += nObs;
+            std::vector<DSite> hSites;
+            if (nObs >= 0x7fffffffull) { out.why = "too many mismatch observations for one chunk"; return false; }
+            if (nObs > 0) {
+                const size_t m = A.top;
+                u64* kB = A.get<u64>(nObs); u64* kB2 = A.get<u64>(nObs); u64* kU = A.get<u64>(nObs); u64* kU2 = A.get<u64>(nObs);
+                kDiscWrite<<<gridFor(n), 256, 0, st>>>(C, n, dOff, kB, kU, shPos, shCi, bcBits);
+                cub::DoubleBuffer<u64> dbU(kU, kU2), dbB(kB, kB2);
+                size_t tb = 0; AS_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, dbU, dbB, (int) nObs, 0, 64, st));
+                size_t tb2 = 0; AS_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb2, dbB, dbU, (int) nObs, 0, keyBits, st));
+                void* tmp = A.get<char>(std::max(tb, tb2));
+                AS_CK(cub::DeviceRadixSort::SortPairs(tmp, tb, dbU, dbB, (int) nObs, 0, 64, st));        // by UMI, then (stable) by key
+                AS_CK(cub::DeviceRadixSort::SortPairs(tmp, tb2, dbB, dbU, (int) nObs, 0, keyBits, st));
+                const u64* B = dbB.Current(); const u64* U = dbU.Current();
+                u64* val = dbB.Alternate();   // free now
+                kDiscVals<<<gridFor(nObs), 256, 0, st>>>(B, U, (u32) nObs, val);
+                u64* uk = dbU.Alternate(); u64* ua = A.get<u64>(nObs);
+                cub::TransformInputIterator<u64, ShrOp, const u64*> kit(B, ShrOp{bcBits});
+                size_t tr = 0; AS_CK(cub::DeviceReduce::ReduceByKey(nullptr, tr, kit, uk, val, ua, dNum, cub::Sum(), (int) nObs, st));
+                void* tmp2 = A.get<char>(tr);
+                AS_CK(cub::DeviceReduce::ReduceByKey(tmp2, tr, kit, uk, val, ua, dNum, cub::Sum(), (int) nObs, st));
+                int nU = 0; AS_CK(cudaMemcpyAsync(&nU, dNum, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                u8* fl = A.get<u8>(nU + 1); DSite* sit = A.get<DSite>(nU + 1); DSite* sitc = A.get<DSite>(nU + 1);
+                kSites<<<gridFor(nU), 256, 0, st>>>(uk, ua, dNum, in.min_alt_molecules, in.min_alt_cells, fl, sit);
+                size_t ts = 0; AS_CK(cub::DeviceSelect::Flagged(nullptr, ts, sit, fl, sitc, dNum + 1, nU, st));
+                void* tmp3 = A.get<char>(ts);
+                AS_CK(cub::DeviceSelect::Flagged(tmp3, ts, sit, fl, sitc, dNum + 1, nU, st));
+                int nSel = 0; AS_CK(cudaMemcpyAsync(&nSel, dNum + 1, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                hSites.resize(nSel);
+                if (nSel) AS_CK(cudaMemcpyAsync(hSites.data(), sitc, nSel * sizeof(DSite), cudaMemcpyDeviceToHost, st));
+                AS_CK(cudaStreamSynchronize(st));
+                A.top = m;
+            }
+            // the chunk's sites by (contig, position); sOff[c]: the first site of contig c
+            const u32 nSite = (u32) hSites.size();
+            std::vector<u32> sOff(nC + 1, 0);
+            std::vector<int32_t> spos(nSite); std::vector<u8> sra(nSite);
+            for (u32 i = 0; i < nSite; ++i) {
+                const u32 c = (u32) (hSites[i].cp >> posBits); const int32_t p = (int32_t) (hSites[i].cp & ((1ull << posBits) - 1));
+                const Contig& g = in.contigs[c0 + c];
+                const u8 rv = g.ref[p]; const u8 ref = rv < 4 ? rv : 4;   // discovery kept only ACGT reference bases
+                spos[i] = p; sra[i] = (u8) ((ref & 3) | (hSites[i].alt << 2)); sOff[c + 1]++;
+                ContigOut& co = out.contigs[c0 + c];
+                co.pos.push_back(p); co.ref.push_back(ref); co.alt.push_back((u8) hSites[i].alt); co.mol.push_back(hSites[i].mol); co.cells.push_back(hSites[i].cells);
+            }
+            for (u32 c = 0; c < nC; ++c) sOff[c + 1] += sOff[c];
+            out.sec_disc += secSince(td);
+            if (in.progress) in.progress();
+            if (nSite == 0) { A.top = mark0; continue; }
+
+            // ---- 2. counting
+            auto tc = std::chrono::steady_clock::now();
+            int32_t* dSpos = A.get<int32_t>(nSite); u8* dSra = A.get<u8>(nSite); u32* dSoff = A.get<u32>(nC + 1);
+            AS_CK(cudaMemcpyAsync(dSpos, spos.data(), nSite * 4, cudaMemcpyHostToDevice, st));
+            AS_CK(cudaMemcpyAsync(dSra, sra.data(), nSite, cudaMemcpyHostToDevice, st));
+            AS_CK(cudaMemcpyAsync(dSoff, sOff.data(), (nC + 1) * 4, cudaMemcpyHostToDevice, st));
+            kRange<<<gridFor(n), 256, 0, st>>>(C, n, dSpos, dSoff, dRf, dRl);
+            // the hits of each block must fit: about 100 bytes per hit (two sort buffers of keys and values, the entry and group arrays)
+            const size_t workMark = A.top;
+            const u64 capHits = std::min<u64>(0x7ffffff0ull, (A.left() > ((size_t) 64 << 20) ? (A.left() - ((size_t) 64 << 20)) : 0) / 112);
+            if (capHits < 1000000) { out.why = "too little device memory left for counting"; return false; }
+            const u64 capHitsUse = blockHits ? std::min<u64>(capHits, blockHits) : capHits;
+            kHits<false><<<gridFor(n), 256, 0, st>>>(C, n, dSpos, dSra, dRf, dRl, 0, nSite, dCnt, nullptr, nullptr, nullptr, bcBits, L);
+            u64 allHits = 0; scanCounts(allHits);
+            std::vector<std::pair<u32, u32>> todo;   // site ranges, processed from the back
+            if (allHits <= capHitsUse) todo.push_back({0, nSite});
+            else {   // cut by the hits of the reads whose first site falls in each range (spliced reads cross cuts; blocks that overflow split)
+                u64* dHist = A.get<u64>(nSite);
+                AS_CK(cudaMemsetAsync(dHist, 0, nSite * 8, st));
+                kHist<<<gridFor(n), 256, 0, st>>>(dRf, dRl, dCnt, n, dHist);
+                std::vector<u64> hist(nSite);
+                AS_CK(cudaMemcpyAsync(hist.data(), dHist, nSite * 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                A.top = workMark;
+                const u64 target = std::max<u64>(1, capHitsUse * 6 / 10);
+                std::vector<std::pair<u32, u32>> fw;
+                u32 a = 0; u64 acc = 0;
+                for (u32 i = 0; i < nSite; ++i) { acc += hist[i]; if (acc >= target && i + 1 < nSite) { fw.push_back({a, i + 1}); a = i + 1; acc = 0; } }
+                fw.push_back({a, nSite});
+                for (auto it = fw.rbegin(); it != fw.rend(); ++it) todo.push_back(*it);
+            }
+            while (!todo.empty()) {
+                const u32 s0 = todo.back().first, s1 = todo.back().second; todo.pop_back();
+                A.top = workMark;
+                kHits<false><<<gridFor(n), 256, 0, st>>>(C, n, dSpos, dSra, dRf, dRl, s0, s1, dCnt, nullptr, nullptr, nullptr, bcBits, L);
+                u64 N = 0; scanCounts(N);
+                if (N > capHitsUse) {
+                    if (s1 - s0 < 2) { out.why = "one site's hits exceed the device budget"; return false; }
+                    const u32 mid = s0 + (s1 - s0) / 2; todo.push_back({mid, s1}); todo.push_back({s0, mid}); continue;
+                }
+                out.blocks++;
+                if (N == 0) continue;
+                out.hits += N;
+                const int sBits = bitsFor(s1 - s0 - 1) + bcBits;
+                u64* h1 = A.get<u64>(N); u64* h2 = A.get<u64>(N); u64* l1 = A.get<u64>(N); u64* l2 = A.get<u64>(N);
+                kHits<true><<<gridFor(n), 256, 0, st>>>(C, n, dSpos, dSra, dRf, dRl, s0, s1, nullptr, dOff, h1, l1, bcBits, L);
+                cub::DoubleBuffer<u64> dbL(l1, l2), dbH(h1, h2);
+                size_t tb = 0; AS_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, dbL, dbH, (int) N, 0, loBits, st));
+                size_t tb2 = 0; AS_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb2, dbH, dbL, (int) N, 0, sBits, st));
+                size_t tm = A.top; void* tmp = A.get<char>(std::max(tb, tb2));
+                AS_CK(cub::DeviceRadixSort::SortPairs(tmp, tb, dbL, dbH, (int) N, 0, loBits, st));    // by (UMI, class), then (stable) by (site, barcode)
+                AS_CK(cub::DeviceRadixSort::SortPairs(tmp, tb2, dbH, dbL, (int) N, 0, sBits, st));
+                A.top = tm;
+                const u64* H = dbH.Current(); const u64* Lo = dbL.Current();
+                u64* ehi = dbH.Alternate(); u64* eumi = dbL.Alternate();
+                u8* f8 = A.get<u8>(N); u32* eS = A.get<u32>(N + 1);
+                kEntryHead<<<gridFor(N), 256, 0, st>>>(H, Lo, (u32) N, f8);
+                cub::CountingInputIterator<u32> cnt0(0);
+                size_t t1 = 0; AS_CK(cub::DeviceSelect::Flagged(nullptr, t1, cnt0, f8, eS, dNum, (int) N, st));
+                tm = A.top; tmp = A.get<char>(t1);
+                AS_CK(cub::DeviceSelect::Flagged(tmp, t1, cnt0, f8, eS, dNum, (int) N, st)); A.top = tm;
+                int nE = 0; AS_CK(cudaMemcpyAsync(&nE, dNum, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                u32* en = A.get<u32>(nE); u32* er = A.get<u32>(nE); u32* par = A.get<u32>(nE); u32* agg = A.get<u32>(3 * (size_t) nE);
+                u32* gid = A.get<u32>(nE); u32* gS = A.get<u32>(nE + 1);
+                kEntries<<<gridFor(nE), 256, 0, st>>>(H, Lo, eS, dNum, (u32) N, ehi, eumi, en, er, par);
+                kGroupHead<<<gridFor(nE), 256, 0, st>>>(ehi, dNum, f8);
+                cub::TransformInputIterator<u32, U8ToU32, const u8*> f32(f8, U8ToU32{});
+                size_t t2 = 0; AS_CK(cub::DeviceScan::InclusiveSum(nullptr, t2, f32, gid, nE, st));
+                size_t t3 = 0; AS_CK(cub::DeviceSelect::Flagged(nullptr, t3, cnt0, f8, gS, dNum + 1, nE, st));
+                tm = A.top; tmp = A.get<char>(std::max(t2, t3));
+                AS_CK(cub::DeviceScan::InclusiveSum(tmp, t2, f32, gid, nE, st));
+                AS_CK(cub::DeviceSelect::Flagged(tmp, t3, cnt0, f8, gS, dNum + 1, nE, st)); A.top = tm;
+                int nG = 0; AS_CK(cudaMemcpyAsync(&nG, dNum + 1, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                out.entries += (u64) nE; out.groups += (u64) nG;
+                if (in.directional) kUnion<<<gridFor(nE), 256, 0, st>>>(eumi, er, gid, gS, dNum, dNum + 1, par, L);
+                AS_CK(cudaMemsetAsync(agg, 0, 3 * (size_t) nE * 4, st));
+                kRootAgg<<<gridFor(nE), 256, 0, st>>>(par, en, dNum, agg);
+                                GOut* go = A.get<GOut>(nG); TriOut* tri = A.get<TriOut>(nG); u8* fad = A.get<u8>(nG);
+                kGroups<<<gridFor(nG), 256, 0, st>>>(ehi, gS, dNum, dNum + 1, par, agg, s0, dSoff, nC, bcBits, go, f8, fad, dStat);
+                // per contig of the block: its groups [first group of the contig's first site, ...), selected into DP and AD triplets
+                std::vector<u32> cs;   // the contigs whose site ranges meet [s0, s1)
+                for (u32 c = 0; c < nC; ++c) if (sOff[c] < s1 && sOff[c + 1] > s0 && sOff[c + 1] > sOff[c]) cs.push_back(c);
+                std::vector<u32> q; for (u32 c : cs) q.push_back(std::max(sOff[c], s0));
+                q.push_back(s1);
+                u32* dq = A.get<u32>(q.size()); u32* dqi = A.get<u32>(q.size());
+                AS_CK(cudaMemcpyAsync(dq, q.data(), q.size() * 4, cudaMemcpyHostToDevice, st));
+                kFirstGroupOfSite<<<gridFor(q.size()), 256, 0, st>>>(ehi, gS, dNum + 1, dq, (u32) q.size(), s0, bcBits, dqi);
+                std::vector<u32> qi(q.size());
+                AS_CK(cudaMemcpyAsync(qi.data(), dqi, q.size() * 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                for (size_t z = 0; z < cs.size(); ++z) {
+                    const u32 ga = qi[z], gb = qi[z + 1]; if (gb <= ga) continue;
+                    ContigOut& co = out.contigs[c0 + cs[z]];
+                    for (int w = 0; w < 2; ++w) {
+                        const u8* fl = w == 0 ? f8 : fad;
+                        size_t ts = 0;
+                        if (w == 0) { cub::TransformInputIterator<TriOut, DpTri, const GOut*> it(go + ga, DpTri{}); AS_CK(cub::DeviceSelect::Flagged(nullptr, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
+                        else { cub::TransformInputIterator<TriOut, AdTri, const GOut*> it(go + ga, AdTri{}); AS_CK(cub::DeviceSelect::Flagged(nullptr, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
+                        tm = A.top; tmp = A.get<char>(ts);
+                        if (w == 0) { cub::TransformInputIterator<TriOut, DpTri, const GOut*> it(go + ga, DpTri{}); AS_CK(cub::DeviceSelect::Flagged(tmp, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
+                        else { cub::TransformInputIterator<TriOut, AdTri, const GOut*> it(go + ga, AdTri{}); AS_CK(cub::DeviceSelect::Flagged(tmp, ts, it, fl + ga, tri, dNum + 2, (int) (gb - ga), st)); }
+                        A.top = tm;
+                        int ns = 0; AS_CK(cudaMemcpyAsync(&ns, dNum + 2, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                        if (ns == 0) continue;
+                        std::vector<Count>& dst = w == 0 ? co.dp : co.ad;
+                        const size_t base = dst.size(); dst.resize(base + ns);
+                        static_assert(sizeof(Count) == sizeof(TriOut), "Count and TriOut share one layout");
+                        AS_CK(cudaMemcpyAsync(dst.data() + base, tri, ns * sizeof(TriOut), cudaMemcpyDeviceToHost, st));
+                        AS_CK(cudaStreamSynchronize(st));
+                        u64 sum = 0; for (size_t z2 = base; z2 < dst.size(); ++z2) sum += dst[z2].val;
+                        (w == 0 ? out.molecules : out.ad_molecules) += sum;
+                    }
+                }
+                if (in.progress) in.progress();
+            }
+            AS_CK(cudaMemcpyAsync(stat, dStat, 16, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+            out.ambiguous += stat[0]; out.other += stat[1];
+            out.sec_count += secSince(tc);
+            A.top = mark0;
+        }
+    } catch (const std::exception& e) {
+        out.why = e.what();
+        for (auto& c : out.contigs) c = ContigOut{};
+        return false;
+    }
+    out.sec = secSince(T0);
+    return true;
+}
+
+}  // namespace singlet_engine_gpu
