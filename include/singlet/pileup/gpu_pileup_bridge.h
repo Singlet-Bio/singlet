@@ -17,6 +17,11 @@
 #include <unistd.h>
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -530,6 +535,58 @@ private:
     std::unordered_map<uint64_t, Group> pend_;   // keyed like the engine's mm_buffer (64-bit qname hash)
     std::unordered_map<H128, uint32_t, H128Hash> sigmap_;
     std::vector<SigRec> sigs_; std::vector<AlnRec> alns_; std::vector<ReadRec> reads_; std::vector<uint32_t> ops_; std::vector<uint8_t> seq_;
+};
+
+// ---- the stream's records for a collector, copied in batches and added by one worker thread, so the stream thread only copies bytes.
+// Used on the CPU route, where the collector feeds the all-site pass alone: records reach Collector::add in stream order with the barcode
+// the stream gave them, so the collector's records are the same. drain() returns once every record is added.
+class AsyncFeed {
+public:
+    explicit AsyncFeed(Collector& c) : c_(c) { th_ = std::thread([this] { run(); }); }
+    ~AsyncFeed() { drain(); }
+    void add(const bam1_t* b, int32_t bc) {   // per record: int32 barcode, uint32 l_data, the core, the data; padded to 8 bytes
+        const size_t n = (8 + sizeof(bam1_core_t) + static_cast<size_t>(b->l_data) + 7) & ~static_cast<size_t>(7);
+        if (cur_.n + n > cur_.cap) { if (cur_.n) push(); if (n > cur_.cap) cur_.grow(std::max(n, kChunk)); }
+        char* p = cur_.p.get() + cur_.n; const uint32_t l = static_cast<uint32_t>(b->l_data);
+        std::memcpy(p, &bc, 4); std::memcpy(p + 4, &l, 4); std::memcpy(p + 8, &b->core, sizeof(bam1_core_t)); std::memcpy(p + 8 + sizeof(bam1_core_t), b->data, l);
+        cur_.n += n;
+    }
+    void drain() {
+        if (done_) return;
+        if (cur_.n) push();
+        { std::lock_guard<std::mutex> g(mu_); stop_ = true; }
+        cv_.notify_all(); th_.join(); done_ = true;
+    }
+private:
+    static constexpr size_t kChunk = size_t(8) << 20, kMaxQ = 16;
+    struct Buf { std::unique_ptr<char[]> p; size_t n = 0, cap = 0; void grow(size_t c) { p.reset(new char[c]); cap = c; n = 0; } };
+    void push() {
+        std::unique_lock<std::mutex> g(mu_);
+        cv_room_.wait(g, [&] { return q_.size() < kMaxQ; });
+        q_.push_back(std::move(cur_));
+        if (!spare_.empty()) { cur_ = std::move(spare_.back()); spare_.pop_back(); } else cur_ = Buf();
+        g.unlock(); cv_.notify_one();
+        if (!cur_.cap) cur_.grow(kChunk);
+        cur_.n = 0;
+    }
+    void run() {
+        bam1_t b; std::memset(&b, 0, sizeof(b));
+        for (;;) {
+            Buf v;
+            { std::unique_lock<std::mutex> g(mu_); cv_.wait(g, [&] { return !q_.empty() || stop_; }); if (q_.empty()) return; v = std::move(q_.front()); q_.pop_front(); }
+            cv_room_.notify_one();
+            for (size_t o = 0; o < v.n;) {
+                const char* p = v.p.get() + o; int32_t bc; uint32_t l;
+                std::memcpy(&bc, p, 4); std::memcpy(&l, p + 4, 4); std::memcpy(&b.core, p + 8, sizeof(bam1_core_t));
+                b.data = reinterpret_cast<uint8_t*>(const_cast<char*>(p + 8 + sizeof(bam1_core_t))); b.l_data = static_cast<int>(l); b.m_data = l;
+                c_.add(&b, bc);
+                o += (8 + sizeof(bam1_core_t) + l + 7) & ~static_cast<size_t>(7);
+            }
+            std::lock_guard<std::mutex> g(mu_); if (spare_.size() < 4) spare_.push_back(std::move(v));
+        }
+    }
+    Collector& c_; Buf cur_; std::deque<Buf> q_; std::vector<Buf> spare_;
+    std::mutex mu_; std::condition_variable cv_, cv_room_; bool stop_ = false, done_ = false; std::thread th_;
 };
 
 // ---- compare: CPU accumulator (after to_csc: sums and clamps) vs GPU triplets, entry by entry
