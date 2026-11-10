@@ -2366,6 +2366,18 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         return g_bud.used + eIn + eBuild + eProd + eKeep + SLACK;
     };
     u64 capRec = cap; int recSlots = 1;
+    // E16 trace: what the host holds at a point of the records' phase (sizes only)
+    auto hostMark = [&](const char* where, u64 nRec) {
+        if (!singlet_tail::on()) return;
+        u64 hb = 0; for (auto& cr : chunks) hb += cr.hBlob.size() + cr.hOff.size() * 8;
+        double a, sh; singlet_tail::rss(a, sh);
+        const double G = 1073741824.0;
+        singlet_tail::mark("engine: %s: host anon %.1f GB, shmem %.1f GB; records seq %.1f, blob %.1f, offsets %.1f, recSrc+recRead %.1f, host lane %.1f, "
+                           "reads seq %.1f, off %.1f, aux %.1f, readRecord %.1f, clip %.1f GB (%llu records, %llu reads, RC %d, gatherDev %d)", where, a, sh,
+                           out.seq.size() / G, out.blob.size() / G, (out.seqOff.size() + out.blobOff.size()) * 8 / G, (recSrc.size() * 8 + recRead.size() * 4) / G,
+                           hb / G, in.seq.size() / G, in.off.size() * 8 / G, in.e10.aux.size() * 8 / G, out.readRecord.size() * 4 / G,
+                           (out.clip5.size() + out.clip3.size()) * 2 / G, (unsigned long long) nRec, (unsigned long long) n, (int) RC, (int) gatherDev);
+    };
     auto e2eBuild = [&](std::string& why) -> bool {
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const u64 nRec = out.seqOff.size() - 1;
@@ -2389,16 +2401,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             dfree(dA2);
             stepAdd("e2e.keep", now() - tk);
         }
-        if (singlet_tail::on()) {   // what the host holds as the records' phase starts (sizes only)
-            u64 hb = 0; for (auto& cr : chunks) hb += cr.hBlob.size() + cr.hOff.size() * 8;
-            double a, sh; singlet_tail::rss(a, sh);
-            singlet_tail::mark("engine: records phase: host anon %.1f GB; records seq %.1f, blob %.1f, offsets %.1f, recSrc+recRead %.1f, host lane %.1f, "
-                               "reads seq %.1f, off %.1f, aux %.1f, readRecord %.1f, clip %.1f GB (%llu records, %llu reads, gatherDev %d)", a,
-                               out.seq.size() / 1073741824.0, out.blob.size() / 1073741824.0, (out.seqOff.size() + out.blobOff.size()) * 8 / 1073741824.0,
-                               nRec * 12 / 1073741824.0, hb / 1073741824.0, in.seq.size() / 1073741824.0, in.off.size() * 8 / 1073741824.0,
-                               in.e10.aux.size() * 8 / 1073741824.0, out.readRecord.size() * 4 / 1073741824.0, (out.clip5.size() + out.clip3.size()) * 2 / 1073741824.0,
-                               (unsigned long long) nRec, (unsigned long long) n, (int) gatherDev);
-        }
+        hostMark("records phase", nRec);
         const double tg = now();
         LaneSrc* dTab = nullptr; u64 *dSrc = nullptr, *dBOff = nullptr, *dSOff = nullptr; uint32_t* dRd = nullptr; uint8_t* dBlob = nullptr; char* dRS = nullptr;
         u64 nB = 0, nS = 0, hostBytes = 0;
@@ -2616,6 +2619,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             if (keep) { keepTally = budRound(std::max<u64>(1, n) * 8) * 2; g_bud.used += keepTally; g_bud.note(); }
             stepAdd("e2e.keep", now() - t0r);
         }
+        hostMark("records phase (RC)", nRec);
         // readRecord on the device (products' and E11's read -> record map); per chunk its local copy
         DB dRRg, dRRl;
         if (!dalc(dRRg, n * 4) || !dalc(dRRl, n * 4) || cudaMemcpy(dRRg.p, out.readRecord.data(), n * 4, cudaMemcpyHostToDevice) != cudaSuccess) {
@@ -2731,6 +2735,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             tProd += now() - ta;
             devNote();
         }
+        hostMark("records pass 2 done (RC)", nRec);
         singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
         E2H.nRec = nRec; E2H.nAln = nAln; E2H.nOps = nOps; E2H.nSeq = nSeqT;
         E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
