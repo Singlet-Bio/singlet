@@ -211,6 +211,11 @@ template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U, class... A> void construct(U* p, A&&... a) { ::new ((void*) p) U(std::forward<A>(a)...); }
 };
 template <class T> using NoInitVector = std::vector<T, NoInitAlloc<T>>;
+// E16 handover: release the whole pages inside [p, p + len) (their contents read as zeros afterwards; the allocation stays valid)
+inline void dropPages(const void* p, uint64_t len) {
+    const uint64_t a = ((uint64_t) p + 4095) & ~4095ull, b = ((uint64_t) p + len) & ~4095ull;
+    if (len && b > a) madvise((void*) a, b - a, MADV_DONTNEED);
+}
 
 struct Input {
     NoInitVector<char> seq;          // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4); not zero-filled on resize (E13)
@@ -231,6 +236,9 @@ struct Input {
     // E8: with e2e set, mapDistinct also builds the pileup's records on the device and copies them into e2e (E2EHeader); the host lane
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
     E2ERegion* e2e = nullptr;
+    // E16 "handover" (level 5): the caller reads no host record (out.seq, out.blob) after mapDistinct, so the records' phase releases their
+    // pages as it uploads them to build the region's records (Output::hostDropped says it did)
+    bool e2eHandover = false;
     int outSAMmapqUnique = 255; uint16_t outSAMflagAND = 65535, outSAMflagOR = 0;
     // E10 (level >= 2, with e2e): per read what the host decode packs (the target ingest format: CB+UMI key and quality bits), from which the
     // device builds the per-read entries; and STAR's options the per-read products depend on
@@ -261,6 +269,7 @@ struct Output {
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
+    bool hostDropped = false;           // E16 handover: seq and blob keep their sizes, but their pages were released (zeros); offsets intact
     bool e2eOk = false;                 // E8: the records are in Input::e2e (arrays and nRec..nSeq; readRecord and magic are the caller's)
     // E10: what the device computed for the reads with a record (valid with e10.ok)
     struct E10 {
