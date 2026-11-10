@@ -1,0 +1,2119 @@
+{
+ "truth_cells": 4855,
+ "truth_genes": 21166,
+ "molecules": 9758836,
+ "singlet_cells_reported": 4855,
+ "starsolo_cells_reported": 4855,
+ "alevinfry_cells_reported": 4855,
+ "common_cells": 4855,
+ "clsLR": {
+  "common": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.6879161613126812,
+     "truth_A": 0.24946971134672208
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.13196517573247063,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.7177985345787794,
+     "gene_pooled_pearson_log1p_U": 0.8978129025100101,
+     "genes": 15194,
+     "per_cell_median_pearson": 0.7161337995443238,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145187,
+      "fp": 1682,
+      "fn": 114443,
+      "tn": 1536799,
+      "precision": 0.9885476172643648,
+      "recall": 0.5592073335130763,
+      "f1": 0.7143289405385991
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.13215792099977905,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.7178287070183828,
+     "gene_pooled_pearson_log1p_U": 0.8978055517640168,
+     "genes": 15193,
+     "per_cell_median_pearson": 0.7161682870345107,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145185,
+      "fp": 1677,
+      "fn": 114429,
+      "tn": 1536513,
+      "precision": 0.9885811169669486,
+      "recall": 0.5592340936929442,
+      "f1": 0.7143595193812181
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06261412734059676,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.3947921231325987,
+     "gene_pooled_pearson_log1p_U": 0.8685182464806059,
+     "genes": 16406,
+     "per_cell_median_pearson": 0.4367915440935187,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 408901,
+      "fp": 559082,
+      "fn": 165444,
+      "tn": 2757891,
+      "precision": 0.4224258070647935,
+      "recall": 0.7119431700458784,
+      "f1": 0.5302387040888838
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 489220,
+      "truth_S->tool_U": 856,
+      "truth_S->tool_A": 503813,
+      "truth_U->tool_S": 24866,
+      "truth_U->tool_U": 131688,
+      "truth_U->tool_A": 77785,
+      "truth_A->tool_S": 2365,
+      "truth_A->tool_U": 509,
+      "truth_A->tool_A": 391490
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.6879161613126812,
+     "truth_A": 0.24946971134672208
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.12509042737405746,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.6995122029210685,
+     "gene_pooled_pearson_log1p_U": 0.8915319595547843,
+     "genes": 14679,
+     "per_cell_median_pearson": 0.6987534727252269,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141529,
+      "fp": 9610,
+      "fn": 108084,
+      "tn": 1511364,
+      "precision": 0.9364161467258616,
+      "recall": 0.5669937062572863,
+      "f1": 0.7063171238072424
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.12567158054696329,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.6996325503945529,
+     "gene_pooled_pearson_log1p_U": 0.8915922867871839,
+     "genes": 14679,
+     "per_cell_median_pearson": 0.6987799867393755,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141518,
+      "fp": 9576,
+      "fn": 108062,
+      "tn": 1510630,
+      "precision": 0.9366222351648642,
+      "recall": 0.5670246013302348,
+      "f1": 0.706399716477735
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06261412734059676,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.39224378032580826,
+     "gene_pooled_pearson_log1p_U": 0.8526396623654081,
+     "genes": 16465,
+     "per_cell_median_pearson": 0.4314678261814789,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 406774,
+      "fp": 569399,
+      "fn": 167571,
+      "tn": 2747574,
+      "precision": 0.4167027770692285,
+      "recall": 0.7082398210135024,
+      "f1": 0.5246943279600753
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 857831,
+      "truth_S->tool_U": 4465,
+      "truth_S->tool_A": 123366,
+      "truth_U->tool_S": 60455,
+      "truth_U->tool_U": 127706,
+      "truth_U->tool_A": 35680,
+      "truth_A->tool_S": 279392,
+      "truth_A->tool_U": 3243,
+      "truth_A->tool_A": 90602
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.6879161613126812,
+     "truth_A": 0.24946971134672208
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.1309669140633394,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.6998469782676757,
+     "gene_pooled_pearson_log1p_U": 0.87962507661349,
+     "genes": 14929,
+     "per_cell_median_pearson": 0.6983503958506194,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136892,
+      "fp": 4913,
+      "fn": 112812,
+      "tn": 1489229,
+      "precision": 0.9653538309650577,
+      "recall": 0.5482170890334156,
+      "f1": 0.6993044859760568
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.13112721553197104,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.6998771026618795,
+     "gene_pooled_pearson_log1p_U": 0.8796736978717636,
+     "genes": 14928,
+     "per_cell_median_pearson": 0.6984204765059082,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136890,
+      "fp": 4910,
+      "fn": 112798,
+      "tn": 1488993,
+      "precision": 0.9653737658674189,
+      "recall": 0.5482442087725481,
+      "f1": 0.6993317802844532
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06261412734059676,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.39059805282458515,
+     "gene_pooled_pearson_log1p_U": 0.8506752396604739,
+     "genes": 16457,
+     "per_cell_median_pearson": 0.4291025328414101,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 401664,
+      "fp": 559003,
+      "fn": 172681,
+      "tn": 2757970,
+      "precision": 0.41810950100294897,
+      "recall": 0.6993427295440894,
+      "f1": 0.5233366253814302
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 474898,
+      "truth_S->tool_U": 2225,
+      "truth_S->tool_A": 490703,
+      "truth_U->tool_S": 26364,
+      "truth_U->tool_U": 124222,
+      "truth_U->tool_A": 74731,
+      "truth_A->tool_S": 943,
+      "truth_A->tool_U": 1974,
+      "truth_A->tool_A": 378960
+     }
+    }
+   }
+  },
+  "own_cells": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.6879161613126812,
+     "truth_A": 0.24946971134672208
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.13196517573247063,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.7177985345787794,
+     "gene_pooled_pearson_log1p_U": 0.8978129025100101,
+     "genes": 15194,
+     "per_cell_median_pearson": 0.7161337995443238,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145187,
+      "fp": 1682,
+      "fn": 114443,
+      "tn": 1536799,
+      "precision": 0.9885476172643648,
+      "recall": 0.5592073335130763,
+      "f1": 0.7143289405385991
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.13215792099977905,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.7178287070183828,
+     "gene_pooled_pearson_log1p_U": 0.8978055517640168,
+     "genes": 15193,
+     "per_cell_median_pearson": 0.7161682870345107,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145185,
+      "fp": 1677,
+      "fn": 114429,
+      "tn": 1536513,
+      "precision": 0.9885811169669486,
+      "recall": 0.5592340936929442,
+      "f1": 0.7143595193812181
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06261412734059676,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.3947921231325987,
+     "gene_pooled_pearson_log1p_U": 0.8685182464806059,
+     "genes": 16406,
+     "per_cell_median_pearson": 0.4367915440935187,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 408901,
+      "fp": 559082,
+      "fn": 165444,
+      "tn": 2757891,
+      "precision": 0.4224258070647935,
+      "recall": 0.7119431700458784,
+      "f1": 0.5302387040888838
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 489220,
+      "truth_S->tool_U": 856,
+      "truth_S->tool_A": 503813,
+      "truth_U->tool_S": 24866,
+      "truth_U->tool_U": 131688,
+      "truth_U->tool_A": 77785,
+      "truth_A->tool_S": 2365,
+      "truth_A->tool_U": 509,
+      "truth_A->tool_A": 391490
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.6879161613126812,
+     "truth_A": 0.24946971134672208
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.12509042737405746,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.6995122029210685,
+     "gene_pooled_pearson_log1p_U": 0.8915319595547843,
+     "genes": 14679,
+     "per_cell_median_pearson": 0.6987534727252269,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141529,
+      "fp": 9610,
+      "fn": 108084,
+      "tn": 1511364,
+      "precision": 0.9364161467258616,
+      "recall": 0.5669937062572863,
+      "f1": 0.7063171238072424
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.12567158054696329,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.6996325503945529,
+     "gene_pooled_pearson_log1p_U": 0.8915922867871839,
+     "genes": 14679,
+     "per_cell_median_pearson": 0.6987799867393755,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141518,
+      "fp": 9576,
+      "fn": 108062,
+      "tn": 1510630,
+      "precision": 0.9366222351648642,
+      "recall": 0.5670246013302348,
+      "f1": 0.706399716477735
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06261412734059676,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.39224378032580826,
+     "gene_pooled_pearson_log1p_U": 0.8526396623654081,
+     "genes": 16465,
+     "per_cell_median_pearson": 0.4314678261814789,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 406774,
+      "fp": 569399,
+      "fn": 167571,
+      "tn": 2747574,
+      "precision": 0.4167027770692285,
+      "recall": 0.7082398210135024,
+      "f1": 0.5246943279600753
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 857831,
+      "truth_S->tool_U": 4465,
+      "truth_S->tool_A": 123366,
+      "truth_U->tool_S": 60455,
+      "truth_U->tool_U": 127706,
+      "truth_U->tool_A": 35680,
+      "truth_A->tool_S": 279392,
+      "truth_A->tool_U": 3243,
+      "truth_A->tool_A": 90602
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.6879161613126812,
+     "truth_A": 0.24946971134672208
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06261412734059676,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.1309669140633394,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.6998469782676757,
+     "gene_pooled_pearson_log1p_U": 0.87962507661349,
+     "genes": 14929,
+     "per_cell_median_pearson": 0.6983503958506194,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136892,
+      "fp": 4913,
+      "fn": 112812,
+      "tn": 1489229,
+      "precision": 0.9653538309650577,
+      "recall": 0.5482170890334156,
+      "f1": 0.6993044859760568
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.13112721553197104,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.6998771026618795,
+     "gene_pooled_pearson_log1p_U": 0.8796736978717636,
+     "genes": 14928,
+     "per_cell_median_pearson": 0.6984204765059082,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136890,
+      "fp": 4910,
+      "fn": 112798,
+      "tn": 1488993,
+      "precision": 0.9653737658674189,
+      "recall": 0.5482442087725481,
+      "f1": 0.6993317802844532
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06261412734059676,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.39059805282458515,
+     "gene_pooled_pearson_log1p_U": 0.8506752396604739,
+     "genes": 16457,
+     "per_cell_median_pearson": 0.4291025328414101,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 401664,
+      "fp": 559003,
+      "fn": 172681,
+      "tn": 2757970,
+      "precision": 0.41810950100294897,
+      "recall": 0.6993427295440894,
+      "f1": 0.5233366253814302
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 474898,
+      "truth_S->tool_U": 2225,
+      "truth_S->tool_A": 490703,
+      "truth_U->tool_S": 26364,
+      "truth_U->tool_U": 124222,
+      "truth_U->tool_A": 74731,
+      "truth_A->tool_S": 943,
+      "truth_A->tool_U": 1974,
+      "truth_A->tool_A": 378960
+     }
+    }
+   }
+  }
+ },
+ "clsR2": {
+  "common": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.03126202756148377,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.46877189041807854,
+     "truth_A": 0.4999660820204377
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.03126202756148377,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.06513141392038722,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.9009473312727915,
+     "gene_pooled_pearson_log1p_U": 0.9720157167746436,
+     "genes": 13303,
+     "per_cell_median_pearson": 0.9035644359812036,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 125217,
+      "fp": 21652,
+      "fn": 4409,
+      "tn": 1646833,
+      "precision": 0.8525761052366394,
+      "recall": 0.965986761915048,
+      "f1": 0.9057451310150274
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.06523190891961203,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.9009597293687684,
+     "gene_pooled_pearson_log1p_U": 0.9720440268482844,
+     "genes": 13301,
+     "per_cell_median_pearson": 0.9036472783388947,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 125215,
+      "fp": 21647,
+      "fn": 4409,
+      "tn": 1646533,
+      "precision": 0.85260312402119,
+      "recall": 0.9659862371165834,
+      "f1": 0.9057601469875509
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.03126202756148377,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.4112585935152817,
+     "gene_pooled_pearson_log1p_U": 0.8692582756621943,
+     "genes": 15187,
+     "per_cell_median_pearson": 0.46935117099097634,
+     "cells_with_ge20_pairs": 4853,
+     "has_unspliced": {
+      "tp": 286822,
+      "fp": 681161,
+      "fn": 8170,
+      "tn": 2915165,
+      "precision": 0.29630892278066867,
+      "recall": 0.9723043336768454,
+      "f1": 0.454200597794889
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 506278,
+      "truth_S->tool_U": 2639,
+      "truth_S->tool_A": 11752,
+      "truth_U->tool_S": 1577,
+      "truth_U->tool_U": 113447,
+      "truth_U->tool_A": 2251,
+      "truth_A->tool_S": 8596,
+      "truth_A->tool_U": 16967,
+      "truth_A->tool_A": 959085
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.03126202756148377,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.46877189041807854,
+     "truth_A": 0.4999660820204377
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.03126202756148377,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.06124345027385878,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.862922057783427,
+     "gene_pooled_pearson_log1p_U": 0.9514148043674496,
+     "genes": 13074,
+     "per_cell_median_pearson": 0.865413502979475,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 119297,
+      "fp": 31842,
+      "fn": 4411,
+      "tn": 1615037,
+      "precision": 0.7893197652492077,
+      "recall": 0.964343453939923,
+      "f1": 0.8680975233493544
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.06153508612624782,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.86303371144601,
+     "gene_pooled_pearson_log1p_U": 0.951509759175438,
+     "genes": 13073,
+     "per_cell_median_pearson": 0.8655546329247522,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 119289,
+      "fp": 31805,
+      "fn": 4411,
+      "tn": 1614281,
+      "precision": 0.789501899479794,
+      "recall": 0.9643411479385611,
+      "f1": 0.8682067294045721
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.03126202756148377,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.4031988197592287,
+     "gene_pooled_pearson_log1p_U": 0.8462594921488926,
+     "genes": 15270,
+     "per_cell_median_pearson": 0.45737228156816273,
+     "cells_with_ge20_pairs": 4853,
+     "has_unspliced": {
+      "tp": 281281,
+      "fp": 694892,
+      "fn": 13711,
+      "tn": 2901434,
+      "precision": 0.28814667072332467,
+      "recall": 0.9535207734447035,
+      "f1": 0.44255623778187725
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 502251,
+      "truth_S->tool_U": 4259,
+      "truth_S->tool_A": 16308,
+      "truth_U->tool_S": 2910,
+      "truth_U->tool_U": 107695,
+      "truth_U->tool_A": 660,
+      "truth_A->tool_S": 692517,
+      "truth_A->tool_U": 23460,
+      "truth_A->tool_A": 232680
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.03126202756148377,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.46877189041807854,
+     "truth_A": 0.4999660820204377
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.03126202756148377,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.0642685596110691,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.8656661433845426,
+     "gene_pooled_pearson_log1p_U": 0.9504135272066988,
+     "genes": 13113,
+     "per_cell_median_pearson": 0.8675237183672417,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 115964,
+      "fp": 25841,
+      "fn": 8015,
+      "tn": 1594026,
+      "precision": 0.8177708825499806,
+      "recall": 0.935351954766533,
+      "f1": 0.8726183667940884
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.06435347069055176,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.8656701757534233,
+     "gene_pooled_pearson_log1p_U": 0.9504218045728534,
+     "genes": 13112,
+     "per_cell_median_pearson": 0.8675058403424888,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 115962,
+      "fp": 25838,
+      "fn": 8015,
+      "tn": 1593776,
+      "precision": 0.8177856135401974,
+      "recall": 0.9353509118626842,
+      "f1": 0.8726262994916791
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.03126202756148377,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.4022634277227736,
+     "gene_pooled_pearson_log1p_U": 0.8454950028745484,
+     "genes": 15268,
+     "per_cell_median_pearson": 0.45556197754955813,
+     "cells_with_ge20_pairs": 4853,
+     "has_unspliced": {
+      "tp": 278331,
+      "fp": 682336,
+      "fn": 16661,
+      "tn": 2913990,
+      "precision": 0.28972682521623,
+      "recall": 0.9435205022509084,
+      "f1": 0.4433225899706847
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 494177,
+      "truth_S->tool_U": 1911,
+      "truth_S->tool_A": 11210,
+      "truth_U->tool_S": 3489,
+      "truth_U->tool_U": 105145,
+      "truth_U->tool_A": 3424,
+      "truth_A->tool_S": 4539,
+      "truth_A->tool_U": 21365,
+      "truth_A->tool_A": 929760
+     }
+    }
+   }
+  },
+  "own_cells": {}
+ },
+ "clsLR5": {
+  "common": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.0658580593013347,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.6850460444257901,
+     "truth_A": 0.24909589627287518
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.0658580593013347,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.13803592479528695,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.7010499458421581,
+     "gene_pooled_pearson_log1p_U": 0.8896355966351864,
+     "genes": 15261,
+     "per_cell_median_pearson": 0.6989599810185936,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145521,
+      "fp": 1348,
+      "fn": 125733,
+      "tn": 1525509,
+      "precision": 0.9908217527184089,
+      "recall": 0.5364750381561194,
+      "f1": 0.6960679034638133
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.13823325695304722,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.7010882964661284,
+     "gene_pooled_pearson_log1p_U": 0.8896408930907767,
+     "genes": 15260,
+     "per_cell_median_pearson": 0.6990425211893703,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145518,
+      "fp": 1344,
+      "fn": 125715,
+      "tn": 1525227,
+      "precision": 0.9908485517015975,
+      "recall": 0.536505513709615,
+      "f1": 0.6961001686219639
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.0658580593013347,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.3862348135401226,
+     "gene_pooled_pearson_log1p_U": 0.8664481018030953,
+     "genes": 16445,
+     "per_cell_median_pearson": 0.4280587772546476,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 415159,
+      "fp": 552824,
+      "fn": 186184,
+      "tn": 2737151,
+      "precision": 0.42889079663589136,
+      "recall": 0.69038635188237,
+      "f1": 0.5290921070574246
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 485036,
+      "truth_S->tool_U": 662,
+      "truth_S->tool_A": 499832,
+      "truth_U->tool_S": 29081,
+      "truth_U->tool_U": 131961,
+      "truth_U->tool_A": 83128,
+      "truth_A->tool_S": 2334,
+      "truth_A->tool_U": 430,
+      "truth_A->tool_A": 390128
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.0658580593013347,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.6850460444257901,
+     "truth_A": 0.24909589627287518
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.0658580593013347,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.13103946174891548,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.6832338133097542,
+     "gene_pooled_pearson_log1p_U": 0.8841575457776704,
+     "genes": 14740,
+     "per_cell_median_pearson": 0.6815609071956803,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 142004,
+      "fp": 9135,
+      "fn": 119144,
+      "tn": 1500304,
+      "precision": 0.9395589490469038,
+      "recall": 0.5437682846508494,
+      "f1": 0.6888599446502073
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.13164353049390437,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.6833663994723504,
+     "gene_pooled_pearson_log1p_U": 0.8842392664854356,
+     "genes": 14740,
+     "per_cell_median_pearson": 0.681717934166665,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141993,
+      "fp": 9101,
+      "fn": 119117,
+      "tn": 1499575,
+      "precision": 0.9397659734999404,
+      "recall": 0.54380529278848,
+      "f1": 0.6889452795217902
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.0658580593013347,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.38410616299195477,
+     "gene_pooled_pearson_log1p_U": 0.8513205087572255,
+     "genes": 16502,
+     "per_cell_median_pearson": 0.4235448863972639,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 413371,
+      "fp": 562802,
+      "fn": 187972,
+      "tn": 2727173,
+      "precision": 0.42346080049335516,
+      "recall": 0.6874130072188418,
+      "f1": 0.5240783611703463
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 850953,
+      "truth_S->tool_U": 4227,
+      "truth_S->tool_A": 122250,
+      "truth_U->tool_S": 67715,
+      "truth_U->tool_U": 128080,
+      "truth_U->tool_A": 37697,
+      "truth_A->tool_S": 279010,
+      "truth_A->tool_U": 3107,
+      "truth_A->tool_A": 89701
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.0658580593013347,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.6850460444257901,
+     "truth_A": 0.24909589627287518
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.0658580593013347,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.13701351659720254,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.6835435069948789,
+     "gene_pooled_pearson_log1p_U": 0.8716955358449735,
+     "genes": 14990,
+     "per_cell_median_pearson": 0.6815567320200578,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 137245,
+      "fp": 4560,
+      "fn": 123682,
+      "tn": 1478359,
+      "precision": 0.9678431649095589,
+      "recall": 0.5259900278621991,
+      "f1": 0.6815698777350695
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.13717892558066855,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.6835813003522538,
+     "gene_pooled_pearson_log1p_U": 0.8717934267638283,
+     "genes": 14990,
+     "per_cell_median_pearson": 0.6815881888549858,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 137243,
+      "fp": 4557,
+      "fn": 123667,
+      "tn": 1478124,
+      "precision": 0.9678631875881524,
+      "recall": 0.526016634088383,
+      "f1": 0.6815971791115194
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.0658580593013347,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.3822856220185548,
+     "gene_pooled_pearson_log1p_U": 0.8493555594614132,
+     "genes": 16496,
+     "per_cell_median_pearson": 0.4207173098142255,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 407994,
+      "fp": 552673,
+      "fn": 193349,
+      "tn": 2737302,
+      "precision": 0.4246986729012238,
+      "recall": 0.6784713549505025,
+      "f1": 0.5223961434305798
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 470824,
+      "truth_S->tool_U": 2042,
+      "truth_S->tool_A": 486854,
+      "truth_U->tool_S": 30463,
+      "truth_U->tool_U": 124523,
+      "truth_U->tool_A": 79861,
+      "truth_A->tool_S": 918,
+      "truth_A->tool_U": 1856,
+      "truth_A->tool_A": 377679
+     }
+    }
+   }
+  },
+  "own_cells": {}
+ },
+ "clsLR20": {
+  "common": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.05967648190829316,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.6901957364587334,
+     "truth_A": 0.25012778163297344
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.05967648190829316,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.1255498920788771,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.734689231328108,
+     "gene_pooled_pearson_log1p_U": 0.907267657507614,
+     "genes": 15109,
+     "per_cell_median_pearson": 0.7327282208201783,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 144510,
+      "fp": 2359,
+      "fn": 102768,
+      "tn": 1548474,
+      "precision": 0.9839380672572157,
+      "recall": 0.5844029796423459,
+      "f1": 0.733279715436119
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.12573353624174236,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.7347186666746908,
+     "gene_pooled_pearson_log1p_U": 0.9072536869596574,
+     "genes": 15107,
+     "per_cell_median_pearson": 0.7327848558207911,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 144508,
+      "fp": 2354,
+      "fn": 102755,
+      "tn": 1548187,
+      "precision": 0.983971347251161,
+      "recall": 0.5844303433995381,
+      "f1": 0.7333104979384713
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.05967648190829316,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.40053235322509606,
+     "gene_pooled_pearson_log1p_U": 0.8713946805033046,
+     "genes": 16360,
+     "per_cell_median_pearson": 0.44284982914420223,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 401607,
+      "fp": 566376,
+      "fn": 147408,
+      "tn": 2775927,
+      "precision": 0.4148905507638047,
+      "recall": 0.7315046036993524,
+      "f1": 0.5294759782148691
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 493044,
+      "truth_S->tool_U": 1235,
+      "truth_S->tool_A": 507892,
+      "truth_U->tool_S": 21021,
+      "truth_U->tool_U": 131125,
+      "truth_U->tool_A": 71569,
+      "truth_A->tool_S": 2386,
+      "truth_A->tool_U": 693,
+      "truth_A->tool_A": 393627
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.05967648190829316,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.6901957364587334,
+     "truth_A": 0.25012778163297344
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.05967648190829316,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.11888055184999387,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.7162355209488841,
+     "gene_pooled_pearson_log1p_U": 0.8997418914773577,
+     "genes": 14605,
+     "per_cell_median_pearson": 0.7154726545684887,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 140784,
+      "fp": 10355,
+      "fn": 96717,
+      "tn": 1522731,
+      "precision": 0.9314869094012797,
+      "recall": 0.5927722409589854,
+      "f1": 0.7244956772334294
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.11943409062128502,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.7163522545401192,
+     "gene_pooled_pearson_log1p_U": 0.8997972105490587,
+     "genes": 14604,
+     "per_cell_median_pearson": 0.7158001610637863,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 140773,
+      "fp": 10321,
+      "fn": 96698,
+      "tn": 1521994,
+      "precision": 0.9316915297761659,
+      "recall": 0.5928008051509448,
+      "f1": 0.7245788992832602
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.05967648190829316,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.3977435836469287,
+     "gene_pooled_pearson_log1p_U": 0.8547070323479389,
+     "genes": 16418,
+     "per_cell_median_pearson": 0.43736625270587326,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 399352,
+      "fp": 576821,
+      "fn": 149663,
+      "tn": 2765482,
+      "precision": 0.4090996165638673,
+      "recall": 0.7273972477983297,
+      "f1": 0.5236757698067386
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 864323,
+      "truth_S->tool_U": 4835,
+      "truth_S->tool_A": 124614,
+      "truth_U->tool_S": 53414,
+      "truth_U->tool_U": 127089,
+      "truth_U->tool_A": 33014,
+      "truth_A->tool_S": 279941,
+      "truth_A->tool_U": 3490,
+      "truth_A->tool_A": 92020
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.05967648190829316,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.6901957364587334,
+     "truth_A": 0.25012778163297344
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.05967648190829316,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.12452839263110609,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.7170052516323377,
+     "gene_pooled_pearson_log1p_U": 0.8886642474067571,
+     "genes": 14848,
+     "per_cell_median_pearson": 0.7158010436012352,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136297,
+      "fp": 5508,
+      "fn": 101388,
+      "tn": 1500653,
+      "precision": 0.9611579281407566,
+      "recall": 0.5734354292445885,
+      "f1": 0.718316688186777
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.12468151928047565,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.7170333329558862,
+     "gene_pooled_pearson_log1p_U": 0.8887069293606035,
+     "genes": 14846,
+     "per_cell_median_pearson": 0.71580787867659,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136295,
+      "fp": 5505,
+      "fn": 101376,
+      "tn": 1500415,
+      "precision": 0.9611777150916784,
+      "recall": 0.5734607924399695,
+      "f1": 0.7183421130995518
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.05967648190829316,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.396233966386821,
+     "gene_pooled_pearson_log1p_U": 0.8528554982923553,
+     "genes": 16410,
+     "per_cell_median_pearson": 0.43540536738258573,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 394460,
+      "fp": 566207,
+      "fn": 154555,
+      "tn": 2776096,
+      "precision": 0.4106105445487354,
+      "recall": 0.7184867444423194,
+      "f1": 0.5225736280885643
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 478668,
+      "truth_S->tool_U": 2511,
+      "truth_S->tool_A": 494721,
+      "truth_U->tool_S": 22587,
+      "truth_U->tool_U": 123713,
+      "truth_U->tool_A": 68659,
+      "truth_A->tool_S": 950,
+      "truth_A->tool_U": 2197,
+      "truth_A->tool_A": 381014
+     }
+    }
+   }
+  },
+  "own_cells": {}
+ },
+ "clsLR_pb": {
+  "common": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.062253633527605136,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.6880124842757886,
+     "truth_A": 0.24973388219660622
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.062253633527605136,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.13133212440524406,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.7195006532929562,
+     "gene_pooled_pearson_log1p_U": 0.8985428606745436,
+     "genes": 15181,
+     "per_cell_median_pearson": 0.7177183736333674,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145139,
+      "fp": 1730,
+      "fn": 113275,
+      "tn": 1537967,
+      "precision": 0.9882207954027058,
+      "recall": 0.5616530064160611,
+      "f1": 0.7162353219848846
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.13152387359766043,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.7195311595293084,
+     "gene_pooled_pearson_log1p_U": 0.8985494489468691,
+     "genes": 15179,
+     "per_cell_median_pearson": 0.7177183736333674,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145137,
+      "fp": 1725,
+      "fn": 113261,
+      "tn": 1537681,
+      "precision": 0.9882542795277199,
+      "recall": 0.5616800439631886,
+      "f1": 0.7162661007748112
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.062253633527605136,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.3959482564024964,
+     "gene_pooled_pearson_log1p_U": 0.8685872202525059,
+     "genes": 16398,
+     "per_cell_median_pearson": 0.4378456272783325,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 408286,
+      "fp": 559697,
+      "fn": 163012,
+      "tn": 2760323,
+      "precision": 0.42179046532842,
+      "recall": 0.714663800678455,
+      "f1": 0.5304892349090257
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 489480,
+      "truth_S->tool_U": 873,
+      "truth_S->tool_A": 503586,
+      "truth_U->tool_S": 24424,
+      "truth_U->tool_U": 131647,
+      "truth_U->tool_A": 77290,
+      "truth_A->tool_S": 2547,
+      "truth_A->tool_U": 533,
+      "truth_A->tool_A": 392212
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.062253633527605136,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.6880124842757886,
+     "truth_A": 0.24973388219660622
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.062253633527605136,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.12447202869448028,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.7011854648468995,
+     "gene_pooled_pearson_log1p_U": 0.8921539695030338,
+     "genes": 14666,
+     "per_cell_median_pearson": 0.7007084439982113,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141468,
+      "fp": 9671,
+      "fn": 106942,
+      "tn": 1512506,
+      "precision": 0.9360125447435804,
+      "recall": 0.5694939817237631,
+      "f1": 0.7081384260754
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.12505116921032042,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.7013024374055288,
+     "gene_pooled_pearson_log1p_U": 0.8922218640334052,
+     "genes": 14665,
+     "per_cell_median_pearson": 0.7007583552975829,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141457,
+      "fp": 9637,
+      "fn": 106921,
+      "tn": 1511771,
+      "precision": 0.9362185129786755,
+      "recall": 0.5695230656499368,
+      "f1": 0.708219850202267
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.062253633527605136,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.39338072604679564,
+     "gene_pooled_pearson_log1p_U": 0.8526048527173027,
+     "genes": 16457,
+     "per_cell_median_pearson": 0.43281629344195793,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 406149,
+      "fp": 570024,
+      "fn": 165149,
+      "tn": 2749996,
+      "precision": 0.41606252170465685,
+      "recall": 0.7109231959502746,
+      "f1": 0.5249196915483392
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 857929,
+      "truth_S->tool_U": 4482,
+      "truth_S->tool_A": 123304,
+      "truth_U->tool_S": 59691,
+      "truth_U->tool_U": 127657,
+      "truth_U->tool_A": 35536,
+      "truth_A->tool_S": 280058,
+      "truth_A->tool_U": 3275,
+      "truth_A->tool_A": 90808
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.062253633527605136,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.6880124842757886,
+     "truth_A": 0.24973388219660622
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.062253633527605136,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.1303370809512066,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.7015389194743422,
+     "gene_pooled_pearson_log1p_U": 0.8802981078913317,
+     "genes": 14915,
+     "per_cell_median_pearson": 0.7001361799555644,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136847,
+      "fp": 4958,
+      "fn": 111682,
+      "tn": 1490359,
+      "precision": 0.9650364937766651,
+      "recall": 0.5506278945314229,
+      "f1": 0.7011789903006144
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.1304970425418002,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.701567812670741,
+     "gene_pooled_pearson_log1p_U": 0.8803511939909668,
+     "genes": 14913,
+     "per_cell_median_pearson": 0.7002829244302639,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136845,
+      "fp": 4955,
+      "fn": 111669,
+      "tn": 1490122,
+      "precision": 0.9650564174894217,
+      "recall": 0.5506530819189261,
+      "f1": 0.7012046711109517
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.062253633527605136,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.39173920012255686,
+     "gene_pooled_pearson_log1p_U": 0.8506713565863872,
+     "genes": 16449,
+     "per_cell_median_pearson": 0.43053075825134823,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 401048,
+      "fp": 559619,
+      "fn": 170250,
+      "tn": 2760401,
+      "precision": 0.4174682798513949,
+      "recall": 0.7019944057217075,
+      "f1": 0.5235733192337945
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 475178,
+      "truth_S->tool_U": 2226,
+      "truth_S->tool_A": 490489,
+      "truth_U->tool_S": 25936,
+      "truth_U->tool_U": 124183,
+      "truth_U->tool_A": 74249,
+      "truth_A->tool_S": 1091,
+      "truth_A->tool_U": 2012,
+      "truth_A->tool_A": 379656
+     }
+    }
+   }
+  },
+  "own_cells": {}
+ },
+ "clsLR_ont": {
+  "common": {
+   "singlet": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 38944257,
+    "share_all_molecules": {
+     "truth_U": 0.06241850974849869,
+     "tool_U": 0.3213165165790684,
+     "tool_S": 0.29591084508301185,
+     "tool_A": 0.38277263833791975,
+     "truth_S": 0.6869566206461508,
+     "truth_A": 0.25062486960535046
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06241850974849869,
+     "tool_U": 0.11274927515772785
+    },
+    "q90": {
+     "pairs": 1798111,
+     "share": {
+      "truth_U": 0.13152000729719307,
+      "tool_U": 0.07398931355891833
+     },
+     "pair_pearson_log1p_U": 0.7188184133184965,
+     "gene_pooled_pearson_log1p_U": 0.8983043347575874,
+     "genes": 15183,
+     "per_cell_median_pearson": 0.7169806737127542,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145122,
+      "fp": 1747,
+      "fn": 113650,
+      "tn": 1537592,
+      "precision": 0.9881050459933682,
+      "recall": 0.5608102885938201,
+      "f1": 0.7155193878330839
+     }
+    },
+    "q100": {
+     "pairs": 1797804,
+     "share": {
+      "truth_U": 0.13171205211402923,
+      "tool_U": 0.0741110231292801
+     },
+     "pair_pearson_log1p_U": 0.718848796121079,
+     "gene_pooled_pearson_log1p_U": 0.8982969230010044,
+     "genes": 15182,
+     "per_cell_median_pearson": 0.7170187312193349,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 145120,
+      "fp": 1742,
+      "fn": 113636,
+      "tn": 1537306,
+      "precision": 0.9881385246013265,
+      "recall": 0.5608372366244647,
+      "f1": 0.7155500988614903
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06241850974849869,
+      "tool_U": 0.11274927515772785
+     },
+     "pair_pearson_log1p_U": 0.395099223503299,
+     "gene_pooled_pearson_log1p_U": 0.8685597553109128,
+     "genes": 16398,
+     "per_cell_median_pearson": 0.4370669587733174,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 408381,
+      "fp": 559602,
+      "fn": 164282,
+      "tn": 2759053,
+      "precision": 0.42188860754785984,
+      "recall": 0.7131262190852211,
+      "f1": 0.5301425505924139
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1622592,
+     "confusion": {
+      "truth_S->tool_S": 488848,
+      "truth_S->tool_U": 876,
+      "truth_S->tool_A": 501619,
+      "truth_U->tool_S": 24662,
+      "truth_U->tool_U": 131628,
+      "truth_U->tool_A": 77264,
+      "truth_A->tool_S": 2941,
+      "truth_A->tool_U": 549,
+      "truth_A->tool_A": 394205
+     }
+    }
+   },
+   "starsolo": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 37354570,
+    "share_all_molecules": {
+     "truth_U": 0.06241850974849869,
+     "tool_U": 0.34092586261868363,
+     "tool_S": 0.5349635667068313,
+     "tool_A": 0.12411057067448508,
+     "truth_S": 0.6869566206461508,
+     "truth_A": 0.25062486960535046
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06241850974849869,
+     "tool_U": 0.12198567261967692
+    },
+    "q90": {
+     "pairs": 1770587,
+     "share": {
+      "truth_U": 0.12466106525766855,
+      "tool_U": 0.07587323549323233
+     },
+     "pair_pearson_log1p_U": 0.7005019152756258,
+     "gene_pooled_pearson_log1p_U": 0.8919999437038401,
+     "genes": 14668,
+     "per_cell_median_pearson": 0.6995776707877632,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141456,
+      "fp": 9683,
+      "fn": 107316,
+      "tn": 1512132,
+      "precision": 0.935933147632312,
+      "recall": 0.5686170469345425,
+      "f1": 0.707437404822573
+     }
+    },
+    "q100": {
+     "pairs": 1769786,
+     "share": {
+      "truth_U": 0.1252401394354846,
+      "tool_U": 0.07625235991078134
+     },
+     "pair_pearson_log1p_U": 0.7006226545177333,
+     "gene_pooled_pearson_log1p_U": 0.8920602840583538,
+     "genes": 14668,
+     "per_cell_median_pearson": 0.69970376483714,
+     "cells_with_ge20_pairs": 4850,
+     "has_unspliced": {
+      "tp": 141445,
+      "fp": 9649,
+      "fn": 107294,
+      "tn": 1511398,
+      "precision": 0.9361390922207368,
+      "recall": 0.568648261832684,
+      "f1": 0.7075203897627259
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06241850974849869,
+      "tool_U": 0.12198567261967692
+     },
+     "pair_pearson_log1p_U": 0.3925422389796643,
+     "gene_pooled_pearson_log1p_U": 0.8526335203952164,
+     "genes": 16457,
+     "per_cell_median_pearson": 0.43185205184090053,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 406247,
+      "fp": 569926,
+      "fn": 166416,
+      "tn": 2748729,
+      "precision": 0.4161629137458217,
+      "recall": 0.7093997691486965,
+      "f1": 0.5245836227980238
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1582740,
+     "confusion": {
+      "truth_S->tool_S": 855841,
+      "truth_S->tool_U": 4474,
+      "truth_S->tool_A": 122862,
+      "truth_U->tool_S": 59955,
+      "truth_U->tool_U": 127640,
+      "truth_U->tool_A": 35484,
+      "truth_A->tool_S": 281882,
+      "truth_A->tool_U": 3300,
+      "truth_A->tool_A": 91302
+     }
+    }
+   },
+   "alevinfry": {
+    "cells": 4855,
+    "truth_molecules": 9758836,
+    "tool_molecules": 40076845,
+    "share_all_molecules": {
+     "truth_U": 0.06241850974849869,
+     "tool_U": 0.3283670159165473,
+     "tool_S": 0.29092936332687863,
+     "tool_A": 0.38070362075657405,
+     "truth_S": 0.6869566206461508,
+     "truth_A": 0.25062486960535046
+    },
+    "pairs_with_truth": 3891318,
+    "share_on_truth_pairs": {
+     "truth_U": 0.06241850974849869,
+     "tool_U": 0.11023100885679253
+    },
+    "q90": {
+     "pairs": 1743846,
+     "share": {
+      "truth_U": 0.130517691096278,
+      "tool_U": 0.0738411795057491
+     },
+     "pair_pearson_log1p_U": 0.700893377255367,
+     "gene_pooled_pearson_log1p_U": 0.8801225567856088,
+     "genes": 14919,
+     "per_cell_median_pearson": 0.6994301755472119,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136834,
+      "fp": 4971,
+      "fn": 112029,
+      "tn": 1490012,
+      "precision": 0.9649448185889073,
+      "recall": 0.5498366571165662,
+      "f1": 0.700512967532534
+     }
+    },
+    "q100": {
+     "pairs": 1743591,
+     "share": {
+      "truth_U": 0.13067738473085722,
+      "tool_U": 0.07394501124410442
+     },
+     "pair_pearson_log1p_U": 0.700923743835839,
+     "gene_pooled_pearson_log1p_U": 0.8801713344865117,
+     "genes": 14918,
+     "per_cell_median_pearson": 0.6995332868596731,
+     "cells_with_ge20_pairs": 4849,
+     "has_unspliced": {
+      "tp": 136832,
+      "fp": 4968,
+      "fn": 112015,
+      "tn": 1489776,
+      "precision": 0.9649647390691114,
+      "recall": 0.5498639726418241,
+      "f1": 0.7005403855654849
+     }
+    },
+    "truth_pairs_all": {
+     "pairs": 3891318,
+     "share": {
+      "truth_U": 0.06241850974849869,
+      "tool_U": 0.11023100885679253
+     },
+     "pair_pearson_log1p_U": 0.3909156513361616,
+     "gene_pooled_pearson_log1p_U": 0.8506820166246966,
+     "genes": 16449,
+     "per_cell_median_pearson": 0.42944252258138965,
+     "cells_with_ge20_pairs": 4855,
+     "has_unspliced": {
+      "tp": 401157,
+      "fp": 559510,
+      "fn": 171506,
+      "tn": 2759145,
+      "precision": 0.4175817426850303,
+      "recall": 0.7005114700967235,
+      "f1": 0.5232493983682573
+     }
+    },
+    "single_molecule_pairs": {
+     "n": 1575020,
+     "confusion": {
+      "truth_S->tool_S": 474553,
+      "truth_S->tool_U": 2233,
+      "truth_S->tool_A": 488559,
+      "truth_U->tool_S": 26160,
+      "truth_U->tool_U": 124169,
+      "truth_U->tool_A": 74219,
+      "truth_A->tool_S": 1492,
+      "truth_A->tool_U": 2019,
+      "truth_A->tool_A": 381616
+     }
+    }
+   }
+  },
+  "own_cells": {}
+ },
+ "starsolo_per_umi": {
+  "clsLR": {
+   "truth_molecules": 9758836,
+   "dump_rows": 40425361,
+   "joined_on_cb_umi": 9427430,
+   "joined_same_gene": 9329680,
+   "joined_other_class_E_M": 0,
+   "truth_molecules_recovered": 9329680,
+   "confusion_truth_rows_tool_cols": {
+    "S->S": 5827997,
+    "S->U": 7290,
+    "S->A": 590349,
+    "U->S": 147756,
+    "U->U": 338421,
+    "U->A": 99332,
+    "A->S": 1539824,
+    "A->U": 4199,
+    "A->A": 774512
+   },
+   "capture_by_star_class": {
+    "S": {
+     "star_umis_in_truth_cells": 19990391,
+     "in_truth": 7520170,
+     "fraction": 0.3761892401204159
+    },
+    "U": {
+     "star_umis_in_truth_cells": 12867357,
+     "in_truth": 359590,
+     "fraction": 0.02794590994871752
+    },
+    "A": {
+     "star_umis_in_truth_cells": 4636925,
+     "in_truth": 1464776,
+     "fraction": 0.3158938305018951
+    }
+   },
+   "accuracy": 0.743962279520841,
+   "share_U": {
+    "truth": 0.06275767228886736,
+    "starsolo": 0.03750503768618002
+   }
+  },
+  "clsR2": {
+   "truth_molecules": 9758836,
+   "dump_rows": 40425361,
+   "joined_on_cb_umi": 9427430,
+   "joined_same_gene": 9329680,
+   "joined_other_class_E_M": 0,
+   "truth_molecules_recovered": 9329680,
+   "confusion_truth_rows_tool_cols": {
+    "S->S": 4330406,
+    "S->U": 9416,
+    "S->A": 120013,
+    "U->S": 5629,
+    "U->U": 285983,
+    "U->A": 1307,
+    "A->S": 3179542,
+    "A->U": 54511,
+    "A->A": 1342873
+   },
+   "capture_by_star_class": {
+    "S": {
+     "star_umis_in_truth_cells": 19990391,
+     "in_truth": 7520170,
+     "fraction": 0.3761892401204159
+    },
+    "U": {
+     "star_umis_in_truth_cells": 12867357,
+     "in_truth": 359590,
+     "fraction": 0.02794590994871752
+    },
+    "A": {
+     "star_umis_in_truth_cells": 4636925,
+     "in_truth": 1464776,
+     "fraction": 0.3158938305018951
+    }
+   },
+   "accuracy": 0.6387423791598426,
+   "share_U": {
+    "truth": 0.03139646804606375,
+    "starsolo": 0.03750503768618002
+   }
+  }
+ }
+}

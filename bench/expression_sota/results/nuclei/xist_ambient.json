@@ -1,0 +1,33 @@
+{
+ "aX_pool_share": 0.0015094398223457657,
+ "female_tags": [
+  "CCGTACCTCA",
+  "GGTAGATGTC",
+  "TGGTGTCATT",
+  "TTCCTGCCAT"
+ ],
+ "male_tags": [
+  "ATGATGAACA",
+  "CTCGAACGCT",
+  "CTTATCACCG",
+  "TGACGCCGTT"
+ ],
+ "n_male_nuclei": 1344,
+ "rho_true_mean": 0.02284448502326182,
+ "rho_true_umi_weighted": 0.024390229796606194,
+ "rho": {
+  "mean": 0.373659693452381,
+  "ratio": 16.356669588826147,
+  "umi_weighted": 0.34874360748048616
+ },
+ "rho_total": {
+  "mean": 0.27630871205357144,
+  "ratio": 12.095204237355974,
+  "umi_weighted": 0.24912245058826268
+ },
+ "removed": {
+  "mean": 0.27491845509560353,
+  "ratio": 12.034346793795645,
+  "umi_weighted": 0.2484126819303449
+ }
+}
