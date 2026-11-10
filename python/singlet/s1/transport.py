@@ -7,9 +7,18 @@ A transport is addressed by *keys* (``s1/m/GSE145370.json``, ``s1/s/GSM.../<d>.s
 * ``https://data.singlet.bio`` (default) or any ``http(s)://`` URL;
 * a directory path or ``file://`` URL whose layout is the server's.
 
-Every ranged read is checked: HTTP 206, ``Content-Range: bytes a-b/TOTAL`` equal to the request and (when the caller knows it, and
-for immutable objects it always does) to the expected object size, body length equal to the range. ``data.singlet.bio`` answers 403
-to the default Python-urllib User-Agent, so every request carries ``User-Agent: singlet-client/2``.
+Every ranged read is checked: ``Content-Range: bytes a-b/TOTAL`` equal to the request and (when the caller knows it, and for
+immutable objects it always does) to the expected object size, body length equal to the range. The status is 206, or 200 when the
+response still carries that exact ``Content-Range`` (``rclone serve s3`` answers so); a 200 without it is the whole object, accepted
+only when the request asked for all of it, so a server that ignores ``Range`` is refused. ``data.singlet.bio`` answers 403 to the
+default Python-urllib User-Agent, so every request carries ``User-Agent: singlet-client/2``.
+
+Concurrency.  Every range of a sample object is addressable on its own, and over HTTP each request mostly waits one round trip
+(20-100 ms to the first byte on R2 or S3), so readers send independent ranges together. ``io_threads`` (see :func:`io_threads`)
+is the number of requests one read keeps in flight: ``"auto"`` is 1 for a local directory and 8 over HTTP, 1 sends them one at a
+time. It is a budget of waiting, separate from the decode ``threads`` (CPU). Whatever the readers ask for, one process has at most
+``$SINGLET_MAX_CONNECTIONS`` (default 16) HTTP requests in flight; requests sent together run on one shared pool of that many
+threads, so the kept-alive connections are bounded too.
 """
 
 from __future__ import annotations
@@ -23,13 +32,18 @@ import ssl
 import threading
 import time
 import urllib.parse
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Mapping, Optional
+from typing import Any, Callable, List, Mapping, Optional, Sequence, Union
 
 USER_AGENT = "singlet-client/2 (+https://singlet.bio)"
 DEFAULT_BASE = "https://data.singlet.bio"
 _CONTENT_RANGE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 _RETRY_STATUS = {429, 500, 502, 503, 504}
+IO_THREADS_HTTP = 8  # io_threads="auto" over HTTP
+MAX_CONNECTIONS = (
+    16  # requests in flight per process, unless $SINGLET_MAX_CONNECTIONS says otherwise
+)
 
 
 def _rcvbuf() -> int:
@@ -84,6 +98,9 @@ class Response:
     etag: Optional[str] = None
 
 
+_STATS_LOCK = threading.Lock()
+
+
 @dataclass
 class Stats:
     requests: int = 0
@@ -92,6 +109,10 @@ class Stats:
     by_kind: dict = field(default_factory=dict)
 
     def add(self, kind: str, nbytes: int) -> None:
+        with _STATS_LOCK:  # requests finish on several threads at once
+            self._add(kind, nbytes)
+
+    def _add(self, kind: str, nbytes: int) -> None:
         self.requests += 1
         self.bytes += nbytes
         k = self.by_kind.setdefault(kind, [0, 0])
@@ -120,6 +141,98 @@ def make_transport(base: Optional[str] = None, **kw) -> "Transport":
             p = p[1:]
         return DirTransport(p)
     return DirTransport(base)
+
+
+# ============================================================================================================== concurrency
+def max_connections() -> int:
+    """HTTP requests one process keeps in flight at most: ``$SINGLET_MAX_CONNECTIONS`` (default 16, at least 1)."""
+    v = os.environ.get("SINGLET_MAX_CONNECTIONS", "").strip()
+    return max(1, int(v)) if v else MAX_CONNECTIONS
+
+
+_IO_LOCK = threading.Lock()
+_IO_SLOTS: Optional[threading.BoundedSemaphore] = None
+_IO_POOL: Optional[ThreadPoolExecutor] = None
+
+
+def _slots() -> threading.BoundedSemaphore:
+    global _IO_SLOTS
+    s = _IO_SLOTS
+    if s is None:
+        with _IO_LOCK:
+            if _IO_SLOTS is None:
+                _IO_SLOTS = threading.BoundedSemaphore(max_connections())
+            s = _IO_SLOTS
+    return s
+
+
+def _io_pool() -> ThreadPoolExecutor:
+    """The process-wide pool that runs requests sent together (as many threads as :func:`max_connections`)."""
+    global _IO_POOL
+    p = _IO_POOL
+    if p is None:
+        with _IO_LOCK:
+            if _IO_POOL is None:
+                _IO_POOL = ThreadPoolExecutor(max_connections(), thread_name_prefix="singlet-io")
+            p = _IO_POOL
+    return p
+
+
+def _reset_after_fork() -> (
+    None
+):  # a forked DataLoader worker inherits neither the pool's threads nor the parent's slot count
+    global _IO_SLOTS, _IO_POOL
+    _IO_SLOTS = _IO_POOL = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)
+
+
+def io_threads(value: Union[int, str, None], transport: "Transport") -> int:
+    """Requests in flight for one read: ``"auto"`` (or None) is 1 for a local directory and 8 over HTTP; a number is used as given
+    (at least 1; 1 sends requests one at a time)."""
+    if value is None or value == "auto":
+        return 1 if transport.is_local() else IO_THREADS_HTTP
+    if isinstance(value, IOBudget):
+        return value.n
+    n = int(value)
+    if n < 1:
+        raise ValueError("io_threads must be 'auto' or at least 1")
+    return n
+
+
+class IOBudget:
+    """At most ``n`` requests of one read in flight at once, shared by every thread of that read (samples and chunk ranges alike).
+
+    ``map(fn, items)`` runs ``fn`` on every item, ``n`` at a time on the process-wide pool (in the calling thread when ``n == 1``
+    or there is one item), and returns the results in order. ``call(fn, *args)`` runs one request in the calling thread inside the
+    budget. ``fn`` must be a leaf (a request), never something that itself waits on the pool."""
+
+    def __init__(self, n: int):
+        self.n = max(1, int(n))
+        self._sem = threading.BoundedSemaphore(self.n)
+
+    def call(self, fn: Callable, *args, **kw):
+        with self._sem:
+            return fn(*args, **kw)
+
+    def submit(self, fn: Callable, *args, **kw) -> Future:
+        self._sem.acquire()  # the submitting thread waits for a free slot; the slot is held until the request is done
+        try:
+            f = _io_pool().submit(fn, *args, **kw)
+        except BaseException:
+            self._sem.release()
+            raise
+        f.add_done_callback(lambda _f: self._sem.release())
+        return f
+
+    def map(self, fn: Callable, items: Sequence[Any]) -> List[Any]:
+        items = list(items)
+        if self.n == 1 or len(items) <= 1:
+            return [self.call(fn, x) for x in items]
+        futs = [self.submit(fn, x) for x in items]
+        return [f.result() for f in futs]
 
 
 class Transport:
@@ -270,41 +383,45 @@ class HttpTransport(Transport):
         redirects = 0
         attempt = 0
         stale_ok = True  # one free retry when a kept-alive connection was closed by the server
+        slots = _slots()
         while attempt <= self.retries:
             conn = self._conn(netloc, scheme)
             reused = conn.sock is not None
             try:
-                conn.request("GET", path, headers=headers)
-                resp = conn.getresponse()
-                status = resp.status
-                if status in (301, 302, 307, 308) and redirects < self.max_redirects:
-                    loc = resp.getheader("Location") or ""
-                    resp.read()
-                    nu = urllib.parse.urlsplit(
-                        urllib.parse.urljoin(f"{scheme}://{netloc}{path}", loc)
-                    )
-                    if nu.scheme not in ("http", "https") or (
-                        self.scheme == "https" and nu.scheme != "https"
-                    ):
-                        raise TransportError(f"refusing redirect to {loc!r}")
-                    scheme, netloc, path = (
-                        nu.scheme,
-                        nu.netloc,
-                        nu.path + (("?" + nu.query) if nu.query else ""),
-                    )
-                    redirects += 1
-                    continue
-                hdr = {k.lower(): v for k, v in resp.getheaders()}
-                if status in _RETRY_STATUS:
-                    resp.read()
-                    last = TransportError(f"HTTP {status} for {key}")
-                    delay = self._retry_after(hdr, attempt)
-                    self._drop(netloc, scheme)
-                else:
-                    r = self._finish(resp, status, hdr, key, rng, expect_total, kind)
-                    if hdr.get("connection", "").lower() == "close":
+                with (
+                    slots
+                ):  # the per-process cap on requests in flight (not held during a retry's back-off)
+                    conn.request("GET", path, headers=headers)
+                    resp = conn.getresponse()
+                    status = resp.status
+                    if status in (301, 302, 307, 308) and redirects < self.max_redirects:
+                        loc = resp.getheader("Location") or ""
+                        resp.read()
+                        nu = urllib.parse.urlsplit(
+                            urllib.parse.urljoin(f"{scheme}://{netloc}{path}", loc)
+                        )
+                        if nu.scheme not in ("http", "https") or (
+                            self.scheme == "https" and nu.scheme != "https"
+                        ):
+                            raise TransportError(f"refusing redirect to {loc!r}")
+                        scheme, netloc, path = (
+                            nu.scheme,
+                            nu.netloc,
+                            nu.path + (("?" + nu.query) if nu.query else ""),
+                        )
+                        redirects += 1
+                        continue
+                    hdr = {k.lower(): v for k, v in resp.getheaders()}
+                    if status in _RETRY_STATUS:
+                        resp.read()
+                        last = TransportError(f"HTTP {status} for {key}")
+                        delay = self._retry_after(hdr, attempt)
                         self._drop(netloc, scheme)
-                    return r
+                    else:
+                        r = self._finish(resp, status, hdr, key, rng, expect_total, kind)
+                        if hdr.get("connection", "").lower() == "close":
+                            self._drop(netloc, scheme)
+                        return r
             except (OSError, http.client.HTTPException, socket.timeout) as e:
                 last = e
                 self._drop(netloc, scheme)
@@ -360,7 +477,11 @@ class HttpTransport(Transport):
             resp.read()
             raise TransportError(f"{self.url(key)}: HTTP {status}")
         total: Optional[int] = None
-        if status == 206:
+        cr = _CONTENT_RANGE.match(hdr.get("content-range", "")) if status == 200 else None
+        if status == 206 or (
+            cr and rng is not None and (int(cr.group(1)), int(cr.group(2))) == tuple(rng)
+        ):
+            # a 206, or a 200 that names exactly the requested slice in Content-Range (rclone serve s3): the same checks
             m = _CONTENT_RANGE.match(hdr.get("content-range", ""))
             if not m or rng is None:
                 resp.read()
@@ -380,7 +501,7 @@ class HttpTransport(Transport):
                     f"{self.url(key)}: object is {total} bytes, expected {expect_total} (stale or replaced object)"
                 )
             want = b - a + 1
-        else:  # 200: the whole object
+        else:  # 200 without the requested Content-Range: the whole object
             cl = hdr.get("content-length")
             total = int(cl) if cl and cl.isdigit() else None
             if rng is not None and not (rng[0] == 0 and total is not None and rng[1] >= total - 1):
