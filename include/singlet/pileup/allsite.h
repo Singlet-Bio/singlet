@@ -526,6 +526,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     auto out_sp = std::make_shared<std::vector<PerTid>>(n_tid);
     auto& out = *out_sp;
     std::atomic<uint64_t> t_walk{0}, t_sort{0}, t_member{0}, t_cwalk{0}, t_csort{0}, t_coll{0}, n_hits{0};
+    std::atomic<uint64_t> g_1{0}, g_8{0}, g_64{0}, g_512{0}, g_big{0}, g_m2{0};
 
     // 3a. discovery observations over chunks of reads (chunk order = contig then read order)
     struct Obs { uint64_t key; int32_t bc; uint64_t umi; };
@@ -719,6 +720,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
             });
         }
         o.st.snp_molecules = cn.molecules; o.st.snp_molecules_ambiguous = cn.ambiguous; o.st.snp_molecules_other = cn.other;
+        if (TM) { g_1 += cn.g1; g_8 += cn.g8; g_64 += cn.g64; g_512 += cn.g512; g_big += cn.gbig; g_m2 += cn.m2; }
         const uint64_t nh = W.hits.size(); n_hits += nh;
         if (W.hits.capacity() > 4 * (P.block_hits + 1024)) { std::vector<Hit>().swap(W.hits); std::vector<uint64_t>().swap(W.keys); }
         if (TM) { const uint64_t v3 = now_ns(); t_cwalk += v1 - v0; t_csort += v2 - v1; t_coll += v3 - v2; }
@@ -743,7 +745,9 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         std::cerr << "[allsite-timing] kernel sorted, threads " << nth << ", reads " << res.reads_used << ", units " << units.size() << ", hits " << n_hits.load()
                   << "; wall s: prepare " << (T_prep - T_start) * sec << ", discovery walk " << (T_a1 - T_prep) * sec << ", sites+blocks " << (T_a2 - T_a1) * sec
                   << ", counting+assembly " << (T_b - T_a2) * sec << "; thread-s: discovery walk " << t_walk * sec << ", discovery sort+scan " << t_sort * sec
-                  << ", block membership " << t_member * sec << ", counting walk " << t_cwalk * sec << ", counting sort " << t_csort * sec << ", collapse " << t_coll * sec << "\n";
+                  << ", block membership " << t_member * sec << ", counting walk " << t_cwalk * sec << ", counting sort " << t_csort * sec << ", collapse " << t_coll * sec
+                  << "; groups (molecules per barcode and site) 1: " << g_1.load() << ", 2-8: " << g_8.load() << ", 9-64: " << g_64.load() << ", 65-512: " << g_512.load()
+                  << ", >512: " << g_big.load() << ", sum m^2 (m >= 2) " << g_m2.load() << "\n";
     }
     finish(res, out_sp, n_tid, n_barcodes, P);
     return res;

@@ -53,7 +53,10 @@ inline uint64_t key(const Layout& y, uint32_t bc, uint64_t umi_f, uint8_t cls) {
 }
 
 
-struct Counts { uint64_t molecules = 0, ambiguous = 0, other = 0; };   // SnpConsensus's snp_molecules, _ambiguous, _other
+struct Counts {   // SnpConsensus's snp_molecules, _ambiguous, _other; then group sizes (molecules per (barcode, site)) for speed work
+    uint64_t molecules = 0, ambiguous = 0, other = 0;
+    uint64_t g1 = 0, g8 = 0, g64 = 0, g512 = 0, gbig = 0, m2 = 0;   // groups of 1, 2-8, 9-64, 65-512, more; sum of m^2 over groups of 2+
+};
 
 // One exact (barcode, site, UMI) molecule: UMI with umi_pack3's leading bit, class counts saturated at 255, reads = their sum
 struct Ent { uint64_t umi; uint32_t bc, reads; uint32_t n[3]; };
@@ -80,6 +83,7 @@ inline void collapse_group(Ent* p, size_t m, bool directional, Scratch& S, Count
         if (best == 2) { ++st.other; return; }
         ++st.molecules; ++dp; if (best == 1) ++ad;
     };
+    if (m == 1) ++st.g1; else { (m <= 8 ? st.g8 : m <= 64 ? st.g64 : m <= 512 ? st.g512 : st.gbig)++; st.m2 += static_cast<uint64_t>(m) * m; }
     if (m == 1 || !directional) { for (size_t i = 0; i < m; ++i) vote(p[i].n); return; }
     std::sort(p, p + m, [](const Ent& a, const Ent& b) { return a.reads != b.reads ? a.reads > b.reads : a.umi < b.umi; });
     umi3_directional_roots(m, [&](size_t i) { return p[i].umi; }, [&](size_t i) { return p[i].reads; }, S.root);
