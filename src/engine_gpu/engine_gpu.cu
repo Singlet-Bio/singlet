@@ -90,7 +90,7 @@ __global__ void k_hash(const char* seq, const u64* off, u64 n, u64* h1, u64* h2,
         a = (a ^ c) * 0x100000001B3ULL; a ^= a >> 29;
         b = (b + c + 1) * 0xFF51AFD7ED558CCDULL; b ^= b >> 31;
     }
-    h1[i] = a; h2[i] = b; hasN[i] = N | (off[i + 1] == off[i]);   // an empty (fully clipped) read is not cached either
+    h1[i] = a; h2[i] = b; hasN[i] = N | (off[i + 1] == off[i] ? 2 : 0);   // an empty (fully clipped) read is not cached either (bit 1: N, bit 2: empty)
 }
 // group boundaries after the sort, and the byte-for-byte check of every member against the group's first read
 __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u64* h2, const uint32_t* order, u64 n,
@@ -251,15 +251,15 @@ __global__ void k_collide(const char* seq, const u64* off, const uint32_t* order
 // E12: the dedup's products on the device (before: three arrays to the host and two serial passes over the reads there). Per sorted
 // position its group's first position (k_heads, then an inclusive max-scan), per read its representative (the group's first read; NONE
 // for a sequence with N), and the representatives without N in hash order (stream compaction)
-__global__ void k_readrep(const uint32_t* order, const uint32_t* hp, const uint8_t* hasN, u64 n, uint32_t* readRep) {
+__global__ void k_readrep(const uint32_t* order, const uint32_t* hp, const uint8_t* hasN, u64 n, uint32_t* readRep, uint8_t rrMask) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     const uint32_t f = order[hp[k]];
-    readRep[order[k]] = hasN[f] ? 0xFFFFFFFFu : f;
+    readRep[order[k]] = (hasN[f] & rrMask) ? 0xFFFFFFFFu : f;
 }
 struct RepPred {
-    const uint32_t* head; const uint8_t* hasN; const uint32_t* order;
-    __host__ __device__ bool operator()(u64 k) const { return head[k] && !hasN[order[k]]; }
+    const uint32_t* head; const uint8_t* hasN; const uint32_t* order; uint8_t mask;
+    __host__ __device__ bool operator()(u64 k) const { return head[k] && !(hasN[order[k]] & mask); }
 };
 __global__ void k_prefix_key(const char* seq, const u64* off, const uint32_t* rep, u64 n, u64* key) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -282,7 +282,7 @@ __global__ void k_hash_span(const char* seq, const u64* off, const u64* cs, cons
         a = (a ^ c) * 0x100000001B3ULL; a ^= a >> 29;
         b = (b + c + 1) * 0xFF51AFD7ED558CCDULL; b ^= b >> 31;
     }
-    h1[i] = a; h2[i] = b; hasN[i] = N | (L == 0);
+    h1[i] = a; h2[i] = b; hasN[i] = N | (L == 0 ? 2 : 0);   // bit 1: N, bit 2: empty
 }
 // P3-MEM-03: per read (local index in its hash partition) its group's first read, from the sort's order and the max-scanned heads
 __global__ void k_group_head(const uint32_t* order, const uint32_t* hp, u64 n, uint32_t* gh) {
@@ -1520,6 +1520,15 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     std::vector<uint32_t> rep;   // one read per distinct sequence without N
     const uint32_t NONE = 0xFFFFFFFFu;
     singlet_engine_gpu::NoInitVector<uint32_t> readRep(n);
+    // align-w2 (SINGLET_ENGINE_GPU_NREADS): the sequences with N on the device too (STAR's mapOneRead splits them with qualitySplit and
+    // scores N as neither match nor mismatch; the port, stitch.cuh, does the same). 0: as before, STAR maps them. 1: they get records like
+    // every other sequence. check: the lanes map them and their results go to SINGLET_ENGINE_GPU_NCHECK_OUT (no records: STAR still maps
+    // their reads, and SINGLET_STAR_NDUMP writes STAR's results for the comparison). The flag per read: bit 1 N, bit 2 empty (never on the device).
+    const char* nrE = std::getenv("SINGLET_ENGINE_GPU_NREADS");
+    const int nreads = !nrE ? 0 : std::string(nrE) == "check" ? 2 : nrE[0] == '1' ? 1 : 0;
+    const uint8_t repMask = nreads ? 2 : 3, rrMask = nreads == 1 ? 2 : 3;   // the flag bits that keep a sequence out of rep / its reads without a record
+    struct NDump { FILE* f = nullptr; std::mutex mu; u64 n = 0; ~NDump() { if (f) fclose(f); } } ndump;   // check: per sequence u32 L, L bases, u32 B, B bytes
+    if (nreads == 2) if (const char* np = std::getenv("SINGLET_ENGINE_GPU_NCHECK_OUT")) ndump.f = std::fopen(np, "wb");
     // align-w2: the read chunks' byte-for-byte check of every hash group against its head runs on host threads beside the index, the lanes
     // and the host lane (it only proves that no two different sequences share a hash; readRep and rep do not depend on it). It is joined
     // before anything leaves the lanes (the records, the region's records, the host assembly): a collision then fails the GPU path, as
@@ -1583,11 +1592,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         uint32_t* dRR; uint32_t* dRep;
         if (dmal(&dRR, n * 4) || dmal(&dRep, n * 4)) return fail("out of device memory (dedup)");
         const unsigned G = (unsigned)((n + 255) / 256);
-        k_readrep<<<G, 256>>>(dOrder, dHp, dN, n, dRR);
+        k_readrep<<<G, 256>>>(dOrder, dHp, dN, n, dRR, rrMask);
         const u64 nDist = thrust::reduce(TP, thrust::device_ptr<uint32_t>(dHead), thrust::device_ptr<uint32_t>(dHead + n), (u64)0);
         const u64 nRep = (u64)(thrust::copy_if(TP, thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n), thrust::counting_iterator<u64>(0),
-                                               thrust::device_ptr<uint32_t>(dRep), RepPred{dHead, dN, dOrder}) - thrust::device_ptr<uint32_t>(dRep));
-        out.nDistinct = nDist; out.nWithN = nDist - nRep;
+                                               thrust::device_ptr<uint32_t>(dRep), RepPred{dHead, dN, dOrder, repMask}) - thrust::device_ptr<uint32_t>(dRep));
+        out.nDistinct = nDist;
+        out.nWithN = nDist - (nreads == 0 ? nRep : (u64) thrust::count_if(TP, thrust::counting_iterator<u64>(0), thrust::counting_iterator<u64>(n), RepPred{dHead, dN, dOrder, 3}));
         dfree(dHp);
         step("dedup.dev");
         if (g_d2h ? !g_d2h->copy(readRep.data(), dRR, n * 4) : cudaMemcpy(readRep.data(), dRR, n * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
@@ -1613,8 +1623,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
     step("dedup.d2h");
     dfree(dH1); dfree(dH2); dfree(dN); dfree(dOrder); dfree(dHead); dfree(dColl);
-    for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
-    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
+    for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; if (!(hasN[order[k]] & repMask)) rep.push_back(order[k]); }
+    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = (hasN[order[k]] & rrMask) ? NONE : order[k]; readRep[order[k]] = cur; } }
     step("dedup.host");
     }
     // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
@@ -1889,10 +1899,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                         const u64 L = rlen(gj);
                         if (L != rlen(gH) || std::memcmp(rseq(gj), rseq(gH), L) != 0) cT[t]++;
                     }
-                    readRep[gj] = hN[gH] ? NONE : gH;
+                    readRep[gj] = (hN[gH] & rrMask) ? NONE : gH;
                 } else {
                     dT[t]++;
-                    if (hN[gj]) { nT1[t]++; readRep[gj] = NONE; } else { readRep[gj] = gj; repT[t].push_back(gj); }
+                    if (hN[gj]) nT1[t]++;
+                    readRep[gj] = (hN[gj] & rrMask) ? NONE : gj;
+                    if (!(hN[gj] & repMask)) repT[t].push_back(gj);
                 }
             }
         });
@@ -2346,11 +2358,24 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         cr.okv.assign(nK, 1); cr.sOff.assign(nK + 1, 0); cr.bOff.assign(nK + 1, 0); cr.rank.assign(nK + 1, 0);
         std::vector<uint8_t>& okv = cr.okv; std::vector<u64>& sOff = cr.sOff; std::vector<u64>& bOff = cr.bOff; std::vector<uint32_t>& rank = cr.rank;
         parallelFor(nK, hostThreads, [&](u64 lo, u64 hi) {
+            std::vector<uint8_t> nb;   // NREADS=check: this range's sequences with N and their results
             for (u64 k = lo; k < hi; k++) {
                 const uint8_t* p; u64 len; bool ok;
                 laneOf(cr, k, p, len, ok);
+                if (ok && nreads == 2) {
+                    const char* q = rseq(repc[k]); const u64 L = rlen(repc[k]);
+                    bool hasN = false;
+                    for (u64 j = 0; j < L && !hasN; j++) hasN = (uint8_t) q[j] > 3;
+                    if (hasN) {
+                        const uint32_t L4 = (uint32_t) L, B4 = (uint32_t) len;
+                        nb.insert(nb.end(), (const uint8_t*) &L4, (const uint8_t*) &L4 + 4); nb.insert(nb.end(), (const uint8_t*) q, (const uint8_t*) q + L);
+                        nb.insert(nb.end(), (const uint8_t*) &B4, (const uint8_t*) &B4 + 4); nb.insert(nb.end(), p, p + len);
+                        ok = false;   // no record: STAR maps its reads
+                    }
+                }
                 okv[k] = ok; sOff[k + 1] = ok ? rlen(repc[k]) : 0; bOff[k + 1] = ok ? len : 0; rank[k + 1] = ok ? 1 : 0;
             }
+            if (!nb.empty() && ndump.f) { std::lock_guard<std::mutex> lk(ndump.mu); std::fwrite(nb.data(), 1, nb.size(), ndump.f); }
         });
         for (u64 k = 0; k < nK; k++) { sOff[k + 1] += sOff[k]; bOff[k + 1] += bOff[k]; rank[k + 1] += rank[k]; if (!okv[k]) out.nFailed++; }   // not cached: STAR maps it
         stepAdd("records.prep", now() - tR0);
