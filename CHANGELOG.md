@@ -2,7 +2,27 @@
 
 All notable changes to the singlet project.
 
-## [Unreleased]
+## [1.0.0] — the Research Beta freeze (date set at the tag)
+
+The launch candidate of the Research Beta engine, on top of `main` at 1.3.4. The version number restarts at 1.0.0 for the
+Beta line; the client APIs are those of 1.3.4 plus the additions below. Every entry derives from a merged change.
+
+- **Engine.** The all-site pass has a device route (discovery and counting on the GPU, with a host fallback), the GPU pool
+  shares one device index by default, and the stream loop stages UMIs in a flat table. New intron rules add chrM
+  precedence, transcript compatibility and STARsolo Gene's gene set (the default set is 61837). Whitelist lookup follows one
+  order for encode, download and run. Chimeric junctions carry transcript-strand names, a canonical call set, the Arriba
+  blacklist and a recurrent flag. TE counts, allele outputs, RNA editing and HLA typing (by chemistry, 3' on the node and
+  5' deferred) are folded in, the B20 confidence policy is applied, and the V(D)J IG barcode floor is added with its
+  preregistered addenda. The nonhost cache copy runs in-process instead of through `cp`.
+- **Clients.** Atlas readers take `io_threads` in Python (#89) and R (#90); `write_s1(gene_pack=)` writes files that read
+  back (#187); cell lines carry their line as cell type; a truncated range body is requested again, `load_sample` falls back
+  to `load`, and `~/.singlet/api_key` is read (issue 73). A `CITATION.cff` and how-to-cite sections are added (#103).
+- **CI.** Python 3.9 runs on `ubuntu-24.04` (#188); `actions/checkout`, `cibuildwheel` and `download-artifact` are updated
+  (#183 to #185).
+- **Removed.** The retired `singlepress` extension, `singlet.derive`, and the unused `singlet.adt.chemistry` and
+  `singlet.adt.gex` modules.
+
+### Also in this release
 
 - **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
   the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
