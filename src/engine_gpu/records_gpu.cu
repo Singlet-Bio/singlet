@@ -361,8 +361,8 @@ struct RegionPin {
         u64 lo = end, hi = 0;
         if (split) {
             const u64 r[5][2] = {{H.oSigs, H.nRec * 16}, {H.oAlns, H.nAln * 16}, {H.oOps, H.nOps * 4}, {H.oNm, H.nAln * 2}, {H.oSeq, H.nSeq}};
-            for (const auto& x : r) if (x[0] && x[1]) { lo = std::min(lo, x[0]); hi = std::max(hi, x[0] + x[1]); }
-            lo &= ~4095ull; hi = std::min(end, (hi + 4095) & ~4095ull);
+            for (const auto& x : r) if (x[0] && x[1]) { lo = std::min<u64>(lo, x[0]); hi = std::max<u64>(hi, x[0] + x[1]); }
+            lo &= ~4095ull; hi = std::min<u64>(end, (hi + 4095) & ~4095ull);
         }
         if (!split || lo >= hi) rec.push_back({R.base, end});
         else {
