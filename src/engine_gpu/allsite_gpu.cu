@@ -71,11 +71,11 @@ struct DrvCtx {
 
 // ---------------------------------------------------------------------------------------------------------------- arena
 struct Arena {
-    char* base = nullptr; size_t cap = 0, top = 0;
+    char* base = nullptr; size_t cap = 0, top = 0, peak = 0;   // peak: the high-water mark (logged)
     template <class T> T* get(size_t n) {
         const size_t b = (n * sizeof(T) + 255) & ~size_t(255);
         if (top + b > cap) throw std::runtime_error("arena: " + std::to_string((top + b) >> 20) + " MiB of " + std::to_string(cap >> 20));
-        T* p = reinterpret_cast<T*>(base + top); top += b; return p;
+        T* p = reinterpret_cast<T*>(base + top); top += b; if (top > peak) peak = top; return p;
     }
     size_t left() const { return cap - top; }
 };
@@ -438,6 +438,8 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             if (want < minBytes) { out.why = "device memory: arena allocation failed"; return false; }
         }
         A.cap = want; out.arena_bytes = want;
+        u64 failBlock = 0;
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_FAIL_BLOCK")) failBlock = strtoull(e, nullptr, 10);
 
         // chunks of consecutive contigs whose gathered reads take at most ~45% of the arena
         auto dataBytes = [](const AD::Contig& c) { return AD::contig_bytes(c); };
@@ -722,6 +724,9 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 }
                 stage(out.sec_out);
                 if (in.progress) in.progress();
+                out.arena_peak = A.peak;
+                if (failBlock && out.blocks >= failBlock)   // test knob: a failure after counts went to the sink (the caller drops them)
+                    throw std::runtime_error("injected failure after " + std::to_string(out.blocks) + " blocks (SINGLET_ALLSITE_GPU_FAIL_BLOCK)");
             }
             AS_CK(cudaMemcpyAsync(stat, dStat, 32, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
             out.ambiguous += stat[0]; out.other += stat[1]; out.molecules += stat[2]; out.ad_molecules += stat[3];
