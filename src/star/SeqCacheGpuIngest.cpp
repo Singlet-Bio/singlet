@@ -264,8 +264,7 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
     out.sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     if (singlet::fq::RunSet::ingest_timing_on()) {
         auto& it = singlet::fq::RunSet::ingest_timing();
-        std::fprintf(stderr, "[ingest-timing] thread cpu: read+inflate %.1f s, head scan %.1f s, decode %.1f s, copy %.1f s; wall %.1f s, %d threads
-",
+        std::fprintf(stderr, "[ingest-timing] thread cpu: read+inflate %.1f s, head scan %.1f s, decode %.1f s, copy %.1f s; wall %.1f s, %d threads\n",
                      it.read_ns.load() * 1e-9, it.scan_ns.load() * 1e-9, it.decode_ns.load() * 1e-9, it.copy_ns.load() * 1e-9, out.sec, T);
     }
     return true;
