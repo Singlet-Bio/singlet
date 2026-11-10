@@ -53,7 +53,7 @@ static size_t pileupWiden(int device, size_t totB, size_t prevArena, PileupWiden
     // (2) the other slots (flock on a new descriptor conflicts with this process's own slot, so that one is never taken: S - 1 are wanted)
     W.slots = gpuSlots();
     const char* we = getenv("SINGLET_GPU_PILEUP_SLOT_WAIT_S");
-    const double waitS = we ? atof(we) : 20.0;
+    const double waitS = we ? atof(we) : 120.0;
     std::vector<char> mine(W.slots, 0);
     for (;;) {
         for (int k = 0; k < W.slots && (int) W.fds.size() < W.slots - 1; k++) {
