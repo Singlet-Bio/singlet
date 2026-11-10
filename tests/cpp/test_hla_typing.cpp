@@ -182,6 +182,22 @@ void test_deferred_route() {
       CHECK(same, "every output is byte-identical to the direct route");
       CHECK(no_timing(read_all(a + "/private/hla/hla_summary.json")) == no_timing(read_all(moved + "/private/hla/hla_summary.json")), "the summary is identical apart from its timing lines");
     }
+    { // the donor stage with two T1K calls at a time, and started before finish_stage as the pipeline does after demux: same outputs
+      const std::string c = d + "/concurrent", e = d + "/early";
+      { Session s; make_stage(s, t1k, c, 10, false); s.cfg.threads = 8; type_sample(s); finish_stage(s); }
+      { Session s; make_stage(s, t1k, e, 10, false); s.cfg.threads = 8; type_sample(s); donor_stage(s);
+        CHECK(s.donors_run && s.n_donors == 2 && s.donor_reads[0] == 5 && s.donor_reads[1] == 5 && s.donor_ok[0] && s.donor_ok[1],
+              "the donor stage types both donors");
+        CHECK(!exists(e + "/private/hla"), "the donor stage writes nothing into the run directory");
+        finish_stage(s); }
+      for (const std::string& r : {c, e}) {
+          bool same = true;
+          for (const char* f : {"hla_genotype.tsv", "hla_allele.tsv", "hla_allele.vcf", "hla_candidate_reads.fq.gz", "donors/donor0_genotype.tsv", "donors/donor1_genotype.tsv"})
+              if (!exists(r + "/private/hla/" + f) || read_all(a + "/private/hla/" + f) != read_all(r + "/private/hla/" + f)) { same = false; std::cout << "  differs: " << f << "\n"; }
+          CHECK(same && no_timing(read_all(a + "/private/hla/hla_summary.json")) == no_timing(read_all(r + "/private/hla/hla_summary.json")),
+                "concurrent or early donor stage: outputs identical to the serial route");
+      }
+    }
     auto retained = [&](const std::string& r, const Result& res, const char* what) {
         CHECK(!res.landed && exists(r + pendRel + "/manifest.json") && !exists(r + "/private/hla/hla_summary.json"), what);
     };

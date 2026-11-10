@@ -15,6 +15,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -273,6 +274,9 @@ struct ExportConfig {
     std::vector<singlet::PipelineStageStats> stage_stats;
     // Genome directory for MT reference extraction
     std::string genome_dir;
+    /// Called once, right after demux has written donor_assignments.tsv (both copies), while export goes on. The pipeline starts the
+    /// HLA donor stage from here; the callback must not write into the run directory.
+    std::function<void()> on_donor_assignments;
 };
 
 /// Result statistics from export_results().
@@ -1895,6 +1899,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         // table. Donor labels are public; the genotypes behind them are not.
         write_donor_assignments(out_prefix + "/donor_assignments.tsv",
                                 demux_result.assignments, barcodes);
+        if (export_cfg.on_donor_assignments) export_cfg.on_donor_assignments();
 
         if (demux_result.n_donors_k > 0 && !demux_result.covered_to_original.empty()) {
             auto depths = aggregate_donor_depths(

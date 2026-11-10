@@ -7523,12 +7523,15 @@ static int singlet_main(int argc, char* argv[]) {
     // The HLA sample stage (prefilter + sample T1K) reads only the input .1fq, so it runs on a thread from the STAR fork on,
     // in a temporary directory outside the run directory; the HLA step joins it and finishes (donors, summary) after export.
     // No fork happens in the parent while it runs. SINGLET_HLA_BG=0 runs the whole step after export as before.
+    // The donor stage (T1K per donor) needs the sample stage and donor_assignments.tsv only: export starts it on donor_th the moment
+    // demux has written the assignments (SINGLET_HLA_EARLY_DONORS=0: after export, as before). It works in the temporary directory.
     struct HlaBackground {
         singlet::hla::Session s;
-        std::thread th;
+        std::thread th, donor_th;
         bool on = false, finished = false;
         StopWatch sw;
         void stop() {   // join; an exit before the HLA step leaves no temporary files
+            if (donor_th.joinable()) donor_th.join();
             if (th.joinable()) th.join();
             if (s.gz.valid()) s.gz.wait();
             if (on && !finished && !s.tmp.empty()) { std::error_code ec; std::filesystem::remove_all(s.tmp, ec); }
@@ -9949,6 +9952,18 @@ static int singlet_main(int argc, char* argv[]) {
                   << " metadata fields from " << metadata_json_path << "\n";
     }
 
+    if (hla_bg.on) {
+        const char* early = std::getenv("SINGLET_HLA_EARLY_DONORS");
+        if (!(early && std::string(early) == "0"))
+            export_cfg.on_donor_assignments = [&hla_bg]() {
+                if (hla_bg.donor_th.joinable()) return;
+                hla_bg.donor_th = std::thread([&hla_bg] {
+                    if (hla_bg.th.joinable()) hla_bg.th.join();
+                    singlet::hla::donor_stage(hla_bg.s);
+                });
+                std::cerr << "[hla] donor stage started after demux\n";
+            };
+    }
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
 
     // ── D-101: HLA typing per sample and per donor (T1K on the input reads; private/hla/) ──
@@ -9962,6 +9977,7 @@ static int singlet_main(int argc, char* argv[]) {
                 std::cerr << "[hla] skipped: no T1K install at " << t1k << "\n";
             } else if (hla_bg.on) {
                 StopWatch wait_sw;
+                if (hla_bg.donor_th.joinable()) hla_bg.donor_th.join();   // it joined the sample stage first
                 if (hla_bg.th.joinable()) hla_bg.th.join();
                 const double waited = wait_sw.elapsed_s();
                 const auto hr = singlet::hla::finish_stage(hla_bg.s);
