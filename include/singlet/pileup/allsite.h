@@ -347,8 +347,7 @@ inline Result run(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t n_barc
                   << tmr.walk * sec << ", discovery sort " << tmr.sort * sec << ", discovery scan " << tmr.scan * sec << ", block membership " << tmr.member * sec
                   << ", counting walk+inserts " << tmr.count * sec << ", finalize " << tmr.fin * sec << "; busy " << tmr.wall * sec << " of " << wall * nth
                   << "; largest contig (index " << tmr.max_tid << ", " << tmr.max_reads << " reads, " << tmr.max_sites << " sites) " << tmr.max_wall * sec
-                  << " s; hits " << tmr.hits << ", blocks " << tmr.blocks << ", records (ad+dp) " << tmr.records << "
-";
+                  << " s; hits " << tmr.hits << ", blocks " << tmr.blocks << ", records (ad+dp) " << tmr.records << "\n";
     }
 
     // 4. rows in (contig, position) order; CSC by barcode
