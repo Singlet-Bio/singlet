@@ -200,6 +200,24 @@ int main() {
                   << "), DP entries " << h.dp.data.size() << ", obs " << h.mismatch_obs << "\n";
     }
     fs::remove_all(dir);
+    if (ran > 0) {   // a failure after counts reached the sink: the device route declines and the host pass gives the same result
+        unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS"); unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES"); unsetenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES");
+        setenv("SINGLET_ALLSITE_GPU_BLOCK_HITS", "150000", 1); setenv("SINGLET_ALLSITE_GPU_FAIL_BLOCK", "2", 1);
+        A::Params P;
+        P.skip_tid = 1; P.use_qual = 1; P.qwords = qwords; P.umi_len = 12; P.threads = 4; P.min_alt_pct = 1;
+        const A::Result h = A::run(R, G, 4, nBc, P);
+        A::Params Pd = P;
+        bool used = true; std::string why;
+        Pd.device = [&](const A::dev::Input& i, A::dev::Output& o) { used = singlet_engine_gpu::allsiteDeviceRun(i, o); why = o.why; return used; };
+        const A::Result d = A::run(R, G, 4, nBc, Pd);
+        CHECK(!used && why.find("injected failure") != std::string::npos, "[injected failure] the device route declined (" + why + ")");
+        bool sitesEq = h.sites.size() == d.sites.size();
+        for (size_t i = 0; sitesEq && i < h.sites.size(); ++i) sitesEq = h.sites[i].pos == d.sites[i].pos && h.sites[i].alt == d.sites[i].alt && h.sites[i].alt_molecules == d.sites[i].alt_molecules;
+        CHECK(sitesEq && h.ad.data == d.ad.data && h.ad.indices == d.ad.indices && h.dp.data == d.dp.data && h.site_ad == d.site_ad
+              && h.sites_below_floor == d.sites_below_floor && h.molecules == d.molecules, "[injected failure] the host pass after it");
+        std::cout << "[injected failure] " << why << "; host pass " << d.sites.size() << " sites\n";
+        unsetenv("SINGLET_ALLSITE_GPU_FAIL_BLOCK"); unsetenv("SINGLET_ALLSITE_GPU_BLOCK_HITS");
+    }
     if (ran == 0 && n_fail == 0) { std::cout << "SKIP: the device route did not run\n"; return 77; }
     std::cout << (n_fail ? "FAILED " : "OK ") << n_fail << "\n";
     return n_fail ? 1 : 0;

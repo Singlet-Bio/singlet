@@ -238,7 +238,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
     const double s_sel = 1e-9 * static_cast<double>(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count()) - t_run0);
     std::cerr << "[allsite-gpu] selection " << s_sel
               << " s, sizes " << s_sizes << " s; " << o.chunks << " chunks, " << o.blocks << " blocks; hits " << o.hits << ", entries " << o.entries << ", groups " << o.groups
-              << "; device arena " << (o.arena_bytes >> 20) << " MiB, " << n_split << " contigs in " << in.contigs.size() << " entries; s: gather " << o.sec_gather << ", upload " << o.sec_upload << ", discovery " << o.sec_disc
+              << "; device arena " << (o.arena_bytes >> 20) << " MiB (peak " << (o.arena_peak >> 20) << " MiB), " << n_split << " contigs in " << in.contigs.size() << " entries; s: gather " << o.sec_gather << ", upload " << o.sec_upload << ", discovery " << o.sec_disc
               << ", counting " << o.sec_count << " (hits " << o.sec_hits << ", sort " << o.sec_sort << ", entries " << o.sec_entries << ", R9 and vote " << o.sec_r9
               << ", out " << o.sec_out << "); spill " << (spl.bytes >> 20) << " MiB in " << spl.where << ", " << spl.u.size() << " units; device total " << o.sec << ", hook total "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
