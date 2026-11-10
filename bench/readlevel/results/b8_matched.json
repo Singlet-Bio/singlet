@@ -1,0 +1,87 @@
+{
+ "cells_shared": 1218,
+ "umi_len": 12,
+ "molinfo_umi_msb_first": true,
+ "molecules_cr": 9231696,
+ "molecules_engine": 13955592,
+ "engine_hist_file_molecules": 13955592,
+ "dump_hist_tvd_vs_hist_file": 0.0,
+ "engine_by_label": {
+  "A": 6445324,
+  "U": 4441881,
+  "S": 3068387
+ },
+ "molecules_per_cell_median_ratio": {
+  "all": 1.5086,
+  "S": 0.3315,
+  "S+A": 1.0297,
+  "U": 0.4762
+ },
+ "matched": {
+  "molecules": 8944042,
+  "fraction_of_cr": 0.96884,
+  "fraction_of_engine": 0.64089,
+  "engine_unmatched_by_label": {
+   "U": 4359817,
+   "A": 510304,
+   "S": 141429
+  },
+  "fraction_of_engine_by_label": {
+   "S": 0.95391,
+   "A": 0.92083,
+   "U": 0.01848
+  },
+  "pooled_fraction_engine": [
+   0.18938,
+   0.18241,
+   0.17313,
+   0.14394,
+   0.1101,
+   0.07775,
+   0.05104,
+   0.03159,
+   0.01855,
+   0.01045,
+   0.00569,
+   0.00295,
+   0.0015,
+   0.00076,
+   0.00038,
+   0.00038
+  ],
+  "pooled_fraction_cr": [
+   0.20466,
+   0.18141,
+   0.16927,
+   0.14039,
+   0.1072,
+   0.07581,
+   0.05007,
+   0.03098,
+   0.01827,
+   0.01034,
+   0.00564,
+   0.00294,
+   0.0015,
+   0.00076,
+   0.00038,
+   0.00039
+  ],
+  "pooled_tvd": 0.01529,
+  "saturation_engine": 0.72882,
+  "saturation_cr": 0.72475,
+  "same_read_count": 0.89672,
+  "engine_reads_minus_cr_median": 0.0,
+  "mean_rpu_pearson": 0.99792
+ },
+ "engine_SA_vs_cr_all": {
+  "pooled_tvd": 0.00641,
+  "saturation_engine": 0.72257,
+  "saturation_cr": 0.72193
+ },
+ "engine_all_vs_cr_all": {
+  "pooled_tvd": 0.00835,
+  "saturation_engine": 0.7184,
+  "saturation_cr": 0.72193
+ }
+}

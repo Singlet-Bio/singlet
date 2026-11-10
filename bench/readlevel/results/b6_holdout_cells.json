@@ -1,0 +1,131 @@
+{
+ "labels": {
+  "pacbio": {
+   "engine": {
+    "line": "Ku812",
+    "cells_line": 547,
+    "cells_other": 2111,
+    "recall": 0.0037,
+    "fpr": 0.00142,
+    "cells_called_line": 2,
+    "cells_called_other": 3
+   },
+   "starfusion": {
+    "line": "Ku812",
+    "cells_line": 547,
+    "cells_other": 2111,
+    "recall": 0.0,
+    "fpr": 0.0,
+    "cells_called_line": 0,
+    "cells_called_other": 0
+   },
+   "arriba": {
+    "line": "Ku812",
+    "cells_line": 547,
+    "cells_other": 2111,
+    "recall": 0.0037,
+    "fpr": 0.00142,
+    "cells_called_line": 2,
+    "cells_called_other": 3
+   }
+  },
+  "kit": {
+   "engine": {
+    "line": "Ku812",
+    "cells_line": 1104,
+    "cells_other": 2498,
+    "recall": 0.0009,
+    "fpr": 0.0028,
+    "cells_called_line": 1,
+    "cells_called_other": 7
+   },
+   "starfusion": {
+    "line": "Ku812",
+    "cells_line": 1104,
+    "cells_other": 2498,
+    "recall": 0.0,
+    "fpr": 0.0,
+    "cells_called_line": 0,
+    "cells_called_other": 0
+   },
+   "arriba": {
+    "line": "Ku812",
+    "cells_line": 1104,
+    "cells_other": 2498,
+    "recall": 0.0009,
+    "fpr": 0.0028,
+    "cells_called_line": 1,
+    "cells_called_other": 7
+   }
+  },
+  "hashtag": {
+   "engine": {
+    "line": "Ku812",
+    "cells_line": 308,
+    "cells_other": 10362,
+    "recall": 0.0,
+    "fpr": 0.0001,
+    "cells_called_line": 0,
+    "cells_called_other": 1
+   },
+   "starfusion": {
+    "line": "Ku812",
+    "cells_line": 308,
+    "cells_other": 10362,
+    "recall": 0.0,
+    "fpr": 0.0,
+    "cells_called_line": 0,
+    "cells_called_other": 0
+   },
+   "arriba": {
+    "line": "Ku812",
+    "cells_line": 308,
+    "cells_other": 10362,
+    "recall": 0.0,
+    "fpr": 0.00039,
+    "cells_called_line": 0,
+    "cells_called_other": 4
+   }
+  }
+ },
+ "genotyped_cells": {
+  "engine": {
+   "cells": 9,
+   "with_pacbio_bcr_abl1": 6,
+   "barcodes": [
+    "AGGTTGTTCGAACCAT",
+    "AGTTAGCTCATTTCGT",
+    "CACTGGGTCACAGTGT",
+    "CAGTTCCCATGCCGAC",
+    "CATCGCTAGGTACTGG",
+    "GCTTCACGTCACAGTT",
+    "TAACTTCGTGACAACG",
+    "TATTGGGTCATCTCTA",
+    "TTCCTCTGTTGGGTAG"
+   ]
+  },
+  "starfusion": {
+   "cells": 0,
+   "with_pacbio_bcr_abl1": 0,
+   "barcodes": []
+  },
+  "arriba": {
+   "cells": 10,
+   "with_pacbio_bcr_abl1": 6,
+   "barcodes": [
+    "ACCCAAATCCACAGGC",
+    "AGGTTGTTCGAACCAT",
+    "AGTTAGCTCATTTCGT",
+    "CACCGTTTCAACTTTC",
+    "CACTGGGTCACAGTGT",
+    "CAGTTCCCATGCCGAC",
+    "CATCGCTAGGTACTGG",
+    "TATTGGGTCATCTCTA",
+    "TCAAGTGTCTCCGTGT",
+    "TTCCTCTGTTGGGTAG"
+   ]
+  }
+ },
+ "pacbio_genotyped_cells": 4400,
+ "pacbio_bcr_abl1_cells": 934
+}
