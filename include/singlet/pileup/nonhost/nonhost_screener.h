@@ -38,6 +38,10 @@
 #include "min_sketch.h"
 #include "host_kmer_filter.h"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <chrono>
 #include <numeric>
 #include <string>
 #include <unordered_set>
@@ -365,6 +369,10 @@ public:
         const int nt = 1;
 #endif
 
+        const bool tm_on = std::getenv("SINGLET_NONHOST_TIMING") != nullptr;
+        auto tm_t0 = std::chrono::steady_clock::now();
+        double tm_a = 0, tm_flat = 0, tm_sort = 0, tm_c = 0;
+        auto tm_lap = [&](double& dst) { const auto t1 = std::chrono::steady_clock::now(); dst = std::chrono::duration<double>(t1 - tm_t0).count(); tm_t0 = t1; };
         // Phase A: extract + filter minimizers per read (parallel)
         // Reads with < kMinNonhostMins non-host minimizers stay empty (treated UNKNOWN).
         std::vector<std::vector<uint64_t>> read_mins(n_reads);  // filtered per-read
@@ -383,6 +391,7 @@ public:
                 read_mins[ri] = std::move(kept);
         }
         for (const auto& m : read_mins) total_mins += m.size();
+        tm_lap(tm_a);
 
         // Phase B: build flat list and sort in parallel
         std::vector<std::pair<uint64_t, uint32_t>> flat;
@@ -390,12 +399,15 @@ public:
         for (uint32_t ri = 0; ri < static_cast<uint32_t>(n_reads); ++ri)
             for (uint64_t h : read_mins[ri])
                 flat.push_back({h, ri});
+        tm_lap(tm_flat);
         parallel_sort_flat(flat, nt);
+        tm_lap(tm_sort);
 
         // Phase C: batch merge-scan against both DBs
         std::vector<std::unordered_map<uint32_t, uint32_t>> vh(n_reads), mh(n_reads);
         viral_.batch_query_presorted(flat, vh);
         microbial_.batch_query_presorted(flat, mh);
+        tm_lap(tm_c);
 
         // Phase D: convert hit maps to MultiHit results in parallel
         std::vector<MultiHit> results(n_reads);
@@ -407,6 +419,14 @@ public:
             if (np == 0) continue;
             // Use n_nonhost (filtered count) as denominator — same as classify_multi_filtered
             results[ri] = hits_to_multi_hit(vh[ri], mh[ri], np, soft_threshold_multiplier);
+        }
+        if (tm_on) {
+            double tm_d = 0;
+            tm_lap(tm_d);
+            char buf[320];
+            std::snprintf(buf, sizeof buf, "[nonhost-time] cpu classify: minimizers+host filter %.2f s, flat list %.2f s (%zu minimizers), sort %.2f s, merge-scan %.2f s, hit maps to results %.2f s@BS@n",
+                          tm_a, tm_flat, total_mins, tm_sort, tm_c, tm_d);
+            std::cerr << buf;
         }
         return results;
     }
