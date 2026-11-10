@@ -330,6 +330,14 @@ struct Session {
     std::future<bool> gz;
     std::string gz_tmp;
     bool wait_gz() { return gz.valid() ? gz.get() : false; }
+    // The donor stage (donor_stage): T1K on each donor's candidate reads, in tmp. It needs only the sample stage and the donor
+    // assignments, so the pipeline starts it as soon as demux has written them; finish_stage runs it when nobody did and moves its
+    // results in. donor_reads[k] counts donor k's candidate reads, donor_ok[k] says its T1K call succeeded.
+    bool donors_run = false;
+    int n_donors = 0;
+    std::vector<uint64_t> donor_reads;
+    std::vector<char> donor_ok;
+    double donor_s = 0;        // wall seconds of the donor stage
 };
 
 /// Move a file, across file systems too (Config::tmp_dir may be on another one than the run directory).
@@ -341,9 +349,9 @@ inline void move_file(const std::string& from, const std::string& to) {
     std::remove(from.c_str());
 }
 
-inline bool t1k_call(const Session& s, const std::string& in, const std::string& prefix, bool no_extract) {
+inline bool t1k_call(const Session& s, const std::string& in, const std::string& prefix, bool no_extract, const std::string& threads = "") {
     const std::string runt1k = s.cfg.t1k_dir + "/bin/run-t1k";
-    const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(s.tref) + " -t " + s.T + " -o " + shq(prefix) +
+    const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(s.tref) + " -t " + (threads.empty() ? s.T : threads) + " -o " + shq(prefix) +
                             " --od " + shq(s.tmp) + (no_extract ? " --noExtraction" : "") + " >> " + shq(s.log) + " 2>&1";
     return run_sh(cmd.c_str()) == 0;
 }
@@ -558,6 +566,66 @@ inline Result write_pending(Session& s) {
     return res;
 }
 
+/// The donor stage: the sample's candidate reads (T1K's sample_candidate.fq) split by donor (called cells of one donor with prob_max
+/// >= 0.9), then T1K --noExtraction on each donor's reads, all in Session::tmp; finish_stage moves the genotype tables in. Runs once.
+/// Several donors are typed at a time, each with a share of the threads; every T1K call gets the same reads and index as one call per
+/// donor in turn, and T1K's results do not depend on its thread count. SINGLET_HLA_DONOR_JOBS=N caps the concurrent calls (1: in turn).
+/// Writes nothing into the run directory, so it may run while export is still writing there.
+inline void donor_stage(Session& s) {
+    if (s.donors_run) return;
+    s.donors_run = true;
+    const Config& cfg = s.cfg;
+    const Result& res = s.res;
+    if (!s.made || s.stopped || !res.ran) return;
+    if (cfg.donor_assignments.empty() || !file_exists(cfg.donor_assignments)) return;
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::string& tmp = s.tmp;
+    int n_donors = 0;
+    const std::unordered_map<std::string, int> bc2d = read_donors(cfg.donor_assignments, n_donors);
+    if (n_donors < 2) return;
+    s.n_donors = n_donors;
+    s.donor_reads.assign(n_donors, 0);
+    s.donor_ok.assign(n_donors, 0);
+    {
+        std::vector<FILE*> fo(n_donors, nullptr);
+        for (int k = 0; k < n_donors; ++k) fo[k] = std::fopen((tmp + "/donor" + std::to_string(k) + ".fq").c_str(), "wb");
+        std::ifstream cf(tmp + "/sample_candidate.fq");
+        std::string h, sq, p, q;
+        while (std::getline(cf, h) && std::getline(cf, sq) && std::getline(cf, p) && std::getline(cf, q)) {
+            std::string bc = h.substr(h.find('_') == std::string::npos ? h.size() : h.find('_') + 1);
+            const auto sp = bc.find_first_of(" \t"); if (sp != std::string::npos) bc.resize(sp);
+            auto it = bc2d.find(bc);
+            if (it == bc2d.end() || !fo[it->second]) continue;
+            std::fprintf(fo[it->second], "%s\n%s\n%s\n%s\n", h.c_str(), sq.c_str(), p.c_str(), q.c_str());
+            ++s.donor_reads[it->second];
+        }
+        for (auto* f : fo) if (f) std::fclose(f);
+    }
+    // the donors with reads, largest first; P calls at a time with T / P threads each (at least 4 threads per call)
+    std::vector<int> order;
+    for (int k = 0; k < n_donors; ++k) if (s.donor_reads[k] > 0) order.push_back(k);
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return s.donor_reads[a] > s.donor_reads[b]; });
+    const int T = std::max(1, cfg.threads);
+    int P = std::max(1, std::min<int>(static_cast<int>(order.size()), T / 4));
+    if (const char* e = std::getenv("SINGLET_HLA_DONOR_JOBS")) { const int j = std::atoi(e); if (j > 0) P = std::min(P, j); }
+    const std::string per = P == 1 ? s.T : std::to_string(std::max(1, T / P));
+    std::atomic<size_t> next{0};
+    auto work = [&]() {
+        for (size_t i; (i = next++) < order.size();) {
+            const int k = order[i];
+            const std::string name = "donor" + std::to_string(k);
+            s.donor_ok[k] = t1k_call(s, tmp + "/" + name + ".fq", name, true, per) ? 1 : 0;
+        }
+    };
+    std::vector<std::thread> th;
+    for (int t = 1; t < P; ++t) th.emplace_back(work);
+    work();
+    for (auto& t : th) t.join();
+    s.donor_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    std::cerr << "[hla] donor stage: " << order.size() << " of " << n_donors << " donors with candidate reads, " << P << " T1K calls at a time ("
+              << per << " threads each), " << s.donor_s << " s\n";
+}
+
 inline Result finish_stage(Session& s) {
     const Config& cfg = s.cfg;
     Result& res = s.res;
@@ -578,40 +646,25 @@ inline Result finish_stage(Session& s) {
         move_file(tmp + "/sample_allele.vcf", dir + "/hla_allele.vcf");
     }
 
-    // 3. donors: candidate reads of each donor's cells
+    // 3. donors: candidate reads of each donor's cells (typed by donor_stage, here unless the pipeline started it after demux)
+    donor_stage(s);
     std::string donors_json = "{}";
-    int n_donors = 0;
-    std::unordered_map<std::string, int> bc2d;
-    if (res.ran && !cfg.donor_assignments.empty() && file_exists(cfg.donor_assignments)) bc2d = read_donors(cfg.donor_assignments, n_donors);
-    if (res.ran && n_donors >= 2) {
-        std::vector<FILE*> fo(n_donors, nullptr);
-        std::vector<uint64_t> nr(n_donors, 0);
-        for (int k = 0; k < n_donors; ++k) fo[k] = std::fopen((tmp + "/donor" + std::to_string(k) + ".fq").c_str(), "wb");
-        std::ifstream cf(tmp + "/sample_candidate.fq");
-        std::string h, sq, p, q;
-        while (std::getline(cf, h) && std::getline(cf, sq) && std::getline(cf, p) && std::getline(cf, q)) {
-            std::string bc = h.substr(h.find('_') == std::string::npos ? h.size() : h.find('_') + 1);
-            const auto sp = bc.find_first_of(" \t"); if (sp != std::string::npos) bc.resize(sp);
-            auto it = bc2d.find(bc);
-            if (it == bc2d.end() || !fo[it->second]) continue;
-            std::fprintf(fo[it->second], "%s\n%s\n%s\n%s\n", h.c_str(), sq.c_str(), p.c_str(), q.c_str());
-            ++nr[it->second];
-        }
-        for (auto* f : fo) if (f) std::fclose(f);
+    if (s.n_donors >= 2) {
         donors_json = "{";
-        for (int k = 0; k < n_donors; ++k) {
+        for (int k = 0; k < s.n_donors; ++k) {
             const std::string name = "donor" + std::to_string(k);
+            const uint64_t nr = s.donor_reads[k];
             std::string calls = "null";
-            if (nr[k] > 0 && t1k_call(s, tmp + "/" + name + ".fq", name, true)) {
+            if (nr > 0 && s.donor_ok[k]) {
                 move_file(tmp + "/" + name + "_genotype.tsv", dir + "/donors/" + name + "_genotype.tsv");
                 calls = genotype_json(dir + "/donors/" + name + "_genotype.tsv");
                 ++res.n_donors_typed;
-            } else if (nr[k] > 0) {
+            } else if (nr > 0) {
                 ++res.n_donors_failed;
                 std::cerr << "[hla] T1K failed for " << name << "; end of its log:\n" << std::flush;
                 run_sh(("tail -n 20 " + shq(s.log) + " 1>&2").c_str());
             }
-            donors_json += std::string(k ? ", " : "") + "\"" + name + "\": {\"candidate_reads\": " + std::to_string(nr[k]) + ", \"calls\": " + calls + "}";
+            donors_json += std::string(k ? ", " : "") + "\"" + name + "\": {\"candidate_reads\": " + std::to_string(nr) + ", \"calls\": " + calls + "}";
         }
         donors_json += "}";
     }
