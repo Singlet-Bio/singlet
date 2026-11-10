@@ -2393,6 +2393,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const char* raE = std::getenv("SINGLET_ENGINE_GPU_RECASYNC");
     const bool recAsync = !(raE && raE[0] == '0');
     u64 recNext = 0, recS = 0, recB = 0, recR = 0; bool recInit = false, recOk = true;
+    std::vector<uint32_t> rrPos;   // per read: its representative's position in rep, or NONE (readRecord = recOfPos of it, once the records exist)
     auto recOne = [&](u64 c) -> bool {
         ChunkRes& cr = chunks[c];
         if (!hostPrep(cr)) return false;
@@ -2407,6 +2408,14 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             out.seq.reserve(recS + sAll.load()); out.seqOff.reserve(recR + nRep + 1); out.blobOff.reserve(recR + nRep + 1);
             out.blob.reserve(recB + nRep * bpr + nRep / 4 * bpr + (64u << 20));
             if (e2e) { recSrc.reserve(recR + nRep); recRead.reserve(recR + nRep); }
+            const double tP0 = now();
+            {   // readRecord's first half (it depends on the dedup and rep's order only)
+                singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);
+                parallelFor(nRep, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
+                rrPos.resize(n);
+                parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; rrPos[i] = r != NONE ? posOf[r] : NONE; } });
+            }
+            stepAdd("readRecord.pre", now() - tP0);
         }
         const u64 s0 = recS, b0 = recB, r0 = recR;
         recS += cr.sOff[nK]; recB += cr.bOff[nK]; recR += cr.rank[nK];
@@ -2941,6 +2950,11 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     };
     // per read: its record (sequence-cache result) or NONE; final once every hostPart ran
     auto fillReadRecord = [&]() {
+        if (rrPos.size() == n) {   // align-w2: the positions came with the records; one pass in place
+            out.readRecord.swap(rrPos); std::vector<uint32_t>().swap(rrPos);
+            parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t p = out.readRecord[i]; if (p != NONE) out.readRecord[i] = recOfPos[p]; } });
+            return;
+        }
         singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);   // set for every representative, the only reads readRep names
         parallelFor(rep.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
         out.readRecord.assign(n, NONE);
