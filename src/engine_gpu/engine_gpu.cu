@@ -483,12 +483,16 @@ __global__ void k_wkey(u64 n, const u64* need, const uint8_t* pend, u64* key, un
     key[k] = pend[k] ? need[k] : 0;
     if (pend[k]) atomicAdd(cnt, 1ULL);
 }
+// lane B's phase 3 thread order (SINGLET_B_SORT): thread t takes read perm[t] (largest expected work first), so the 32 reads of a warp cost about the same
+// and the long reads start first. perm == nullptr: thread t takes read t. A read's result does not depend on its thread or on when it runs.
 template <class C>
 __global__ void k_p3c(Params P, GenomeView g, u64 b0, u64 n, u64 budget, Work<C>* work, ReadBuf<C::LREAD>* rbuf, const u64* base,
                       const uint32_t* bits, uint8_t* bst, uint8_t* out, uint16_t* outLen, uint8_t* pend, const u64* need, const u64* wb,
-                      m5::uint* pool, u64 poolAl) {
-    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
-    if (k >= n || !pend[k]) return;
+                      m5::uint* pool, u64 poolAl, const uint32_t* perm) {
+    const u64 t = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    const u64 k = perm ? perm[t] : t;
+    if (!pend[k]) return;
     const u64 nd = need[k];
     if (nd && wb[k] + nd > poolAl) return;   // the next round
     work[k].waP = pool + (nd ? wb[k] * WA_SIZE : 0);
@@ -509,6 +513,12 @@ __global__ void k_cost(u64 n, const Work<C>* work, const u64* nEnt, u64* key, ui
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     key[k] = ~(nEnt[k] ? ((u64)work[k].nW << 40) | min(nEnt[k], (u64)0xFFFFFFFFFFULL) : 0);
+    perm[k] = (uint32_t)k;
+}
+__global__ void k_cost_need(u64 n, const u64* need, u64* key, uint32_t* perm) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    key[k] = ~need[k];
     perm[k] = (uint32_t)k;
 }
 // warp lane (E3): the assignment thread per read, then k_p3w: warp per read, the read's windows stitched across the lanes
@@ -569,6 +579,17 @@ __global__ void k_clksum(u64 n, Work<C>* work, unsigned long long* acc) {
     if (k >= n) return;
     Work<C>& w = work[k];
     for (int c = 0; c < 8; c++) { if (w.clk[c]) atomicAdd(&acc[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
+}
+// SINGLET_LANE_PROF=2: per read the work features of a COMPACT lane after phase 3 (stitching steps, windows, aligns, SA hits, sum of squared window rows, largest row)
+template <class C>
+__global__ void k_feat(u64 n, const Work<C>* work, const u64* need, const u64* nEnt, uint32_t* f) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    const Work<C>& w = work[k];
+    u64 sq = 0, mxr = 0;
+    for (uint i = 0; i < w.nWall && i < (uint)C::NW; i++) { const u64 r = w.waOff[i + 1] - w.waOff[i]; sq += r * r; if (r > mxr) mxr = r; }
+    f[6 * k + 0] = (uint32_t)min(w.nSteps, (u64)0xFFFFFFFFull); f[6 * k + 1] = w.nW; f[6 * k + 2] = (uint32_t)min(need[k], (u64)0xFFFFFFFFull);
+    f[6 * k + 3] = (uint32_t)min(nEnt[k], (u64)0xFFFFFFFFull); f[6 * k + 4] = (uint32_t)min(sq, (u64)0xFFFFFFFFull); f[6 * k + 5] = (uint32_t)mxr;
 }
 typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
 static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
@@ -661,6 +682,7 @@ struct Budget {
 };
 static Budget g_bud;
 static std::vector<void*> g_ipcPtrs;   // shared index: mappings imported from the holder (shared_index.cuh); cudaFree is invalid on them, so dfree leaves them alone
+static int g_bSort = 0;   // SINGLET_B_SORT: lane B's phase 3 thread order (0: batch order; 1: aligns of the read, most first)
 static int g_waSlice = 160;   // aligns per read of lane B's pool (SINGLET_BOLD_WASLICE)
 static inline u64 budRound(u64 b) { return b < (1u << 20) ? (b + 511) & ~511ull : (b + (2u << 20) - 1) & ~((2ull << 20) - 1); }   // the driver's granularity
 static cudaError_t dmalv(void** p, u64 b) {
@@ -710,12 +732,33 @@ typedef std::function<void(u64 b0, u64 nb, const uint8_t* status)> BatchFn;
 enum { K_P1S, K_P1W, K_SCAN, K_P2, K_WPLAN, K_WKEY, K_WSCAN, K_P3, K_COST, K_SORT, K_P3A, K_P3W, K_CSTAT, K_N };
 static const char* const kProfName[K_N] = {"p1s", "p1w", "scan", "p2", "wplan", "wkey", "wscan", "p3", "cost", "sort", "p3a", "p3w", "cstat"};
 struct LaneProf {
-    bool on = false;
+    bool on = false; int lvl = 0;
     struct Ev { cudaEvent_t a, b; int id; };
     std::vector<Ev> ev;
     double sec[K_N] = {}; u64 cnt[K_N] = {};
     double hostCb = 0, hostSync = 0; u64 nBatch = 0;
-    void init() { const char* e = std::getenv("SINGLET_LANE_PROF"); on = e && e[0] == '1'; }
+    void init() { const char* e = std::getenv("SINGLET_LANE_PROF"); on = e && (e[0] == '1' || e[0] == '2'); lvl = on ? e[0] - '0' : 0; }
+    // lvl 2: SIMT model of a COMPACT lane's phase 3. Cost of a read = its stitching steps (+ a fixed part); a warp costs its largest read; efficiency = sum of costs / (32 x sum of warp maxima)
+    // for the batch order and for the reads sorted by a feature (descending): f[6k+0] steps, 1 windows, 2 aligns, 3 SA hits, 4 sum of squared rows, 5 largest row.
+    static constexpr int NK = 7;   // identity, then features 2, 3, 4, 1, 5, and the oracle (steps)
+    double mSum[2] = {}, mMax[2][NK] = {}; u64 mReads = 0; double mStepsMax = 0, mStepsMean = 0;
+    void model(const std::vector<uint32_t>& f, u64 n) {
+        static const int feat[NK] = {-1, 2, 3, 4, 1, 5, 0};
+        std::vector<uint32_t> ord(n);
+        for (int kk = 0; kk < NK; kk++) {
+            for (u64 i = 0; i < n; i++) ord[i] = (uint32_t)i;
+            if (feat[kk] >= 0) { const int ft = feat[kk]; std::stable_sort(ord.begin(), ord.end(), [&](uint32_t a, uint32_t b) { return f[6 * a + ft] > f[6 * b + ft]; }); }
+            for (int m = 0; m < 2; m++) {
+                const double c0 = m ? 50.0 : 0.0; double sum = 0, mx = 0;
+                for (u64 i = 0; i < n; i += 32) { double wm = 0; for (u64 j = i; j < std::min(n, i + 32); j++) { const double c = f[6 * ord[j]] + c0; sum += c; wm = std::max(wm, c); } mx += wm; }
+                if (kk == 0) mSum[m] += sum;
+                mMax[m][kk] += mx;
+            }
+        }
+        mReads += n;
+        double mxs = 0, sm = 0; for (u64 i = 0; i < n; i++) { mxs = std::max<double>(mxs, f[6 * i]); sm += f[6 * i]; }
+        mStepsMax = std::max(mStepsMax, mxs); mStepsMean += sm;
+    }
     void begin(int id) { if (!on) return; Ev e; e.id = id; cudaEventCreate(&e.a); cudaEventCreate(&e.b); cudaEventRecord(e.a); ev.push_back(e); }
     void end() { if (!on) return; cudaEventRecord(ev.back().b); }
     void collect() {
@@ -730,6 +773,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
              Lane& L, std::string& err, bool keepDev, const char* nm, bool NEW, const BatchFn* onBatch = nullptr) {
     const double tA = now();
     const std::string sn = std::string("lane") + nm;
+    const int bSort = g_bSort;
     g_bud.at = sn;
     u64 n = idx.size();
     L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0); L.off.resize(n + 1); L.off[0] = 0;   // off: every entry copied below
@@ -757,7 +801,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     int nSm = 0, bpsS = 0, bpsW = 0; size_t stack0 = 0; u64 stackRes = 0;
     if (NEW) {
         EG_CK(dmal(&dCtr, 16));
-        if (WARP) { EG_CK(dmal(&dKey, NB * 8)); EG_CK(dmal(&dPerm, NB * 4)); }
+        if (WARP || (C::COMPACT && bSort)) { EG_CK(dmal(&dKey, NB * 8)); EG_CK(dmal(&dPerm, NB * 4)); }
         int dev = 0; cudaGetDevice(&dev); cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, dev);
         EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
         if constexpr (p1WinPers<C>()) EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsW, k_p1wp<C>, 128, 0));
@@ -816,6 +860,12 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             if constexpr (C::COMPACT) {
                 PK(pr, K_WPLAN, (k_wplan<C><<<G, T>>>(P, D, nb, dWork, dBase, dBits, dBst, dNeed)));
                 EG_CK(cudaMemset(dPend, 1, nb));
+                const uint32_t* dPm = nullptr;
+                if (bSort) {
+                    PK(pr, K_COST, (k_cost_need<<<G, T>>>(nb, dNeed, dKey, dPerm)));
+                    PK(pr, K_SORT, thrust::sort_by_key(TP, thrust::device_ptr<u64>(dKey), thrust::device_ptr<u64>(dKey + nb), thrust::device_ptr<uint32_t>(dPerm)));
+                    dPm = dPerm;
+                }
                 for (int rd = 0;; rd++) {
                     EG_CK(cudaMemset(dWcnt, 0, 8));
                     PK(pr, K_WKEY, (k_wkey<C><<<G, T>>>(nb, dNeed, dPend, dWkey, dWcnt)));
@@ -824,8 +874,14 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
                     if (rd > 0) nDeferred += pendN;
                     nRounds++;
                     PK(pr, K_WSCAN, thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dWkey), thrust::device_ptr<u64>(dWkey + nb), thrust::device_ptr<u64>(dWb)));
-                    PK(pr, K_P3, (k_p3c<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPend, dNeed, dWb, dPool, poolAl)));
+                    PK(pr, K_P3, (k_p3c<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen, dPend, dNeed, dWb, dPool, poolAl, dPm)));
                     EG_CK(cudaGetLastError());
+                }
+                if (pr.lvl >= 2) {   // SINGLET_LANE_PROF=2: the work features of this batch's reads, and the SIMT model
+                    uint32_t* dF; EG_CK(dmal(&dF, nb * 24));
+                    k_feat<C><<<G, T>>>(nb, dWork, dNeed, dNent, dF);
+                    std::vector<uint32_t> hf(nb * 6); EG_CK(d2h(hf.data(), dF, nb * 24)); dfree(dF);
+                    pr.model(hf, nb);
                 }
             } else if constexpr (WARP) {
                 PK(pr, K_COST, (k_cost<C><<<G, T>>>(nb, dWork, dNent, dKey, dPerm)));
@@ -881,6 +937,12 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             g_laneLog += c2;
         }
         if (dClk) dfree(dClk);
+        if (pr.lvl >= 2 && pr.mReads) {
+            static const char* const nmk[LaneProf::NK] = {"batch order", "aligns", "SA hits", "sum row^2", "windows", "max row", "oracle"};
+            char m2[900]; int o2 = snprintf(m2, sizeof m2, "[model %s: %llu reads, mean steps %.0f, largest %.0f; SIMT efficiency by order (steps | steps+50):", nm, (unsigned long long)pr.mReads, pr.mStepsMean / pr.mReads, pr.mStepsMax);
+            for (int kk = 0; kk < LaneProf::NK; kk++) o2 += snprintf(m2 + o2, sizeof m2 - o2, " %s %.2f|%.2f;", nmk[kk], pr.mSum[0] / (32.0 * pr.mMax[0][kk]), pr.mSum[1] / (32.0 * pr.mMax[1][kk]));
+            snprintf(m2 + o2, sizeof m2 - o2, "] "); g_laneLog += m2;
+        }
     }
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
         u64* dPoff; EG_CK(dmal(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
@@ -2032,6 +2094,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     // On by default since item 22 (A/B on pbmc1k_v3, +9 % pairs/s at flat core-s/M); SINGLET_BOLD_WSHRINK=0 turns it off.
     const char* wsV = std::getenv("SINGLET_BOLD_WSHRINK");
     const bool wshrink = NEW && !(wsV && wsV[0] == '0');
+    if (const char* sbs = std::getenv("SINGLET_B_SORT")) g_bSort = std::atoi(sbs);
     if (const char* wsE = std::getenv("SINGLET_BOLD_WASLICE")) g_waSlice = (int)std::max<u64>(8, std::strtoull(wsE, nullptr, 10));
     const u64 perB = wshrink ? lanePerB<LaneBc, false>() + 25 + (u64)g_waSlice * WA_SIZE * sizeof(m5::uint) : perB0;
     const u64 RES = 112;   // E8: per sequence its packed result and offsets kept on the device for the records' gather (~70 bytes of result on pbmc1k_v3)
