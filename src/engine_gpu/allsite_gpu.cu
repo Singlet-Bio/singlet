@@ -446,6 +446,10 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         {   // a contig too large for one chunk (or past the 32-bit offsets) is replaced by windows that fit, when the caller can split it
             u64 hard = (u64) (0.7 * (double) A.cap); const u64 lim32 = 0x7fffffffull;
             if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) hard = std::min(hard, v); }   // test knob
+            if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_FRAC")) {   // test knob: split the contigs above this share of the largest
+                const double f = atof(e); u64 big = 0; for (const AD::Contig& C : in.contigs) big = std::max<u64>(big, dataBytes(C));
+                if (f > 0 && f < 1) hard = std::min(hard, (u64) (f * (double) big));
+            }
             bool over = false;
             for (const AD::Contig& C : in.contigs) over = over || dataBytes(C) > hard || C.reads >= lim32;
             if (over && in.resplit) {

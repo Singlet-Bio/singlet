@@ -75,8 +75,8 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
             if (dev::contig_bytes(c) <= max_bytes && c.reads < max_items) {
                 nc.push_back(c); nk.push_back(static_cast<uint32_t>(k)); nl.emplace_back(); continue;
             }
-            // windows of 1 kb bins by read start, each with about a third of the budget in its own reads (reads overlapping its start and
-            // the reference take the rest); then every read goes to each window it overlaps, in by_tid order
+            // windows of 1 kb bins by read start, each with about half of the budget left after the reference in its own reads (reads
+            // overlapping its start take the rest); then every read goes to each window it overlaps, in by_tid order
             const uint32_t t = ctid[k]; const uint64_t a = cnt[t], n = cnt[t + 1] - a;
             const int sh = 10; const uint64_t nb = (c.ref_len >> sh) + 2;
             std::vector<int32_t> rs(n), re(n);
@@ -90,7 +90,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
                 }
             });
             const uint64_t fix = c.ref_len + 4096;
-            const uint64_t target = max_bytes / 3 > fix ? max_bytes / 3 - fix : 1;
+            const uint64_t target = max_bytes > fix ? (max_bytes - fix) / 2 : 1;
             std::vector<int32_t> bnd;   // window w owns [bnd[w-1], bnd[w]), open at both ends
             { uint64_t acc = 0;
               for (uint64_t b = 0; b < nb; ++b) {
