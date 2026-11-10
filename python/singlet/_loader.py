@@ -1003,7 +1003,7 @@ def load_sample(
     Reads the sample's column range out of its study's ``counts.1pz`` in a
     local catalog directory (``SINGLET_CATALOG_DIR`` or
     :func:`singlet.set_catalog_dir`). This is for machines that hold the
-    pipeline output itself; everyone else should use
+    pipeline output itself. Without a local catalog it calls
     ``singlet.load("GSM…")``, which downloads the public bundle.
 
     Parameters
@@ -1020,8 +1020,6 @@ def load_sample(
 
     Raises
     ------
-    RuntimeError
-        If no local catalog directory is configured.
     KeyError
         If the sample is not in the local sample index.
     """
@@ -1034,12 +1032,8 @@ def load_sample(
     # without one gets this message rather than an ImportError.
     cat_dir = _get_catalog_dir()
     if cat_dir is None:
-        raise RuntimeError(
-            "load_sample requires a local catalog (a directory holding the "
-            "pipeline's processing tree). Set SINGLET_CATALOG_DIR or call "
-            "singlet.set_catalog_dir(). To load a public sample, use "
-            f"singlet.load({gsm_id!r}) instead."
-        )
+        # no local processing tree: a public accession loads through the public bundle
+        return load(gsm_id, genes=genes)
 
     idx = _load_sample_index()
     rows = idx[idx["gsm_id"] == gsm_id]

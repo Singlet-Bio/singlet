@@ -89,6 +89,10 @@ class IntegrityError(TransportError):
     """The server returned bytes that cannot be the requested object (wrong total size, wrong range, short body)."""
 
 
+class ShortBody(IntegrityError):
+    """A body that ended before its declared length (a connection dropped mid-read). Transient: the request is retried."""
+
+
 @dataclass
 class Response:
     status: int
@@ -422,6 +426,11 @@ class HttpTransport(Transport):
                         if hdr.get("connection", "").lower() == "close":
                             self._drop(netloc, scheme)
                         return r
+            except ShortBody as e:
+                # a connection dropped mid-body: the bytes are content-addressed and checked, so ask again
+                last = e
+                self._drop(netloc, scheme)
+                delay = min(8.0, 0.5 * (2**attempt)) * (0.75 + 0.5 * random.random())
             except (OSError, http.client.HTTPException, socket.timeout) as e:
                 last = e
                 self._drop(netloc, scheme)
@@ -446,6 +455,8 @@ class HttpTransport(Transport):
                 with self._lock:
                     self.stats.retries += 1
                 time.sleep(delay)
+        if isinstance(last, ShortBody):
+            raise last
         raise TransportError(
             f"GET {self.url(key)} failed after {self.retries + 1} attempts: {last}"
         )
@@ -515,7 +526,7 @@ class HttpTransport(Transport):
             want = total
         body = self._read_body(resp, want)
         if want is not None and len(body) != want:
-            raise IntegrityError(f"{self.url(key)}: body is {len(body)} bytes, expected {want}")
+            raise ShortBody(f"{self.url(key)}: body is {len(body)} bytes, expected {want}")
         self.stats.add(kind, len(body))
         return Response(status, hdr, body, total, hdr.get("etag"))
 

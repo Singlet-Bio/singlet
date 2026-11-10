@@ -3052,7 +3052,11 @@ def _post(
     url = _api_base(base) + path
     data = json.dumps(body).encode()
     hdr = {"Content-Type": "application/json", "User-Agent": "singlet-bio-atlas"}
-    key = api_key or os.environ.get("SINGLET_API_KEY")
+    if not api_key:
+        from singlet.find import _api_key  # $SINGLET_API_KEY, then ~/.singlet/api_key
+
+        api_key = _api_key()
+    key = api_key
     if key:
         hdr["Authorization"] = f"Bearer {key}"
     req = urllib.request.Request(url, data=data, headers=hdr, method="POST")
@@ -3065,6 +3069,8 @@ def _post(
         except Exception:  # noqa: BLE001
             pass
         msg = j.get("message") or j.get("error")
+        if e.code == 429 and not key:
+            msg = f"{msg or e.reason} (anonymous allowance; set $SINGLET_API_KEY or save a key in ~/.singlet/api_key, from https://singlet.bio/account)"
         if j.get("plan"):
             raise OverBudget(f"{path}: HTTP {e.code}: {msg}", j["plan"]) from e
         raise IndexError_(f"{path}: HTTP {e.code}: {msg or e.reason}") from e
