@@ -15,6 +15,7 @@
 //
 // All lookups are O(1) hash or O(log n) interval tree.
 
+#include "../thread_name.h"
 #include <htslib/sam.h>
 #include <htslib/hts.h>
 #include <htslib/bgzf.h>
@@ -1458,6 +1459,7 @@ public:
         mol_store_.set_staging(false);   // seals: the groups as record_read() would have built them, before anything reads them
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
+        singlet::ThreadNameScope tn_handoff("sg-handoff");   // the hand-off pass and the GPU pileup's host part (per-thread CPU by role)
         if (gpu_covers_ && !gpu_handoff_pass(stats)) {
             std::cerr << "[gpu_pileup] ERROR: the hand-off pass failed (see above); rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
@@ -3961,8 +3963,8 @@ private:
                 if (post_on) B.post.resize(kRecs);
                 for (auto& r : B.rec) r = bam_init1();
             }
-            th = std::thread([this] { read(); });
-            if (post_on) th_post = std::thread([this] { post(); });
+            th = std::thread([this] { singlet::set_thread_name("sg-sreader"); read(); });
+            if (post_on) th_post = std::thread([this] { singlet::set_thread_name("sg-spost"); post(); });
         }
         ~LookAhead() {
             finish();

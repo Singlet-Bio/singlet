@@ -31,6 +31,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <ctime>
 #include <functional>
 #include <map>
 #include <memory>
@@ -167,10 +169,34 @@ class RunSet {
         const uint32_t bi = g - first_block_[f];
         BlockHeader bh;
         BlockScratch& sc = scratch();
+        const bool tm = ingest_timing_on();
+        const double c0 = tm ? thread_cpu_now() : 0.0;
         const size_t raw_size = read_block(r, r.file_descriptor(), r.block_offset(bi), r.block_comp_size(bi), bh, sc);
+        const double c1 = tm ? thread_cpu_now() : 0.0;
         scan_payload(r, sc.raw.data(), raw_size, bh, o, h, sc);
+        const double c2 = tm ? thread_cpu_now() : 0.0;
         blk.clear();
         r.decode_payload(sc.raw.data(), raw_size, bh, blk);
+        if (tm) {
+            const double c3 = thread_cpu_now();
+            IngestTiming& t = ingest_timing();
+            t.add(t.read_ns, c1 - c0); t.add(t.scan_ns, c2 - c1); t.add(t.decode_ns, c3 - c2);
+        }
+    }
+    // SINGLET_INGEST_TIMING=1: thread CPU of the fused pass's parts, summed over blocks (no output change)
+    struct IngestTiming {
+        std::atomic<uint64_t> read_ns{0}, scan_ns{0}, decode_ns{0}, copy_ns{0};
+        static void add(std::atomic<uint64_t>& a, double s) { a.fetch_add(static_cast<uint64_t>(s * 1e9), std::memory_order_relaxed); }
+    };
+    static IngestTiming& ingest_timing() { static IngestTiming t; return t; }
+    static bool ingest_timing_on() {
+        static const bool on = [] { const char* v = std::getenv("SINGLET_INGEST_TIMING"); return v && v[0] == '1'; }();
+        return on;
+    }
+    static double thread_cpu_now() {
+        timespec ts{};
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+        return ts.tv_sec + ts.tv_nsec * 1e-9;
     }
     // the decompressed payload size of block g from its ZSTD frame header (0: not recorded there, or another codec); no decompression
     uint64_t block_raw_size(uint32_t g) const {

@@ -1300,11 +1300,12 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 3: Demux + parallel writes ──
     nvexp.next("export: Phase 3: Demux + parallel writes"); expclk.next("export: Phase 3: Demux + parallel writes");
-    singlet::set_thread_name("sg-demux");
+    singlet::set_thread_name("sg-write");   // the parallel writers inherit it; the demux thread and the editing and TE writers name their own
     std::thread demux_thread;
     DemuxResult demux_result;
     if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
         demux_thread = std::thread([&]() {
+            singlet::set_thread_name("sg-demux");
             singlet::ExportTimer dmx_timer("export.h demux", __LINE__);
             // B-G5-3: K=1 workaround — skip VB entirely; synthesize all-donor0 result.
             // vireoSNP (and our VB) crash or are meaningless at K=1; the correct answer
@@ -1401,6 +1402,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     std::thread edit_thread;
     if (have_editing) {
         edit_thread = std::thread([&]() {
+            singlet::set_thread_name("sg-editing");
             std::filesystem::create_directories(out_prefix + "/private/editing");
             const auto er = editing::summarize(edit_alt_csc, edit_dp_csc, cc_result.cell_indices);
             std::vector<std::string> cov_names(er.covered.size());
@@ -1728,6 +1730,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         // molecule), and the locus table. Built from the records in any order, so the CPU and GPU paths write the same bytes.
         if (engine.has_te())
             write_threads.emplace_back([&]() {
+                singlet::set_thread_name("sg-te");
                 auto t0 = std::chrono::high_resolution_clock::now();
                 auto te = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()), engine.tid_to_chrom());
                 write_matrix("te_counts", te.fam, te.fam.names);
@@ -1870,6 +1873,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
     const bool demux_thread_ran = demux_thread.joinable();
+    singlet::set_thread_name("sg-geno");   // genotype and all-site writers after the demux
     // The all-site member (allsite_store.h): once the cells are called and demux has assigned them, its merged records are prepared for the
     // called cells (every barcode when no cell call ran). The per-cell delta against the donor genotype is built from them below; no CSC
     // matrix with int32 column pointers is built, so a deep library has no entry limit.
