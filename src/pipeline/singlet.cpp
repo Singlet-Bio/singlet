@@ -1755,7 +1755,9 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
     auto nh_mark = [&](const char* what) {
         if (!nh_time) return;
         const double w = nh_sw.elapsed_s(), c = nh_cpu() - nh_c0;
-        std::cerr << "[nonhost-time] " << what << ": " << (w - nh_last_w) << " s wall, " << (c - nh_last_c) << " s cpu (stage " << w << " s, " << c << " s)\n";
+        char buf[256];
+        std::snprintf(buf, sizeof buf, "[nonhost-time] %s: %.2f s wall, %.2f s cpu (stage %.2f s, %.2f s)\n", what, w - nh_last_w, c - nh_last_c, w, c);
+        std::cerr << buf;
         nh_last_w = w; nh_last_c = c;
     };
     try {
@@ -1984,10 +1986,13 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // on the report thresholds), on the run's threads (bit-identical at any count)
         const EmFit em_fit_all = em_fit(multi_hits, /*max_iter=*/500, /*tol=*/1e-6f, /*min_prefilter_hr=*/0.05f, std::max(1, n_threads));
         n_em_iter = em_fit_all.iterations;
-        if (nh_time)
-            std::cerr << "[nonhost-time] em steps: group " << em_fit_all.sec_group << " s, invert " << em_fit_all.sec_invert << " s, iterate "
-                      << em_fit_all.sec_iterate << " s (" << em_fit_all.iterations << " iterations, " << em_fit_all.idx_to_species.size()
-                      << " species, " << em_fit_all.n_groups << " patterns), stats " << em_fit_all.sec_stats << " s\n";
+        if (nh_time) {
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "[nonhost-time] em steps: group %.2f s, invert %.2f s, iterate %.2f s (%d iterations, %zu species, %zu patterns), stats %.2f s\n",
+                          em_fit_all.sec_group, em_fit_all.sec_invert, em_fit_all.sec_iterate, em_fit_all.iterations, em_fit_all.idx_to_species.size(),
+                          em_fit_all.n_groups, em_fit_all.sec_stats);
+            std::cerr << buf;
+        }
         auto em_result = em_report(em_fit_all, kingdom_map, /*min_abundance=*/1e-4f, /*min_report_hr=*/0.30f,
                                    /*min_abs_reads=*/min_abs_reads);
         nh_mark("em");
@@ -2287,8 +2292,11 @@ public:
         std::cerr.rdbuf(orig_);
         running_ = false;
         std::cerr << log_;
-        if (std::getenv("SINGLET_NONHOST_TIMING"))
-            std::cerr << "[nonhost-time] ran beside the export: " << wall_ << " s wall, the join waited " << (sw_.elapsed_s() - t0) << " s\n";
+        if (std::getenv("SINGLET_NONHOST_TIMING")) {
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "[nonhost-time] ran beside the export: %.2f s wall, the join waited %.2f s\n", wall_, sw_.elapsed_s() - t0);
+            std::cerr << buf;
+        }
         std::cerr << std::flush;
         log_.clear();
     }
