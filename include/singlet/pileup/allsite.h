@@ -535,6 +535,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     for (uint32_t t = 0; t < n_tid; ++t) { ch0[t] = chunks.size(); for (uint64_t k = cnt[t]; k < cnt[t + 1]; k += CH) chunks.push_back({t, k, std::min(cnt[t + 1], k + CH)}); }
     ch0[n_tid] = chunks.size();
     std::vector<std::vector<Obs>> cobs(chunks.size());
+    std::vector<uint32_t> RF(by_tid.size(), 0), RL(by_tid.size(), 0);   // each read's alignment span here, its site range after 3b
     pfor(nth, chunks.size(), [&](size_t ci, unsigned) {
         const uint64_t u0 = TM ? now_ns() : 0;
         const Chunk& C = chunks[ci]; const int32_t t = static_cast<int32_t>(C.t); auto& obs = cobs[ci];
@@ -561,6 +562,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
                 } else if (op == 1 || op == 4) qpos += len;
                 else if (op == 2 || op == 3) rpos += len;
             }
+            RF[k] = static_cast<uint32_t>(a.pos); RL[k] = static_cast<uint32_t>(rpos);
         }
         if (TM) t_walk += now_ns() - u0;
         if (P.progress) P.progress();
@@ -613,18 +615,14 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     });
     std::vector<std::vector<Obs>>().swap(cobs);
     // each read's site range [rf, rl) from its alignment span (the span bounds the hits per site; spliced reads overcount), over chunks
-    std::vector<uint32_t> RF(by_tid.size(), 0), RL(by_tid.size(), 0);
     pfor(nth, chunks.size(), [&](size_t ci, unsigned) {
         const uint64_t u0 = TM ? now_ns() : 0;
         const Chunk& Ch = chunks[ci]; const auto& spos = plan[Ch.t].spos; if (spos.empty()) return;
         for (uint64_t k = Ch.k0; k < Ch.k1; ++k) {
-            pf(by_id, k, Ch.k1);
-            const auto& x = R.read(by_tid[k]); const auto& sg = R.sig(x.sig); const auto& a = R.aln(sg.aln_off + sig_p[x.sig]);
-            const uint32_t* o = R.ops_at(a.ops_off); int64_t end = a.pos;
-            for (int i = 0; i < a.n_ops; ++i) { const int op = o[i] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[i] >> 4; }
-            const size_t f = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), a.pos) - spos.begin());
+            const int32_t p0 = static_cast<int32_t>(RF[k]), end = static_cast<int32_t>(RL[k]);   // the span 3a kept
+            const size_t f = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), p0) - spos.begin());
             const size_t l = static_cast<size_t>(std::lower_bound(spos.begin(), spos.end(), end) - spos.begin());
-            if (f < l) { RF[k] = static_cast<uint32_t>(f); RL[k] = static_cast<uint32_t>(l); }
+            if (f < l) { RF[k] = static_cast<uint32_t>(f); RL[k] = static_cast<uint32_t>(l); } else { RF[k] = 0; RL[k] = 0; }
         }
         if (TM) t_member += now_ns() - u0;
     });
