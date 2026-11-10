@@ -19,6 +19,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <new>
@@ -149,6 +150,8 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
                 fail(std::string("block ") + std::to_string(b) + ": " + ex.what());
                 return;
             }
+            const bool tmI = singlet::fq::RunSet::ingest_timing_on();
+            const double cpy0 = tmI ? singlet::fq::RunSet::thread_cpu_now() : 0.0;
             if (fz) {   // publish this block's counts, advance the frontier, and wait until it passes this block
                 const auto& h = (*fz->heads)[b];
                 bool over = false;
@@ -237,6 +240,7 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
                 for (int v = 0; v < 256; v++)
                     if (bytesOf[v]) for (int j = 0; j < 4; j++) hist[(v >> (2 * j)) & 3] += bytesOf[v];
             if (r != rEnd || pos != posEnd) { fail("block " + std::to_string(b) + " has fewer reads or bases than the head scan counted"); return; }
+            if (tmI) { auto& it = singlet::fq::RunSet::ingest_timing(); it.add(it.copy_ns, singlet::fq::RunSet::thread_cpu_now() - cpy0); }
         }
         for (int c = 0; c < 4; c++) acc[tid].hist[c] = hist[c];
     };
@@ -258,6 +262,12 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
     for (const Acc& a : acc)
         for (int c = 0; c < 4; c++) out.qualHist[c] += a.hist[c];
     out.sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    if (singlet::fq::RunSet::ingest_timing_on()) {
+        auto& it = singlet::fq::RunSet::ingest_timing();
+        std::fprintf(stderr, "[ingest-timing] thread cpu: read+inflate %.1f s, head scan %.1f s, decode %.1f s, copy %.1f s; wall %.1f s, %d threads
+",
+                     it.read_ns.load() * 1e-9, it.scan_ns.load() * 1e-9, it.decode_ns.load() * 1e-9, it.copy_ns.load() * 1e-9, out.sec, T);
+    }
     return true;
 }
 }  // namespace
