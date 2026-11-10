@@ -9,7 +9,7 @@ analysis-ready atlas. You work with two simple things: GEO accession strings
 [AnnData](https://anndata.readthedocs.io/), ready for scanpy or PyTorch.
 
 Data is CC0 (public domain); code is MIT. Downloads need no login and no API
-key.
+key. To cite singlet.bio and this package, see [How to cite](citing.md).
 
 ```{include} ../python/README.md
 :start-after: "## Install"
@@ -26,6 +26,7 @@ the PyTorch extra and the local MCP server.
 
 installation
 api
+citing
 GitHub <https://github.com/Singlet-Bio/singlet>
 Data catalog <https://singlet.bio>
 ```
