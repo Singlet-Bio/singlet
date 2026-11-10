@@ -9025,8 +9025,9 @@ static int singlet_main(int argc, char* argv[]) {
             if (const char* keep = std::getenv("SINGLET_KEEP_ATAC_BAM")) {
                 std::string dst = std::string(keep) + "/atac_sorted.bam";
                 if (std::rename(parallel_bam_path.c_str(), dst.c_str()) != 0) {
-                    std::string cmd = "cp '" + parallel_bam_path + "' '" + dst + "'";
-                    if (std::system(cmd.c_str()) != 0) std::cerr << "[singlet] WARNING: could not keep BAM\n";
+                    std::error_code cp_ec;
+                    std::filesystem::copy_file(parallel_bam_path, dst, std::filesystem::copy_options::overwrite_existing, cp_ec);
+                    if (cp_ec) std::cerr << "[singlet] WARNING: could not keep BAM\n";
                 }
                 std::cerr << "[singlet] ATAC: kept BAM at " << dst << "\n";
             }
