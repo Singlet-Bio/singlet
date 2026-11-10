@@ -48,10 +48,13 @@ struct Input {
     // from the start of those arrays and Read::ci = contig index - c0
     std::function<void(uint32_t c0, uint32_t c1, Read* reads, uint32_t* ops, uint8_t* seq, uint64_t* lq)> gather;
     std::function<void()> progress;
-    // the counts of sites [s0, s0 + ns) of contig c (indices within the contig), in the spill's unit layout (allsite.h Spill): per site
-    // the number of barcodes, then per barcode (ascending) the gap from the previous one, DP and AD, all varints. Called once per block
-    // and contig, in block order; the device route holds no more than one block of counts.
-    std::function<void(uint32_t c, uint32_t s0, uint32_t ns, std::string& bytes)> sink;
+    // whether a counted site stays, from its ALT and depth molecules summed over every barcode (the host's rec::floor_keep); null keeps all
+    std::function<bool(uint64_t ad, uint64_t dp)> keep_site;
+    // the counts of the kept sites among [s0, s0 + ns) of contig c (indices within the contig; keep[i] says whether site s0 + i stayed,
+    // nkeep of them did), in the spill's unit layout (allsite.h Spill): per kept site the number of barcodes, then per barcode (ascending)
+    // the gap from the previous one, DP and AD, all varints. Called once per block and contig, in block order; the device route holds no
+    // more than one block of counts.
+    std::function<void(uint32_t c, uint32_t s0, uint32_t ns, const uint8_t* keep, uint32_t nkeep, std::string& bytes)> sink;
     int min_alt_molecules = 2, min_alt_cells = 2, use_qual = 0, skip_n = 0, directional = 1, umi_len = 12;
     uint32_t n_barcodes = 0;
     unsigned threads = 1;   // host threads for the pinned copies
@@ -63,6 +66,7 @@ struct Output {
     double sec = 0, sec_gather = 0, sec_upload = 0, sec_disc = 0, sec_count = 0;
     double sec_hits = 0, sec_sort = 0, sec_entries = 0, sec_r9 = 0, sec_out = 0;   // counting stages (SINGLET_ALLSITE_GPU_TIMING=1)
     uint64_t arena_bytes = 0, chunks = 0, blocks = 0, spill_bytes = 0;
+    uint64_t kept_dp = 0, kept_ad = 0, below_floor = 0;   // DP and AD molecules of the kept sites; counted sites the floor dropped
     std::string why;                  // why the device route declined or failed (the host pass then runs)
 };
 

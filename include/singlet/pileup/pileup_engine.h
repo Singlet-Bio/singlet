@@ -835,6 +835,11 @@ public:
         if (gpupileup::enabled() && config_.edit_baseq() != config_.min_baseq && edit_snp_start_ != UINT32_MAX)
             std::cerr << "[gpu_pileup] off: editing_min_baseq " << config_.edit_baseq() << " differs from min_baseq " << config_.min_baseq << "\n";
         else if (gpupileup::enabled() || allsite_on()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end; D-101: the all-site member reads the same records
+        // CPU route (the collector feeds the all-site member alone): the stream thread only copies each record; one worker adds them in order
+        if (gpu_col_ && !gpupileup::enabled() && !std::getenv("SINGLET_ENGINE_GPU_HANDOFF") && !std::getenv("SINGLET_ENGINE_GPU_E2E")) {
+            const char* af = std::getenv("SINGLET_COLLECTOR_ASYNC");
+            if (!(af && std::string(af) == "0")) gpu_feed_.reset(new gpupileup::AsyncFeed(*gpu_col_));
+        }
         gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
         e16_early_start();   // E16 (level 5): the hand-off pass's device part as soon as STAR's prefill completed the shared region
 #endif
@@ -868,7 +873,8 @@ public:
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_col_) {
                 const char* gcb = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);   // R11: the collector sees the same corrected CB as the serial loop
-                gpu_col_->add(b, (gcb && gcb[0] != '-') ? bc_index_.lookup(gcb) : -1);
+                const int32_t gbc = (gcb && gcb[0] != '-') ? bc_index_.lookup(gcb) : -1;
+                if (gpu_feed_) gpu_feed_->add(b, gbc); else gpu_col_->add(b, gbc);
             }
 #endif
             // Prefetch aux data region into L2 cache while doing flag checks.
@@ -1446,6 +1452,9 @@ public:
             std::cerr << "[singlet-pileup] Flushed " << mm_flushed
                       << " incomplete multi-mapped entries\n";
         }
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (gpu_feed_) { gpu_feed_->drain(); gpu_feed_.reset(); }   // every streamed record is in the collector before anything reads it
+#endif
         mol_store_.set_staging(false);   // seals: the groups as record_read() would have built them, before anything reads them
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -2183,6 +2192,7 @@ public:
     // W11: runs the GPU pileup on the records collected from this pass and compares each covered output with this engine's accumulators
     // (exon, intron, ambiguous, junctions by contig/donor/acceptor, SNP AD/DP, chrM total/reverse, chrM indels, R1 molecule counters).
     std::unique_ptr<gpupileup::Collector> gpu_col_;
+    std::unique_ptr<gpupileup::AsyncFeed> gpu_feed_;   // CPU route: the stream's records for gpu_col_, added by a worker (declared after it, so it goes first)
     bool allsite_done_ = false;
     PileupStats* gpu_stats_ = nullptr;
     // E16 (docs/gpu-engine/fable/E16-tail.md; level 5, SINGLET_E16=0 turns it off): the hand-off pass's device part (e2ePass + rRNA detector) on a
@@ -2362,6 +2372,10 @@ public:
         }
         allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
         allsite_ok_ = true;
+        if (P.min_alt_pct > 0)
+            std::cerr << "[allsite] ALT-fraction floor " << P.min_alt_pct << "%: " << allsite_.sites_below_floor << " of " << (allsite_.sites.size() + allsite_.sites_below_floor)
+                      << " discovered sites dropped (pooled ALT below the floor of the pooled depth)
+";
         std::cerr << "[allsite] " << allsite_.sites.size() << " sites (>= " << P.min_alt_molecules << " ALT molecules in >= " << P.min_alt_cells
                   << " barcodes), DP records " << allsite_.dp_records << ", AD records " << allsite_.ad_records << "; reads " << allsite_.reads_used
                   << ", mismatch observations " << allsite_.mismatch_obs << ", molecules " << allsite_.molecules << " (ambiguous " << allsite_.ambiguous

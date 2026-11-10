@@ -159,12 +159,15 @@ int main() {
     struct Cfg { int use_qual, skip_n, directional; const char* chunk; const char* block; };
     const Cfg cfgs[] = {{1, 0, 1, nullptr, nullptr}, {0, 1, 1, "40000", "200000"}, {1, 0, 0, nullptr, "150000"}, {0, 0, 1, "1", nullptr}};
     int ran = 0;
+    const int pcts[] = {1, 0, 25, 1};   // the ALT-fraction floor: default, off, one that drops many sites, default
+    int ci = 0;
     for (const Cfg& c : cfgs) {
+        const int pct = pcts[ci++];
         if (c.chunk) setenv("SINGLET_ALLSITE_GPU_CHUNK_READS", c.chunk, 1); else unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS");
         if (c.block) setenv("SINGLET_ALLSITE_GPU_BLOCK_HITS", c.block, 1); else unsetenv("SINGLET_ALLSITE_GPU_BLOCK_HITS");
         if (c.block) setenv("SINGLET_ALLSITE_GPU_SLICE_BYTES", "1027", 1); else unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES");   // 4 threads x 256 + 3: slices split records and leave a remainder
         A::Params P;
-        P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = qwords; P.skip_n = c.skip_n; P.directional = c.directional; P.umi_len = 12; P.threads = 4;
+        P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = qwords; P.skip_n = c.skip_n; P.directional = c.directional; P.umi_len = 12; P.threads = 4; P.min_alt_pct = pct;
         const A::Result h = A::run(R, G, 4, nBc, P);
         A::Params Pd = P;
         bool used = false; std::string why;
@@ -175,7 +178,7 @@ int main() {
             std::cout << "FAIL device route declined: " << why << "\n"; ++n_fail; continue;
         }
         ++ran;
-        const std::string tag = "[qual " + std::to_string(c.use_qual) + " skipN " + std::to_string(c.skip_n) + " dir " + std::to_string(c.directional) + "] ";
+        const std::string tag = "[floor " + std::to_string(pct) + " qual " + std::to_string(c.use_qual) + " skipN " + std::to_string(c.skip_n) + " dir " + std::to_string(c.directional) + "] ";
         bool sitesEq = h.sites.size() == d.sites.size();
         for (size_t i = 0; sitesEq && i < h.sites.size(); ++i) {
             const auto& a = h.sites[i]; const auto& b = d.sites[i];
@@ -188,6 +191,7 @@ int main() {
                   + std::to_string(d.molecules) + "/" + std::to_string(d.ambiguous) + "/" + std::to_string(d.other));
         CHECK(h.dp_records == d.dp_records && h.ad_records == d.ad_records, tag + "DP/AD records");
         CHECK(h.reads_used == d.reads_used, tag + "reads used");
+        CHECK(h.sites_below_floor == d.sites_below_floor, tag + "sites below the floor " + std::to_string(h.sites_below_floor) + " vs " + std::to_string(d.sites_below_floor));
         CHECK(h.ad.indptr == d.ad.indptr && h.ad.indices == d.ad.indices && h.ad.data == d.ad.data, tag + "AD matrix");
         CHECK(h.dp.indptr == d.dp.indptr && h.dp.indices == d.dp.indices && h.dp.data == d.dp.data, tag + "DP matrix");
         CHECK(h.site_ad == d.site_ad && h.site_dp == d.site_dp, tag + "per-site sums");

@@ -311,9 +311,11 @@ struct ToU32Flag { const u8* f; u32 n; __host__ __device__ u32 operator()(u32 i)
 struct ToU64Plain { const u64* c; u32 n; __host__ __device__ u64 operator()(u64 i) const { return i < n ? c[i] : 0ull; } };
 __device__ __forceinline__ u32 vlen(u32 v) { return v < (1u << 7) ? 1 : v < (1u << 14) ? 2 : v < (1u << 21) ? 3 : v < (1u << 28) ? 4 : 5; }
 __device__ __forceinline__ u8* vput(u8* p, u32 v) { while (v >= 128) { *p++ = (u8) ((v & 127) | 128); v >>= 7; } *p++ = (u8) v; return p; }
-__global__ void kRecs(const GOut* go, const u8* f, const u32* pre, const int* nG_, GOut* rec, u32* cntS) {
+__global__ void kRecs(const GOut* go, const u8* f, const u32* pre, const int* nG_, GOut* rec, u32* cntS, u64* sdp, u64* sad) {
     const int g = blockIdx.x * blockDim.x + threadIdx.x; if (g >= *nG_ || !f[g]) return;
     const GOut x = go[g]; rec[pre[g]] = x; atomicAdd(&cntS[x.bs], 1u);
+    atomicAdd((unsigned long long*) &sdp[x.bs], (unsigned long long) x.dp);
+    if (x.ad) atomicAdd((unsigned long long*) &sad[x.bs], (unsigned long long) x.ad);
 }
 __global__ void kRecLen(const GOut* rec, u32 n, u32* len) {
     const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
@@ -321,17 +323,18 @@ __global__ void kRecLen(const GOut* rec, u32 n, u32* len) {
     len[i] = vlen(x.bc - prev) + vlen(x.dp) + vlen(x.ad);
 }
 // per site: its bytes = varint(count) + its records' bytes (records [rs[s], rs[s + 1]) of the exclusive length sums lx)
-__global__ void kSiteBytes(const u32* cntS, const u32* rs, const u64* lx, u32 nsb, u64* tb) {
+__global__ void kSiteBytes(const u32* cntS, const u32* rs, const u64* lx, const u8* kp, u32 nsb, u64* tb) {   // dropped sites: no bytes
     const u32 b = blockIdx.x * blockDim.x + threadIdx.x; if (b >= nsb) return;
-    tb[b] = vlen(cntS[b]) + (lx[rs[b + 1]] - lx[rs[b]]);
+    tb[b] = kp[b] ? vlen(cntS[b]) + (lx[rs[b + 1]] - lx[rs[b]]) : 0;
 }
-__global__ void kSiteHead(const u32* cntS, const u64* so, u32 nsb, u8* bytes) {
-    const u32 b = blockIdx.x * blockDim.x + threadIdx.x; if (b >= nsb) return;
+__global__ void kSiteHead(const u32* cntS, const u64* so, const u8* kp, u32 nsb, u8* bytes) {
+    const u32 b = blockIdx.x * blockDim.x + threadIdx.x; if (b >= nsb || !kp[b]) return;
     vput(bytes + so[b], cntS[b]);
 }
-__global__ void kRecWrite(const GOut* rec, u32 n, const u32* cntS, const u32* rs, const u64* lx, const u64* so, u8* bytes) {
+__global__ void kRecWrite(const GOut* rec, u32 n, const u32* cntS, const u32* rs, const u64* lx, const u64* so, const u8* kp, u8* bytes) {
     const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
-    const GOut x = rec[i]; const u32 prev = (i > 0 && rec[i - 1].bs == x.bs) ? rec[i - 1].bc : 0u;
+    const GOut x = rec[i]; if (!kp[x.bs]) return;
+    const u32 prev = (i > 0 && rec[i - 1].bs == x.bs) ? rec[i - 1].bc : 0u;
     u8* p = bytes + so[x.bs] + vlen(cntS[x.bs]) + (lx[i] - lx[rs[x.bs]]);
     p = vput(p, x.bc - prev); p = vput(p, x.dp); vput(p, x.ad);
 }
@@ -649,7 +652,9 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 const u32 nsb = s1 - s0;
                 u32* pre = A.get<u32>((size_t) nG + 1); u32* cntS = A.get<u32>(nsb); u32* rs = A.get<u32>((size_t) nsb + 1);
                 u64* so = A.get<u64>((size_t) nsb + 1); u64* stb = A.get<u64>(nsb);
+                u64* sdp = A.get<u64>(nsb); u64* sad = A.get<u64>(nsb); u8* kp = A.get<u8>(nsb);
                 AS_CK(cudaMemsetAsync(cntS, 0, (size_t) nsb * 4, st));
+                AS_CK(cudaMemsetAsync(sdp, 0, (size_t) nsb * 8, st)); AS_CK(cudaMemsetAsync(sad, 0, (size_t) nsb * 8, st));
                 {
                     cub::TransformInputIterator<u32, ToU32Flag, cub::CountingInputIterator<u32>> fi(cub::CountingInputIterator<u32>(0), ToU32Flag{f8, (u32) nG});
                     size_t ts = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, ts, fi, pre, nG + 1, st));
@@ -657,7 +662,16 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 }
                 u32 nRec = 0; AS_CK(cudaMemcpyAsync(&nRec, pre + nG, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
                 GOut* rec = A.get<GOut>(std::max<u32>(nRec, 1)); u32* len = A.get<u32>(std::max<u32>(nRec, 1)); u64* lx = A.get<u64>((size_t) nRec + 1);
-                kRecs<<<gridFor(nG), 256, 0, st>>>(go, f8, pre, dNum + 1, rec, cntS);
+                kRecs<<<gridFor(nG), 256, 0, st>>>(go, f8, pre, dNum + 1, rec, cntS, sdp, sad);
+                // the ALT-fraction floor on the block's complete per-site sums (a block holds every hit of its sites): the host's rule decides
+                std::vector<u64> hdp(nsb), had(nsb); std::vector<u8> hk(nsb, 1);
+                AS_CK(cudaMemcpyAsync(hdp.data(), sdp, (size_t) nsb * 8, cudaMemcpyDeviceToHost, st));
+                AS_CK(cudaMemcpyAsync(had.data(), sad, (size_t) nsb * 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
+                for (u32 b = 0; b < nsb; ++b) {
+                    if (in.keep_site && !in.keep_site(had[b], hdp[b])) { hk[b] = 0; ++out.below_floor; continue; }
+                    out.kept_dp += hdp[b]; out.kept_ad += had[b];
+                }
+                AS_CK(cudaMemcpyAsync(kp, hk.data(), nsb, cudaMemcpyHostToDevice, st));
                 if (nRec) kRecLen<<<gridFor(nRec), 256, 0, st>>>(rec, nRec, len);
                 {
                     cub::TransformInputIterator<u64, ToU64, cub::CountingInputIterator<u64>> li(cub::CountingInputIterator<u64>(0), ToU64{len, nRec});
@@ -668,7 +682,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                     AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t2, cntS, rs, (int) nsb, st));
                     A.top = tm;
                     AS_CK(cudaMemcpyAsync(rs + nsb, &nRec, 4, cudaMemcpyHostToDevice, st));
-                    kSiteBytes<<<gridFor(nsb), 256, 0, st>>>(cntS, rs, lx, nsb, stb);
+                    kSiteBytes<<<gridFor(nsb), 256, 0, st>>>(cntS, rs, lx, kp, nsb, stb);
                     cub::TransformInputIterator<u64, ToU64Plain, cub::CountingInputIterator<u64>> bi(cub::CountingInputIterator<u64>(0), ToU64Plain{stb, nsb});
                     size_t t3 = 0; AS_CK(cub::DeviceScan::ExclusiveSum(nullptr, t3, bi, so, (int) nsb + 1, st));
                     tm = A.top; tmp = A.get<char>(t3); AS_CK(cub::DeviceScan::ExclusiveSum(tmp, t3, bi, so, (int) nsb + 1, st)); A.top = tm;
@@ -676,15 +690,16 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
                 std::vector<u64> hso((size_t) nsb + 1);
                 AS_CK(cudaMemcpyAsync(hso.data(), so, ((size_t) nsb + 1) * 8, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
                 u8* bytes = A.get<u8>(std::max<u64>(hso[nsb], 1));
-                kSiteHead<<<gridFor(nsb), 256, 0, st>>>(cntS, so, nsb, bytes);
-                if (nRec) kRecWrite<<<gridFor(nRec), 256, 0, st>>>(rec, nRec, cntS, rs, lx, so, bytes);
+                kSiteHead<<<gridFor(nsb), 256, 0, st>>>(cntS, so, kp, nsb, bytes);
+                if (nRec) kRecWrite<<<gridFor(nRec), 256, 0, st>>>(rec, nRec, cntS, rs, lx, so, kp, bytes);
                 for (u32 c = 0; c < nC; ++c) {   // the contigs whose site ranges meet [s0, s1), in site order
                     const u32 a0 = std::max(sOff[c], s0), a1 = std::min(sOff[c + 1], s1); if (a1 <= a0) continue;
                     const u64 b0 = hso[a0 - s0], b1 = hso[a1 - s0];
                     std::string buf; buf.resize(b1 - b0);
                     d2h.copy(&buf[0], bytes + b0, b1 - b0, st);
                     out.spill_bytes += b1 - b0;
-                    if (in.sink) in.sink(c0 + c, a0 - sOff[c], a1 - a0, buf);
+                    uint32_t nk = 0; for (u32 b = a0; b < a1; ++b) nk += hk[b - s0];
+                    if (in.sink) in.sink(c0 + c, a0 - sOff[c], a1 - a0, hk.data() + (a0 - s0), nk, buf);
                 }
                 stage(out.sec_out);
                 if (in.progress) in.progress();

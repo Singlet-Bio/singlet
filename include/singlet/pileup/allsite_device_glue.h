@@ -19,7 +19,7 @@ namespace singlet { namespace allsite { namespace detail {
 template <class Rec, class Out>
 inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t n_tid, uint32_t n_barcodes,
                         const std::vector<uint8_t>& sig_p, const std::vector<uint64_t>& cnt, const std::vector<uint64_t>& by_tid,
-                        const std::vector<uint32_t>& order, Out& out, Spill& spl, uint64_t t_run0) {
+                        const std::vector<uint32_t>& order, Out& out, Spill& spl, uint64_t& below_floor, uint64_t t_run0) {
     using dev::Read;
     const auto t0 = std::chrono::steady_clock::now();
     dev::Input in;
@@ -95,26 +95,41 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         for (unsigned s = 0; s < ns; ++s) { sz[s + 1].ops += sz[s].ops; sz[s + 1].seq += sz[s].seq; sz[s + 1].lq += sz[s].lq; }
         run_all(true);
     };
+    // the ALT-fraction floor: the host kernel's rule (rec::floor_keep), applied by the device route at the end of each block
+    in.keep_site = [&P](uint64_t ad, uint64_t dp) { return rec::floor_keep(ad, dp, P.min_alt_pct); };
+    const uint8_t keep_unseen = rec::floor_keep(0, 0, P.min_alt_pct) ? 1 : 0;   // sites of blocks without hits have depth 0
     std::vector<std::pair<uint32_t, uint32_t>> ukey;   // per spill unit: (contig index of in.contigs, first site within the contig)
-    in.sink = [&](uint32_t c, uint32_t s0, uint32_t ns, std::string& b) {
-        spl.u.emplace_back(); ukey.push_back({c, s0}); spl.put(spl.u.size() - 1, 0, ns, b);
+    std::vector<std::vector<uint8_t>> kmask(ctid.size());   // per contig: which sites stayed
+    in.sink = [&](uint32_t c, uint32_t s0, uint32_t ns, const uint8_t* keep, uint32_t nkeep, std::string& b) {
+        std::vector<uint8_t>& m = kmask[c];
+        if (m.size() < static_cast<size_t>(s0) + ns) m.resize(static_cast<size_t>(s0) + ns, keep_unseen);
+        std::memcpy(m.data() + s0, keep, ns);
+        spl.u.emplace_back(); ukey.push_back({c, s0}); spl.put(spl.u.size() - 1, 0, nkeep, b);
     };
     dev::Output o;
     if (!P.device(in, o)) {
         std::cerr << "[allsite-gpu] host pass: " << o.why << "\n";
         return false;
     }
+    below_floor = 0;
+    std::vector<std::vector<uint32_t>> kbefore(ctid.size());   // per contig: kept sites before each site
     for (size_t k = 0; k < ctid.size(); ++k) {
         auto& pt = out[ctid[k]]; dev::ContigOut& co = o.contigs[k];
         const int32_t t = static_cast<int32_t>(ctid[k]);
-        pt.sites.resize(co.pos.size());
-        for (size_t i = 0; i < co.pos.size(); ++i)
-            pt.sites[i] = Site{t, co.pos[i], "ACGT"[co.ref[i] & 3], "ACGT"[co.alt[i] & 3], co.mol[i], co.cells[i]};
+        const size_t ns = co.pos.size();
+        std::vector<uint8_t>& m = kmask[k]; m.resize(ns, keep_unseen);
+        std::vector<uint32_t>& kb = kbefore[k]; kb.assign(ns + 1, 0);
+        pt.sites.clear(); pt.sites.reserve(ns);
+        for (size_t i = 0; i < ns; ++i) {
+            kb[i + 1] = kb[i] + m[i];
+            if (m[i]) pt.sites.push_back(Site{t, co.pos[i], "ACGT"[co.ref[i] & 3], "ACGT"[co.alt[i] & 3], co.mol[i], co.cells[i]});
+        }
+        below_floor += ns - pt.sites.size();
     }
     {   // the units' rows (contigs in index order, sites by position), then the units in row order as the readers expect
         std::vector<uint32_t> grow0(n_tid + 1, 0);
         for (uint32_t t = 0; t < n_tid; ++t) grow0[t + 1] = grow0[t] + static_cast<uint32_t>(out[t].sites.size());
-        for (size_t i = 0; i < spl.u.size(); ++i) spl.u[i].row0 = grow0[ctid[ukey[i].first]] + ukey[i].second;
+        for (size_t i = 0; i < spl.u.size(); ++i) spl.u[i].row0 = grow0[ctid[ukey[i].first]] + kbefore[ukey[i].first][ukey[i].second];
         std::vector<uint32_t> perm(spl.u.size()); for (size_t i = 0; i < perm.size(); ++i) perm[i] = static_cast<uint32_t>(i);
         std::sort(perm.begin(), perm.end(), [&](uint32_t a, uint32_t b) { return spl.u[a].row0 < spl.u[b].row0; });
         std::vector<Spill::U> su(spl.u.size()); for (size_t i = 0; i < perm.size(); ++i) su[i] = std::move(spl.u[perm[i]]);
@@ -122,7 +137,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
     }
     auto& p0 = out[ctid[0]];   // finish_spill sums the statistics over contigs; DP and AD records are the summed molecules, as kernel 1's
     p0.st.snp_molecules += o.molecules; p0.st.snp_molecules_ambiguous += o.ambiguous; p0.st.snp_molecules_other += o.other;
-    p0.obs += o.obs; p0.dp_rec += o.molecules; p0.ad_rec += o.ad_molecules;
+    p0.obs += o.obs; p0.dp_rec += o.kept_dp; p0.ad_rec += o.kept_ad;   // the kept sites' molecules, as the host kernel counts them
     const double s_sel = 1e-9 * static_cast<double>(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count()) - t_run0);
     std::cerr << "[allsite-gpu] selection " << s_sel
               << " s, sizes " << s_sizes << " s; " << o.chunks << " chunks, " << o.blocks << " blocks; hits " << o.hits << ", entries " << o.entries << ", groups " << o.groups

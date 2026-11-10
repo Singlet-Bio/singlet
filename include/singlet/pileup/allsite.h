@@ -115,6 +115,8 @@ struct Params {
     std::function<void()> progress;  // called (from worker threads) after each contig's discovery and each counting block; the
                                      // engine re-arms its stall watchdog here, since an LCL's pass runs well past an hour
     std::function<bool(const dev::Input&, dev::Output&)> device;   // the device route (allsite_device.h); false: the host pass runs
+    int min_alt_pct = 1;             // the pooled ALT-fraction floor (rec::floor_keep): a counted site is kept only when 100 * ALT >= pct * depth
+                                     // over every barcode; 0 keeps every discovered site
     std::string spill_dir;           // kernel 1 keeps its merged counts in a file here, unlinked at once, so memory does not grow with them:
                                      // "" SINGLET_ALLSITE_SPILL_DIR, else TMPDIR, else /tmp; "-" compact bytes in memory
     int kernel = -1;                 // counting kernel: 1 sorted records (allsite_records.h), 0 the per-block hash map; -1: sorted records
@@ -127,7 +129,8 @@ struct Result {
     std::vector<Site> sites;                                         // row order
     SparseAccumulator<uint16_t>::CSCMatrix ad, dp;                   // rows = sites, columns = barcodes
     uint64_t reads_used = 0, mismatch_obs = 0, molecules = 0, ambiguous = 0, other = 0;
-    uint64_t dp_records = 0, ad_records = 0;                         // per-(barcode, site, molecule-batch) counts before they are summed
+    uint64_t dp_records = 0, ad_records = 0;                         // per-(barcode, site, molecule-batch) counts before they are summed (kept sites)
+    uint64_t sites_below_floor = 0;                                  // discovered sites dropped by the ALT-fraction floor (Params::min_alt_pct)
     std::vector<uint64_t> site_dp, site_ad;                          // per site, summed over every barcode (filled by finalize)
     // With Params::defer_build the matrices stay empty until the caller builds them in two steps, once the called cells (and with them the
     // donor count) are known. prepare(keep_cols) drops the entries of other barcodes, merges the per-molecule records of each (barcode, site)
@@ -201,6 +204,33 @@ struct PerTid { std::vector<Site> sites; std::vector<Tri> ad, dp; uint64_t obs =
 // count) triplets in any order; prepare sums them per (barcode, site), so one triplet per molecule and one per (barcode, site) agree.
 inline void finish(Result& res, std::shared_ptr<std::vector<PerTid>> out_sp, uint32_t n_tid, uint32_t n_barcodes, const Params& P) {
     auto& out = *out_sp;
+    // the ALT-fraction floor (rec::floor_keep) on each contig's complete per-site sums: dropped sites leave the site list and their triplets
+    // go, the rest are renumbered (molecule statistics stay those of every discovered site; the record counts are those of the kept sites)
+    if (P.min_alt_pct > 0) {
+        const unsigned nth = std::max(1u, std::min<unsigned>(P.threads, n_tid));
+        std::atomic<uint32_t> next{0}; std::atomic<uint64_t> dropped{0};
+        auto work = [&]() {
+            for (uint32_t t; (t = next.fetch_add(1)) < n_tid;) {
+                PerTid& pt = out[t]; const size_t ns = pt.sites.size(); if (!ns) continue;
+                std::vector<uint64_t> sad(ns, 0), sdp(ns, 0);
+                for (const Tri& x : pt.ad) sad[x.row] += x.val;
+                for (const Tri& x : pt.dp) sdp[x.row] += x.val;
+                std::vector<uint32_t> nrow(ns, UINT32_MAX); uint32_t k = 0;
+                for (size_t i = 0; i < ns; ++i) if (rec::floor_keep(sad[i], sdp[i], P.min_alt_pct)) { nrow[i] = k; pt.sites[k++] = pt.sites[i]; }
+                if (k == ns) continue;
+                dropped += ns - k; pt.sites.resize(k);
+                for (int w = 0; w < 2; ++w) {
+                    auto& v = w == 0 ? pt.ad : pt.dp; size_t m = 0;
+                    for (const Tri& x : v) if (nrow[x.row] != UINT32_MAX) { Tri y = x; y.row = nrow[x.row]; v[m++] = y; }
+                    v.resize(m);
+                }
+                pt.ad_rec = pt.ad.size(); pt.dp_rec = pt.dp.size();
+            }
+        };
+        std::vector<std::thread> th; for (unsigned i = 1; i < nth; ++i) th.emplace_back(work);
+        work(); for (auto& x : th) x.join();
+        res.sites_below_floor = dropped.load();
+    }
     // 4. rows in (contig, position) order; CSC by barcode
     std::vector<uint32_t> row0(n_tid + 1, 0);
     for (uint32_t t = 0; t < n_tid; ++t) row0[t + 1] = row0[t] + static_cast<uint32_t>(out[t].sites.size());
@@ -685,7 +715,9 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     auto& out = *out_sp;
     if (P.device && P.umi_dedup && P.umi_len >= 1 && P.umi_len <= 20) {   // the device route: its counts go straight into the spill
         auto spl = std::make_shared<Spill>(); spl->open(P.spill_dir, 0);
-        if (device_pass(R, G, P, n_tid, n_barcodes, sig_p, cnt, by_tid, order, out, *spl, T_start)) {
+        uint64_t below = 0;
+        if (device_pass(R, G, P, n_tid, n_barcodes, sig_p, cnt, by_tid, order, out, *spl, below, T_start)) {
+            res.sites_below_floor = below;
             finish_spill(res, out_sp, spl, n_tid, n_barcodes, P);
             return res;
         }
@@ -830,10 +862,8 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     u0[n_tid] = units.size();
     std::vector<uint32_t> uorder(units.size()); for (size_t i = 0; i < units.size(); ++i) uorder[i] = static_cast<uint32_t>(i);
     std::sort(uorder.begin(), uorder.end(), [&](uint32_t a, uint32_t b) { return units[a].w != units[b].w ? units[a].w > units[b].w : a < b; });
-    struct UnitOut { Stats st; uint64_t adr = 0, dpr = 0; };
+    struct UnitOut { Stats st; uint64_t adr = 0, dpr = 0; std::vector<uint8_t> keep; };
     std::vector<UnitOut> uout(units.size());
-    std::vector<uint32_t> grow0(n_tid + 1, 0);   // the member's first row of each contig
-    for (uint32_t t = 0; t < n_tid; ++t) grow0[t + 1] = grow0[t] + static_cast<uint32_t>(out[t].sites.size());
     auto spl = std::make_shared<Spill>(); spl->open(P.spill_dir, units.size());
     struct Hit { uint64_t key; uint32_t site; };
     struct WS { std::vector<Hit> hits; std::vector<uint64_t> keys; std::vector<uint64_t> off; rec::Scratch sc; std::string enc, site; };
@@ -880,16 +910,18 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
           for (size_t i = ns; i > 0; --i) w[i] = w[i - 1]; w[0] = 0; }
         const uint64_t v2 = TM ? now_ns() : 0;
         rec::Counts cn;
-        W.enc.clear();
-        for (size_t i = 0; i < ns; ++i) {   // barcodes come out ascending
-            uint32_t nbc = 0, prev = 0; W.site.clear();
+        W.enc.clear(); o.keep.assign(ns, 0); uint32_t nkeep = 0;
+        for (size_t i = 0; i < ns; ++i) {   // barcodes come out ascending; a block holds every hit of its sites, so the sums are complete
+            uint32_t nbc = 0, prev = 0; uint64_t sdp = 0, sad = 0; W.site.clear();
             rec::collapse_site_unsorted(W.keys.data() + W.off[i], W.off[i + 1] - W.off[i], Y, P.directional != 0, W.sc, cn, [&](uint32_t bc, uint32_t dp, uint32_t ad) {
                 Spill::put_varint(W.site, bc - prev); Spill::put_varint(W.site, dp); Spill::put_varint(W.site, ad); prev = bc; ++nbc;
-                o.dpr += dp; o.adr += ad;
+                sdp += dp; sad += ad;
             });
+            if (!rec::floor_keep(sad, sdp, P.min_alt_pct)) continue;   // below the ALT-fraction floor: never reaches the spill
+            o.keep[i] = 1; ++nkeep; o.dpr += sdp; o.adr += sad;
             Spill::put_varint(W.enc, nbc); W.enc += W.site;
         }
-        spl->put(un, grow0[t] + static_cast<uint32_t>(s0), static_cast<uint32_t>(ns), W.enc);
+        spl->put(un, 0, nkeep, W.enc);   // the unit's first row is set once every unit's kept sites are known
         o.st.snp_molecules = cn.molecules; o.st.snp_molecules_ambiguous = cn.ambiguous; o.st.snp_molecules_other = cn.other;
         if (TM) { g_1 += cn.g1; g_8 += cn.g8; g_64 += cn.g64; g_512 += cn.g512; g_big += cn.gbig; g_m2 += cn.m2; }
         const uint64_t nh = W.hits.size(); n_hits += nh;
@@ -899,13 +931,20 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
         pl.tick(++done, units.size(), n_hits.load());
     });
     std::vector<WS>().swap(ws);
+    uint32_t kept_rows = 0;
     for (uint32_t t = 0; t < n_tid; ++t) {   // units back in (contig, block) order
-        PerTid& pt = out[t];
+        PerTid& pt = out[t]; size_t k = 0;   // the kept sites, renumbered; each unit's first row follows the kept sites before it
         for (size_t u = u0[t]; u < u0[t + 1]; ++u) {
-            const UnitOut& o = uout[u];
+            UnitOut& o = uout[u];
             pt.st.snp_molecules += o.st.snp_molecules; pt.st.snp_molecules_ambiguous += o.st.snp_molecules_ambiguous; pt.st.snp_molecules_other += o.st.snp_molecules_other;
             pt.ad_rec += o.adr; pt.dp_rec += o.dpr;
+            spl->u[u].row0 = kept_rows + static_cast<uint32_t>(k);
+            const size_t s0 = plan[t].cuts[units[u].b];
+            for (size_t i = 0; i < o.keep.size(); ++i) if (o.keep[i]) pt.sites[k++] = pt.sites[s0 + i];
+            std::vector<uint8_t>().swap(o.keep);
         }
+        res.sites_below_floor += pt.sites.size() - k;
+        pt.sites.resize(k); kept_rows += static_cast<uint32_t>(k);
     }
     if (TM) std::cerr << "[allsite-timing] merged counts: " << spl->bytes << " bytes in " << spl->where << "\n";
     if (TM) {
