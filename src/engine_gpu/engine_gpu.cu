@@ -562,6 +562,14 @@ __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k < n) dst[k] = s[k];
 }
+// SINGLET_LANE_PROF: the reads' phase cycle counters (Work::clk, filled by the mapping code) summed over a batch, then cleared for the next one
+template <class C>
+__global__ void k_clksum(u64 n, Work<C>* work, unsigned long long* acc) {
+    const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    Work<C>& w = work[k];
+    for (int c = 0; c < 8; c++) { if (w.clk[c]) atomicAdd(&acc[c], (unsigned long long)w.clk[c]); w.clk[c] = 0; }
+}
 typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
 static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
 
@@ -784,6 +792,8 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     devNote();
     const double tK = now(); stepAdd(sn + ".alloc", tK - tA);
     LaneProf pr; pr.init();
+    unsigned long long* dClk = nullptr; u64 nReadsDone = 0;
+    if (pr.on) { EG_CK(dmal(&dClk, 64)); EG_CK(cudaMemset(dClk, 0, 64)); EG_CK(cudaMemset(dWork, 0, NB * sizeof(Work<C>))); }
     for (u64 b0 = 0; b0 < n; b0 += NB) {
         pr.nBatch++;
         u64 nb = std::min(NB, n - b0);
@@ -827,6 +837,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             } else if constexpr (MAXREG == 64) PK(pr, K_P3, (k_p3lb<C, 128, 8><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen)));
             else PK(pr, K_P3, (k_p3e<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dOut, dLen)));
             PK(pr, K_CSTAT, (k_copy_status<<<G, T>>>(dBst, dSt + b0, nb)));
+            if (pr.on) { k_clksum<C><<<G, T>>>(nb, dWork, dClk); nReadsDone += nb; }
         }
         EG_CK(cudaGetLastError());
         if (onBatch && *onBatch) {   // the batch's statuses now (the next batch's kernels wait for the host for this copy's duration)
@@ -859,6 +870,17 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         char b[700]; int o = snprintf(b, sizeof b, "[prof %s: wall %.2f s, in kernels %.2f s, gaps %.2f s (status copy wait %.2f, callback %.2f), %llu batches:", nm, tP - tK, sum, tP - tK - sum, pr.hostSync, pr.hostCb, (unsigned long long)pr.nBatch);
         for (int i = 0; i < K_N; i++) if (pr.cnt[i]) o += snprintf(b + o, sizeof b - o, " %s %.2f s x%llu;", kProfName[i], pr.sec[i], (unsigned long long)pr.cnt[i]);
         snprintf(b + o, sizeof b - o, "] "); g_laneLog += b;
+        if (dClk && nReadsDone) {   // the reads' own cycle counters (thread cycles, summed over the lane), per read and as a share of seeds + windows/assign + stitch + select
+            unsigned long long h[8]; EG_CK(cudaMemcpy(h, dClk, 64, cudaMemcpyDeviceToHost));
+            int clkKHz = 0; cudaDeviceGetAttribute(&clkKHz, cudaDevAttrClockRate, 0);
+            const double tot = (double)(h[0] + h[1] + h[2] + h[3]);
+            char c2[600]; snprintf(c2, sizeof c2, "[clk %s per read, kcycles: seeds %.1f, windows+assign %.1f, stitch %.1f (stitchAlign %.1f, finalize %.1f, copies %.1f, record %.1f), select+encode %.1f; thread-seconds %.1f; shares %.0f/%.0f/%.0f/%.0f %%] ", nm,
+                     (double)h[0] / nReadsDone / 1e3, (double)h[1] / nReadsDone / 1e3, (double)h[2] / nReadsDone / 1e3, (double)h[4] / nReadsDone / 1e3, (double)h[5] / nReadsDone / 1e3,
+                     (double)h[6] / nReadsDone / 1e3, (double)h[7] / nReadsDone / 1e3, (double)h[3] / nReadsDone / 1e3, tot / (clkKHz * 1e3),
+                     100.0 * h[0] / tot, 100.0 * h[1] / tot, 100.0 * h[2] / tot, 100.0 * h[3] / tot);
+            g_laneLog += c2;
+        }
+        if (dClk) dfree(dClk);
     }
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
         u64* dPoff; EG_CK(dmal(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
