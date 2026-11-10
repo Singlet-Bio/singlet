@@ -30,7 +30,7 @@
 
 namespace singlet_engine_gpu {
 namespace {
-using namespace singlet::allsite::dev;
+namespace AD = singlet::allsite::dev;
 using u64 = unsigned long long;
 using u32 = uint32_t;
 using u8 = uint8_t;
@@ -79,7 +79,7 @@ struct Arena {
 
 // ---------------------------------------------------------------------------------------------------------------- device helpers
 struct ChunkV {
-    const Read* rd; const u32* ops; const u8* seq; const u64* lq; const u8* ref; const u64* refOff; const u64* refLen;
+    const AD::Read* rd; const u32* ops; const u8* seq; const u64* lq; const u8* ref; const u64* refOff; const u64* refLen;
     int skipN, useQual;
 };
 __constant__ u8 kComp16[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
@@ -89,13 +89,13 @@ __device__ __forceinline__ u8 refBase(const ChunkV& C, u32 ci, int32_t pos) {
     const u8 v = C.ref[C.refOff[ci] + (u64) pos];
     return v < 4 ? v : 4;
 }
-__device__ __forceinline__ bool passQ(const ChunkV& C, const Read& x, u32 ri, u8 code) {   // allsite.h pass_q
+__device__ __forceinline__ bool passQ(const ChunkV& C, const AD::Read& x, u32 ri, u8 code) {   // allsite.h pass_q
     if (C.skipN && code == 15) return false;
     if (C.useQual && (ri >> 6) < x.nlq && ((C.lq[x.lq + (ri >> 6)] >> (ri & 63)) & 1ull)) return false;
     return true;
 }
 // f(pos, nt16 code, record index) for every aligned base in order (allsite.h walk); f returns false to stop
-template <class F> __device__ __forceinline__ void walkRead(const ChunkV& C, const Read& x, F&& f) {
+template <class F> __device__ __forceinline__ void walkRead(const ChunkV& C, const AD::Read& x, F&& f) {
     const u32* o = C.ops + x.ops; const u8* s = C.seq + x.seq;
     int32_t rpos = x.pos; int qpos = 0;
     for (int i = 0; i < x.nops; ++i) {
@@ -116,7 +116,7 @@ template <class F> __device__ __forceinline__ void walkRead(const ChunkV& C, con
 // ---- discovery
 __global__ void kDiscCount(ChunkV C, u32 n, u32* cnt) {
     const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
-    const Read x = C.rd[i]; u32 k = 0;
+    const AD::Read x = C.rd[i]; u32 k = 0;
     walkRead(C, x, [&](int32_t pos, u8 code, u32 ri) {
         const int bi = baseIdx(code); if (bi < 0) return true;
         const u8 rf = refBase(C, x.ci, pos); if (rf > 3 || bi == rf || !passQ(C, x, ri, code)) return true;
@@ -126,7 +126,7 @@ __global__ void kDiscCount(ChunkV C, u32 n, u32* cnt) {
 }
 __global__ void kDiscWrite(ChunkV C, u32 n, const u64* off, u64* keyB, u64* umi, int shPos, int shCi, int bcBits) {
     const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
-    const Read x = C.rd[i]; u64 o = off[i];
+    const AD::Read x = C.rd[i]; u64 o = off[i];
     const u64 hiPart = ((u64) x.ci << shCi) | (u64) (u32) x.bc;
     walkRead(C, x, [&](int32_t pos, u8 code, u32 ri) {
         const int bi = baseIdx(code); if (bi < 0) return true;
@@ -161,7 +161,7 @@ __global__ void kSites(const u64* K, const u64* agg, const int* nU_, int minM, i
 // ---- counting
 __global__ void kRange(ChunkV C, u32 n, const int32_t* spos, const u32* sOff, u32* rf, u32* rl) {
     const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
-    const Read x = C.rd[i];
+    const AD::Read x = C.rd[i];
     const u32* o = C.ops + x.ops; long long end = x.pos;
     for (int k = 0; k < x.nops; ++k) { const int op = o[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += o[k] >> 4; }
     const u32 lo = sOff[x.ci], hi = sOff[x.ci + 1];
@@ -180,7 +180,7 @@ __global__ void kHits(ChunkV C, u32 n, const int32_t* spos, const u8* sra, const
     const u32 i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
     const u32 a = max(rf[i], s0), b = min(rl[i], s1);
     if (a >= b) { if (!Write) cnt[i] = 0; return; }
-    const Read x = C.rd[i];
+    const AD::Read x = C.rd[i];
     u32 cur = a, k = 0; u64 o = Write ? off[i] : 0;
     const u64 p3 = Write ? (umiPack3(x.umi3, L) << 2) : 0;
     walkRead(C, x, [&](int32_t pos, u8 code, u32 ri) {
@@ -314,9 +314,9 @@ inline unsigned gridFor(u64 n, unsigned b = 256) { return (unsigned) std::max<u6
 
 }  // namespace
 
-bool allsiteDeviceRun(const Input& in, Output& out) {
+bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
     const auto T0 = std::chrono::steady_clock::now();
-    out = Output{};
+    out = AD::Output{};
     out.contigs.resize(in.contigs.size());
     if (const char* e = std::getenv("SINGLET_ALLSITE_GPU")) if (e[0] == '0') { out.why = "SINGLET_ALLSITE_GPU=0"; return false; }
     if (deviceCount() <= 0) { out.why = "no CUDA device"; return false; }
@@ -351,7 +351,7 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
         A.cap = want; out.arena_bytes = want;
 
         // chunks of consecutive contigs whose gathered reads take at most ~45% of the arena
-        auto dataBytes = [&](const Contig& c) { return c.reads * (sizeof(Read) + 20) + c.ops * 4 + c.seqb + c.lqw * 8 + c.ref_len + 4096; };
+        auto dataBytes = [&](const AD::Contig& c) { return c.reads * (sizeof(AD::Read) + 20) + c.ops * 4 + c.seqb + c.lqw * 8 + c.ref_len + 4096; };
         std::vector<u32> cut{0};
         u64 chunkReads = 0x7fffffffull, blockHits = 0;   // test knobs: smaller chunks and blocks than memory allows
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_CHUNK_READS")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) chunkReads = v; }
@@ -374,7 +374,7 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
             mxR = std::max(mxR, r); mxO = std::max(mxO, o); mxS = std::max(mxS, s); mxQ = std::max(mxQ, q);
         }
         if (mxO >= 0xffffffffull || mxS >= 0xffffffffull) { out.why = "chunk arrays past 32-bit offsets"; return false; }
-        std::unique_ptr<Read[]> hR(new Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
+        std::unique_ptr<AD::Read[]> hR(new AD::Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
         std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<u64[]> hQ(new u64[mxQ + 1]);
 
         u64 stat[2] = {0, 0};
@@ -383,7 +383,7 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
             u64 nR = 0, nO = 0, nS = 0, nQ = 0, maxRef = 1;
             std::vector<u64> refOff(nC + 1, 0), refLen(nC, 0);
             for (u32 c = c0; c < c1; ++c) {
-                const Contig& g = in.contigs[c];
+                const AD::Contig& g = in.contigs[c];
                 nR += g.reads; nO += g.ops; nS += g.seqb; nQ += g.lqw;
                 refLen[c - c0] = g.ref ? g.ref_len : 0; refOff[c - c0 + 1] = refOff[c - c0] + refLen[c - c0]; maxRef = std::max<u64>(maxRef, refLen[c - c0]);
             }
@@ -393,9 +393,9 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
             out.sec_gather += secSince(tg);
             const size_t mark0 = A.top;
             auto tu = std::chrono::steady_clock::now();
-            Read* dR = A.get<Read>(nR); u32* dO = A.get<u32>(nO + 1); u8* dS = A.get<u8>(nS + 1); u64* dQ = A.get<u64>(nQ + 1);
+            AD::Read* dR = A.get<AD::Read>(nR); u32* dO = A.get<u32>(nO + 1); u8* dS = A.get<u8>(nS + 1); u64* dQ = A.get<u64>(nQ + 1);
             u8* dRef = A.get<u8>(refOff[nC] + 1); u64* dRefOff = A.get<u64>(nC + 1); u64* dRefLen = A.get<u64>(nC + 1);
-            AS_CK(cudaMemcpyAsync(dR, hR.get(), nR * sizeof(Read), cudaMemcpyHostToDevice, st));
+            AS_CK(cudaMemcpyAsync(dR, hR.get(), nR * sizeof(AD::Read), cudaMemcpyHostToDevice, st));
             if (nO) AS_CK(cudaMemcpyAsync(dO, hO.get(), nO * 4, cudaMemcpyHostToDevice, st));
             if (nS) AS_CK(cudaMemcpyAsync(dS, hS.get(), nS, cudaMemcpyHostToDevice, st));
             if (nQ) AS_CK(cudaMemcpyAsync(dQ, hQ.get(), nQ * 8, cudaMemcpyHostToDevice, st));
@@ -463,10 +463,10 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
             std::vector<int32_t> spos(nSite); std::vector<u8> sra(nSite);
             for (u32 i = 0; i < nSite; ++i) {
                 const u32 c = (u32) (hSites[i].cp >> posBits); const int32_t p = (int32_t) (hSites[i].cp & ((1ull << posBits) - 1));
-                const Contig& g = in.contigs[c0 + c];
+                const AD::Contig& g = in.contigs[c0 + c];
                 const u8 rv = g.ref[p]; const u8 ref = rv < 4 ? rv : 4;   // discovery kept only ACGT reference bases
                 spos[i] = p; sra[i] = (u8) ((ref & 3) | (hSites[i].alt << 2)); sOff[c + 1]++;
-                ContigOut& co = out.contigs[c0 + c];
+                AD::ContigOut& co = out.contigs[c0 + c];
                 co.pos.push_back(p); co.ref.push_back(ref); co.alt.push_back((u8) hSites[i].alt); co.mol.push_back(hSites[i].mol); co.cells.push_back(hSites[i].cells);
             }
             for (u32 c = 0; c < nC; ++c) sOff[c + 1] += sOff[c];
@@ -564,7 +564,7 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
                 AS_CK(cudaMemcpyAsync(qi.data(), dqi, q.size() * 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
                 for (size_t z = 0; z < cs.size(); ++z) {
                     const u32 ga = qi[z], gb = qi[z + 1]; if (gb <= ga) continue;
-                    ContigOut& co = out.contigs[c0 + cs[z]];
+                    AD::ContigOut& co = out.contigs[c0 + cs[z]];
                     for (int w = 0; w < 2; ++w) {
                         const u8* fl = w == 0 ? f8 : fad;
                         size_t ts = 0;
@@ -576,9 +576,9 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
                         A.top = tm;
                         int ns = 0; AS_CK(cudaMemcpyAsync(&ns, dNum + 2, 4, cudaMemcpyDeviceToHost, st)); AS_CK(cudaStreamSynchronize(st));
                         if (ns == 0) continue;
-                        std::vector<Count>& dst = w == 0 ? co.dp : co.ad;
+                        std::vector<AD::Count>& dst = w == 0 ? co.dp : co.ad;
                         const size_t base = dst.size(); dst.resize(base + ns);
-                        static_assert(sizeof(Count) == sizeof(TriOut), "Count and TriOut share one layout");
+                        static_assert(sizeof(AD::Count) == sizeof(TriOut), "AD::Count and TriOut share one layout");
                         AS_CK(cudaMemcpyAsync(dst.data() + base, tri, ns * sizeof(TriOut), cudaMemcpyDeviceToHost, st));
                         AS_CK(cudaStreamSynchronize(st));
                         u64 sum = 0; for (size_t z2 = base; z2 < dst.size(); ++z2) sum += dst[z2].val;
@@ -594,7 +594,7 @@ bool allsiteDeviceRun(const Input& in, Output& out) {
         }
     } catch (const std::exception& e) {
         out.why = e.what();
-        for (auto& c : out.contigs) c = ContigOut{};
+        for (auto& c : out.contigs) c = AD::ContigOut{};
         return false;
     }
     out.sec = secSince(T0);
