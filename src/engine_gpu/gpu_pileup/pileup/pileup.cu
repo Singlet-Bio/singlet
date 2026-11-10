@@ -1089,6 +1089,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         A.reset(base);
     }
     g_parts_used = K; g_parts_log.clear();
+    fprintf(stderr, "[pileup] K %d of at most %d, arena %.2f GB, shared tables %.2f GB, reads %d\n", K, kMaxParts, A.cap / 1e9, base / 1e9, nR);
     uint8_t* pid = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr; uint64_t* Qg = nullptr;
     const size_t base2 = [&] {   // K > 1: partition scratch that outlives each partition (the partition of each read; the largest partition's reads, their global index, masks)
         if (K > 1) {
@@ -1116,6 +1117,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, in.dp.qw, ridx, nRp, Qg); Qp = Qg; }
         }
         T.mark("part.select");
+        fprintf(stderr, "[pileup] partition %d/%d selected: %d reads\n", part, K, nRp);
         const int GR = (nRp + TB - 1) / TB;
         const size_t s0 = A.mark();
         // 4 expand to read level: gene tuples + counts / offsets of the other streams
@@ -1249,6 +1251,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             fExtra(); fSj(); fSn(); fMt(); fInd();
         }
         T.mark("fetch");
+        fprintf(stderr, "[pileup] partition %d/%d fetched\n", part, K);
     }
     A.reset(base2); A.peak = peak_all;
     T.finish();
