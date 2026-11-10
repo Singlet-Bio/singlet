@@ -61,7 +61,8 @@ int main() {
         for (uint64_t h : extract_minimizers(reads[ri], K, W)) flat.push_back({h, ri});
     std::sort(flat.begin(), flat.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
-    for (const MinSketchIndex* idx : {&viral, &micro}) {
+    const MinSketchIndex* idxs[2] = {&viral, &micro};
+    for (const MinSketchIndex* idx : idxs) {
         std::vector<std::unordered_map<uint32_t, uint32_t>> ref(reads.size());
         idx->batch_query_presorted(flat, ref);
         for (int nt : {1, 2, 3, 8}) {
