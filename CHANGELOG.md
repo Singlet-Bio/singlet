@@ -4,6 +4,12 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+- **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
+  the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
+  default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and
+  `cell_type_ontology_term_id` = its Cellosaurus id (or `cultured cell` / `CL:0000010` when the GEO record does not name the
+  line); level 0, no score, no path. Python `singlet.s1.sample_facts.relabel_cell_lines`, R `load()` / `singlet_cells()`, as on
+  singlet.bio. `sample_facts=False` keeps the labeller's calls.
 - **Run metadata is kept apart from data** (summary.json schema 1.2). `memory_tier` described the process that ran, bucketed
   from its peak RSS, so two runs of the same input near a tier boundary wrote different summary.json files. It now lives in
   `private/run_metadata.json` with the peak RSS and the timings; summary.json keeps `peak_rss_gb` and its timing keys where they
