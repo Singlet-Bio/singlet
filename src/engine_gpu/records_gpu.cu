@@ -377,6 +377,18 @@ struct RegionPin {
                 }
         return true;
     }
+    // a host-to-device copy may not span two page-locked ranges: the per-read arrays next to the records are split at its edges
+    cudaError_t h2d(void* d, const uint8_t* s, u64 n) const {
+        u64 o = 0;
+        for (const auto& x : rec)
+            for (const uint8_t* c : {x.first, x.first + x.second})
+                if (c > s + o && c < s + n) {
+                    const cudaError_t e = cudaMemcpy((uint8_t*) d + o, s + o, (u64) (c - (s + o)), cudaMemcpyHostToDevice);
+                    if (e != cudaSuccess) return e;
+                    o = (u64) (c - s);
+                }
+        return cudaMemcpy((uint8_t*) d + o, s + o, n - o, cudaMemcpyHostToDevice);
+    }
     void unpinOther() { for (auto& x : other) cudaHostUnregister(x.first); other.clear(); }
     void unpinAll() { unpinOther(); for (auto& x : rec) cudaHostUnregister(x.first); rec.clear(); }
 };
@@ -454,11 +466,11 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         cudaError_t e = cudaSuccess;
         if (upAt != i0) {
             upAt = ~0ull; qUp = false;
-            if ((e = cudaMemcpy(dRR, hRR + i0 * 4, m * 4, cudaMemcpyHostToDevice)) != cudaSuccess) return e;
-            if ((e = cudaMemcpy(dE, hE + i0 * 24, m * 24, cudaMemcpyHostToDevice)) != cudaSuccess) return e;
+            if ((e = RP.h2d(dRR, hRR + i0 * 4, m * 4)) != cudaSuccess) return e;
+            if ((e = RP.h2d(dE, hE + i0 * 24, m * 24)) != cudaSuccess) return e;
             upAt = i0;
         }
-        if (q && hQ && !qUp) { if ((e = cudaMemcpy(dQ, hQ + i0 * QB, m * QB, cudaMemcpyHostToDevice)) != cudaSuccess) return e; qUp = true; }
+        if (q && hQ && !qUp) { if ((e = RP.h2d(dQ, hQ + i0 * QB, m * QB)) != cudaSuccess) return e; qUp = true; }
         out.msUpload += (now() - t) * 1e3;
         return e;
     };
