@@ -27,6 +27,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/copy.h>
 #include <thrust/reduce.h>
+#include <thrust/count.h>
 #include <thrust/system/cuda/execution_policy.h>
 #include <algorithm>
 #include <new>
