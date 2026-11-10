@@ -1505,6 +1505,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         if (!e2r.attach(gb << 30)) { e2eWant = false; gpuFallback(P, "ENGINE_GPU: E8 not used (the shared memory object could not be mapped)"); }
     }
     if (e2eWant) { in.e2e = &e2r; in.outSAMmapqUnique = P.outSAMmapqUnique; in.outSAMflagAND = P.outSAMflagAND; in.outSAMflagOR = P.outSAMflagOR; }
+    // E16 "handover": at level 5 with E11 nothing reads the host records after mapDistinct (no summaries, no cache inserts), so the records'
+    // phase releases their pages as it uploads them; a fallback that would need them stops the run instead (needHost below)
+    in.e2eHandover = e2eWant && e10Level >= 5 && in.e10.soloModel != nullptr && readSourceFree() && getenv("SINGLET_ENGINE_GPU_DUMP") == nullptr
+                     && getenv("SINGLET_ENGINE_GPU_E2E_CHECK") == nullptr && singlet_tail::cut("handover");
     // E13: R11's exact CB histogram from the decode to the pipeline (engine_gpu_ingest.h publishR11), before the device runs: the stream's CB
     // correction needs it whatever happens next; the device's, where E10 computes one, is compared after mapDistinct
     if (ingOn && e2r.base != nullptr && !ing.r11.empty())
@@ -1685,7 +1689,14 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         singlet_tail::mark("prefill: sequence cache re-created (%llu MB)", (unsigned long long) mb);
     };
     // insert, sharded by hash across threads (SeqCache is thread-safe per shard); keep(i) picks the records
+    auto needHost = [&](const char *what) {   // E16 handover: the host records' pages were released; a path that reads them cannot run
+        if (out.hostDropped)
+            exitWithError(std::string("EXITING because of FATAL ERROR (singlet --engine gpu, E16): ") + what + " needs the host records, which the records' phase "
+                          "released (level 5 not reached); rerun with SINGLET_E16_OFF=handover
+", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+    };
     auto insertRecords = [&](auto keep) {
+        needHost("the sequence cache inserts");
         sizeCache();
         int nt = std::max(1, (int) P.runThreadN);
         std::vector<std::thread> th;
@@ -1747,6 +1758,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
         const bool e10NoSum = e10ok && (e10Level == 4 || (e10Level >= 5 && e11.ready)) && readSourceFree();
         e10NoSumMade = e10NoSum; e19E8 = e2eRec;
+        if (!e10NoSum) needHost("the hand-off summaries");
         std::vector<std::thread> th;
         // E16 (level 5): without summaries the threads would only construct (and leak) a ReadAlign, a Transcriptome copy and an OutSJ each
         const bool e16NoThreads = e10NoSum && e2eRec && singlet_tail::cut("sumthreads");
