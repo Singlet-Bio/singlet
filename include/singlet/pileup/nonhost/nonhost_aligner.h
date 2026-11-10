@@ -32,6 +32,7 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -212,9 +213,11 @@ public:
     //
     // Returns one SecondaryAlignResult per species whose FASTA was found on disk.
     // Species whose FASTA does not exist are silently skipped (warning logged).
+    // threads: the per-read work is independent and both counters are integer sums, so any thread count gives the same result.
     std::vector<SecondaryAlignResult> align(
             const std::vector<std::string>&      reads,
-            const std::vector<SpeciesAbundance>& em_abundances) const {
+            const std::vector<SpeciesAbundance>& em_abundances,
+            int threads = 1) const {
 
         std::vector<SecondaryAlignResult> results;
         const uint32_t n_reads = static_cast<uint32_t>(reads.size());
@@ -238,33 +241,50 @@ public:
 
             uint64_t seed_hits_total = 0;   // accumulator for coverage approximation
 
-            for (const auto& read : reads) {
-                auto mins = extract_minimizers(read, SpeciesRefIndex::K, SpeciesRefIndex::W);
-                if (mins.empty()) continue;
+            const int nt = (reads.size() >= 20000) ? std::max(1, threads) : 1;
+            std::vector<uint64_t> hits_t(nt, 0), aligned_t(nt, 0);
+            auto work = [&](int t) {
+                const size_t rb = reads.size() * static_cast<size_t>(t) / nt, re = reads.size() * static_cast<size_t>(t + 1) / nt;
+                uint64_t seed_hits = 0, aligned_n = 0;
+                for (size_t ri = rb; ri < re; ++ri) {
+                    const auto& read = reads[ri];
+                    auto mins = extract_minimizers(read, SpeciesRefIndex::K, SpeciesRefIndex::W);
+                    if (mins.empty()) continue;
 
-                // Collect reference positions hit by this read, grouped by contig.
-                std::unordered_map<uint32_t, std::vector<uint32_t>> contig_hits;
-                for (uint64_t mhash : mins) {
-                    const auto* positions = idx.lookup(mhash);
-                    if (!positions) continue;
-                    for (const SeedPos& sp : *positions) {
-                        contig_hits[sp.contig_id].push_back(sp.position);
-                        ++seed_hits_total;
+                    // Collect reference positions hit by this read, grouped by contig.
+                    std::unordered_map<uint32_t, std::vector<uint32_t>> contig_hits;
+                    for (uint64_t mhash : mins) {
+                        const auto* positions = idx.lookup(mhash);
+                        if (!positions) continue;
+                        for (const SeedPos& sp : *positions) {
+                            contig_hits[sp.contig_id].push_back(sp.position);
+                            ++seed_hits;
+                        }
                     }
-                }
 
-                // A read is aligned if any contig has a chain of ≥ MIN_CHAIN_SEEDS seeds
-                // with consecutive seeds no more than MAX_GAP_BP apart.
-                bool aligned = false;
-                for (auto& [cid, pos_list] : contig_hits) {
-                    std::sort(pos_list.begin(), pos_list.end());
-                    if (longest_chain(pos_list, MAX_GAP_BP) >= MIN_CHAIN_SEEDS) {
-                        aligned = true;
-                        break;
+                    // A read is aligned if any contig has a chain of ≥ MIN_CHAIN_SEEDS seeds
+                    // with consecutive seeds no more than MAX_GAP_BP apart.
+                    bool aligned = false;
+                    for (auto& [cid, pos_list] : contig_hits) {
+                        std::sort(pos_list.begin(), pos_list.end());
+                        if (longest_chain(pos_list, MAX_GAP_BP) >= MIN_CHAIN_SEEDS) {
+                            aligned = true;
+                            break;
+                        }
                     }
+                    if (aligned) ++aligned_n;
                 }
-                if (aligned) ++res.aligned_reads;
+                hits_t[t] = seed_hits;
+                aligned_t[t] = aligned_n;
+            };
+            if (nt == 1) {
+                work(0);
+            } else {
+                std::vector<std::thread> ts;
+                for (int t = 0; t < nt; ++t) ts.emplace_back(work, t);
+                for (auto& th : ts) th.join();
             }
+            for (int t = 0; t < nt; ++t) { seed_hits_total += hits_t[t]; res.aligned_reads += static_cast<uint32_t>(aligned_t[t]); }
 
             if (n_reads > 0)
                 res.mapping_rate = static_cast<float>(res.aligned_reads) /
