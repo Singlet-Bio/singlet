@@ -2,10 +2,10 @@
 
 All notable changes to the singlet project.
 
-## [1.0.0] — the Research Beta freeze (date set at the tag)
+## [1.3.5] — the Research Beta freeze (date set at the tag)
 
-The launch candidate of the Research Beta engine, on top of `main` at 1.3.4. The version number restarts at 1.0.0 for the
-Beta line; the client APIs are those of 1.3.4 plus the additions below. Every entry derives from a merged change.
+The launch candidate of the Research Beta engine, on top of `main` at 1.3.4. The client APIs are those of 1.3.4 plus the
+additions below. Every entry derives from a merged change.
 
 - **Engine.** The all-site pass has a device route (discovery and counting on the GPU, with a host fallback), the GPU pool
   shares one device index by default, and the stream loop stages UMIs in a flat table. New intron rules add chrM

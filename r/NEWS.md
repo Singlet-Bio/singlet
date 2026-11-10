@@ -1,8 +1,8 @@
 # singlet (R) — NEWS
 
-## singlet 1.0.0
+## singlet 1.3.5
 
-Version number restarts at 1.0.0 for the Research Beta line. The notes below (written as 1.2.2) are carried forward unchanged.
+Version aligned with the Python package for the Research Beta freeze. The notes below (written as 1.2.2) are carried forward unchanged.
 
 ## singlet 1.2.2
 
