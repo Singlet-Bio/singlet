@@ -2415,6 +2415,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             if (!SU.init(std::max(1, std::min(8, hostThreads))) || !SU.copy(dBOff, out.blobOff.data(), (nRec + 1) * 8) || !SU.copy(dSOff, out.seqOff.data(), (nRec + 1) * 8)
                 || !SU.copy(dBlob, out.blob.data(), nB) || !SU.copy(dRS, out.seq.data(), nS) || !SU.finish()) { why = "records upload"; return false; }
             hostBytes = SU.bytes;
+            if (in.e2eHandover && singlet_tail::cut("handover") && e10 && in.e10.soloModel != nullptr) {   // E16 handover: read for the last time
+                singlet_engine_gpu::dropPages(out.blob.data(), nB); singlet_engine_gpu::dropPages(out.seq.data(), nS); out.hostDropped = true;
+            }
         } else {
         // the gather: per chunk the lanes' packed results (device-resident; the host lane's uploaded), per record its source and sequence
         std::vector<LaneSrc> tab(chunks.size() * 4, LaneSrc{nullptr, nullptr});
@@ -2688,9 +2691,16 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         bool prodOk = e10;
         if (e10) out.e10.recMapped.assign(nRec, 0);
         u64 aB = 0, oB = 0, sB = 0;
+        // E16 handover: the host records are read for the last time by pass 2's upload of each chunk (the level-5 caller reads none after)
+        const bool handover = in.e2eHandover && singlet_tail::cut("handover");
         for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
             const u64 m = std::min(RRN, nRec - q0);
             if (!upChunk(q0, m)) { why = "records upload"; return false; }
+            if (handover && prodOk && keep) {
+                singlet_engine_gpu::dropPages(out.blob.data() + out.blobOff[q0], out.blobOff[q0 + m] - out.blobOff[q0]);
+                singlet_engine_gpu::dropPages(out.seq.data() + out.seqOff[q0], out.seqOff[q0 + m] - out.seqOff[q0]);
+                out.hostDropped = true;
+            }
             double ta = now();
             singlet_records_gpu::DeviceRecords R6; std::string e6err;
             struct R6Free { singlet_records_gpu::DeviceRecords& r; ~R6Free() { singlet_records_gpu::release(r); } } r6f{R6};
