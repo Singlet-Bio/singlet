@@ -1262,17 +1262,45 @@ struct E10Source : StarReadSource {
 };
 E10Source e10src;
 bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std::string &why) {
-    E10Rec x;
-    for (uint64 r = 0; r < nReads; r++) {
-        if (readRecord[r] != 0xFFFFFFFFu) continue;
-        if (!e10Record(r, x)) { why = "a FASTQ record could not be read back"; return false; }
-        const std::string line1 = e10ReadName(P, r, x, false) + ' ' + std::to_string(r + 1) + ' ' + x.filter + ' ' + std::to_string(P.readFilesIndex) + '\n';
-        for (int im = 0; im < 2; im++) {
-            std::string &o = e10src.buf[im];
-            o += line1; o.append(x.seq[im], x.seqLen[im]); o += "\n+\n"; o.append(x.qual[im], x.qualLen[im]); o += '\n';
-            e10src.end[im].push_back(o.size());
+    // align-w2: per thread a contiguous range of reads, joined in read order (the buffers and their order are the serial loop's)
+    const int T = (int) std::max<uint64>(1, std::min<uint64>((uint64) std::max(1, (int) P.runThreadN), nReads / 65536 + 1));
+    struct Part { std::string buf[2]; std::vector<uint64> end[2], iRead; bool bad = false; };
+    std::vector<Part> pt(T);
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+        Part &q = pt[t];
+        E10Rec x;
+        for (uint64 r = nReads * t / T, e = nReads * (t + 1) / T; r < e; r++) {
+            if (readRecord[r] != 0xFFFFFFFFu) continue;
+            if (!e10Record(r, x)) { q.bad = true; return; }
+            const std::string line1 = e10ReadName(P, r, x, false) + ' ' + std::to_string(r + 1) + ' ' + x.filter + ' ' + std::to_string(P.readFilesIndex) + '
+';
+            for (int im = 0; im < 2; im++) {
+                std::string &o = q.buf[im];
+                o += line1; o.append(x.seq[im], x.seqLen[im]); o += "
++
+"; o.append(x.qual[im], x.qualLen[im]); o += '
+';
+                q.end[im].push_back(o.size());
+            }
+            q.iRead.push_back(r + 1);
         }
-        e10src.iRead.push_back(r + 1);
+    });
+    for (auto &x : th) x.join();
+    for (int t = 0; t < T; t++) if (pt[t].bad) { why = "a FASTQ record could not be read back"; return false; }
+    for (int im = 0; im < 2; im++) {
+        uint64 nb = e10src.buf[im].size(), ne = e10src.end[im].size();
+        for (int t = 0; t < T; t++) { nb += pt[t].buf[im].size(); ne += pt[t].end[im].size(); }
+        e10src.buf[im].reserve(nb); e10src.end[im].reserve(ne);
+    }
+    for (int t = 0; t < T; t++) {
+        Part &q = pt[t];
+        for (int im = 0; im < 2; im++) {
+            const uint64 base = e10src.buf[im].size();
+            e10src.buf[im] += q.buf[im]; std::string().swap(q.buf[im]);
+            for (uint64 v : q.end[im]) e10src.end[im].push_back(base + v);
+        }
+        e10src.iRead.insert(e10src.iRead.end(), q.iRead.begin(), q.iRead.end());
     }
     return true;
 }
@@ -1732,7 +1760,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 e2eQ = e2eQOn ? e2r.take(std::max<uint64>(1, nR) * 8 * g_handoffQWords) : 0;
             }
             if (!e2eR || !e2eE || (e2eQOn && !e2eQ)) { e2eRec = false; gpuFallback(P, "ENGINE_GPU: E8: the shared region is full; the hand-off file path runs"); }
-            else memcpy(e2r.base + e2eR, out.readRecord.data(), nR * 4);
+            else {   // align-w2: on every thread (each faults in its part of the region's pages)
+                const int tc = (int) std::max<uint64>(1, std::min<uint64>((uint64) nt, nR / (1u << 20) + 1));
+                std::vector<std::thread> tv;
+                for (int t = 0; t < tc; t++) tv.emplace_back([&, t]() { const uint64 a = nR * t / tc, b = nR * (t + 1) / tc; if (b > a) memcpy(e2r.base + e2eR + a * 4, out.readRecord.data() + a, (b - a) * 4); });
+                for (auto &x : tv) x.join();
+            }
         }
         e10ok = e10ok && e2eRec;
         // E10 level 4: no read with a record reaches STAR's loop, so no summaries are needed
@@ -1770,7 +1803,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                              << " differ from alignBAM's" << "\n";
         static std::vector<uint8> recAln;   // per record its alignment count (the first byte of each record)
         recAln.resize(nRec);
-        if (e2eRec) for (uint64 r = 0; r < nRec; r++) recAln[r] = e2r.recAln(r);
+        if (e2eRec) {   // align-w2: on every thread
+            const int tc = (int) std::max<uint64>(1, std::min<uint64>((uint64) nt, nRec / (1u << 20) + 1));
+            std::vector<std::thread> tv;
+            for (int t = 0; t < tc; t++) tv.emplace_back([&, t]() { for (uint64 r = nRec * t / tc, e = nRec * (t + 1) / tc; r < e; r++) recAln[r] = e2r.recAln(r); });
+            for (auto &x : tv) x.join();
+        }
         else
         for (int t = 0, r = 0; t < nt; t++)
             for (uint64 o : partOff[t]) recAln[r++] = part[t][o];
