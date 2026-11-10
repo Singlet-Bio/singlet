@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+smartseq3_pbmc	rna	zstd22	5038873	5036341	0.999498
+smartseq3_pbmc	rna	xz9e	5038873	5036992	0.999627
+smartseq3_pbmc	rna	brotli11	5038873	5038885	1.000002
+smartseq3_pbmc	rna	bzip2_9	5038873	5060633	1.004318

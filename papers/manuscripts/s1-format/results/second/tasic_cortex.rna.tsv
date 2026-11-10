@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+tasic_cortex	rna	zstd22	256258878	256185546	0.999714
+tasic_cortex	rna	xz9e	256258878	256191532	0.999737
+tasic_cortex	rna	brotli11	256258878	256189743	0.99973
+tasic_cortex	rna	bzip2_9	256258878	257367107	1.004325

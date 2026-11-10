@@ -36,7 +36,9 @@ def test_class_is_the_smallest_that_holds_the_sample():
     assert L.mem_class(425e6, CLASSES) == 248
     assert L.mem_class(625e6, CLASSES) == 344
     assert L.mem_class(1.29e9, CLASSES) == 720
-    assert L.mem_class(9e9, CLASSES) == 720    # nothing holds it: the largest, and the worker will wait / fail loudly rather than be killed silently
+    assert (
+        L.mem_class(9e9, CLASSES) == 720
+    )  # nothing holds it: the largest, and the worker will wait / fail loudly rather than be killed silently
     for r in (3e7, 1.1e8, 2.9e8, 4.3e8, 6.4e8, 1.3e9):
         assert C.gpu_job_mem_gb(r) <= L.mem_class(r, CLASSES) or L.mem_class(r, CLASSES) == 720
 
@@ -51,20 +53,43 @@ def test_every_class_with_work_gets_a_worker_before_any_gets_a_second():
 def test_plan_starts_workers_by_class_and_respects_the_gpu_cap():
     p = dict(L.DEFAULTS, multi_sample=False)
     assert p["max_h100"] == 3
-    bl = {"pairs": 5e10, "samples": 100, "todo": 0, "fetching": 0, "by_class": {96: 1e10, 176: 3e10, 720: 1e10}}
-    have = {"h100": {"run": 1, "pend": 0, "ages": []}, "h100_by_class": {176: {"run": 1, "pend": 0, "ages": []}},
-            "v100": {"run": 0, "pend": 0, "ages": []}, "cpu": {"run": 0, "pend": 0, "ages": []}, "fetch": 0}
+    bl = {
+        "pairs": 5e10,
+        "samples": 100,
+        "todo": 0,
+        "fetching": 0,
+        "by_class": {96: 1e10, 176: 3e10, 720: 1e10},
+    }
+    have = {
+        "h100": {"run": 1, "pend": 0, "ages": []},
+        "h100_by_class": {176: {"run": 1, "pend": 0, "ages": []}},
+        "v100": {"run": 0, "pend": 0, "ages": []},
+        "cpu": {"run": 0, "pend": 0, "ages": []},
+        "fetch": 0,
+    }
     d = L.plan(p, bl, have)
-    assert d["h100"] == 2 and len(d["h100_classes"]) == 2 and 176 not in d["h100_classes"][:1]   # the busy class already has a worker
+    assert (
+        d["h100"] == 2 and len(d["h100_classes"]) == 2 and 176 not in d["h100_classes"][:1]
+    )  # the busy class already has a worker
     assert set(d["h100_classes"]) == {96, 720}
 
 
 def test_sbatch_script_has_the_class_memory_and_name():
     a = types.SimpleNamespace(log_dir="/tmp", stage="/stage", config="/cfg.json")
     s = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS, multi_sample=False), 176)
-    assert "#SBATCH --mem=176G" in s and "--mem-gb 176" in s and "#SBATCH --job-name=s9-drain-h100-c176" in s
-    whole = L.sbatch_script("drain-h100", a, dict(L.DEFAULTS, multi_sample=False), 720)   # the too-big class: a whole node, alone
-    assert "#SBATCH --exclusive" in whole and "#SBATCH --mem=0" in whole and "#SBATCH --job-name=s9-drain-h100-c720" in whole
+    assert (
+        "#SBATCH --mem=176G" in s
+        and "--mem-gb 176" in s
+        and "#SBATCH --job-name=s9-drain-h100-c176" in s
+    )
+    whole = L.sbatch_script(
+        "drain-h100", a, dict(L.DEFAULTS, multi_sample=False), 720
+    )  # the too-big class: a whole node, alone
+    assert (
+        "#SBATCH --exclusive" in whole
+        and "#SBATCH --mem=0" in whole
+        and "#SBATCH --job-name=s9-drain-h100-c720" in whole
+    )
     assert "--exclusive" not in s
     old = L.sbatch_script("drain-v100", a, dict(L.DEFAULTS, multi_sample=False))
     assert "#SBATCH --mem=128G" in old and "--mem-gb 128" in old
@@ -75,10 +100,16 @@ def test_worker_leaves_a_sample_it_cannot_hold():
     small = {"pairs": 66_000_000}
     assert not D.accept_sample(big, mem_gb=128) and D.accept_sample(small, mem_gb=128)
     assert D.accept_sample(big, mem_gb=344) and not D.accept_sample(big, mem_gb=248)
-    assert D.accept_sample(big, mem_gb=0)                       # memory unknown: no filter
-    assert D.accept_sample({"pairs": 1_300_000_000}, mem_gb=720) and D.accept_sample({"pairs": 3_000_000_000}, mem_gb=720)   # the whole-node worker takes any sample
-    assert not D.accept_sample({"pairs": 1_300_000_000}, mem_gb=344)   # and no shared worker takes a p99 sample
-    assert D.accept_sample(big, mem_gb=128, engine="cpu")       # the CPU engine's memory is a different model
+    assert D.accept_sample(big, mem_gb=0)  # memory unknown: no filter
+    assert D.accept_sample({"pairs": 1_300_000_000}, mem_gb=720) and D.accept_sample(
+        {"pairs": 3_000_000_000}, mem_gb=720
+    )  # the whole-node worker takes any sample
+    assert not D.accept_sample(
+        {"pairs": 1_300_000_000}, mem_gb=344
+    )  # and no shared worker takes a p99 sample
+    assert D.accept_sample(
+        big, mem_gb=128, engine="cpu"
+    )  # the CPU engine's memory is a different model
     assert not D.accept_sample({"pairs": 1, "format": "1fg2"}, mem_gb=128)
     assert D.accept_sample({"pairs": 1, "format": "1fg2"}, mem_gb=128, accept_1fg2=True)
     assert not D.accept_sample(small, mem_gb=128, min_pairs=70_000_000)
@@ -88,17 +119,32 @@ def test_backlog_by_class(tmp_path):
     stage = str(tmp_path / "stage")
     for d in ("todo", "fetching", "ready", "claimed"):
         os.makedirs(os.path.join(stage, d))
-    for gsm, pairs in (("GSM1", 60_000_000), ("GSM2", 70_000_000), ("GSM3", 250_000_000), ("GSM4", 1_300_000_000)):
+    for gsm, pairs in (
+        ("GSM1", 60_000_000),
+        ("GSM2", 70_000_000),
+        ("GSM3", 250_000_000),
+        ("GSM4", 1_300_000_000),
+    ):
         os.makedirs(os.path.join(stage, "ready", gsm))
-        json.dump({"pairs": pairs, "bytes": 1}, open(os.path.join(stage, "ready", gsm, "manifest.json"), "w"))
+        json.dump(
+            {"pairs": pairs, "bytes": 1},
+            open(os.path.join(stage, "ready", gsm, "manifest.json"), "w"),
+        )
     bl = Q.backlog(stage, classify=lambda m: L.mem_class(m["pairs"], CLASSES))
-    assert bl["by_class"] == {96: 130_000_000, 176: 250_000_000, 720: 1_300_000_000} and bl["pairs"] == 1_680_000_000
+    assert (
+        bl["by_class"] == {96: 130_000_000, 176: 250_000_000, 720: 1_300_000_000}
+        and bl["pairs"] == 1_680_000_000
+    )
     assert "by_class" not in Q.backlog(stage)
 
 
 def test_memory_tier_comes_from_the_sample_not_the_process():
     # summary.json (a member of the .s1) reports a tier; the drain worker fixes it from the read count so CPU and GPU runs of a sample agree
-    assert C.memory_tier(5e6) == "Medium" and C.memory_tier(66e6) == "Medium" and C.memory_tier(263e6) == "Large"
+    assert (
+        C.memory_tier(5e6) == "Medium"
+        and C.memory_tier(66e6) == "Medium"
+        and C.memory_tier(263e6) == "Large"
+    )
     assert C.memory_tier(625e6) == "XLarge" and C.memory_tier(1.29e9) == "XLarge"
     assert C.memory_tier(100e6) == C.memory_tier(100e6)
 
@@ -110,4 +156,6 @@ def test_the_singlet_command_carries_the_tier():
     man = {"runs": ["SRR1"], "pairs": 263_000_000, "organism": "Homo sapiens"}
     cmd = D.singlet_cmd(a, ccfg, cfg, "/claim", man, "/out")
     assert cmd[cmd.index("--memory-tier") + 1] == "Large"
-    assert "--memory-tier" not in D.singlet_cmd(a, ccfg, cfg, "/claim", {"runs": ["SRR1"], "organism": "Homo sapiens"}, "/out")   # no read count: the measured value stays
+    assert "--memory-tier" not in D.singlet_cmd(
+        a, ccfg, cfg, "/claim", {"runs": ["SRR1"], "organism": "Homo sapiens"}, "/out"
+    )  # no read count: the measured value stays

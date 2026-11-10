@@ -77,7 +77,7 @@ can match few cells.
 
 ## Other modalities
 
-`singlet_study_modalities("GSE128639")` lists what a study's samples carry beyond gene counts (spliced and unspliced layers,
+`singlet_study_modalities("GSE144434")` (CITE-seq of human PBMC) lists what a study's samples carry beyond gene counts (spliced and unspliced layers,
 splice junctions and PSI, V(D)J usage), and `singlet_load(..., modalities = )` fetches them. Research Alpha withholds
 per-cell mitochondrial DNA, doublet scores and per-donor germline data from every published object.
 

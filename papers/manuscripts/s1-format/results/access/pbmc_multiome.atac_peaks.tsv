@@ -1,0 +1,7 @@
+dataset	matrix	format	batches	bytes_per_batch	requests_per_batch	requests_p90	needed_per_batch	overread	index_bytes	file_bytes	chunk_elems
+pbmc_multiome	atac_peaks	s1	200	2597919.5	8.0	8.0	2442727.126263	1.065571	120560	56604640	NA
+pbmc_multiome	atac_peaks	h5ad_gzip	200	7916242.5	23.0	27.1	7736252.102424	1.02195	41908	179270030	20898
+pbmc_multiome	atac_peaks	h5ad_lzf	200	19730684.0	23.0	27.1	19063372.900787	1.033232	47648	441750267	20898
+pbmc_multiome	atac_peaks	h5ad_none	200	30928832.0	23.0	27.1	29860859.965708	1.0345	47648	691957448	20898
+pbmc_multiome	atac_peaks	tenx_h5	200	5620177.5	24.0	28.0	5433357.785032	1.034429	27586	125905697	20898
+pbmc_multiome	atac_peaks	zarr	200	11760958.0	39.0	43.0	6800130.023015	1.700478	28554	157577532	334363

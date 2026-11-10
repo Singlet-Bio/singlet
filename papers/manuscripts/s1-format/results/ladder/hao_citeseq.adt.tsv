@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+hao_citeseq	adt	33599680	64.0	19.782119	6.380135	5.793238	5.518691	5.617097	1

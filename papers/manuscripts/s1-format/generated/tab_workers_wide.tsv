@@ -1,0 +1,5 @@
+loader	where	w0	w2	w4
+.s1 (S1Cells)	node disk	73,981	62,324	72,162
+.s1 (S1Cells)	store, 1 ms	56,812	53,500	59,131
+scDataset	node disk	4,254	8,690	15,648
+scDataset	store, 1 ms	6,434	9,401	17,216

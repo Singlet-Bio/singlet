@@ -359,7 +359,9 @@ def migrate_sample(
             knee = called
             if knee_list is not None:
                 ks = set(knee_list)
-                knee = np.fromiter((b in ks for b in basis_barcodes), dtype=bool, count=len(basis_barcodes))
+                knee = np.fromiter(
+                    (b in ks for b in basis_barcodes), dtype=bool, count=len(basis_barcodes)
+                )
             _add_called_ed(base, basis_barcodes, ex_c, it_c, protocol, opts, gsm, knee)
     labels = None
     if opts.labels is not None and base is not None:
@@ -670,7 +672,9 @@ def _label_cells(
     return res
 
 
-def _add_called_ed(base, barcodes, exon, intron, protocol, opts: Options, gsm: str, knee=None) -> None:
+def _add_called_ed(
+    base, barcodes, exon, intron, protocol, opts: Options, gsm: str, knee=None
+) -> None:
     """Optional cells columns ``called_ed`` (bool) and ``called_ed_fdr`` (f32, NaN = not tested) plus the call's parameters in
     ``base.meta["called_ed"]`` (docs/called-ed.md)."""
     if opts.cell_call_ed is False:

@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+visium_hd_crc	rna	zstd22	156701678	156582779	0.999241
+visium_hd_crc	rna	xz9e	156701678	156577240	0.999206
+visium_hd_crc	rna	brotli11	156701678	156558941	0.999089
+visium_hd_crc	rna	bzip2_9	156701678	157318392	1.003936

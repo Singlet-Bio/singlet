@@ -1,0 +1,28 @@
+% Fig. 1b drawn four ways, for choosing one: log or linear axes, with or without every matrix. Build: latexmk -pdf here.
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=0.7in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[scaled=0.92]{helvet}
+\usepackage{xcolor,tikz,pgfplots}
+\pgfplotsset{compat=1.18}
+\newcommand{\gen}[1]{generated/#1}
+\newcommand{\sone}{\texttt{.s1}}
+\definecolor{sone}{HTML}{2A78D6}\definecolor{gen}{HTML}{8C8C8C}\definecolor{dom}{HTML}{D9591F}\definecolor{ink2}{HTML}{555555}
+\pgfplotsset{
+  table/col sep=tab,
+  discard if not/.style 2 args={x filter/.append code={\edef\tempa{\thisrow{#1}}\edef\tempb{#2}\ifx\tempa\tempb\else\def\pgfmathresult{nan}\fi}},
+  every axis/.append style={font=\sffamily\scriptsize, label style={font=\sffamily\scriptsize},
+    tick label style={font=\sffamily\tiny}, title style={font=\sffamily\small\bfseries, align=left}},
+}
+\pagestyle{empty}
+\begin{document}
+\noindent\textsf{\small Fig.~1b four ways. Left: medians, with lines spanning the interquartile ranges over matrices.
+Right: medians and every matrix (one faint point per matrix and format). Top: log axes. Bottom: linear axes (x clipped at
+70 bits; four uncompressed h5ad matrices lie beyond). The manuscript uses bottom right.}\par\medskip
+\noindent
+\def\fbTitle{Log axes, quartiles}\def\fbLog{1}\def\fbPts{0}\input{figures/fig1b_panel}\hfill
+\def\fbTitle{Log axes, every matrix}\def\fbLog{1}\def\fbPts{1}\input{figures/fig1b_panel}\par\medskip
+\noindent
+\def\fbTitle{Linear axes, quartiles}\def\fbLog{0}\def\fbPts{0}\input{figures/fig1b_panel}\hfill
+\def\fbTitle{Linear axes, every matrix (manuscript)}\def\fbLog{0}\def\fbPts{1}\input{figures/fig1b_panel}
+\end{document}

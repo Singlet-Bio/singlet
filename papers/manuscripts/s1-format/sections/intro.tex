@@ -1,0 +1,32 @@
+% Introduction (main text). Numbers belong in the figures and their captions; the text states what they show.
+\section{Introduction}
+\label{sec:intro}
+
+\IEEEPARstart{H}{ow} many bits does a single cell need? The Gene Expression Omnibus~\cite{barrett2013geo} now holds sequencing data from more than three billion cells~\cite{seqout}, reference atlases serve tens of
+millions~\cite{svensson2018exponential,sikkema2023integrated,czi2025cellxgene}, a single perturbation screen has reached a
+hundred million~\cite{zhang2025tahoe}, and machine learning models are trained by streaming such collections from cloud
+storage, minibatch by minibatch, many times over~\cite{lopez2018deep,theodoris2023transfer,cui2024scgpt}. AI agents,
+too, now find, fetch and analyze public data on their own, deciding after each result what to fetch next. Every one of
+those minibatches and fetches crosses a network. When it does, the bits each cell takes and the round trips needed to find
+it, not the model or the processor, set how fast training runs, what each epoch costs, and whether an agent can answer
+within a conversation or must wait minutes for each step. AI-ready data, we argue, is not just a matter of systematic
+annotation but also of how quickly a model can get the cells it needs.
+
+Today's formats spend those bits generously. AnnData~\cite{virshup2024anndata}, the 10x Genomics HDF5 file, loom, Zarr and
+TileDB-SOMA~\cite{tiledbsoma} store whole-number counts as generic arrays and hand them to compressors such as gzip or
+zstd, which see only bytes. Yet count matrices are anything but arbitrary. Most non-zero counts are exactly one; a cell's
+sequencing depth sets the expected count of every gene in it; and if genes are numbered from most to least often
+detected, the positions of a cell's non-zero entries become a short list of small steps. Properties like these, specific
+to the data, are what let CRAM replace gzip for sequencing reads with models of the reads
+themselves~\cite{bonfield2022cram}.
+
+A model of the counts can shrink a file, but a smaller file helps only if it can be decoded as fast as the link delivers
+it. So we asked two questions together: how few bits can a lossless code spend on single-cell counts, and how fast can a
+code that small be decoded? Here we measure both limits on \nm{nMatrices} public matrices and introduce \sone, an open
+format built to approach them (Fig.~\ref{fig:how}), read and written from Python, R and C++ by the \texttt{singlet}
+package. We compare it with the formats in use today on file size, read speed, delivery over networks to training
+loaders and the cost of writing, and ask how close it comes to the best count models and integer codes. The codec was
+developed iteratively with Claude 5.5-generation models (Anthropic), with every candidate change measured against these
+benchmarks.
+
+\input{figures/fig2_how}

@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+abc_merfish_zhuang1	rna	zstd22	406215445	405544302	0.998348
+abc_merfish_zhuang1	rna	xz9e	406215445	405824028	0.999036
+abc_merfish_zhuang1	rna	brotli11	406215445	405142463	0.997359
+abc_merfish_zhuang1	rna	bzip2_9	406215445	407753853	1.003787

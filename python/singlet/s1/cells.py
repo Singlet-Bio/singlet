@@ -482,7 +482,13 @@ def parse_cell_calls_column(data: bytes, column: str) -> Optional[list]:
     out = []
     for ln in lines[1:]:
         f = ln.split("\t")
-        if ln and bi < len(f) and ci < len(f) and f[ci].strip().lower() in _TRUE_STRINGS and f[bi] != "":
+        if (
+            ln
+            and bi < len(f)
+            and ci < len(f)
+            and f[ci].strip().lower() in _TRUE_STRINGS
+            and f[bi] != ""
+        ):
             out.append(f[bi])
     return out
 

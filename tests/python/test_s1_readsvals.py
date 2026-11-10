@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
 """singlet.s1.readsvals: the reads matrix is rebuilt exactly from the count matrix and the stored reads - UMIs vector."""
+
 import numpy as np
 import pytest
 import scipy.sparse as sp
-
 from singlet.s1 import readsvals as RV
 from singlet.s1.matrix import Csc
 
@@ -11,8 +11,15 @@ from singlet.s1.matrix import Csc
 def _csc(dense, rows, cols):
     m = sp.csc_matrix(dense)
     m.sort_indices()
-    return Csc(m=m.shape[0], n=m.shape[1], indptr=m.indptr.astype(np.int64), indices=m.indices.astype(np.uint32),
-               data=m.data.astype(np.uint32), rownames=rows, colnames=cols)
+    return Csc(
+        m=m.shape[0],
+        n=m.shape[1],
+        indptr=m.indptr.astype(np.int64),
+        indices=m.indices.astype(np.uint32),
+        data=m.data.astype(np.uint32),
+        rownames=rows,
+        colnames=cols,
+    )
 
 
 def _pair(seed=0, big=False):
@@ -43,7 +50,11 @@ def test_round_trip_is_exact(big):
     ref = _reads_expected(reads, sel)
     g = got.to_scipy().tocsc()
     assert got.colnames == [cols[i] for i in sel] and got.rownames == counts.rownames
-    assert np.array_equal(g.indptr, ref.indptr) and np.array_equal(g.indices, ref.indices) and np.array_equal(g.data, ref.data)
+    assert (
+        np.array_equal(g.indptr, ref.indptr)
+        and np.array_equal(g.indices, ref.indices)
+        and np.array_equal(g.data, ref.data)
+    )
 
 
 def test_boolean_mask_and_set_agree():
@@ -58,15 +69,24 @@ def test_no_called_columns_and_empty_deltas():
     blob = RV.encode(counts, reads, set())
     assert RV.decode(blob, counts, set()).n == 0
     blob = RV.encode(counts, counts, {"BC02"})
-    assert RV.decode(blob, counts, {"BC02"}).data.tolist() == _reads_expected(counts, [2]).data.tolist()
+    assert (
+        RV.decode(blob, counts, {"BC02"}).data.tolist()
+        == _reads_expected(counts, [2]).data.tolist()
+    )
 
 
 def test_member_is_not_written_when_the_matrices_do_not_line_up():
     counts, reads, cols = _pair(4)
     called = {"BC03", "BC09"}
-    other = _csc(np.vstack([reads.to_scipy().toarray()[1:], reads.to_scipy().toarray()[:1]]), reads.rownames, cols)
+    other = _csc(
+        np.vstack([reads.to_scipy().toarray()[1:], reads.to_scipy().toarray()[:1]]),
+        reads.rownames,
+        cols,
+    )
     assert RV.encode(counts, other, called) is None  # other nonzero positions
-    below = Csc(**{**reads.__dict__, "data": np.maximum(reads.data, 1) - 1 if reads.nnz else reads.data})
+    below = Csc(
+        **{**reads.__dict__, "data": np.maximum(reads.data, 1) - 1 if reads.nnz else reads.data}
+    )
     below.data = counts.data.copy()
     below.data[: len(below.data) // 2] = 0
     assert RV.encode(counts, below, called) is None  # reads below UMIs / pattern differs

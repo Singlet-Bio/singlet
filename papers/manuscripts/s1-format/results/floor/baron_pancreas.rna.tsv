@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+baron_pancreas	rna	droplet_other	16171764	17	7.095467	5.007368	5.033782	4.88993	3.990547	4.886202	5.032879	10000.0	4.974623

@@ -43,7 +43,9 @@ class ReadsValuesError(ValueError):
 def _called_columns(csc: Csc, called) -> tuple:
     """(column indices, per-column nonzero counts) of the called columns. ``called`` is a set of barcodes or a boolean array."""
     if isinstance(called, (set, frozenset)):
-        sel = np.flatnonzero(np.fromiter((b in called for b in csc.colnames), dtype=bool, count=csc.n))
+        sel = np.flatnonzero(
+            np.fromiter((b in called for b in csc.colnames), dtype=bool, count=csc.n)
+        )
     else:
         sel = np.flatnonzero(np.asarray(called, dtype=bool))
         if len(sel) and int(sel[-1]) >= csc.n:
@@ -60,14 +62,18 @@ def _gather(csc: Csc, sel: np.ndarray, per_col: np.ndarray) -> np.ndarray:
     total = int(per_col.sum())
     if total == 0:
         return np.zeros(0, dtype=np.uint32)
-    offs = np.repeat(starts - np.concatenate([[0], np.cumsum(per_col)[:-1]]), per_col) + np.arange(total)
+    offs = np.repeat(starts - np.concatenate([[0], np.cumsum(per_col)[:-1]]), per_col) + np.arange(
+        total
+    )
     return np.asarray(csc.data, np.uint32)[offs]
 
 
 def encode(counts: Csc, reads: Csc, called) -> Optional[bytes]:
     """The member bytes for ``reads`` relative to ``counts`` over the called columns, or None when the two matrices do not line up (same
     rows, barcodes and nonzero positions, reads never below UMIs): the caller then leaves the member out."""
-    if (counts.m, counts.n) != (reads.m, reads.n) or list(counts.colnames or []) != list(reads.colnames or []):
+    if (counts.m, counts.n) != (reads.m, reads.n) or list(counts.colnames or []) != list(
+        reads.colnames or []
+    ):
         return None
     sel, per_col = _called_columns(counts, called)
     if not np.array_equal(per_col, _called_columns(reads, called)[1]):
@@ -87,8 +93,17 @@ def encode(counts: Csc, reads: Csc, called) -> Optional[bytes]:
         return None
     top = int(delta.max()) if len(delta) else 0
     width = 1 if top <= 0xFF else 2 if top <= 0xFFFF else 4
-    payload = util.zstd_compress(delta.astype({1: np.uint8, 2: np.uint16, 4: np.uint32}[width]).tobytes(), LEVEL)
-    head = _HEAD.pack(MAGIC, VERSION, width, len(sel), len(delta), zlib.crc32(per_col.astype("<i8").tobytes()) & 0xFFFFFFFF)
+    payload = util.zstd_compress(
+        delta.astype({1: np.uint8, 2: np.uint16, 4: np.uint32}[width]).tobytes(), LEVEL
+    )
+    head = _HEAD.pack(
+        MAGIC,
+        VERSION,
+        width,
+        len(sel),
+        len(delta),
+        zlib.crc32(per_col.astype("<i8").tobytes()) & 0xFFFFFFFF,
+    )
     return head + payload
 
 
@@ -96,7 +111,9 @@ def _gather_idx(ip: np.ndarray, ix: np.ndarray, sel: np.ndarray, per_col: np.nda
     total = int(per_col.sum())
     if not len(sel) or total == 0:
         return np.zeros(0, dtype=np.uint32)
-    offs = np.repeat(ip[sel] - np.concatenate([[0], np.cumsum(per_col)[:-1]]), per_col) + np.arange(total)
+    offs = np.repeat(ip[sel] - np.concatenate([[0], np.cumsum(per_col)[:-1]]), per_col) + np.arange(
+        total
+    )
     return ix[offs]
 
 
@@ -108,15 +125,25 @@ def decode(blob: bytes, counts: Csc, called) -> Csc:
     if magic != MAGIC or version != VERSION or width not in (1, 2, 4):
         raise ReadsValuesError("not a reads member (magic %r version %d)" % (magic, version))
     sel, per_col = _called_columns(counts, called)
-    if len(sel) != n_cols or int(per_col.sum()) != nnz or (zlib.crc32(per_col.astype("<i8").tobytes()) & 0xFFFFFFFF) != crc:
-        raise ReadsValuesError("the reads member does not belong to this count matrix (called columns or nonzeros differ)")
+    if (
+        len(sel) != n_cols
+        or int(per_col.sum()) != nnz
+        or (zlib.crc32(per_col.astype("<i8").tobytes()) & 0xFFFFFFFF) != crc
+    ):
+        raise ReadsValuesError(
+            "the reads member does not belong to this count matrix (called columns or nonzeros differ)"
+        )
     raw = util.zstd_decompress(blob[_HEAD.size :], nnz * width)
     delta = np.frombuffer(raw, dtype={1: np.uint8, 2: np.uint16, 4: np.uint32}[width])
     if len(delta) != nnz:
-        raise ReadsValuesError("reads member payload has %d values, expected %d" % (len(delta), nnz))
+        raise ReadsValuesError(
+            "reads member payload has %d values, expected %d" % (len(delta), nnz)
+        )
     ip = np.asarray(counts.indptr, np.int64)
     indices = _gather_idx(ip, np.asarray(counts.indices, np.uint32), sel, per_col)
-    data = (_gather(counts, sel, per_col).astype(np.int64) + delta.astype(np.int64)).astype(np.uint32)
+    data = (_gather(counts, sel, per_col).astype(np.int64) + delta.astype(np.int64)).astype(
+        np.uint32
+    )
     out = Csc(
         m=counts.m,
         n=len(sel),
@@ -141,7 +168,9 @@ def reads_matrix(sample, kind: str = "exon") -> Csc:
     if cells is None:
         raise ReadsValuesError("the object has no cells table, so the called columns are unknown")
     counts = sample.matrix(COUNTS[kind])
-    return decode(sample.reader.read_member(mem), counts, np.asarray(cells.column("called"), dtype=bool))
+    return decode(
+        sample.reader.read_member(mem), counts, np.asarray(cells.column("called"), dtype=bool)
+    )
 
 
 def from_run_dir_matrices(counts_1pz: bytes, reads_1pz: bytes, called: set) -> Optional[bytes]:

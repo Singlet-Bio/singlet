@@ -1,0 +1,66 @@
+% .s1 manuscript, preprint (bioRxiv/arXiv) layout: plain single-column article with the same sections, figures and
+% tables as the TCBB version (main.tex). The supplementary material (supplement.tex, Supplementary File 1) and the format
+% specification (spec.tex, Supplementary File 2) are the same separate documents as for TCBB; the main text refers to
+% the supplement as S-<label> through xr from supplement.aux, so build supplement.tex first, then this file twice.
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{newtxtext}
+\input{preamble}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage[nocompress]{cite}
+\usepackage{xr}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\externaldocument[S-]{supplement}   % supplement labels as S-<label>
+\usepackage{placeins}
+% let a tall figure share its page with text (one column: the IEEEtran figure* environments become full-page floats
+% under the default fractions)
+\renewcommand{\topfraction}{0.9}\renewcommand{\bottomfraction}{0.8}\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}\renewcommand{\dbltopfraction}{0.9}\renewcommand{\dblfloatpagefraction}{0.85}
+\newcommand{\IEEEPARstart}[2]{#1#2}   % the sections are shared with the IEEEtran version
+\newcommand{\para}[1]{\par\smallskip\noindent\textbf{#1.}\ }
+
+\title{Fewer Bits, Faster Cells: An AI-Ready Single-Cell Count Format Near the Limits of Size and Speed}
+\author{Zachary J.\ DeBruine\\[2pt]
+  \small Department of Information Sciences and Technology, College of Computing\\
+  \small Grand Valley State University, Allendale, MI, USA\\
+  \small Correspondence: \href{mailto:debruinz@gvsu.edu}{debruinz@gvsu.edu}}
+\date{\small\itshape This work has been submitted to the IEEE for possible publication. Copyright may be transferred\
+without notice, after which this version may no longer be accessible.}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/format}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/methods}
+
+\section*{Data and code availability}
+All datasets are public; accessions, file names, licenses and SHA-256 checksums are in \texttt{datasets.yaml} and
+Supplementary Table~\ref{S-tab:datasets}. The \sone{} codec, its Python, R and C++ interfaces (\texttt{singlet}
+\nm{rel-singlet_py} for Python and \nm{rel-singlet_r} for R, \url{https://github.com/Singlet-Bio/singlet}), and the
+benchmark pipeline that produces every figure, table and number in this paper
+(\texttt{papers/manuscripts/s1-format/bench}) are open source under the MIT license, with the per-stage results behind the
+figures in \texttt{papers/manuscripts/s1-format/results}. The version used for this preprint is tagged
+\texttt{s1-paper-biorxiv}: \url{https://github.com/Singlet-Bio/singlet/tree/s1-paper-biorxiv/papers/manuscripts/s1-format}.
+The supplementary material (Supplementary File~1) and the format
+specification (Supplementary File~2) are separate files.
+
+\section*{Acknowledgments}
+Computations ran on the Clipper cluster at Grand Valley State University; the author thanks the GVSU HPC team for their
+support. This work used Anvil at Purdue University through allocation BIO260157 from the Advanced Cyberinfrastructure
+Coordination Ecosystem: Services \& Support (ACCESS) program, which is supported by U.S. National Science Foundation
+grants \#2138259, \#2138286, \#2138307, \#2137603 and \#2138296. \emph{AI use:} Claude (Anthropic; Claude 5.5-generation models) discovered the codec against benchmarks the author
+designed, wrote all code and figures, and drafted the manuscript and its supplements. The author designed the experiments
+and evaluation, revised the text, verified all results, and is responsible for the content.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}

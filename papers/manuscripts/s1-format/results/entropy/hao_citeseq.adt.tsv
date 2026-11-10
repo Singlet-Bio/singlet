@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+hao_citeseq	adt	streams	33599680	0.47486	5.149783	5.621543	NA	NA	NA	NA	NA
+hao_citeseq	adt	raw_u32	33599680	NA	NA	NA	268797440	2.552243	2.436631	64.0	NA
+hao_citeseq	adt	fixed_bytes	33599680	NA	NA	NA	100799040	5.553359	2.178223	24.0	NA
+hao_citeseq	adt	leb128_gaps	33599680	NA	NA	NA	68266725	3.655976	2.871085	16.254137	NA
+hao_citeseq	adt	streamvbyte_gaps	33599680	NA	NA	NA	84449547	3.136633	2.371646	20.107226	NA
+hao_citeseq	adt	rans0_gaps	33599680	NA	NA	NA	23825826	7.99671	7.99223	5.67287	NA
+hao_citeseq	adt	bitpack256_gaps	33599680	NA	NA	NA	51193394	5.130593	4.816177	12.189019	NA
+hao_citeseq	adt	zstd3_leb_gaps	33599680	NA	NA	NA	26656068	7.996049	7.987952	6.346743	NA
+hao_citeseq	adt	zstd19_leb_gaps	33599680	NA	NA	NA	24208597	7.994671	7.980237	5.764007	NA
+hao_citeseq	adt	pz2_avx2	33599680	NA	NA	NA	23591582	7.998712	7.994869	5.617097	23583887

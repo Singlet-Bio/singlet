@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+pbmc68k	rna	droplet_3p	M	umi	32738	68579	37323295	0.016624	1369.832048	1292.0	525.0	0.670731	260	2.516973

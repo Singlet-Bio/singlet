@@ -33,6 +33,11 @@ knitr::opts_chunk$set(
 > Bundles ship the per-feature `exon_counts` and `intron_counts` matrices
 > but not the per-gene `spliced`/`gene_counts` ones, so `as_sce()` and
 > `as_seurat()` need a full pipeline directory.
+>
+> A pipeline run of your own also writes `mt_heteroplasmy` (mitochondrial
+> variant calls), shown in the examples below. That layer stays with your run:
+> singlet.bio never releases genotypes or mitochondrial variants, so no public
+> object carries it.
 
 `singlet` reads the per-sample output directories produced by the
 [singlet single-cell reprocessing pipeline](https://github.com/Singlet-Bio/singlet)
@@ -189,7 +194,7 @@ are independent.
 | `sj_counts.1pz`       | Per-splice-junction counts                          | —              |
 | `splice_psi.1pz`      | Per-event PSI (alt splicing)                        | derivable from sj_counts + splice_events.tsv |
 | `gene_counts_em.1pz`  | EM-rescued multi-mapper counts                      | —              |
-| `mt_heteroplasmy.1pz` | Mitochondrial allele matrix                         | —              |
+| `mt_heteroplasmy.1pz` | Mitochondrial allele matrix (your own runs only; never in public singlet.bio objects) | — |
 | `vdj_gene_usage.1pz`  | V/D/J gene usage                                    | —              |
 
 ## Next steps

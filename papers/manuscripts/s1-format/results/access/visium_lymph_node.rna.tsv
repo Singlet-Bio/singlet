@@ -1,0 +1,7 @@
+dataset	matrix	format	batches	bytes_per_batch	requests_per_batch	requests_p90	needed_per_batch	overread	index_bytes	file_bytes	chunk_elems
+visium_lymph_node	rna	s1	200	1461634.5	7.0	8.0	1326981.297673	1.097512	33994	10451324	NA
+visium_lymph_node	rna	h5ad_gzip	200	5923824.0	19.0	23.0	5743790.68851	1.026928	13978	45238179	20714
+visium_lymph_node	rna	h5ad_lzf	200	15243741.0	19.0	23.0	14598746.022961	1.042978	16160	114979936	20714
+visium_lymph_node	rna	h5ad_none	200	22767184.0	19.0	23.0	21794071.486607	1.042626	16160	171650424	20714
+visium_lymph_node	rna	tenx_h5	200	3988820.0	21.0	25.0	3870740.058941	1.025605	9152	30486005	20714
+visium_lymph_node	rna	zarr	200	9078582.0	31.0	33.0	4917235.333172	1.832481	9371	38728217	331419

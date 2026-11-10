@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+pbmc_multiome	rna	23508033	64.0	28.258708	8.203552	7.632093	4.888264	4.934668	1

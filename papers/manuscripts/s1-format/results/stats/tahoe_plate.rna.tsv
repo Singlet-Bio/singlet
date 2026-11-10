@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+tahoe_plate	rna	combinatorial	XL	umi	62710	5481420	8276063161	0.024077	2482.774263	1944.0	1317.0	0.752509	5467	1.644396

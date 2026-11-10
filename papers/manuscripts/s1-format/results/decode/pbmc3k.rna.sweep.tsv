@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+pbmc3k	rna	sweep	local	s1	1	cold	file	native	auto	2286884	ok	0.031283	0.031159	0.032448	73.102087	3	0.033612,0.031034,0.031283	avx2
+pbmc3k	rna	sweep	local	s1	1	cold	file	canonical	auto	2286884	ok	0.049018	0.048959	0.050488	46.653871	3	0.051958,0.048901,0.049018	avx2
+pbmc3k	rna	sweep	local	s1	2	cold	file	native	auto	2286884	ok	0.022322	0.022205	0.023202	102.448498	3	0.024083,0.022089,0.022322	avx2
+pbmc3k	rna	sweep	local	s1	2	cold	file	canonical	auto	2286884	ok	0.031793	0.031048	0.032862	71.930713	3	0.033931,0.030302,0.031793	avx2
+pbmc3k	rna	sweep	local	s1	4	cold	file	native	auto	2286884	ok	0.015931	0.015828	0.016757	143.547586	3	0.017582,0.015725,0.015931	avx2
+pbmc3k	rna	sweep	local	s1	4	cold	file	canonical	auto	2286884	ok	0.021392	0.02106	0.021908	106.905793	3	0.022425,0.021392,0.020729	avx2
+pbmc3k	rna	sweep	local	s1	4	warm	file	native	auto	2286884	ok	0.015551	0.015308	0.015556	147.05991	3	0.015065,0.015551,0.015561	avx2
+pbmc3k	rna	sweep	local	s1	4	warm	file	canonical	auto	2286884	ok	0.020328	0.020176	0.020545	112.50081	3	0.020761,0.020328,0.020025	avx2
+pbmc3k	rna	sweep	local	s1	8	cold	file	native	auto	2286884	ok	0.013255	0.013014	0.014012	172.530445	3	0.014769,0.012774,0.013255	avx2
+pbmc3k	rna	sweep	local	s1	8	cold	file	canonical	auto	2286884	ok	0.01562	0.015575	0.016552	146.403754	3	0.017485,0.015620,0.015529	avx2
+pbmc3k	rna	sweep	local	s1	1	warm	codec	native	scalar	2286884	ok	0.077995	0.077939	0.078396	29.320724	3	0.078797,0.077882,0.077995	scalar
+pbmc3k	rna	sweep	local	s1	1	warm	codec	native	avx2	2286884	ok	0.024468	0.024367	0.024831	93.46486	3	0.025195,0.024266,0.024468	avx2
+pbmc3k	rna	sweep	local	s1	1	warm	codec	native	avx512	2286884	ok	0.024207	0.024169	0.024554	94.472886	3	0.024902,0.024207,0.024131	avx2
+pbmc3k	rna	sweep	local	s1	1	warm	codec	canonical	scalar	2286884	ok	0.097297	0.097279	0.097324	23.504219	3	0.097262,0.097352,0.097297	scalar
+pbmc3k	rna	sweep	local	s1	1	warm	codec	canonical	avx2	2286884	ok	0.043659	0.043599	0.043679	52.379991	3	0.043699,0.043659,0.043538	avx2
+pbmc3k	rna	sweep	local	s1	1	warm	codec	canonical	avx512	2286884	ok	0.04348	0.043468	0.043517	52.596294	3	0.043554,0.043480,0.043455	avx2
+pbmc3k	rna	sweep	local	s1	2	warm	codec	native	scalar	2286884	ok	0.041711	0.04171	0.042005	54.827173	3	0.042299,0.041709,0.041711	scalar
+pbmc3k	rna	sweep	local	s1	2	warm	codec	native	avx2	2286884	ok	0.015039	0.015014	0.015468	152.06536	3	0.015896,0.015039,0.014988	avx2
+pbmc3k	rna	sweep	local	s1	2	warm	codec	native	avx512	2286884	ok	0.015119	0.015101	0.015545	151.260564	3	0.015972,0.015119,0.015084	avx2
+pbmc3k	rna	sweep	local	s1	2	warm	codec	canonical	scalar	2286884	ok	0.053812	0.053542	0.053861	42.497657	3	0.053271,0.053910,0.053812	scalar
+pbmc3k	rna	sweep	local	s1	2	warm	codec	canonical	avx2	2286884	ok	0.024512	0.024493	0.02456	93.295989	3	0.024473,0.024512,0.024608	avx2
+pbmc3k	rna	sweep	local	s1	2	warm	codec	canonical	avx512	2286884	ok	0.024837	0.024724	0.024981	92.077281	3	0.025126,0.024837,0.024612	avx2
+pbmc3k	rna	sweep	local	s1	4	warm	codec	native	scalar	2286884	ok	0.02303	0.023014	0.023609	99.300294	3	0.024188,0.022998,0.023030	scalar
+pbmc3k	rna	sweep	local	s1	4	warm	codec	native	avx2	2286884	ok	0.009885	0.009825	0.01007	231.350786	3	0.010255,0.009766,0.009885	avx2
+pbmc3k	rna	sweep	local	s1	4	warm	codec	native	avx512	2286884	ok	0.010244	0.010031	0.010477	223.243468	3	0.010710,0.010244,0.009817	avx2
+pbmc3k	rna	sweep	local	s1	4	warm	codec	canonical	scalar	2286884	ok	0.02801	0.027966	0.028677	81.644972	3	0.029343,0.027923,0.028010	scalar
+pbmc3k	rna	sweep	local	s1	4	warm	codec	canonical	avx2	2286884	ok	0.015275	0.015192	0.015314	149.709722	3	0.015275,0.015353,0.015109	avx2
+pbmc3k	rna	sweep	local	s1	4	warm	codec	canonical	avx512	2286884	ok	0.015658	0.015619	0.015659	146.05647	3	0.015661,0.015658,0.015581	avx2
+pbmc3k	rna	sweep	local	s1	8	warm	codec	native	scalar	2286884	ok	0.015011	0.014793	0.015279	152.350506	3	0.015548,0.015011,0.014575	scalar
+pbmc3k	rna	sweep	local	s1	8	warm	codec	native	avx2	2286884	ok	0.007139	0.007104	0.007404	320.331471	3	0.007668,0.007139,0.007068	avx2
+pbmc3k	rna	sweep	local	s1	8	warm	codec	native	avx512	2286884	ok	0.007012	0.006975	0.007147	326.145363	3	0.007283,0.007012,0.006938	avx2
+pbmc3k	rna	sweep	local	s1	8	warm	codec	canonical	scalar	2286884	ok	0.017785	0.017732	0.017889	128.585138	3	0.017993,0.017785,0.017680	scalar
+pbmc3k	rna	sweep	local	s1	8	warm	codec	canonical	avx2	2286884	ok	0.009952	0.00974	0.010176	229.781736	3	0.010399,0.009952,0.009527	avx2
+pbmc3k	rna	sweep	local	s1	8	warm	codec	canonical	avx512	2286884	ok	0.010199	0.010051	0.010275	224.221196	3	0.010351,0.010199,0.009903	avx2
+pbmc3k	rna	sweep	local	h5ad_gzip	1	cold	file		auto	2286884	ok	0.10885	0.107811	0.110592	21.009504	3	0.112334,0.108850,0.106773	
+pbmc3k	rna	sweep	local	h5ad_gzip	2	cold	file		auto	2286884	ok	0.108193	0.108189	0.110124	21.137051	3	0.112055,0.108193,0.108185	
+pbmc3k	rna	sweep	local	h5ad_gzip	4	cold	file		auto	2286884	ok	0.109066	0.107915	0.110803	20.967977	3	0.112541,0.109066,0.106764	
+pbmc3k	rna	sweep	local	h5ad_gzip	4	warm	file		auto	2286884	ok	0.104343	0.104051	0.104414	21.91693	3	0.104486,0.104343,0.103759	
+pbmc3k	rna	sweep	local	h5ad_gzip	8	cold	file		auto	2286884	ok	0.108943	0.107616	0.110542	20.991501	3	0.112141,0.108943,0.106288	
+pbmc3k	rna	sweep	local	csc_i32	1	cold	file		auto	2286884	ok	0.015741	0.015651	0.016539	145.284358	3	0.017338,0.015741,0.015561	
+pbmc3k	rna	sweep	local	csc_i32	2	cold	file		auto	2286884	ok	0.015175	0.01512	0.016357	150.702064	3	0.017540,0.015175,0.015065	
+pbmc3k	rna	sweep	local	csc_i32	4	cold	file		auto	2286884	ok	0.015185	0.015106	0.016249	150.604799	3	0.017314,0.015185,0.015027	
+pbmc3k	rna	sweep	local	csc_i32	4	warm	file		auto	2286884	ok	0.008591	0.008573	0.008888	266.181297	3	0.009185,0.008591,0.008555	
+pbmc3k	rna	sweep	local	csc_i32	8	cold	file		auto	2286884	ok	0.015598	0.015477	0.016434	146.611474	3	0.017269,0.015598,0.015357	
+pbmc3k	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	2286884	ok	0.076423	0.076168	0.077192	29.924028	3	0.077962,0.076423,0.075913	scalar
+pbmc3k	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	2286884	ok	0.021925	0.02178	0.022406	104.304857	3	0.022887,0.021925,0.021635	avx2
+pbmc3k	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	2286884	ok	0.021861	0.021746	0.022305	104.610219	3	0.022750,0.021861,0.021630	avx2
+pbmc3k	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	2286884	ok	0.096223	0.096139	0.0969	23.766501	3	0.097577,0.096223,0.096055	scalar
+pbmc3k	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	2286884	ok	0.041216	0.041072	0.041701	55.485345	3	0.042185,0.041216,0.040929	avx2
+pbmc3k	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	2286884	ok	0.041286	0.041196	0.041764	55.391271	3	0.042242,0.041286,0.041107	avx2
+pbmc3k	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	2286884	ok	0.039051	0.03896	0.039464	58.561471	3	0.039877,0.039051,0.038869	scalar
+pbmc3k	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	2286884	ok	0.012526	0.01249	0.01289	182.570972	3	0.013255,0.012526,0.012454	avx2
+pbmc3k	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	2286884	ok	0.012664	0.012595	0.013213	180.581491	3	0.013763,0.012664,0.012527	avx2
+pbmc3k	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	2286884	ok	0.04947	0.049419	0.050314	46.227694	3	0.051158,0.049470,0.049368	scalar
+pbmc3k	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	2286884	ok	0.022755	0.02266	0.023317	100.500286	3	0.023879,0.022755,0.022565	avx2
+pbmc3k	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	2286884	ok	0.022384	0.022311	0.023233	102.166011	3	0.024082,0.022384,0.022239	avx2
+pbmc3k	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	2286884	ok	0.021468	0.021374	0.022135	106.525247	3	0.022802,0.021468,0.021280	scalar
+pbmc3k	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	2286884	ok	0.00698	0.006926	0.007392	327.633811	3	0.007805,0.006980,0.006871	avx2
+pbmc3k	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	2286884	ok	0.007305	0.00715	0.007714	313.057358	3	0.008123,0.007305,0.006996	avx2
+pbmc3k	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	2286884	ok	0.026659	0.026375	0.027127	85.782813	3	0.027596,0.026659,0.026091	scalar
+pbmc3k	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	2286884	ok	0.012791	0.012748	0.01318	178.788523	3	0.013569,0.012791,0.012705	avx2
+pbmc3k	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	2286884	ok	0.012932	0.012918	0.013414	176.839159	3	0.013897,0.012932,0.012903	avx2
+pbmc3k	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	2286884	ok	0.012597	0.012534	0.013046	181.541954	3	0.013495,0.012597,0.012471	scalar
+pbmc3k	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	2286884	ok	0.00433	0.004313	0.004686	528.14873	3	0.005042,0.004330,0.004295	avx2
+pbmc3k	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	2286884	ok	0.004407	0.004392	0.004798	518.920808	3	0.005189,0.004407,0.004377	avx2
+pbmc3k	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	2286884	ok	0.015347	0.015262	0.015877	149.011794	3	0.016407,0.015347,0.015176	scalar
+pbmc3k	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	2286884	ok	0.007502	0.007475	0.007945	304.836577	3	0.008387,0.007502,0.007449	avx2
+pbmc3k	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	2286884	ok	0.007641	0.007632	0.008066	299.291192	3	0.008491,0.007641,0.007623	avx2

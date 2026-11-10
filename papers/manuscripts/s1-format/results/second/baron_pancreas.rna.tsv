@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+baron_pancreas	rna	zstd22	10106564	10099788	0.99933
+baron_pancreas	rna	xz9e	10106564	10101008	0.99945
+baron_pancreas	rna	brotli11	10106564	10106584	1.000002
+baron_pancreas	rna	bzip2_9	10106564	10147571	1.004057

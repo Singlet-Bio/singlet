@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+visium_lymph_node	rna	streams	21210753	3.906081	2.283251	6.181529	NA	NA	NA	NA	NA
+visium_lymph_node	rna	raw_u32	21210753	NA	NA	NA	169686024	3.439469	2.960024	64.0	NA
+visium_lymph_node	rna	fixed_bytes	21210753	NA	NA	NA	84843012	5.788487	3.964014	32.0	NA
+visium_lymph_node	rna	leb128_gaps	21210753	NA	NA	NA	42457344	3.35464	3.269061	16.013517	NA
+visium_lymph_node	rna	streamvbyte_gaps	21210753	NA	NA	NA	53034549	3.149516	2.765626	20.002892	NA
+visium_lymph_node	rna	rans0_gaps	21210753	NA	NA	NA	16723382	7.999117	7.996184	6.307511	NA
+visium_lymph_node	rna	bitpack256_gaps	21210753	NA	NA	NA	35652606	5.363991	5.03521	13.446993	NA
+visium_lymph_node	rna	zstd3_leb_gaps	21210753	NA	NA	NA	19381680	7.998162	7.993539	7.310134	NA
+visium_lymph_node	rna	zstd19_leb_gaps	21210753	NA	NA	NA	16390226	7.982667	7.949677	6.181855	NA
+visium_lymph_node	rna	pz2_avx2	21210753	NA	NA	NA	10451132	7.99911	7.991565	3.941824	10445220

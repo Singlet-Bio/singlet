@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+smartseq3_pbmc	rna	streams	6423798	5.243234	3.026034	8.25482	NA	NA	NA	NA	NA
+smartseq3_pbmc	rna	raw_u32	6423798	NA	NA	NA	51390384	3.456032	3.004981	64.0	NA
+smartseq3_pbmc	rna	fixed_bytes	6423798	NA	NA	NA	25695192	5.825455	4.239335	32.0	NA
+smartseq3_pbmc	rna	leb128_gaps	6423798	NA	NA	NA	13017704	4.335209	4.197001	16.211847	NA
+smartseq3_pbmc	rna	streamvbyte_gaps	6423798	NA	NA	NA	16107236	4.026902	3.500827	20.059455	NA
+smartseq3_pbmc	rna	rans0_gaps	6423798	NA	NA	NA	6701533	7.996291	7.98625	8.345883	NA
+smartseq3_pbmc	rna	bitpack256_gaps	6423798	NA	NA	NA	11199706	6.109195	5.869012	13.947769	NA
+smartseq3_pbmc	rna	zstd3_leb_gaps	6423798	NA	NA	NA	7355820	7.995734	7.977627	9.160711	NA
+smartseq3_pbmc	rna	zstd19_leb_gaps	6423798	NA	NA	NA	6832502	7.974468	7.931826	8.508987	NA
+smartseq3_pbmc	rna	pz2_avx2	6423798	NA	NA	NA	5038681	7.999279	7.987894	6.275018	5036469

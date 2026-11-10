@@ -1,0 +1,7 @@
+format	fid	kib	req	overread	index_kib	n
+\textbf{.s1}	s1	761.101	8	1.36797	82.7373	29
+AnnData Zarr	zarr	8164.22	22	7.87244	121.604	29
+h5ad gzip	h5ad_gzip	2532.51	22	1.41645	211.745	29
+h5ad lzf	h5ad_lzf	5238.58	22	1.35365	239.023	28
+h5ad (none)	h5ad_none	8812.66	22	1.3967	268	29
+10x HDF5	tenx_h5	1487.34	23	1.25506	120.083	29

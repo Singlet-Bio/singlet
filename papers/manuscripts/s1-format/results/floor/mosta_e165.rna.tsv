@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+mosta_e165	rna	spatial_seq	211994186	18	6.410446	5.331955	5.293264	5.158373	4.633032	5.163112	5.291899	10000.0	5.402805

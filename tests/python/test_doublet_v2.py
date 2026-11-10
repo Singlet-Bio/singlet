@@ -60,7 +60,9 @@ def _toy_atlas(G=60, H=16, K=8, seed=0):
 
 # ------------------------------------------------------------------------------------------------------------ stacker
 def test_rank_norm_ties_and_range():
-    np.testing.assert_allclose(D.rank_norm(np.array([3.0, 1.0, 1.0, 2.0])), [1.0, 0.375, 0.375, 0.75])
+    np.testing.assert_allclose(
+        D.rank_norm(np.array([3.0, 1.0, 1.0, 2.0])), [1.0, 0.375, 0.375, 0.75]
+    )
 
 
 def test_array_stacker_equals_sklearn_including_missing():
@@ -68,7 +70,9 @@ def test_array_stacker_equals_sklearn_including_missing():
     np.testing.assert_allclose(st.predict_proba(X), clf.predict_proba(X)[:, 1], atol=1e-12, rtol=0)
     Xn = X.copy()
     Xn[::7, 3] = np.nan
-    np.testing.assert_allclose(st.predict_proba(Xn), clf.predict_proba(Xn)[:, 1], atol=1e-12, rtol=0)
+    np.testing.assert_allclose(
+        st.predict_proba(Xn), clf.predict_proba(Xn)[:, 1], atol=1e-12, rtol=0
+    )
 
 
 def test_stacker_save_load_hash(tmp_path):
@@ -106,7 +110,9 @@ def test_doublet_stage_does_not_import_torch():
         "assert 'torch' not in sys.modules, 'torch was imported'\n"
     )
     env = dict(os.environ, PYTHONPATH=str(Path(D.__file__).parents[2]))
-    r = subprocess.run([sys.executable, "-W", "ignore", "-c", code], capture_output=True, text=True, env=env)
+    r = subprocess.run(
+        [sys.executable, "-W", "ignore", "-c", code], capture_output=True, text=True, env=env
+    )
     assert r.returncode == 0, r.stderr[-800:]
 
 
@@ -121,7 +127,9 @@ def test_registry_row_and_method_version():
     row = REG.registry_rows(("doublet",))[0]
     assert row["feature_id"] == "doublet/score_v2" and row["status"] == "active"
     assert json.loads(row["organisms"]) == ["human", "mouse"]
-    assert len(REG.features("hallmark")) + len(REG.features("cell_cycle")) + 1 <= 64  # cell index cap per version
+    assert (
+        len(REG.features("hallmark")) + len(REG.features("cell_cycle")) + 1 <= 64
+    )  # cell index cap per version
 
 
 @needs_model
@@ -130,13 +138,23 @@ def test_sidecar_roundtrip_and_guard(tmp_path):
     n = 50
     v = np.linspace(0, 1, n).astype(np.float32)
     v[3] = np.nan
-    tab = O.build_table("GSM123", np.arange(n), {"score_v2": v}, feats, REG.method_version("doublet"))
+    tab = O.build_table(
+        "GSM123", np.arange(n), {"score_v2": v}, feats, REG.method_version("doublet")
+    )
     p = O.write_features(tab, tmp_path / O.sidecar_name("GSM123", "doublet"), feats)
     t = pq.read_table(p)
-    md = {k.decode(): x.decode() for k, x in t.schema.metadata.items() if not k.startswith(b"pandas")}
+    md = {
+        k.decode(): x.decode() for k, x in t.schema.metadata.items() if not k.startswith(b"pandas")
+    }
     assert md["feature_set"] == "doublet" and md["method_version"] == REG.method_version("doublet")
-    assert t.schema.field("score_v2").type == pa.float32() and t.column_names == ["gsm", "col", "score_v2"]
-    bad = O.build_table("GSM123", np.arange(n), {"score_v2": v * 2}, feats, REG.method_version("doublet"))
+    assert t.schema.field("score_v2").type == pa.float32() and t.column_names == [
+        "gsm",
+        "col",
+        "score_v2",
+    ]
+    bad = O.build_table(
+        "GSM123", np.arange(n), {"score_v2": v * 2}, feats, REG.method_version("doublet")
+    )
     with pytest.raises(O.PublicOutputError):
         O.assert_public_safe(bad, feats)
 
@@ -147,11 +165,17 @@ def test_cell_index_records_the_method_version(tmp_path):
     feats = REG.features("doublet")
     n = 60
     v = np.random.default_rng(3).random(n).astype(np.float32)
-    tab = O.build_table("GSM123", np.arange(n), {"score_v2": v}, feats, REG.method_version("doublet"))
+    tab = O.build_table(
+        "GSM123", np.arange(n), {"score_v2": v}, feats, REG.method_version("doublet")
+    )
     p = O.write_features(tab, tmp_path / "x.parquet", feats)
     specs = atlas.load_features([f.cell_feature_row() for f in feats])
     _, entry = atlas.normalize_feature_sidecar(p, gsm="GSM123", specs=specs, n_columns=n)
-    assert entry["method_version"] == REG.method_version("doublet") and entry["feature_set"] == "doublet" and entry["n_rows"] == n
+    assert (
+        entry["method_version"] == REG.method_version("doublet")
+        and entry["feature_set"] == "doublet"
+        and entry["n_rows"] == n
+    )
 
 
 @needs_model
@@ -181,7 +205,9 @@ def test_pipeline_without_engine_score_is_na():
 
 def test_prod_tsv_reader(tmp_path):
     (tmp_path / "GSM9").mkdir()
-    (tmp_path / "GSM9" / "doublet_scores.tsv").write_text("barcode\tdoublet_score\tis_doublet\nAAA\t0.2\t0\nCCC\t0.9\t1\n")
+    (tmp_path / "GSM9" / "doublet_scores.tsv").write_text(
+        "barcode\tdoublet_score\tis_doublet\nAAA\t0.2\t0\nCCC\t0.9\t1\n"
+    )
     v = D.read_prod_scores(D.find_prod_tsv(tmp_path, "GSE1", "GSM9"), ["CCC", "GGG", "AAA"])
     np.testing.assert_allclose(v, [0.9, np.nan, 0.2])
     assert D.find_prod_tsv(tmp_path, "GSE1", "GSM8") is None
@@ -190,7 +216,10 @@ def test_prod_tsv_reader(tmp_path):
 # ------------------------------------------------------------------------------------------------------------ the encoder
 def test_atlas_gene_mapping():
     at = _toy_atlas()
-    np.testing.assert_array_equal(at.columns(["ENSG00000000003.5", "hg19_ENSG00000000001", "ENSG9", "ENSMUSG00000000004"]), [3, 1, -1, 4])
+    np.testing.assert_array_equal(
+        at.columns(["ENSG00000000003.5", "hg19_ENSG00000000001", "ENSG9", "ENSMUSG00000000004"]),
+        [3, 1, -1, 4],
+    )
     np.testing.assert_array_equal(at.columns(["gene3", "FOO", "Gene10"]), [3, -1, 10])
 
 
@@ -209,10 +238,16 @@ def test_atlas_features_are_deterministic_and_bounded():
 
 def test_knn_ref_excludes_the_query_itself_and_scales_linearly():
     Q = np.array([[0.0], [10.0]], np.float32)
-    ref = np.array([[0.0], [10.0], [0.1], [9.9]], np.float32)  # rows 0, 1 real (m = 2); rows 2, 3 simulated
+    ref = np.array(
+        [[0.0], [10.0], [0.1], [9.9]], np.float32
+    )  # rows 0, 1 real (m = 2); rows 2, 3 simulated
     f = DA.Atlas.knn_ref(Q, ref, 2, 1, np.array([0, 1]))
-    np.testing.assert_array_equal(f, [1.0, 1.0])  # self excluded: the nearest is the simulated neighbour
-    assert DA.REF_CAP * (1 + DA.SIM_RATIO) < 10_000  # reference size is fixed, so the search is O(n)
+    np.testing.assert_array_equal(
+        f, [1.0, 1.0]
+    )  # self excluded: the nearest is the simulated neighbour
+    assert (
+        DA.REF_CAP * (1 + DA.SIM_RATIO) < 10_000
+    )  # reference size is fixed, so the search is O(n)
 
 
 # --------------------------------------------------------------------------------------------------------------- sdfl
@@ -253,7 +288,9 @@ def test_sdfl_scores_cells_outside_the_fitting_subsample():
 
 # ------------------------------------------------------------------------- reproduction on the real datasets (Clipper data)
 LQC = os.environ.get("LQC", "/mnt/projects/debruinz_project/debruinz/singlet/latent_qc")
-REF = os.environ.get("SINGLET_DBL_REF")  # OUT of scripts/doublet_v2.sbatch: pkgfeat/ (feats) and loso_ref/ (ref-loso)
+REF = os.environ.get(
+    "SINGLET_DBL_REF"
+)  # OUT of scripts/doublet_v2.sbatch: pkgfeat/ (feats) and loso_ref/ (ref-loso)
 have_data = bool(REF) and Path(f"{LQC}/dbl/data").exists() and (Path(REF) / "loso_ref").exists()
 
 
@@ -263,10 +300,20 @@ def test_loso_scores_reproduce_stack_py_style_evaluation():
     import doublet_v2 as S
 
     data = S.load_training(Path(REF) / "pkgfeat")
-    names = [n for n in ("pbmc-1A-dm", "hm-6k", "pbmc-ch") if (Path(REF) / "loso_ref" / f"{n}.npy").exists()]
+    names = [
+        n
+        for n in ("pbmc-1A-dm", "hm-6k", "pbmc-ch")
+        if (Path(REF) / "loso_ref" / f"{n}.npy").exists()
+    ]
     assert len(names) >= 2
     for n in names:
-        np.testing.assert_allclose(D.loso_scores(data, n), np.load(Path(REF) / "loso_ref" / f"{n}.npy"), atol=1e-9, rtol=0, err_msg=n)
+        np.testing.assert_allclose(
+            D.loso_scores(data, n),
+            np.load(Path(REF) / "loso_ref" / f"{n}.npy"),
+            atol=1e-9,
+            rtol=0,
+            err_msg=n,
+        )
 
 
 @needs_model

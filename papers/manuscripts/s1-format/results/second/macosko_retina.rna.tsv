@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+macosko_retina	rna	zstd22	25933694	25923618	0.999611
+macosko_retina	rna	xz9e	25933694	25923192	0.999595
+macosko_retina	rna	brotli11	25933694	25933739	1.000002
+macosko_retina	rna	bzip2_9	25933694	26042974	1.004214

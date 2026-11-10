@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+mosta_e165	rna	211994186	64.0	23.888122	7.40733	6.689862	5.402805	5.411993	1

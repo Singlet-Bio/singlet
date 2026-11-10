@@ -8,10 +8,10 @@ import pandas as pd
 import pytest
 from scipy import sparse
 from singlet.adt import hto as H
+from singlet.adt import members as ST
 from singlet.adt import normalize as N
 from singlet.adt import panel as P
 from singlet.adt import qc as Q
-from singlet.adt import members as ST
 
 RNG = np.random.default_rng(3)
 
@@ -244,5 +244,10 @@ def test_modalities_vocabulary_has_adt_hto_and_crispr():
     )
     assert client.MODALITIES["hto"].members == (ST.MEMBERS[1],)
     assert client.MODALITIES["crispr"].members == (CS.MEMBERS[0],)
-    for alias, name in (("protein", "adt"), ("cite", "adt"), ("hashtag", "hto"), ("guides", "crispr")):
+    for alias, name in (
+        ("protein", "adt"),
+        ("cite", "adt"),
+        ("hashtag", "hto"),
+        ("guides", "crispr"),
+    ):
         assert client._MODALITY_ALIASES[alias] == name

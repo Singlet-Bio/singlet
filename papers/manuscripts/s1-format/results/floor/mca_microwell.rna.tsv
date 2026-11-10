@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+mca_microwell	rna	droplet_other	266059719	64	6.849646	5.898133	5.546829	5.044913	4.717945	5.029847	5.535088	10000.0	5.650635

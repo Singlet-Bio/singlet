@@ -1,0 +1,11 @@
+dataset	matrix	codec	nnz	h0_gap	h0_val	h0_pair	bytes	h0	h1	bits	zstd19_bytes
+tasic_cortex	rna	streams	214290227	2.964021	8.279847	11.178517	NA	NA	NA	NA	NA
+tasic_cortex	rna	raw_u32	214290227	NA	NA	NA	1714321816	3.965148	3.700388	64.0	NA
+tasic_cortex	rna	fixed_bytes	214290227	NA	NA	NA	1285741362	4.99472	4.51009	48.0	NA
+tasic_cortex	rna	leb128_gaps	214290227	NA	NA	NA	497603486	5.48046	5.027232	18.576806	NA
+tasic_cortex	rna	streamvbyte_gaps	214290227	NA	NA	NA	571386469	5.018283	4.595646	21.331312	NA
+tasic_cortex	rna	rans0_gaps	214290227	NA	NA	NA	315317803	7.924921	7.881247	11.771617	NA
+tasic_cortex	rna	bitpack256_gaps	214290227	NA	NA	NA	490216048	5.993964	5.89802	18.301014	NA
+tasic_cortex	rna	zstd3_leb_gaps	214290227	NA	NA	NA	325796852	7.998425	7.976494	12.162826	NA
+tasic_cortex	rna	zstd19_leb_gaps	214290227	NA	NA	NA	308491103	7.997795	7.979535	11.516759	NA
+tasic_cortex	rna	pz2_avx2	214290227	NA	NA	NA	256258686	7.998758	7.996914	9.566789	256187280

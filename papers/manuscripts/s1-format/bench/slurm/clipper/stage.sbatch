@@ -14,6 +14,7 @@ set -euo pipefail
 source "/mnt/projects/debruinz_project/debruinz/singlet/s1paper/src/${S1_SHA:?set S1_SHA}/papers/manuscripts/s1-format/bench/slurm/clipper/common.sh"
 s1_checkout
 s1_activate
+[ -n "${S1_PKG_SITE:-}" ] && export PYTHONPATH="$S1_PKG_SITE:$PYTHONPATH"   # a package built by a timed job (S1_PKG_OVERLAY)
 IFS=, read -ra DS <<<"${DS_LIST:?set DS_LIST}"
 D=${DS[${SLURM_ARRAY_TASK_ID:-0}]}
 echo "dataset $D stages ${STAGES:?set STAGES}"

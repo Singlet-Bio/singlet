@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 """The ancestry label rule (celllabels/data/ancestry_label_model.json): shipped, deterministic, abstains, and keeps the old rule available."""
+
 import numpy as np
 import pytest
-
 from singlet.celllabels import ancestry as ANC
 
 
@@ -32,7 +32,7 @@ def test_uniform_mixture_abstains():
 
 def test_old_rule_unchanged_without_a_model():
     q = np.array([0.1, 0.1, 0.1, 0.6, 0.1])
-    assert ANC._group(q, 0.8) == "admixed"          # largest proportion below q_min
+    assert ANC._group(q, 0.8) == "admixed"  # largest proportion below q_min
     assert ANC._group(np.array([0.0, 0.0, 0.0, 0.9, 0.1]), 0.8) == "EUR"
 
 

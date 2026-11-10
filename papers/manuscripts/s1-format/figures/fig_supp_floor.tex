@@ -1,0 +1,56 @@
+% Supplementary Figure: count-model savings, a second compression pass and where the bits go. Values from
+% generated/fig3b_models.tsv, fig3d_second.tsv, fig3c_decomp.tsv.
+\begin{figure*}[p]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  title={a\quad What each count model would save},
+  xbar, bar shift=0pt, width=0.36\linewidth, height=5cm, bar width=7pt,
+  xlabel={\sone{} payload $-$ model code length, bits per non-zero},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3b_models.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
+  axis x line*=bottom, axis y line*=left, extra x ticks={0}, extra x tick style={grid=major, grid style={ink2, thin}},
+  error bars/error bar style={ink2, line width=0.5pt}, error bars/error mark options={rotate=90, mark size=1.5pt, ink2},
+]
+\addplot[fill=dl!75, draw=none, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=ep, x error minus=em] {\gen{fig3b_models.tsv}};
+\end{axis}
+\end{tikzpicture}\hfill
+\begin{tikzpicture}
+\begin{axis}[
+  title={b\quad Compressing \sone{} again},
+  xbar, bar shift=0pt, width=0.36\linewidth, height=5cm, bar width=7pt,
+  xmin=0.98, xmax=1.02, xlabel={output size / \sone{} size},
+  xtick={0.98,0.99,1,1.01,1.02}, xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=2},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3d_second.tsv}}{label}, y dir=reverse, enlarge y limits=0.15,
+  axis x line*=bottom, axis y line*=left, extra x ticks={1}, extra x tick style={grid=major, grid style={ink2, thin}},
+]
+\addplot[only marks, mark=*, mark size=2pt, gen, error bars/.cd, x dir=both, x explicit]
+  table[x=median, y=pos, x error plus=rp, x error minus=rm] {\gen{fig3d_second.tsv}};
+\end{axis}
+\end{tikzpicture}
+
+\vspace{4pt}
+\begin{tikzpicture}
+\begin{axis}[
+  title={c\quad Where the bits go, by protocol class},
+  xbar stacked, width=0.5\linewidth, height=5.4cm, bar width=5pt,
+  xmin=0, xlabel={bits per non-zero of the \sone{} payload, median},
+  ytick=data, ytick style={draw=none}, yticklabels from table={\gen{fig3c_decomp.tsv}}{label}, y dir=reverse, enlarge y limits=0.07,
+  axis x line*=bottom, axis y line*=left,
+  legend style={font=\sffamily\tiny, draw=none, at={(1.03,0.5)}, anchor=west, legend columns=1, cells={anchor=west}},
+]
+\addplot[fill=ink2!55, draw=none] table[x=sampling, y=pos] {\gen{fig3c_decomp.tsv}};
+\addplot[fill=dl!70, draw=none]   table[x=state, y=pos] {\gen{fig3c_decomp.tsv}};
+\addplot[fill=sone, draw=none]    table[x=above, y=pos] {\gen{fig3c_decomp.tsv}};
+\legend{sampling of molecules (estimated), the cell's own profile (best model $-$ sampling), \sone{} above the best model}
+\end{axis}
+\end{tikzpicture}
+\caption{\textbf{What count models and a second compression pass would save, and where the bits go.}
+\textbf{(a)} Bits per non-zero each cross-validated count model saves against the \sone{} payload, median and
+interquartile range (negative: the model needs more). Poisson's worst cases are the read-count matrices, hundreds of bits
+more per non-zero (Supplementary Table~\ref{tab:floor}).
+\textbf{(b)} \sone{} after a second general-purpose pass, relative to \sone{} (median, range).
+\textbf{(c)} The \sone{} payload by protocol class: estimated entropy of sampling each cell's molecules (meaningful for
+UMI counts), which no lossless code avoids; the rest of the cell's profile; and \sone's margin above the best model.}
+\label{fig:sfloor}
+\end{figure*}

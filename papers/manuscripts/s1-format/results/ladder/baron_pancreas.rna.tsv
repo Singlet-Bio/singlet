@@ -1,0 +1,2 @@
+dataset	matrix	nnz	L0_csc_i32	L1_leb128	L2_gaps_leb_zstd3	L3_gaps_leb_zstd19	L4_s1_payload	L4_s1_member	s1_codec
+baron_pancreas	rna	16171764	64.0	25.412182	7.532545	6.836847	4.974623	4.999515	1

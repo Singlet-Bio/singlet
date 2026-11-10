@@ -1,0 +1,82 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tasic_cortex	rna	main	local	csc_i32	1	cold	file		auto	214290227	ok	3.771598	2.966351	5.352775	56.816829	3	6.933952,2.161104,3.771598	
+tasic_cortex	rna	main	local	csc_i32	4	cold	file		auto	214290227	ok	2.158005	2.15797	2.158226	99.300137	3	2.158005,2.157934,2.158448	
+tasic_cortex	rna	main	local	csc_i32	4	warm	file		auto	214290227	ok	0.646586	0.645242	0.649303	331.417977	3	0.652020,0.646586,0.643898	
+tasic_cortex	rna	main	local	mtx_gz	1	cold	file		auto	214290227	ok	33.306334	33.177789	33.339306	6.433918	3	33.372277,33.049244,33.306334	
+tasic_cortex	rna	main	local	mtx_gz	4	cold	file		auto	214290227	ok	17.82224	17.806138	17.835718	12.023754	3	17.822240,17.849196,17.790035	
+tasic_cortex	rna	main	local	mtx_gz	4	warm	file		auto	214290227	ok	17.42072	17.414047	17.42108	12.300883	3	17.421440,17.407375,17.420720	
+tasic_cortex	rna	main	local	tenx_h5	1	cold	file		auto	214290227	ok	8.797516	8.796837	8.80642	24.358039	3	8.815325,8.796158,8.797516	
+tasic_cortex	rna	main	local	tenx_h5	4	cold	file		auto	214290227	ok	8.769867	8.768393	8.778057	24.434833	3	8.786247,8.766919,8.769867	
+tasic_cortex	rna	main	local	tenx_h5	4	warm	file		auto	214290227	ok	8.574353	8.573469	8.577357	24.992	3	8.580361,8.574353,8.572584	
+tasic_cortex	rna	main	local	h5ad_none	1	cold	file		auto	214290227	ok	2.449282	2.440574	2.479136	87.491024	3	2.449282,2.431865,2.508990	
+tasic_cortex	rna	main	local	h5ad_none	4	cold	file		auto	214290227	ok	2.432495	2.429519	2.444752	88.094829	3	2.457009,2.426542,2.432495	
+tasic_cortex	rna	main	local	h5ad_none	4	warm	file		auto	214290227	ok	0.843139	0.842975	0.852884	254.157667	3	0.862628,0.843139,0.842811	
+tasic_cortex	rna	main	local	h5ad_gzip	1	cold	file		auto	214290227	ok	7.211336	7.209945	7.227474	29.715747	3	7.243613,7.211336,7.208554	
+tasic_cortex	rna	main	local	h5ad_gzip	4	cold	file		auto	214290227	ok	7.179106	7.179008	7.198269	29.849152	3	7.217432,7.178910,7.179106	
+tasic_cortex	rna	main	local	h5ad_gzip	4	warm	file		auto	214290227	ok	6.912784	6.910768	6.91328	30.999123	3	6.912784,6.913777,6.908752	
+tasic_cortex	rna	main	local	h5ad_lzf	1	cold	file		auto	214290227	ok	3.922802	3.916433	3.930584	54.626832	3	3.938366,3.922802,3.910064	
+tasic_cortex	rna	main	local	h5ad_lzf	4	cold	file		auto	214290227	ok	3.891125	3.89071	3.895856	55.071531	3	3.900586,3.891125,3.890295	
+tasic_cortex	rna	main	local	h5ad_lzf	4	warm	file		auto	214290227	ok	3.416926	3.411478	3.420306	62.714322	3	3.423685,3.416926,3.406030	
+tasic_cortex	rna	main	local	zarr	1	cold	file		auto	214290227	ok	2.25615	2.254497	2.277805	94.980494	3	2.299460,2.256150,2.252845	
+tasic_cortex	rna	main	local	zarr	4	cold	file		auto	214290227	ok	1.992944	1.928668	1.998736	107.524457	3	1.864392,2.004528,1.992944	
+tasic_cortex	rna	main	local	zarr	4	warm	file		auto	214290227	ok	1.061251	1.056487	1.063811	201.92225	3	1.061251,1.066371,1.051723	
+tasic_cortex	rna	main	local	loom	1	cold	file		auto	214290227	ok	36.661976	36.579659	36.699982	5.845027	3	36.661976,36.497343,36.737989	
+tasic_cortex	rna	main	local	loom	4	cold	file		auto	214290227	ok	36.735405	36.597741	36.76996	5.833343	3	36.460077,36.804515,36.735405	
+tasic_cortex	rna	main	local	loom	4	warm	file		auto	214290227	ok	36.200506	36.179318	36.234104	5.919537	3	36.158130,36.267702,36.200506	
+tasic_cortex	rna	main	local	soma	1	cold	file		auto	214290227	ok	14.491771	14.417856	14.563035	14.787028	3	14.491771,14.634299,14.343941	
+tasic_cortex	rna	main	local	soma	4	cold	file		auto	214290227	ok	4.739042	4.638871	4.768502	45.218044	3	4.739042,4.797962,4.538699	
+tasic_cortex	rna	main	local	soma	4	warm	file		auto	214290227	ok	4.583766	4.50104	4.62209	46.749814	3	4.583766,4.418314,4.660414	
+tasic_cortex	rna	main	local	parquet_coo	1	cold	file		auto	214290227	ok	7.018499	6.986639	7.079058	30.532202	3	7.139617,7.018499,6.954779	
+tasic_cortex	rna	main	local	parquet_coo	4	cold	file		auto	214290227	ok	5.47909	5.473964	5.510564	39.110552	3	5.468839,5.542038,5.479090	
+tasic_cortex	rna	main	local	parquet_coo	4	warm	file		auto	214290227	ok	4.547122	4.480692	4.553982	47.126561	3	4.414262,4.547122,4.560842	
+tasic_cortex	rna	main	local	csc_zstd19	1	cold	file		auto	214290227	ok	3.168716	3.145087	3.216693	67.626841	3	3.121459,3.168716,3.264670	
+tasic_cortex	rna	main	local	csc_zstd19	4	cold	file		auto	214290227	ok	3.092769	3.09216	3.099636	69.287505	3	3.106504,3.092769,3.091552	
+tasic_cortex	rna	main	local	csc_zstd19	4	warm	file		auto	214290227	ok	2.887579	2.886447	2.891851	74.211035	3	2.885316,2.896123,2.887579	
+tasic_cortex	rna	main	local	rds_gz	1	cold	file		auto	214290227	ok	12.554577	12.552091	12.605167	17.068693	3	12.655758,12.554577,12.549606	
+tasic_cortex	rna	main	local	rds_gz	4	cold	file		auto	214290227	ok	12.551249	12.534919	12.593942	17.073219	3	12.636635,12.551249,12.518588	
+tasic_cortex	rna	main	local	rds_gz	4	warm	file		auto	214290227	ok	12.222609	12.221044	12.229339	17.532282	3	12.236069,12.222609,12.219479	
+tasic_cortex	rna	main	local	rds_xz	1	cold	file		auto	214290227	ok	18.11586	18.057948	18.18535	11.828874	3	18.115860,18.254841,18.000036	
+tasic_cortex	rna	main	local	rds_xz	4	cold	file		auto	214290227	ok	18.091754	18.043956	18.171509	11.844635	3	18.091754,18.251265,17.996159	
+tasic_cortex	rna	main	local	rds_xz	4	warm	file		auto	214290227	ok	17.85184	17.84535	17.927968	12.003817	3	18.004096,17.838860,17.851840	
+tasic_cortex	rna	main	local	bpcells	1	cold	file		auto	214290227	ok	26.600411	26.490201	27.251624	8.055899	3	27.902838,26.379990,26.600411	
+tasic_cortex	rna	main	local	bpcells	4	cold	file		auto	214290227	ok	26.019007	25.819831	26.751212	8.235911	3	27.483417,25.620656,26.019007	
+tasic_cortex	rna	main	local	bpcells	4	warm	file		auto	214290227	ok	25.850318	25.694339	25.869631	8.289655	3	25.888945,25.850318,25.538360	
+tasic_cortex	rna	main	local	s1	1	cold	file	native	auto	214290227	ok	2.618286	2.617258	2.656501	81.843692	3	2.618286,2.616230,2.694715	avx2
+tasic_cortex	rna	main	local	s1	1	cold	file	canonical	auto	214290227	ok	3.80755	3.802933	3.836993	56.280351	3	3.807550,3.866437,3.798316	avx2
+tasic_cortex	rna	main	local	s1	4	cold	file	native	auto	214290227	ok	1.063757	1.054829	1.064253	201.446626	3	1.064749,1.045901,1.063757	avx2
+tasic_cortex	rna	main	local	s1	4	cold	file	canonical	auto	214290227	ok	1.32508	1.324346	1.332742	161.718723	3	1.323612,1.340403,1.325080	avx2
+tasic_cortex	rna	main	local	s1	4	warm	file	native	auto	214290227	ok	0.894692	0.894211	0.895212	239.51297	3	0.895733,0.894692,0.893730	avx2
+tasic_cortex	rna	main	local	s1	4	warm	file	canonical	auto	214290227	ok	1.166161	1.165181	1.180441	183.757051	3	1.166161,1.194721,1.164202	avx2
+tasic_cortex	rna	main	local	s1	1	warm	codec	native	scalar	214290227	ok	7.535467	7.53488	7.546817	28.437551	3	7.558168,7.535467,7.534294	scalar
+tasic_cortex	rna	main	local	s1	1	warm	codec	native	avx2	214290227	ok	2.311486	2.300015	2.327216	92.706676	3	2.288544,2.342945,2.311486	avx2
+tasic_cortex	rna	main	local	s1	1	warm	codec	native	avx512	214290227	ok	2.327755	2.320025	2.347652	92.058773	3	2.312296,2.367549,2.327755	avx2
+tasic_cortex	rna	main	local	s1	1	warm	codec	canonical	scalar	214290227	ok	8.69015	8.688625	8.702484	24.658978	3	8.714818,8.687099,8.690150	scalar
+tasic_cortex	rna	main	local	s1	1	warm	codec	canonical	avx2	214290227	ok	3.457588	3.448534	3.474437	61.976802	3	3.457588,3.491286,3.439481	avx2
+tasic_cortex	rna	main	local	s1	1	warm	codec	canonical	avx512	214290227	ok	3.517093	3.481646	3.580035	60.92823	3	3.446198,3.517093,3.642978	avx2
+tasic_cortex	rna	main	local	s1	4	warm	codec	native	scalar	214290227	ok	2.024594	2.023432	2.037414	105.843556	3	2.022270,2.050234,2.024594	scalar
+tasic_cortex	rna	main	local	s1	4	warm	codec	native	avx2	214290227	ok	0.718036	0.717601	0.719077	298.439547	3	0.720118,0.718036,0.717167	avx2
+tasic_cortex	rna	main	local	s1	4	warm	codec	native	avx512	214290227	ok	0.718098	0.716627	0.718699	298.413779	3	0.719300,0.715156,0.718098	avx2
+tasic_cortex	rna	main	local	s1	4	warm	codec	canonical	scalar	214290227	ok	2.309273	2.3071	2.313979	92.795543	3	2.304926,2.318686,2.309273	scalar
+tasic_cortex	rna	main	local	s1	4	warm	codec	canonical	avx2	214290227	ok	0.985165	0.984816	0.991541	217.517129	3	0.984466,0.985165,0.997918	avx2
+tasic_cortex	rna	main	local	s1	4	warm	codec	canonical	avx512	214290227	ok	0.992075	0.989093	0.992401	216.002141	3	0.992728,0.986112,0.992075	avx2
+tasic_cortex	rna	main	local	s1_pack	1	cold	file	native	auto	214290227	ok	2.648339	2.645827	2.680228	80.91495	3	2.648339,2.643316,2.712117	avx2
+tasic_cortex	rna	main	local	s1_pack	1	cold	file	canonical	auto	214290227	ok	3.846396	3.810548	3.908946	55.711946	3	3.971495,3.846396,3.774700	avx2
+tasic_cortex	rna	main	local	s1_pack	4	cold	file	native	auto	214290227	ok	1.053423	1.053328	1.059273	203.422737	3	1.053233,1.053423,1.065123	avx2
+tasic_cortex	rna	main	local	s1_pack	4	cold	file	canonical	auto	214290227	ok	1.319182	1.317578	1.330256	162.441806	3	1.315974,1.341330,1.319182	avx2
+tasic_cortex	rna	main	local	s1_pack	4	warm	file	native	auto	214290227	ok	0.889961	0.889893	0.89135	240.786055	3	0.892739,0.889826,0.889961	avx2
+tasic_cortex	rna	main	local	s1_pack	4	warm	file	canonical	auto	214290227	ok	1.162436	1.161264	1.172145	184.345784	3	1.160091,1.181853,1.162436	avx2
+tasic_cortex	rna	main	local	zarr3	1	cold	file		auto	214290227	ok	4.12603	4.102222	4.130572	51.936179	3	4.126030,4.135113,4.078413	
+tasic_cortex	rna	main	local	zarr3	4	cold	file		auto	214290227	ok	3.072977	3.05918	3.073645	69.733765	3	3.074314,3.045384,3.072977	
+tasic_cortex	rna	main	local	zarr3	4	warm	file		auto	214290227	ok	3.044854	3.040003	3.055945	70.377829	3	3.067036,3.035153,3.044854	
+tasic_cortex	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	214290227	ok	7.905292	7.904876	7.911196	27.107187	3	7.905292,7.904460,7.917101	scalar
+tasic_cortex	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	214290227	ok	2.315764	2.315643	2.323914	92.535434	3	2.315521,2.332065,2.315764	avx2
+tasic_cortex	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	214290227	ok	2.311616	2.311247	2.319222	92.701481	3	2.310879,2.326829,2.311616	avx2
+tasic_cortex	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	214290227	ok	8.955408	8.955367	8.96286	23.928583	3	8.955408,8.970311,8.955325	scalar
+tasic_cortex	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	214290227	ok	3.350732	3.350619	3.358805	63.953258	3	3.366878,3.350732,3.350507	avx2
+tasic_cortex	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	214290227	ok	3.351359	3.351188	3.417963	63.941293	3	3.484568,3.351017,3.351359	avx2
+tasic_cortex	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	214290227	ok	1.974823	1.965955	1.975299	108.511106	3	1.975776,1.974823,1.957086	scalar
+tasic_cortex	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	214290227	ok	0.583928	0.583883	0.584009	366.980564	3	0.584090,0.583928,0.583837	avx2
+tasic_cortex	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	214290227	ok	0.58348	0.583338	0.583598	367.262335	3	0.583480,0.583716,0.583197	avx2
+tasic_cortex	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	214290227	ok	2.267272	2.258893	2.272954	94.514565	3	2.278636,2.250514,2.267272	scalar
+tasic_cortex	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	214290227	ok	0.839468	0.8394	0.839651	255.269084	3	0.839833,0.839331,0.839468	avx2
+tasic_cortex	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	214290227	ok	0.841417	0.840286	0.841803	254.677796	3	0.839156,0.841417,0.842189	avx2

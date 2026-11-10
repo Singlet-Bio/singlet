@@ -1,0 +1,79 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+mca_microwell	rna	main	local	csc_i32	1	cold	file		auto	266059719	ok	4.131146	4.127026	4.357485	64.403361	3	4.583823,4.122905,4.131146	
+mca_microwell	rna	main	local	csc_i32	4	cold	file		auto	266059719	ok	4.236703	4.185175	4.293975	62.798767	3	4.236703,4.351246,4.133647	
+mca_microwell	rna	main	local	csc_i32	4	warm	file		auto	266059719	ok	1.716254	1.447806	1.716574	155.023483	3	1.179358,1.716893,1.716254	
+mca_microwell	rna	main	local	mtx_gz	1	cold	file		auto	266059719	ok	42.380133	42.362501	42.416642	6.277935	3	42.453151,42.380133,42.344868	
+mca_microwell	rna	main	local	mtx_gz	4	cold	file		auto	266059719	ok	23.604645	23.594576	23.639494	11.271498	3	23.674342,23.604645,23.584507	
+mca_microwell	rna	main	local	mtx_gz	4	warm	file		auto	266059719	ok	23.085344	23.084369	23.125398	11.525049	3	23.085344,23.083395,23.165451	
+mca_microwell	rna	main	local	tenx_h5	1	cold	file		auto	266059719	ok	12.238714	11.963019	12.244562	21.739188	3	11.687324,12.238714,12.250410	
+mca_microwell	rna	main	local	tenx_h5	4	cold	file		auto	266059719	ok	12.07617	12.05906	12.106236	22.031797	3	12.136302,12.076170,12.041951	
+mca_microwell	rna	main	local	tenx_h5	4	warm	file		auto	266059719	ok	11.419216	11.417158	11.423081	23.299297	3	11.419216,11.415100,11.426945	
+mca_microwell	rna	main	local	h5ad_none	1	cold	file		auto	266059719	ok	4.866641	4.852806	4.886338	54.67009	3	4.906034,4.866641,4.838971	
+mca_microwell	rna	main	local	h5ad_none	4	cold	file		auto	266059719	ok	4.729344	4.72394	4.829362	56.257218	3	4.929380,4.729344,4.718537	
+mca_microwell	rna	main	local	h5ad_none	4	warm	file		auto	266059719	ok	1.610021	1.602635	1.616262	165.252366	3	1.622504,1.595250,1.610021	
+mca_microwell	rna	main	local	h5ad_gzip	1	cold	file		auto	266059719	ok	9.663241	9.660026	9.680654	27.533176	3	9.698067,9.663241,9.656812	
+mca_microwell	rna	main	local	h5ad_gzip	4	cold	file		auto	266059719	ok	9.682222	9.680683	9.692033	27.479199	3	9.701843,9.679143,9.682222	
+mca_microwell	rna	main	local	h5ad_gzip	4	warm	file		auto	266059719	ok	8.268635	8.268207	8.274116	32.176981	3	8.279597,8.267779,8.268635	
+mca_microwell	rna	main	local	h5ad_lzf	1	cold	file		auto	266059719	ok	6.416861	6.413214	6.474187	41.4626	3	6.531514,6.416861,6.409567	
+mca_microwell	rna	main	local	h5ad_lzf	4	cold	file		auto	266059719	ok	6.454519	6.450686	6.462163	41.220686	3	6.469807,6.454519,6.446853	
+mca_microwell	rna	main	local	h5ad_lzf	4	warm	file		auto	266059719	ok	4.913209	4.911186	4.917285	54.15192	3	4.921360,4.909162,4.913209	
+mca_microwell	rna	main	local	zarr	1	cold	file		auto	266059719	ok	3.202754	3.196756	3.207119	83.072158	3	3.211484,3.202754,3.190758	
+mca_microwell	rna	main	local	zarr	4	cold	file		auto	266059719	ok	2.844444	2.788826	2.876931	93.536649	3	2.733208,2.844444,2.909419	
+mca_microwell	rna	main	local	zarr	4	warm	file		auto	266059719	ok	1.771146	1.760982	1.807725	150.218933	3	1.750818,1.771146,1.844304	
+mca_microwell	rna	main	local	soma	1	cold	file		auto	266059719	ok	27.48003	27.470922	27.953844	9.68193	3	27.480030,28.427658,27.461815	
+mca_microwell	rna	main	local	soma	4	cold	file		auto	266059719	ok	8.717076	8.555183	9.036431	30.521669	3	8.717076,8.393290,9.355785	
+mca_microwell	rna	main	local	soma	4	warm	file		auto	266059719	ok	8.751218	8.556487	8.982446	30.402593	3	8.361757,9.213674,8.751218	
+mca_microwell	rna	main	local	parquet_coo	1	cold	file		auto	266059719	ok	19.792288	19.734218	20.009426	13.442595	3	20.226564,19.676147,19.792288	
+mca_microwell	rna	main	local	parquet_coo	4	cold	file		auto	266059719	ok	10.485977	10.315836	12.909452	25.372908	3	15.332927,10.145695,10.485977	
+mca_microwell	rna	main	local	parquet_coo	4	warm	file		auto	266059719	ok	9.658859	9.623754	11.158966	27.545667	3	12.659072,9.658859,9.588649	
+mca_microwell	rna	main	local	csc_zstd19	1	cold	file		auto	266059719	ok	4.071899	4.056161	4.153642	65.340455	3	4.235386,4.071899,4.040422	
+mca_microwell	rna	main	local	csc_zstd19	4	cold	file		auto	266059719	ok	4.083787	4.058817	4.137138	65.15024	3	4.190490,4.083787,4.033847	
+mca_microwell	rna	main	local	csc_zstd19	4	warm	file		auto	266059719	ok	3.845714	3.845575	3.850747	69.183436	3	3.855781,3.845437,3.845714	
+mca_microwell	rna	main	local	rds_gz	1	cold	file		auto	266059719	ok	13.826859	13.821224	13.873073	19.242238	3	13.919287,13.826859,13.815588	
+mca_microwell	rna	main	local	rds_gz	4	cold	file		auto	266059719	ok	13.816585	13.805852	13.891663	19.256547	3	13.816585,13.966741,13.795120	
+mca_microwell	rna	main	local	rds_gz	4	warm	file		auto	266059719	ok	13.520537	13.517961	13.533444	19.678192	3	13.520537,13.546352,13.515385	
+mca_microwell	rna	main	local	rds_xz	1	cold	file		auto	266059719	ok	18.986914	18.962665	18.996235	14.012794	3	18.938417,19.005555,18.986914	
+mca_microwell	rna	main	local	rds_xz	4	cold	file		auto	266059719	ok	19.007701	18.982297	19.009209	13.99747	3	19.010717,19.007701,18.956892	
+mca_microwell	rna	main	local	rds_xz	4	warm	file		auto	266059719	ok	18.756819	18.747617	18.757435	14.184693	3	18.756819,18.758051,18.738415	
+mca_microwell	rna	main	local	bpcells	1	cold	file		auto	266059719	ok	55.420595	55.416811	56.350489	4.800737	3	57.280383,55.413027,55.420595	
+mca_microwell	rna	main	local	bpcells	4	cold	file		auto	266059719	ok	55.690363	55.668316	56.520851	4.777482	3	57.351339,55.690363,55.646268	
+mca_microwell	rna	main	local	bpcells	4	warm	file		auto	266059719	ok	55.150952	55.142155	55.201788	4.824209	3	55.133358,55.252624,55.150952	
+mca_microwell	rna	main	local	s1	1	cold	file	native	auto	266059719	ok	4.842881	4.839153	4.976134	54.938318	3	5.109387,4.842881,4.835426	avx2
+mca_microwell	rna	main	local	s1	1	cold	file	canonical	auto	266059719	ok	6.723312	6.72175	6.729543	39.572718	3	6.735774,6.723312,6.720189	avx2
+mca_microwell	rna	main	local	s1	4	cold	file	native	auto	266059719	ok	2.745459	2.73501	2.755097	96.909009	3	2.764735,2.745459,2.724562	avx2
+mca_microwell	rna	main	local	s1	4	cold	file	canonical	auto	266059719	ok	3.222921	3.220566	3.226697	82.552346	3	3.230472,3.218210,3.222921	avx2
+mca_microwell	rna	main	local	s1	4	warm	file	native	auto	266059719	ok	2.616761	2.615501	2.618523	101.675215	3	2.616761,2.614242,2.620285	avx2
+mca_microwell	rna	main	local	s1	4	warm	file	canonical	auto	266059719	ok	3.106195	3.101898	3.110478	85.654558	3	3.106195,3.114762,3.097602	avx2
+mca_microwell	rna	main	local	s1	1	warm	codec	native	scalar	266059719	ok	10.67842	10.673918	10.685638	24.915644	3	10.692856,10.669416,10.678420	scalar
+mca_microwell	rna	main	local	s1	1	warm	codec	native	avx2	266059719	ok	4.468436	4.467997	4.49223	59.542026	3	4.516024,4.467558,4.468436	avx2
+mca_microwell	rna	main	local	s1	1	warm	codec	native	avx512	266059719	ok	4.49975	4.491164	4.508879	59.127671	3	4.518009,4.499750,4.482579	avx2
+mca_microwell	rna	main	local	s1	1	warm	codec	canonical	scalar	266059719	ok	12.6033	12.597078	12.604724	21.110321	3	12.603300,12.590855,12.606148	scalar
+mca_microwell	rna	main	local	s1	1	warm	codec	canonical	avx2	266059719	ok	6.382675	6.367667	6.390079	41.684672	3	6.397483,6.352659,6.382675	avx2
+mca_microwell	rna	main	local	s1	1	warm	codec	canonical	avx512	266059719	ok	6.345883	6.338864	6.375006	41.926351	3	6.404129,6.345883,6.331846	avx2
+mca_microwell	rna	main	local	s1	4	warm	codec	native	scalar	266059719	ok	3.910145	3.902464	3.919943	68.043446	3	3.910145,3.929742,3.894784	scalar
+mca_microwell	rna	main	local	s1	4	warm	codec	native	avx2	266059719	ok	2.377812	2.373607	2.38049	111.892666	3	2.377812,2.369403,2.383168	avx2
+mca_microwell	rna	main	local	s1	4	warm	codec	native	avx512	266059719	ok	2.385749	2.385279	2.39013	111.520394	3	2.384809,2.394510,2.385749	avx2
+mca_microwell	rna	main	local	s1	4	warm	codec	canonical	scalar	266059719	ok	4.102921	4.100723	4.10553	64.846413	3	4.098524,4.102921,4.108139	scalar
+mca_microwell	rna	main	local	s1	4	warm	codec	canonical	avx2	266059719	ok	2.846884	2.8454	2.8512	93.45646	3	2.846884,2.855515,2.843916	avx2
+mca_microwell	rna	main	local	s1	4	warm	codec	canonical	avx512	266059719	ok	2.857439	2.854928	2.862637	93.111242	3	2.852416,2.867835,2.857439	avx2
+mca_microwell	rna	main	local	s1_pack	1	cold	file	native	auto	266059719	ok	4.895438	4.567616	4.941052	54.348498	3	4.239794,4.986666,4.895438	avx2
+mca_microwell	rna	main	local	s1_pack	1	cold	file	canonical	auto	266059719	ok	6.787702	6.153832	6.80078	39.197316	3	5.519962,6.813857,6.787702	avx2
+mca_microwell	rna	main	local	s1_pack	4	cold	file	native	auto	266059719	ok	2.784376	2.080861	2.788598	95.55451	3	2.792819,2.784376,1.377345	avx2
+mca_microwell	rna	main	local	s1_pack	4	cold	file	canonical	auto	266059719	ok	3.261987	2.70648	3.268865	81.563698	3	2.150972,3.275742,3.261987	avx2
+mca_microwell	rna	main	local	s1_pack	4	warm	file	native	auto	266059719	ok	2.623354	1.921541	2.629369	101.419696	3	2.635385,2.623354,1.219729	avx2
+mca_microwell	rna	main	local	s1_pack	4	warm	file	canonical	auto	266059719	ok	3.123508	3.118817	3.131983	85.179787	3	3.114125,3.140458,3.123508	avx2
+mca_microwell	rna	main	local	zarr3	1	cold	file		auto	266059719	ok	5.326569	5.322433	5.671733	49.949547	3	6.016896,5.326569,5.318296	
+mca_microwell	rna	main	local	zarr3	4	cold	file		auto	266059719	ok	4.516661	4.497725	4.524355	58.90629	3	4.516661,4.478789,4.532049	
+mca_microwell	rna	main	local	zarr3	4	warm	file		auto	266059719	ok	4.015872	3.998446	4.018405	66.252049	3	4.015872,4.020939,3.981020	
+mca_microwell	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	266059719	ok	10.9613	10.814293	11.020077	24.272643	3	11.078853,10.961300,10.667287	scalar
+mca_microwell	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	266059719	ok	3.510218	3.472722	3.584026	75.795782	3	3.510218,3.657833,3.435226	avx2
+mca_microwell	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	266059719	ok	3.516184	3.476948	3.586903	75.667178	3	3.516184,3.657622,3.437712	avx2
+mca_microwell	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	266059719	ok	12.931652	12.913798	13.02166	20.574302	3	13.111669,12.931652,12.895945	scalar
+mca_microwell	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	266059719	ok	5.598059	5.504646	5.617839	47.527137	3	5.637619,5.411232,5.598059	avx2
+mca_microwell	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	266059719	ok	5.604626	5.512247	5.624643	47.471449	3	5.644659,5.419868,5.604626	avx2
+mca_microwell	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	266059719	ok	2.651095	2.643518	2.652927	100.358425	3	2.651095,2.635942,2.654758	scalar
+mca_microwell	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	266059719	ok	0.849238	0.849156	0.849251	313.292291	3	0.849263,0.849238,0.849074	avx2
+mca_microwell	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	266059719	ok	0.840092	0.839894	0.840198	316.703074	3	0.840092,0.840305,0.839697	avx2
+mca_microwell	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	266059719	ok	3.170666	3.157605	3.193917	83.912881	3	3.170666,3.217168,3.144545	scalar
+mca_microwell	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	266059719	ok	1.359022	1.349838	1.36518	195.77293	3	1.359022,1.371338,1.340653	avx2
+mca_microwell	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	266059719	ok	1.352253	1.343935	1.363586	196.752915	3	1.352253,1.374918,1.335617	avx2

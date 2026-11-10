@@ -21,8 +21,8 @@ import numpy as np
 
 from . import assemble as A
 from . import clonotype as CL
-from . import qc as Q
 from . import members as ST
+from . import qc as Q
 
 
 def process_library(

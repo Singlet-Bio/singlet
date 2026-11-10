@@ -1,0 +1,69 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tabula_muris_facs	rna	sweep	local	s1	1	cold	file	native	auto	143478092	ok	1.913953	1.91179	1.92992	74.964271	3	1.913953,1.909628,1.945887	avx2
+tabula_muris_facs	rna	sweep	local	s1	1	cold	file	canonical	auto	143478092	ok	2.669523	2.664846	2.688981	53.746721	3	2.669523,2.708439,2.660170	avx2
+tabula_muris_facs	rna	sweep	local	s1	2	cold	file	native	auto	143478092	ok	1.183042	1.168586	1.20762	121.279001	3	1.154130,1.183042,1.232198	avx2
+tabula_muris_facs	rna	sweep	local	s1	2	cold	file	canonical	auto	143478092	ok	1.513402	1.513187	1.516095	94.804992	3	1.512972,1.513402,1.518788	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	cold	file	native	auto	143478092	ok	0.763098	0.759202	0.775484	188.020566	3	0.763098,0.755307,0.787871	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	cold	file	canonical	auto	143478092	ok	0.934648	0.932837	0.935645	153.510286	3	0.936643,0.931025,0.934648	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	warm	file	native	auto	143478092	ok	0.622661	0.622459	0.62282	230.427377	3	0.622257,0.622661,0.622980	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	warm	file	canonical	auto	143478092	ok	0.79984	0.798944	0.814922	179.383482	3	0.799840,0.798049,0.830005	avx2
+tabula_muris_facs	rna	sweep	local	s1	8	cold	file	native	auto	143478092	ok	0.601777	0.601356	0.613183	238.424079	3	0.600935,0.601777,0.624590	avx2
+tabula_muris_facs	rna	sweep	local	s1	8	cold	file	canonical	auto	143478092	ok	0.722004	0.716105	0.724892	198.722105	3	0.710207,0.722004,0.727781	avx2
+tabula_muris_facs	rna	sweep	local	s1	1	warm	codec	native	scalar	143478092	ok	5.432281	5.431293	5.445303	26.412126	3	5.458325,5.432281,5.430304	scalar
+tabula_muris_facs	rna	sweep	local	s1	1	warm	codec	native	avx2	143478092	ok	1.657615	1.643963	1.660104	86.55693	3	1.630310,1.657615,1.662592	avx2
+tabula_muris_facs	rna	sweep	local	s1	1	warm	codec	native	avx512	143478092	ok	1.643568	1.641382	1.667816	87.296735	3	1.639196,1.692064,1.643568	avx2
+tabula_muris_facs	rna	sweep	local	s1	1	warm	codec	canonical	scalar	143478092	ok	6.223486	6.22346	6.237099	23.054298	3	6.250712,6.223486,6.223434	scalar
+tabula_muris_facs	rna	sweep	local	s1	1	warm	codec	canonical	avx2	143478092	ok	2.406391	2.396397	2.414988	59.623758	3	2.423584,2.406391,2.386403	avx2
+tabula_muris_facs	rna	sweep	local	s1	1	warm	codec	canonical	avx512	143478092	ok	2.445083	2.41279	2.532599	58.680248	3	2.620116,2.445083,2.380496	avx2
+tabula_muris_facs	rna	sweep	local	s1	2	warm	codec	native	scalar	143478092	ok	2.997447	2.909778	3.041414	47.866762	3	2.822109,2.997447,3.085382	scalar
+tabula_muris_facs	rna	sweep	local	s1	2	warm	codec	native	avx2	143478092	ok	0.867919	0.867908	0.868306	165.312771	3	0.867896,0.868693,0.867919	avx2
+tabula_muris_facs	rna	sweep	local	s1	2	warm	codec	native	avx512	143478092	ok	0.869056	0.868588	0.869413	165.096545	3	0.869771,0.869056,0.868119	avx2
+tabula_muris_facs	rna	sweep	local	s1	2	warm	codec	canonical	scalar	143478092	ok	3.229284	3.217302	3.245573	44.430315	3	3.205320,3.229284,3.261863	scalar
+tabula_muris_facs	rna	sweep	local	s1	2	warm	codec	canonical	avx2	143478092	ok	1.248874	1.240955	1.255712	114.885982	3	1.233037,1.248874,1.262551	avx2
+tabula_muris_facs	rna	sweep	local	s1	2	warm	codec	canonical	avx512	143478092	ok	1.271191	1.252812	1.295952	112.869032	3	1.234432,1.271191,1.320713	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	warm	codec	native	scalar	143478092	ok	1.421557	1.414408	1.426036	100.930251	3	1.407260,1.430515,1.421557	scalar
+tabula_muris_facs	rna	sweep	local	s1	4	warm	codec	native	avx2	143478092	ok	0.48239	0.48182	0.48309	297.431703	3	0.483790,0.481250,0.482390	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	warm	codec	native	avx512	143478092	ok	0.481132	0.481007	0.487349	298.209711	3	0.493566,0.480883,0.481132	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	warm	codec	canonical	scalar	143478092	ok	1.637896	1.615705	1.645809	87.599029	3	1.593515,1.637896,1.653722	scalar
+tabula_muris_facs	rna	sweep	local	s1	4	warm	codec	canonical	avx2	143478092	ok	0.661737	0.660987	0.661751	216.820566	3	0.661765,0.661737,0.660237	avx2
+tabula_muris_facs	rna	sweep	local	s1	4	warm	codec	canonical	avx512	143478092	ok	0.661128	0.660519	0.661852	217.020088	3	0.662576,0.661128,0.659910	avx2
+tabula_muris_facs	rna	sweep	local	s1	8	warm	codec	native	scalar	143478092	ok	0.776041	0.769321	0.782769	184.884776	3	0.776041,0.762602,0.789497	scalar
+tabula_muris_facs	rna	sweep	local	s1	8	warm	codec	native	avx2	143478092	ok	0.351012	0.340466	0.357039	408.755261	3	0.363067,0.329921,0.351012	avx2
+tabula_muris_facs	rna	sweep	local	s1	8	warm	codec	native	avx512	143478092	ok	0.357858	0.340855	0.360277	400.936315	3	0.362697,0.323853,0.357858	avx2
+tabula_muris_facs	rna	sweep	local	s1	8	warm	codec	canonical	scalar	143478092	ok	0.893026	0.881197	0.961584	160.665074	3	1.030141,0.893026,0.869368	scalar
+tabula_muris_facs	rna	sweep	local	s1	8	warm	codec	canonical	avx2	143478092	ok	0.475367	0.445127	0.477878	301.825721	3	0.414887,0.480388,0.475367	avx2
+tabula_muris_facs	rna	sweep	local	s1	8	warm	codec	canonical	avx512	143478092	ok	0.485263	0.473649	0.48648	295.670808	3	0.462035,0.487697,0.485263	avx2
+tabula_muris_facs	rna	sweep	local	h5ad_gzip	1	cold	file		auto	143478092	ok	5.434479	5.431313	5.465545	26.401445	3	5.496612,5.434479,5.428148	
+tabula_muris_facs	rna	sweep	local	h5ad_gzip	2	cold	file		auto	143478092	ok	5.451803	5.449217	5.455787	26.31755	3	5.459771,5.451803,5.446631	
+tabula_muris_facs	rna	sweep	local	h5ad_gzip	4	cold	file		auto	143478092	ok	5.440593	5.434268	5.446936	26.371777	3	5.453279,5.440593,5.427944	
+tabula_muris_facs	rna	sweep	local	h5ad_gzip	4	warm	file		auto	143478092	ok	5.223944	5.222573	5.227424	27.465475	3	5.230903,5.221202,5.223944	
+tabula_muris_facs	rna	sweep	local	h5ad_gzip	8	cold	file		auto	143478092	ok	5.431526	5.429257	5.439615	26.4158	3	5.447704,5.431526,5.426989	
+tabula_muris_facs	rna	sweep	local	csc_i32	1	cold	file		auto	143478092	ok	1.423865	1.421462	1.426374	100.766645	3	1.428883,1.423865,1.419060	
+tabula_muris_facs	rna	sweep	local	csc_i32	2	cold	file		auto	143478092	ok	1.417831	1.416456	1.419651	101.195488	3	1.421471,1.417831,1.415081	
+tabula_muris_facs	rna	sweep	local	csc_i32	4	cold	file		auto	143478092	ok	1.44668	1.444184	1.448405	99.177496	3	1.450130,1.441689,1.446680	
+tabula_muris_facs	rna	sweep	local	csc_i32	4	warm	file		auto	143478092	ok	0.422295	0.421654	0.425295	339.757981	3	0.428295,0.422295,0.421013	
+tabula_muris_facs	rna	sweep	local	csc_i32	8	cold	file		auto	143478092	ok	1.432775	1.431539	1.438861	100.139976	3	1.444947,1.432775,1.430303	
+tabula_muris_facs	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	143478092	ok	5.51719	5.516711	5.627263	26.005646	3	5.516233,5.517190,5.737337	scalar
+tabula_muris_facs	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	143478092	ok	1.557599	1.557477	1.56252	92.11491	3	1.567441,1.557599,1.557355	avx2
+tabula_muris_facs	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	143478092	ok	1.570239	1.570165	1.575079	91.37341	3	1.579918,1.570091,1.570239	avx2
+tabula_muris_facs	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	143478092	ok	6.245839	6.245805	6.250853	22.971788	3	6.255867,6.245839,6.245771	scalar
+tabula_muris_facs	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	143478092	ok	2.275449	2.275376	2.280556	63.054849	3	2.275449,2.285662,2.275303	avx2
+tabula_muris_facs	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	143478092	ok	2.298329	2.293171	2.362521	62.427134	3	2.426712,2.298329,2.288012	avx2
+tabula_muris_facs	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	143478092	ok	2.923463	2.922168	2.953473	49.078128	3	2.920872,2.923463,2.983482	scalar
+tabula_muris_facs	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	143478092	ok	0.80735	0.807195	0.993757	177.71486	3	0.807350,0.807039,1.180164	avx2
+tabula_muris_facs	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	143478092	ok	0.806579	0.806578	0.957806	177.884735	3	0.806577,0.806579,1.109032	avx2
+tabula_muris_facs	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	143478092	ok	3.568302	3.457546	3.65519	40.209066	3	3.568302,3.742077,3.346789	scalar
+tabula_muris_facs	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	143478092	ok	1.281918	1.262848	1.294119	111.924547	3	1.306320,1.281918,1.243778	avx2
+tabula_muris_facs	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	143478092	ok	1.326295	1.288218	1.369969	108.179622	3	1.250141,1.326295,1.413642	avx2
+tabula_muris_facs	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	143478092	ok	1.459469	1.439583	1.501164	98.30842	3	1.542859,1.459469,1.419698	scalar
+tabula_muris_facs	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	143478092	ok	0.409295	0.408847	0.417176	350.54934	3	0.408399,0.425056,0.409295	avx2
+tabula_muris_facs	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	143478092	ok	0.409369	0.409218	0.411618	350.485972	3	0.409369,0.413868,0.409068	avx2
+tabula_muris_facs	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	143478092	ok	1.632769	1.612976	1.641341	87.874091	3	1.632769,1.649912,1.593183	scalar
+tabula_muris_facs	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	143478092	ok	0.588923	0.588744	0.592187	243.627931	3	0.595452,0.588565,0.588923	avx2
+tabula_muris_facs	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	143478092	ok	0.592168	0.589635	0.596094	242.292883	3	0.587103,0.600019,0.592168	avx2
+tabula_muris_facs	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	143478092	ok	0.733886	0.730218	0.738151	195.504604	3	0.733886,0.726551,0.742415	scalar
+tabula_muris_facs	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	143478092	ok	0.277571	0.253357	0.280849	516.905916	3	0.277571,0.284126,0.229143	avx2
+tabula_muris_facs	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	143478092	ok	0.230546	0.228664	0.25188	622.340409	3	0.230546,0.273214,0.226783	avx2
+tabula_muris_facs	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	143478092	ok	0.858929	0.850683	0.877046	167.043018	3	0.895163,0.858929,0.842437	scalar
+tabula_muris_facs	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	143478092	ok	0.402557	0.365906	0.403591	356.416835	3	0.402557,0.329255,0.404626	avx2
+tabula_muris_facs	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	143478092	ok	0.406685	0.38897	0.406891	352.799075	3	0.407096,0.371256,0.406685	avx2

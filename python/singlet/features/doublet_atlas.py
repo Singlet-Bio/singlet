@@ -17,10 +17,9 @@ Features per sample (cells x genes raw counts):
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Dict, Optional
-
-import hashlib
 
 import numpy as np
 import scipy.sparse as sp
@@ -65,7 +64,12 @@ class Atlas:
         """Panel position of each input gene (-1 = not on the panel). Ensembl ids (version suffix and ``hg19_``-style prefixes
         ignored; mouse ids through the one-to-one ortholog table) or, when most names are not Ensembl ids, gene symbols (upper case)."""
         g = [str(x) for x in gene_ids]
-        g = [x.split("_", 1)[1] if x[:5] in ("hg19_", "mm10_", "GRCh3", "GRCm3", "hg38_") and "_" in x else x for x in g]
+        g = [
+            x.split("_", 1)[1]
+            if x[:5] in ("hg19_", "mm10_", "GRCh3", "GRCm3", "hg38_") and "_" in x
+            else x
+            for x in g
+        ]
         g = [x.split(".")[0] for x in g]
         if np.mean([x.startswith("ENS") for x in g]) > 0.5:
             return np.array([self._hum.get(x, self._mou.get(x, -1)) for x in g], np.int64)
@@ -73,7 +77,10 @@ class Atlas:
 
     def panel_counts(self, X: sp.csr_matrix, cols: np.ndarray) -> sp.csr_matrix:
         keep = np.flatnonzero(cols >= 0)
-        P = sp.csr_matrix((np.ones(len(keep), np.float32), (keep, cols[keep])), shape=(len(cols), self.W1.shape[0]))
+        P = sp.csr_matrix(
+            (np.ones(len(keep), np.float32), (keep, cols[keep])),
+            shape=(len(cols), self.W1.shape[0]),
+        )
         return sp.csr_matrix(sp.csr_matrix(X, dtype=np.float32) @ P)
 
     def outputs(self, C: sp.csr_matrix, block: int = 4096) -> np.ndarray:
@@ -89,7 +96,9 @@ class Atlas:
         return out
 
     @staticmethod
-    def knn_ref(Q: np.ndarray, ref: np.ndarray, m: int, k: int, pos: np.ndarray, block: int = 4096) -> np.ndarray:
+    def knn_ref(
+        Q: np.ndarray, ref: np.ndarray, m: int, k: int, pos: np.ndarray, block: int = 4096
+    ) -> np.ndarray:
         """Fraction of simulated doublets (rows ``>= m`` of ``ref``) among the k nearest reference rows of each query; ``pos[i]``
         is the reference row that is query i itself (-1 if none), excluded."""
         rq = (ref * ref).sum(1)
@@ -103,7 +112,9 @@ class Atlas:
             out[s : s + block] = (nb >= m).mean(1)
         return out
 
-    def features(self, X, gene_ids, species: Optional[str] = None, *, seed: int = 0) -> Dict[str, np.ndarray]:
+    def features(
+        self, X, gene_ids, species: Optional[str] = None, *, seed: int = 0
+    ) -> Dict[str, np.ndarray]:
         """``{"atlas_knn": ..., "atlas_entropy": ...}`` for the rows of ``X`` (raw counts, cells x genes named by ``gene_ids``)."""
         rng = np.random.default_rng(seed)
         X = sp.csr_matrix(X, dtype=np.float32)
@@ -118,4 +129,7 @@ class Atlas:
         pos = np.full(n, -1)
         pos[sub] = np.arange(m)
         k = max(10, int(round(K_MULT * 0.5 * np.sqrt(m))))
-        return {"atlas_knn": self.knn_ref(E, ref, m, k, pos), "atlas_entropy": o[:, self.K].astype(np.float64)}
+        return {
+            "atlas_knn": self.knn_ref(E, ref, m, k, pos),
+            "atlas_entropy": o[:, self.K].astype(np.float64),
+        }

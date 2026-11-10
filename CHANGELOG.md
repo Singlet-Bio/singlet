@@ -16,6 +16,69 @@ All notable changes to the singlet project.
 - **The content probe sees the same reads on every decode route.** The ingest route sampled one read per stride, while the
   decode routes offered every read to the content-hash sampler; both now offer every read, so the probe's read set (and
   everything derived from it) matches between routes.
+
+## [1.3.4] — 2026-11-06: the production engine on `main`
+
+The engine that processed Research Alpha and the Research Beta pilot (`prod/campaign`, #78) is now on `main`. The Python
+and R client APIs are unchanged from 1.3.3.
+
+- **Alignment and counting.** STAR's sorted BAM is replaced by an unsorted stream into the pileup for CB/UMI protocols
+  (#63; `--sorted-bam` opts out), with counts that no longer depend on the worker count (#152). The Beta aligner profile
+  adds Cell Ranger 4 clipping, a junction guard and a mismatch cap per protocol (#96), and splice junctions count only
+  uniquely mapped molecules (#140). Exon/intron counts keep the legacy split, and alevin-fry USA labels are published
+  as spliced, unspliced and ambiguous matrices (#128, #135, #165).
+- **Cell calling and per-cell features.** In called_v2 2.2, `is_cell` is the EmptyDrops_CR call, with extra low-RNA
+  calls in `called_lowrna` (#121, #164). Other per-cell additions are a frozen cross-study doublet stacker (#122),
+  per-cell ambient RNA estimates (#123, #176), a cell x gene reads-per-UMI matrix as a compact `.s1` member
+  (#129, #133, #139) and ancestry labels from a rule trained on 1000 Genomes (#146).
+- **Genotypes and donors.** The donor genotype call follows cellsnp-lite's posterior cut (#93, #115), and EM and donor
+  demultiplexing are deterministic (#86).
+- **Other modalities.** ATAC, Multiome and Visium processing and QC (#48), HTO demultiplexing (#87), CRISPR guide
+  matching (#91) and SPLiT-seq and inDrop geometry (#94). ADT, HTO, CRISPR, V(D)J, ATAC and spatial modalities are
+  registered (#149), and the `singlet.adt`, `singlet.vdj` and `singlet.crispr` packages are included without pipeline
+  wiring (#147).
+- **Non-host reads.** The screen keeps classified and EM-confirmed reads (#127, #142). The non-host index cache is now
+  copied in-process rather than through a shell command, which closes a CodeQL command-injection alert.
+- **Optional GPU engine.** `singlet --engine gpu` runs STAR's mapping and the pileup on CUDA with identical outputs
+  (#66, #95, #107, #109, #120, #125). It is off by default and needs a CUDA build.
+- **Robustness and throughput.** Fixes cover a FIFO race that gave STAR zero reads (#75), the stall watchdog in every
+  phase (#114) and wrong-strand libraries restarting on the sorted path (#117). The finalize step uses less memory
+  (#118), and protocol detection keeps trimmed 10x barcode reads as 10x (#124, #170). The scATAC whitelist ships
+  gzipped.
+- **Atlas re-run tooling** (`scripts/atlas_rerun`): per-run `.1fq` input (#82, #97), staged `.1fg2` encoding (#110), a
+  multi-sample GPU drain worker (#137, #148), companion-library fetch (#150) and immutable engine builds identified by
+  commit (#169).
+- **CI.** Python 3.9 is tested on `ubuntu-24.04` because `ubuntu-latest` (26.04) has no 3.9 toolchain, and one failing
+  Python version no longer cancels the others.
+
+## [1.3.3] — 2026-10-30: `S1Cells` under forked DataLoader workers; more requests in flight
+
+- **`S1Cells` works with `DataLoader(num_workers > 0)` over HTTP.** Each worker forked from a process that had already
+  opened the object (the dataset reads its shape at construction) shared the parent's HTTP connections. Responses came
+  back interleaved and reads failed with "short range read". A worker now opens its own stream.
+- **More requests in flight by default.** `io_threads="auto"` is 32 for an HTTP URL, up from 8, and `S1Cells(prefetch=4)`
+  sends the next four minibatches' requests while one decodes, up from 1. A link is full only with bandwidth x round-trip
+  time in flight.
+  - Emulated 1 Gbit/s store, PBMC 10k, 4 cores: at a 30 ms round trip, 8 requests and one minibatch ahead deliver about
+    17,000 cells/s, and 32 requests with four ahead about 57,000.
+  - At 100 ms, 64 requests with eight ahead deliver about 42,000 cells/s, against 5,300.
+  - Requests to a local file are unchanged: one at a time.
+
+## [1.3.2] — 2026-10-30: the streaming loader at network speed
+
+- **`S1Stream` / `S1Cells` read at network speed.** On a 1 Gbit/s object store with 1 ms latency (hlca_core, 512-cell
+  batches, 4 cores), sustained throughput went from 11,000 to 60,000 cells/s, which fills about 83% of the link.
+  - A batch's runs of cells are decoded by one C++ call, `singlet._pz2.Member.decode_batch` (the GIL released, runs in
+    parallel), straight into the arrays of the tensor. Python only plans and sends the requests.
+  - Fetched bytes are used for that batch and dropped. Memory no longer grows over an epoch, and range lookups no longer slow down.
+  - HTTP ranges go through `urllib3`. `requests` capped a batch at about 0.25 Gbit/s.
+  - `S1Stream.iter_batches(batches, ahead=1)` keeps the next batches' requests in flight while one decodes. `S1Cells`
+    uses it in place of the read-ahead thread.
+  - Opening reads 256 KiB once, which holds the matrix prefix of most objects, so it is one round trip. There is no
+    separate size probe.
+
+## [1.3.1] — 2026-10-30: `.s1` for your own counts, streaming loader
+
 - **`S1Stream` / `S1Cells` send a batch's range requests together** (`io_threads`). `"auto"` means 8 for an HTTP URL and
   1 for a local file; `io_threads=1` sends them one at a time.
   - Over a link with a 30 ms round trip, the eight block ranges of a minibatch cost about one round trip instead of

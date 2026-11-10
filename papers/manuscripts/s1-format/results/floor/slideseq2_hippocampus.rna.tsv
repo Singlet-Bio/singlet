@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+slideseq2_hippocampus	rna	spatial_seq	22396657	20	5.649338	5.485223	5.651646	5.720448	5.164146	5.706291	5.632129	10000.0	5.58327

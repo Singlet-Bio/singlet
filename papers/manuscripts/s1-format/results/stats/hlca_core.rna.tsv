@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+hlca_core	rna	droplet_3p	L	umi	27402	584944	1138668948	0.07104	7790.829517	4454.0	1560.0	0.608692	34950	4.002216

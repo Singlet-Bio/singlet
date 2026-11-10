@@ -1,4 +1,5 @@
 """common.require_pinned_binary: the campaign never runs an engine from a shared mutable directory."""
+
 import hashlib
 import os
 import sys
@@ -25,8 +26,14 @@ def build(root, name, commit, layout="bin"):
 
 
 def test_commit_named_build_is_accepted(tmp_path):
-    assert C.require_pinned_binary(build(tmp_path, "bbf6497d", "bbf6497d5f22438203b2")) == "bbf6497d5f22438203b2"
-    assert C.require_pinned_binary(build(tmp_path, "bin_9a1b2c3d", "9a1b2c3d99", layout="flat")) == "9a1b2c3d99"
+    assert (
+        C.require_pinned_binary(build(tmp_path, "bbf6497d", "bbf6497d5f22438203b2"))
+        == "bbf6497d5f22438203b2"
+    )
+    assert (
+        C.require_pinned_binary(build(tmp_path, "bin_9a1b2c3d", "9a1b2c3d99", layout="flat"))
+        == "9a1b2c3d99"
+    )
 
 
 def test_shared_directories_are_refused(tmp_path):
@@ -39,13 +46,15 @@ def test_shared_directories_are_refused(tmp_path):
 
 def test_commit_file_must_match_directory_and_config(tmp_path):
     with pytest.raises(SystemExit):
-        C.require_pinned_binary(build(tmp_path, "aaaaaaaa", None))                    # no commit file
+        C.require_pinned_binary(build(tmp_path, "aaaaaaaa", None))  # no commit file
     with pytest.raises(SystemExit):
-        C.require_pinned_binary(build(tmp_path, "bbbbbbbb", "cccccccc11"))            # another commit than the name says
+        C.require_pinned_binary(
+            build(tmp_path, "bbbbbbbb", "cccccccc11")
+        )  # another commit than the name says
     ok = build(tmp_path, "dddddddd", "dddddddd22")
     assert C.require_pinned_binary(ok, "dddddddd22")
     with pytest.raises(SystemExit) as e:
-        C.require_pinned_binary(ok, "eeeeeee")                                         # the config pins another commit
+        C.require_pinned_binary(ok, "eeeeeee")  # the config pins another commit
     assert "config pins" in str(e.value)
 
 
@@ -55,7 +64,7 @@ def test_missing_binary_and_content_addressed_copy(tmp_path):
     data = b"engine bytes"
     f = tmp_path / ("singlet-" + hashlib.sha256(data).hexdigest()[:12])
     f.write_bytes(data)
-    assert C.require_pinned_binary(str(f)) == f.name[len("singlet-"):]
+    assert C.require_pinned_binary(str(f)) == f.name[len("singlet-") :]
     g = tmp_path / "singlet-000000000000"
     g.write_bytes(data)
     with pytest.raises(SystemExit):

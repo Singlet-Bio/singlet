@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	nnz	clusters	poisson_bpn	nb_bpn	gene_depth_bpn	cluster_bpn	sample_sampling_bpn	sample_cluster_bpn	sample_gene_depth_bpn	shrinkage_alpha	s1_payload_bpn
+gtex_bulk	rna	bulk	515414926	38	1810.224585	9.776008	12.999574	12.862019	5.246309	12.870393	13.008309	300000.0	10.178339

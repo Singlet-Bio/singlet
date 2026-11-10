@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+siletti_brain_nonneuronal	rna	droplet_3p_nuclei	L	umi	58232	888263	1962963238	0.03795	5215.274107	4088.0	2030.0	0.622956	10043	2.35997

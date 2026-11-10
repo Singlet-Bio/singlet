@@ -1,0 +1,13 @@
+loader	gbit	cells_per_s
+s1_stream	0.1	7209.46
+s1_stream	1	58057.3
+s1_stream	10	57543.9
+s1_stream_seq	0.1	7197.18
+s1_stream_seq	1	23749.7
+s1_stream_seq	10	23714.7
+anndata_zarr_lazy	0.1	315.817
+anndata_zarr_lazy	1	1770.22
+anndata_zarr_lazy	10	3237.95
+soma_ml	0.1	84.2714
+soma_ml	1	538.558
+soma_ml	10	1258.39

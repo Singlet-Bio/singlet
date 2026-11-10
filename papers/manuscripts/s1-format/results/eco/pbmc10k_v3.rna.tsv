@@ -1,0 +1,10 @@
+dataset	lang	call	median_s	q1_s	q3_s	n	equal
+pbmc10k_v3	Python	anndata.read_h5ad	0.875956	0.874608	0.87608	3	True
+pbmc10k_v3	Python	scanpy.read_10x_h5	1.258396	1.253509	1.261139	3	True
+pbmc10k_v3	Python	singlet.load	0.714715	0.709071	0.716039	3	True
+pbmc10k_v3	C++	pz2::Matrix::open + decode (member in memory)	0.067156	0.067112	0.067181	3	
+pbmc10k_v3	R	Seurat::Read10X_h5	3.7825	3.75425	4.04985	3	True
+pbmc10k_v3	R	CreateSeuratObject(Read10X_h5)	5.041	4.9055	5.0615	3	True
+pbmc10k_v3	R	zellkonverter::readH5AD	1.8832	1.88245	1.9056	3	True
+pbmc10k_v3	R	singlet::load(as='sce')	0.7576	0.75625	0.76275	3	True
+pbmc10k_v3	R	singlet::load(as='seurat')	1.858	1.85125	2.10205	3	True

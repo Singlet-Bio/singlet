@@ -1,0 +1,75 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+slideseq2_hippocampus	rna	sweep	local	soma	1	cold	file		auto	22396657	ok	1.556473	1.555331	1.569937	14.389365	3	1.583400,1.556473,1.554189	
+slideseq2_hippocampus	rna	sweep	local	soma	2	cold	file		auto	22396657	ok	1.485599	1.377729	1.507892	15.075838	3	1.485599,1.530185,1.269858	
+slideseq2_hippocampus	rna	sweep	local	soma	4	cold	file		auto	22396657	ok	0.926072	0.912453	0.986165	24.184573	3	1.046257,0.898835,0.926072	
+slideseq2_hippocampus	rna	sweep	local	soma	4	warm	file		auto	22396657	ok	0.7888	0.761443	0.843247	28.393334	3	0.788800,0.734087,0.897694	
+slideseq2_hippocampus	rna	sweep	local	soma	8	cold	file		auto	22396657	ok	0.692593	0.685394	0.725732	32.337407	3	0.758872,0.692593,0.678195	
+slideseq2_hippocampus	rna	sweep	local	soma	16	cold	file		auto	22396657	ok	0.663459	0.659416	0.665986	33.7574	3	0.668514,0.663459,0.655373	
+slideseq2_hippocampus	rna	sweep	local	soma	32	cold	file		auto	22396657	ok	0.623006	0.619863	0.624397	35.949319	3	0.623006,0.616720,0.625788	
+slideseq2_hippocampus	rna	sweep	local	soma	44	cold	file		auto	22396657	ok	0.635865	0.62512	0.639645	35.22232	3	0.614375,0.643424,0.635865	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	1	cold	file		auto	22396657	ok	3.51299	3.511983	3.541725	6.375384	3	3.570461,3.510976,3.512990	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	2	cold	file		auto	22396657	ok	2.625516	2.543455	2.850054	8.530384	3	3.074593,2.625516,2.461394	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	4	cold	file		auto	22396657	ok	2.339837	2.292091	2.402056	9.571889	3	2.244345,2.339837,2.464275	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	4	warm	file		auto	22396657	ok	2.227458	2.20112	2.249961	10.054803	3	2.174781,2.227458,2.272464	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	8	cold	file		auto	22396657	ok	2.109871	2.099741	2.167813	10.615177	3	2.109871,2.225755,2.089610	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	16	cold	file		auto	22396657	ok	2.066323	2.06603	2.126495	10.838894	3	2.066323,2.065737,2.186667	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	32	cold	file		auto	22396657	ok	2.102308	2.080284	2.11862	10.653366	3	2.102308,2.058260,2.134932	
+slideseq2_hippocampus	rna	sweep	local	mtx_gz	44	cold	file		auto	22396657	ok	2.052738	2.039336	2.066185	10.910626	3	2.052738,2.025935,2.079631	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	1	cold	file		auto	22396657	ok	0.813999	0.792155	0.830084	27.514339	3	0.846168,0.813999,0.770310	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	2	cold	file		auto	22396657	ok	0.658421	0.624512	0.661282	34.015718	3	0.658421,0.590603,0.664143	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	4	cold	file		auto	22396657	ok	0.606548	0.590777	0.626384	36.924785	3	0.606548,0.575005,0.646220	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	4	warm	file		auto	22396657	ok	0.573669	0.563166	0.591546	39.041104	3	0.552664,0.609424,0.573669	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	8	cold	file		auto	22396657	ok	0.683854	0.653417	0.717906	32.750662	3	0.622981,0.683854,0.751959	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	16	cold	file		auto	22396657	ok	0.690961	0.680437	0.703594	32.413781	3	0.669913,0.716227,0.690961	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	32	cold	file		auto	22396657	ok	0.702418	0.696449	0.71051	31.885071	3	0.702418,0.718602,0.690479	
+slideseq2_hippocampus	rna	sweep	local	parquet_coo	44	cold	file		auto	22396657	ok	0.685897	0.682219	0.688244	32.653068	3	0.678541,0.690591,0.685897	
+slideseq2_hippocampus	rna	sweep	local	zarr3	1	cold	file		auto	22396657	ok	0.40491	0.402568	0.40528	55.312668	3	0.405649,0.400226,0.404910	
+slideseq2_hippocampus	rna	sweep	local	zarr3	2	cold	file		auto	22396657	ok	0.402819	0.402537	0.416779	55.59975	3	0.430738,0.402819,0.402254	
+slideseq2_hippocampus	rna	sweep	local	zarr3	4	cold	file		auto	22396657	ok	0.34059	0.331304	0.348047	65.758325	3	0.355504,0.340590,0.322018	
+slideseq2_hippocampus	rna	sweep	local	zarr3	4	warm	file		auto	22396657	ok	0.321967	0.31766	0.330307	69.561901	3	0.321967,0.338646,0.313352	
+slideseq2_hippocampus	rna	sweep	local	zarr3	8	cold	file		auto	22396657	ok	0.477567	0.456435	0.4884	46.897451	3	0.435304,0.499232,0.477567	
+slideseq2_hippocampus	rna	sweep	local	zarr3	16	cold	file		auto	22396657	ok	0.527234	0.467906	0.528988	42.479561	3	0.408578,0.530743,0.527234	
+slideseq2_hippocampus	rna	sweep	local	zarr3	32	cold	file		auto	22396657	ok	0.513386	0.459245	0.524682	43.625414	3	0.405105,0.513386,0.535978	
+slideseq2_hippocampus	rna	sweep	local	zarr3	44	cold	file		auto	22396657	ok	0.508537	0.460027	0.519592	44.041336	3	0.411516,0.508537,0.530646	
+slideseq2_hippocampus	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	22396657	ok	0.834055	0.833554	0.83428	26.852734	3	0.833053,0.834505,0.834055	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	22396657	ok	0.251265	0.251196	0.251387	89.135602	3	0.251510,0.251265,0.251126	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	22396657	ok	0.250966	0.25081	0.251104	89.241798	3	0.251242,0.250966,0.250653	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	22396657	ok	1.028416	1.027675	1.028739	21.777819	3	1.029063,1.028416,1.026934	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	22396657	ok	0.43908	0.438816	0.439461	51.008147	3	0.439842,0.439080,0.438552	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	22396657	ok	0.442769	0.442692	0.442829	50.583164	3	0.442890,0.442614,0.442769	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	22396657	ok	0.44036	0.440056	0.440869	50.859881	3	0.441378,0.440360,0.439752	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	22396657	ok	0.139007	0.138621	0.139359	161.118915	3	0.139712,0.139007,0.138235	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	22396657	ok	0.138576	0.138399	0.138596	161.620028	3	0.138616,0.138576,0.138221	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	22396657	ok	0.535581	0.534539	0.537219	41.817497	3	0.538858,0.535581,0.533496	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	22396657	ok	0.239013	0.238577	0.239168	93.704765	3	0.239322,0.239013,0.238142	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	22396657	ok	0.236538	0.23643	0.236551	94.685239	3	0.236564,0.236321,0.236538	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	22396657	ok	0.222731	0.222274	0.223106	100.554736	3	0.223481,0.222731,0.221817	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	22396657	ok	0.071517	0.071166	0.081865	313.165499	3	0.092213,0.071517,0.070815	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	22396657	ok	0.070376	0.070287	0.070382	318.242824	3	0.070376,0.070388,0.070197	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	22396657	ok	0.271657	0.270966	0.272277	82.444616	3	0.272898,0.271657,0.270276	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	22396657	ok	0.118986	0.118793	0.119063	188.229346	3	0.118986,0.118601,0.119141	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	22396657	ok	0.120308	0.119821	0.120488	186.160995	3	0.120669,0.120308,0.119335	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	22396657	ok	0.111932	0.111899	0.112524	200.091636	3	0.113116,0.111932,0.111865	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	22396657	ok	0.035749	0.035724	0.035848	626.49744	3	0.035947,0.035749,0.035698	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	22396657	ok	0.036092	0.036043	0.036163	620.543528	3	0.036234,0.036092,0.035995	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	22396657	ok	0.136626	0.136086	0.136665	163.926756	3	0.136704,0.136626,0.135546	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	22396657	ok	0.060976	0.060693	0.061149	367.302824	3	0.061322,0.060976,0.060410	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	22396657	ok	0.059893	0.059753	0.059982	373.944484	3	0.060070,0.059893,0.059612	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	16	memory	codec_cpp	native	scalar	22396657	ok	0.057444	0.057431	0.05749	389.886794	3	0.057537,0.057444,0.057418	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx2	22396657	ok	0.019167	0.019126	0.019388	1168.500913	3	0.019610,0.019167,0.019084	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx512	22396657	ok	0.019551	0.01946	0.019582	1145.550458	3	0.019613,0.019370,0.019551	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	scalar	22396657	ok	0.069311	0.069236	0.069347	323.132793	3	0.069382,0.069311,0.069161	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx2	22396657	ok	0.031314	0.031254	0.031462	715.228237	3	0.031610,0.031314,0.031194	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx512	22396657	ok	0.031207	0.031141	0.031787	717.680552	3	0.032368,0.031207,0.031076	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	32	memory	codec_cpp	native	scalar	22396657	ok	0.030364	0.030302	0.030656	737.605618	3	0.030949,0.030364,0.030240	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx2	22396657	ok	0.012169	0.012113	0.012268	1840.468157	3	0.012366,0.012169,0.012058	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx512	22396657	ok	0.012044	0.012043	0.01224	1859.569661	3	0.012437,0.012043,0.012044	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	scalar	22396657	ok	0.03614	0.03611	0.036361	619.719341	3	0.036582,0.036080,0.036140	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx2	22396657	ok	0.017659	0.017466	0.017886	1268.28569	3	0.018114,0.017659,0.017272	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx512	22396657	ok	0.017287	0.017246	0.018037	1295.578007	3	0.018788,0.017287,0.017205	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	44	memory	codec_cpp	native	scalar	22396657	ok	0.023306	0.023294	0.023363	960.982451	3	0.023420,0.023306,0.023281	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx2	22396657	ok	0.0112	0.011183	0.011304	1999.701518	3	0.011407,0.011200,0.011166	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx512	22396657	ok	0.01125	0.011201	0.011265	1990.813956	3	0.011279,0.011153,0.011250	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	scalar	22396657	ok	0.027817	0.027762	0.028056	805.14279	3	0.027707,0.028295,0.027817	scalar
+slideseq2_hippocampus	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx2	22396657	ok	0.014037	0.014025	0.014284	1595.544418	3	0.014530,0.014037,0.014014	avx2
+slideseq2_hippocampus	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx512	22396657	ok	0.014092	0.01407	0.014176	1589.31713	3	0.014259,0.014092,0.014049	avx2

@@ -1,0 +1,82 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+baron_pancreas	rna	main	local	csc_i32	1	cold	file		auto	16171764	ok	0.096487	0.095024	0.096498	167.604821	3	0.096510,0.096487,0.093560	
+baron_pancreas	rna	main	local	csc_i32	4	cold	file		auto	16171764	ok	0.095774	0.095738	0.097513	168.85261	3	0.099252,0.095702,0.095774	
+baron_pancreas	rna	main	local	csc_i32	4	warm	file		auto	16171764	ok	0.049256	0.049036	0.050015	328.320867	3	0.050774,0.049256,0.048816	
+baron_pancreas	rna	main	local	mtx_gz	1	cold	file		auto	16171764	ok	2.204688	2.202419	2.207337	7.335171	3	2.209986,2.204688,2.200151	
+baron_pancreas	rna	main	local	mtx_gz	4	cold	file		auto	16171764	ok	1.354386	1.350667	1.409868	11.940293	3	1.465351,1.346948,1.354386	
+baron_pancreas	rna	main	local	mtx_gz	4	warm	file		auto	16171764	ok	1.328606	1.328575	1.330815	12.171981	3	1.333025,1.328606,1.328545	
+baron_pancreas	rna	main	local	tenx_h5	1	cold	file		auto	16171764	ok	0.633397	0.631912	0.634419	25.531794	3	0.635440,0.630426,0.633397	
+baron_pancreas	rna	main	local	tenx_h5	4	cold	file		auto	16171764	ok	0.636546	0.634386	0.636892	25.405484	3	0.636546,0.632226,0.637238	
+baron_pancreas	rna	main	local	tenx_h5	4	warm	file		auto	16171764	ok	0.623418	0.622502	0.625165	25.940475	3	0.621586,0.626913,0.623418	
+baron_pancreas	rna	main	local	h5ad_none	1	cold	file		auto	16171764	ok	0.131226	0.130449	0.13324	123.235695	3	0.135254,0.131226,0.129671	
+baron_pancreas	rna	main	local	h5ad_none	4	cold	file		auto	16171764	ok	0.135017	0.133112	0.136256	119.776195	3	0.137495,0.135017,0.131207	
+baron_pancreas	rna	main	local	h5ad_none	4	warm	file		auto	16171764	ok	0.085542	0.085313	0.08601	189.050778	3	0.086479,0.085542,0.085084	
+baron_pancreas	rna	main	local	h5ad_gzip	1	cold	file		auto	16171764	ok	0.553516	0.551805	0.555363	29.216448	3	0.553516,0.550095,0.557210	
+baron_pancreas	rna	main	local	h5ad_gzip	4	cold	file		auto	16171764	ok	0.555101	0.552377	0.556435	29.133031	3	0.555101,0.549654,0.557770	
+baron_pancreas	rna	main	local	h5ad_gzip	4	warm	file		auto	16171764	ok	0.533268	0.533153	0.537116	30.325764	3	0.533037,0.540963,0.533268	
+baron_pancreas	rna	main	local	h5ad_lzf	1	cold	file		auto	16171764	ok	0.308668	0.308651	0.311223	52.392072	3	0.313778,0.308668,0.308635	
+baron_pancreas	rna	main	local	h5ad_lzf	4	cold	file		auto	16171764	ok	0.31112	0.31084	0.31161	51.979149	3	0.312100,0.311120,0.310560	
+baron_pancreas	rna	main	local	h5ad_lzf	4	warm	file		auto	16171764	ok	0.280843	0.280559	0.281292	57.582954	3	0.281741,0.280843,0.280275	
+baron_pancreas	rna	main	local	zarr	1	cold	file		auto	16171764	ok	0.133698	0.133449	0.135318	120.957828	3	0.136939,0.133200,0.133698	
+baron_pancreas	rna	main	local	zarr	4	cold	file		auto	16171764	ok	0.13555	0.134828	0.13657	119.304846	3	0.137589,0.135550,0.134105	
+baron_pancreas	rna	main	local	zarr	4	warm	file		auto	16171764	ok	0.113273	0.113201	0.113709	142.768195	3	0.114144,0.113273,0.113130	
+baron_pancreas	rna	main	local	loom	1	cold	file		auto	16171764	ok	4.219469	4.218825	4.250013	3.832654	3	4.280558,4.219469,4.218180	
+baron_pancreas	rna	main	local	loom	4	cold	file		auto	16171764	ok	4.303017	4.269702	4.314204	3.758238	3	4.325390,4.303017,4.236386	
+baron_pancreas	rna	main	local	loom	4	warm	file		auto	16171764	ok	4.222961	4.220523	4.235028	3.829484	3	4.247095,4.218085,4.222961	
+baron_pancreas	rna	main	local	soma	1	cold	file		auto	16171764	ok	1.030211	1.02989	1.041054	15.69752	3	1.051897,1.030211,1.029569	
+baron_pancreas	rna	main	local	soma	4	cold	file		auto	16171764	ok	0.462657	0.456402	0.469099	34.954112	3	0.450147,0.475542,0.462657	
+baron_pancreas	rna	main	local	soma	4	warm	file		auto	16171764	ok	0.463548	0.443428	0.503674	34.8869	3	0.463548,0.423307,0.543800	
+baron_pancreas	rna	main	local	parquet_coo	1	cold	file		auto	16171764	ok	0.518685	0.493163	0.524747	31.178404	3	0.530809,0.467641,0.518685	
+baron_pancreas	rna	main	local	parquet_coo	4	cold	file		auto	16171764	ok	0.417454	0.41368	0.418973	38.738995	3	0.409906,0.417454,0.420492	
+baron_pancreas	rna	main	local	parquet_coo	4	warm	file		auto	16171764	ok	0.375762	0.375671	0.397017	43.037272	3	0.375581,0.375762,0.418272	
+baron_pancreas	rna	main	local	csc_zstd19	1	cold	file		auto	16171764	ok	0.204053	0.202316	0.207875	79.252812	3	0.211698,0.204053,0.200579	
+baron_pancreas	rna	main	local	csc_zstd19	4	cold	file		auto	16171764	ok	0.20377	0.201777	0.207633	79.362668	3	0.211495,0.203770,0.199784	
+baron_pancreas	rna	main	local	csc_zstd19	4	warm	file		auto	16171764	ok	0.195913	0.195584	0.197581	82.545728	3	0.199249,0.195256,0.195913	
+baron_pancreas	rna	main	local	rds_gz	1	cold	file		auto	16171764	ok	0.870247	0.831813	0.915182	18.582966	3	0.960116,0.793378,0.870247	
+baron_pancreas	rna	main	local	rds_gz	4	cold	file		auto	16171764	ok	0.872958	0.833226	0.919018	18.525245	3	0.965078,0.793494,0.872958	
+baron_pancreas	rna	main	local	rds_gz	4	warm	file		auto	16171764	ok	0.843761	0.81352	0.858127	19.166275	3	0.783278,0.872492,0.843761	
+baron_pancreas	rna	main	local	rds_xz	1	cold	file		auto	16171764	ok	1.197569	1.15971	1.262139	13.503822	3	1.326708,1.121851,1.197569	
+baron_pancreas	rna	main	local	rds_xz	4	cold	file		auto	16171764	ok	1.202063	1.164079	1.251458	13.453338	3	1.300853,1.126095,1.202063	
+baron_pancreas	rna	main	local	rds_xz	4	warm	file		auto	16171764	ok	1.113953	1.109451	1.149997	14.517458	3	1.113953,1.186042,1.104949	
+baron_pancreas	rna	main	local	bpcells	1	cold	file		auto	16171764	ok	1.85271	1.8409	2.255473	8.728707	3	2.658237,1.852710,1.829091	
+baron_pancreas	rna	main	local	bpcells	4	cold	file		auto	16171764	ok	1.919353	1.90304	2.323606	8.425632	3	2.727858,1.919353,1.886727	
+baron_pancreas	rna	main	local	bpcells	4	warm	file		auto	16171764	ok	1.860362	1.858401	1.874091	8.692804	3	1.887819,1.860362,1.856440	
+baron_pancreas	rna	main	local	s1	1	cold	file	native	auto	16171764	ok	0.191067	0.190251	0.193108	84.639091	3	0.191067,0.189435,0.195149	avx2
+baron_pancreas	rna	main	local	s1	1	cold	file	canonical	auto	16171764	ok	0.278591	0.277083	0.280853	58.048327	3	0.278591,0.283115,0.275575	avx2
+baron_pancreas	rna	main	local	s1	4	cold	file	native	auto	16171764	ok	0.070197	0.067156	0.071467	230.378464	3	0.070197,0.072736,0.064115	avx2
+baron_pancreas	rna	main	local	s1	4	cold	file	canonical	auto	16171764	ok	0.092256	0.090763	0.093052	175.291686	3	0.092256,0.089269,0.093847	avx2
+baron_pancreas	rna	main	local	s1	4	warm	file	native	auto	16171764	ok	0.065157	0.06288	0.065288	248.197787	3	0.065157,0.065420,0.060604	avx2
+baron_pancreas	rna	main	local	s1	4	warm	file	canonical	auto	16171764	ok	0.082221	0.081721	0.088488	196.685503	3	0.094754,0.082221,0.081221	avx2
+baron_pancreas	rna	main	local	s1	1	warm	codec	native	scalar	16171764	ok	0.618248	0.61689	0.618483	26.157412	3	0.618248,0.618719,0.615532	scalar
+baron_pancreas	rna	main	local	s1	1	warm	codec	native	avx2	16171764	ok	0.18153	0.179025	0.187629	89.085845	3	0.176519,0.181530,0.193729	avx2
+baron_pancreas	rna	main	local	s1	1	warm	codec	native	avx512	16171764	ok	0.194326	0.193398	0.194424	83.219671	3	0.194523,0.194326,0.192471	avx2
+baron_pancreas	rna	main	local	s1	1	warm	codec	canonical	scalar	16171764	ok	0.709101	0.707586	0.709429	22.805993	3	0.709101,0.709756,0.706070	scalar
+baron_pancreas	rna	main	local	s1	1	warm	codec	canonical	avx2	16171764	ok	0.266768	0.265548	0.268337	60.621174	3	0.269906,0.266768,0.264328	avx2
+baron_pancreas	rna	main	local	s1	1	warm	codec	canonical	avx512	16171764	ok	0.267677	0.266235	0.268742	60.415238	3	0.269807,0.267677,0.264793	avx2
+baron_pancreas	rna	main	local	s1	4	warm	codec	native	scalar	16171764	ok	0.160993	0.1607	0.161415	100.450132	3	0.160406,0.160993,0.161838	scalar
+baron_pancreas	rna	main	local	s1	4	warm	codec	native	avx2	16171764	ok	0.051614	0.051346	0.051682	313.319158	3	0.051614,0.051749,0.051078	avx2
+baron_pancreas	rna	main	local	s1	4	warm	codec	native	avx512	16171764	ok	0.051531	0.051464	0.051783	313.827376	3	0.052035,0.051396,0.051531	avx2
+baron_pancreas	rna	main	local	s1	4	warm	codec	canonical	scalar	16171764	ok	0.183902	0.183645	0.184176	87.936779	3	0.183388,0.184450,0.183902	scalar
+baron_pancreas	rna	main	local	s1	4	warm	codec	canonical	avx2	16171764	ok	0.072882	0.072802	0.073034	221.890486	3	0.073186,0.072882,0.072721	avx2
+baron_pancreas	rna	main	local	s1	4	warm	codec	canonical	avx512	16171764	ok	0.072766	0.072702	0.073161	222.243147	3	0.073556,0.072766,0.072638	avx2
+baron_pancreas	rna	main	local	s1_pack	1	cold	file	native	auto	16171764	ok	0.191629	0.191098	0.192375	84.391103	3	0.191629,0.190567,0.193122	avx2
+baron_pancreas	rna	main	local	s1_pack	1	cold	file	canonical	auto	16171764	ok	0.277692	0.276687	0.280651	58.236248	3	0.277692,0.283609,0.275682	avx2
+baron_pancreas	rna	main	local	s1_pack	4	cold	file	native	auto	16171764	ok	0.069259	0.065989	0.071333	233.496637	3	0.069259,0.073406,0.062720	avx2
+baron_pancreas	rna	main	local	s1_pack	4	cold	file	canonical	auto	16171764	ok	0.086554	0.085264	0.088913	186.840217	3	0.091273,0.086554,0.083974	avx2
+baron_pancreas	rna	main	local	s1_pack	4	warm	file	native	auto	16171764	ok	0.059968	0.05836	0.061886	269.672793	3	0.063804,0.059968,0.056752	avx2
+baron_pancreas	rna	main	local	s1_pack	4	warm	file	canonical	auto	16171764	ok	0.078421	0.078278	0.080479	206.217049	3	0.082537,0.078136,0.078421	avx2
+baron_pancreas	rna	main	local	zarr3	1	cold	file		auto	16171764	ok	0.277654	0.268383	0.282863	58.244201	3	0.277654,0.288072,0.259111	
+baron_pancreas	rna	main	local	zarr3	4	cold	file		auto	16171764	ok	0.251599	0.243236	0.253958	64.27582	3	0.234873,0.256317,0.251599	
+baron_pancreas	rna	main	local	zarr3	4	warm	file		auto	16171764	ok	0.255563	0.252315	0.26411	63.278985	3	0.249067,0.255563,0.272658	
+baron_pancreas	rna	main	memory	s1	1	memory	codec_cpp	native	scalar	16171764	ok	0.614362	0.614208	0.615016	26.322859	3	0.614362,0.614055,0.615671	scalar
+baron_pancreas	rna	main	memory	s1	1	memory	codec_cpp	native	avx2	16171764	ok	0.168652	0.168571	0.168699	95.888362	3	0.168745,0.168652,0.168491	avx2
+baron_pancreas	rna	main	memory	s1	1	memory	codec_cpp	native	avx512	16171764	ok	0.164724	0.164545	0.164843	98.174911	3	0.164961,0.164724,0.164366	avx2
+baron_pancreas	rna	main	memory	s1	1	memory	codec_cpp	canonical	scalar	16171764	ok	0.7066	0.706475	0.707197	22.886731	3	0.706600,0.707795,0.706349	scalar
+baron_pancreas	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx2	16171764	ok	0.258562	0.258544	0.258588	62.545014	3	0.258526,0.258614,0.258562	avx2
+baron_pancreas	rna	main	memory	s1	1	memory	codec_cpp	canonical	avx512	16171764	ok	0.255553	0.255478	0.255572	63.281448	3	0.255403,0.255553,0.255592	avx2
+baron_pancreas	rna	main	memory	s1	4	memory	codec_cpp	native	scalar	16171764	ok	0.155215	0.155147	0.155237	104.18944	3	0.155079,0.155259,0.155215	scalar
+baron_pancreas	rna	main	memory	s1	4	memory	codec_cpp	native	avx2	16171764	ok	0.043383	0.043358	0.0434	372.767305	3	0.043334,0.043383,0.043417	avx2
+baron_pancreas	rna	main	memory	s1	4	memory	codec_cpp	native	avx512	16171764	ok	0.043136	0.043128	0.043179	374.901799	3	0.043120,0.043136,0.043221	avx2
+baron_pancreas	rna	main	memory	s1	4	memory	codec_cpp	canonical	scalar	16171764	ok	0.179243	0.179044	0.179448	90.222569	3	0.179653,0.178846,0.179243	scalar
+baron_pancreas	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx2	16171764	ok	0.066375	0.066348	0.066398	243.642395	3	0.066375,0.066321,0.066422	avx2
+baron_pancreas	rna	main	memory	s1	4	memory	codec_cpp	canonical	avx512	16171764	ok	0.066228	0.066164	0.066244	244.183185	3	0.066228,0.066261,0.066099	avx2

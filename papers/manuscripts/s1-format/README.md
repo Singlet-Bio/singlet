@@ -3,15 +3,18 @@
 Manuscript and benchmark for the `.s1` count-matrix format. Every figure, table and number in the paper is produced
 by one pipeline from public datasets; nothing in the `.tex` files is typed by hand.
 
-**Status:** the plan, the dataset list, the pipeline and the manuscript are ready. No dataset has been downloaded and
-no benchmark has been run, so `generated/` holds header-only tables and the PDF shows each missing number as a red
-`[??key]`. `PLAN.md` is the handoff document for running it on a cluster.
+The benchmark ran on Grand Valley State University's Clipper cluster in October and November 2026: 27 datasets and 29
+matrices, plus two out-of-domain extensions, timed on 8 cores of shared bigmem nodes (Xeon Gold 6226, spinning RAID).
+`generated/` holds the final numbers and tables, and `results/` the per-stage results behind them, with host records in
+`results/env/` and the environment locks. `BENCHMARK_NOTES.md` explains how the comparisons are kept fair; the
+manuscript's methods give the full description.
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `PLAN.md` | Questions, experiments, stages, hardware, compute estimate, codebase gaps (G1-G4), done criteria. Read first. |
+| `BENCHMARK_NOTES.md` | How the benchmark keeps comparisons fair: timing, loaders, network tests, records. Read first. |
+| `PLAN.md` | The experiment plan written before the run; the methods describe what was run. |
 | `datasets.yaml` | 29 public datasets (31 count matrices) plus 2 out-of-domain count matrices: source, accession, file, format, licence. |
 | `bench/` | The pipeline, `python -m s1bench` (Python package `s1bench/`, R scripts `R/`, C++ decode benchmark `cpp/`). |
 | `bench/config.yaml` | All settings: formats, threads, repeats, floor models, minibatch workload, network tiers. |
@@ -60,6 +63,4 @@ python -m s1bench report    # from bench/; lists every \nm{key} the .tex files u
 cd .. && latexmk -pdf main.tex   # or `make s1-format` in papers/
 ```
 
-`report` exits with status 1 while any key is missing. After the run, check each sentence of `sections/results.tex`
-against the generated numbers (comments marked `CHECK` name the comparison a sentence depends on) and rewrite any the
-data do not support.
+`report` exits with status 1 while any key is missing.

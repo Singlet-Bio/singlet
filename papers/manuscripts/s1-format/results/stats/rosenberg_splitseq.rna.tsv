@@ -1,0 +1,2 @@
+dataset	matrix	protocol_class	tier	value	genes	cells	nnz	density	counts_per_cell_mean	counts_per_cell_median	nnz_per_cell_median	frac_ones	max_value	mean_value
+rosenberg_splitseq	rna	combinatorial	M	umi	26894	156049	122790641	0.029258	1329.015104	995.0	660.0	0.73259	448	1.688984

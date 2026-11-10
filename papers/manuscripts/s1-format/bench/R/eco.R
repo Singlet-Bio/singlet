@@ -29,7 +29,9 @@ time_it <- function(name, file, expr_fn) {
     cat(toJSON(list(lang = "R", call = name, error = conditionMessage(e)), auto_unbox = TRUE), "\n"))
 }
 ref <- Seurat::Read10X_h5(h5)
+# Read10X_h5 returns a bare matrix; the like-for-like call against singlet::load(as = "seurat") builds the object too
 time_it("Seurat::Read10X_h5", h5, function() Seurat::Read10X_h5(h5))
+time_it("CreateSeuratObject(Read10X_h5)", h5, function() SeuratObject::CreateSeuratObject(Seurat::Read10X_h5(h5)))
 time_it("zellkonverter::readH5AD", h5ad, function() zellkonverter::readH5AD(h5ad, reader = "R"))
 time_it("singlet::load(as='sce')", s1, function() singlet::load(s1, as = "sce"))
 time_it("singlet::load(as='seurat')", s1, function() singlet::load(s1, as = "seurat"))

@@ -1,0 +1,117 @@
+dataset	matrix	run	storage	format	threads	cache	what	mode	isa	nnz	status	median_s	q1_s	q3_s	mnnz_per_s	n	times_s	isa_used
+tasic_cortex	rna	sweep	local	s1	1	cold	file	native	auto	214290227	ok	2.603525	2.602998	2.647606	82.307735	3	2.691688,2.603525,2.602471	avx2
+tasic_cortex	rna	sweep	local	s1	1	cold	file	canonical	auto	214290227	ok	3.741323	3.739909	7.793439	57.276588	3	11.845554,3.741323,3.738494	avx2
+tasic_cortex	rna	sweep	local	s1	2	cold	file	native	auto	214290227	ok	1.810799	1.741609	2.239902	118.34018	3	1.810799,1.672420,2.669006	avx2
+tasic_cortex	rna	sweep	local	s1	2	cold	file	canonical	auto	214290227	ok	2.27999	2.251875	3.050434	93.987373	3	2.223761,2.279990,3.820878	avx2
+tasic_cortex	rna	sweep	local	s1	4	cold	file	native	auto	214290227	ok	1.056004	1.053845	1.075652	202.92566	3	1.056004,1.051687,1.095301	avx2
+tasic_cortex	rna	sweep	local	s1	4	cold	file	canonical	auto	214290227	ok	1.327624	1.324323	1.351782	161.408785	3	1.327624,1.375939,1.321022	avx2
+tasic_cortex	rna	sweep	local	s1	4	warm	file	native	auto	214290227	ok	1.015623	1.01526	1.032484	210.993947	3	1.014897,1.015623,1.049345	avx2
+tasic_cortex	rna	sweep	local	s1	4	warm	file	canonical	auto	214290227	ok	1.301762	1.278583	1.804112	164.615567	3	1.301762,1.255404,2.306463	avx2
+tasic_cortex	rna	sweep	local	s1	8	cold	file	native	auto	214290227	ok	0.686183	0.682373	0.701666	312.292962	3	0.686183,0.678562,0.717148	avx2
+tasic_cortex	rna	sweep	local	s1	8	cold	file	canonical	auto	214290227	ok	0.809392	0.808384	0.813372	264.754659	3	0.817353,0.809392,0.807376	avx2
+tasic_cortex	rna	sweep	local	s1	16	cold	file	native	auto	214290227	ok	0.490337	0.484473	0.497498	437.026412	3	0.504658,0.478608,0.490337	avx2
+tasic_cortex	rna	sweep	local	s1	16	cold	file	canonical	auto	214290227	ok	0.554377	0.550958	0.559651	386.542284	3	0.554377,0.547538,0.564925	avx2
+tasic_cortex	rna	sweep	local	s1	32	cold	file	native	auto	214290227	ok	0.392585	0.392425	0.395287	545.843606	3	0.397988,0.392585,0.392264	avx2
+tasic_cortex	rna	sweep	local	s1	32	cold	file	canonical	auto	214290227	ok	0.425166	0.425145	0.429288	504.015563	3	0.433410,0.425123,0.425166	avx2
+tasic_cortex	rna	sweep	local	s1	44	cold	file	native	auto	214290227	ok	0.382541	0.381332	0.385635	560.175611	3	0.388730,0.380123,0.382541	avx2
+tasic_cortex	rna	sweep	local	s1	44	cold	file	canonical	auto	214290227	ok	0.412627	0.410949	0.417789	519.331121	3	0.422950,0.409270,0.412627	avx2
+tasic_cortex	rna	sweep	local	s1	1	warm	codec	native	scalar	214290227	ok	7.53582	7.53547	7.547026	28.436218	3	7.558232,7.535820,7.535121	scalar
+tasic_cortex	rna	sweep	local	s1	1	warm	codec	native	avx2	214290227	ok	2.364898	2.358555	2.387843	90.612891	3	2.352213,2.410787,2.364898	avx2
+tasic_cortex	rna	sweep	local	s1	1	warm	codec	native	avx512	214290227	ok	2.394021	2.385552	2.414012	89.510583	3	2.377083,2.434002,2.394021	avx2
+tasic_cortex	rna	sweep	local	s1	1	warm	codec	canonical	scalar	214290227	ok	8.697533	8.696585	8.707571	24.638048	3	8.717609,8.697533,8.695637	scalar
+tasic_cortex	rna	sweep	local	s1	1	warm	codec	canonical	avx2	214290227	ok	3.502885	3.493058	3.520105	61.175345	3	3.502885,3.537324,3.483230	avx2
+tasic_cortex	rna	sweep	local	s1	1	warm	codec	canonical	avx512	214290227	ok	3.635711	3.559451	3.64112	58.940396	3	3.483191,3.646528,3.635711	avx2
+tasic_cortex	rna	sweep	local	s1	2	warm	codec	native	scalar	214290227	ok	6.693853	5.499723	7.153371	32.012986	3	4.305593,6.693853,7.612890	scalar
+tasic_cortex	rna	sweep	local	s1	2	warm	codec	native	avx2	214290227	ok	1.444836	1.443852	1.444991	148.314611	3	1.445147,1.444836,1.442868	avx2
+tasic_cortex	rna	sweep	local	s1	2	warm	codec	native	avx512	214290227	ok	1.448157	1.447939	1.450305	147.974434	3	1.452454,1.448157,1.447722	avx2
+tasic_cortex	rna	sweep	local	s1	2	warm	codec	canonical	scalar	214290227	ok	8.839749	6.86226	8.845836	24.241664	3	4.884770,8.851923,8.839749	scalar
+tasic_cortex	rna	sweep	local	s1	2	warm	codec	canonical	avx2	214290227	ok	2.006346	1.995843	2.025882	106.806207	3	2.006346,2.045418,1.985339	avx2
+tasic_cortex	rna	sweep	local	s1	2	warm	codec	canonical	avx512	214290227	ok	2.018563	1.996629	2.028824	106.159806	3	2.018563,2.039086,1.974695	avx2
+tasic_cortex	rna	sweep	local	s1	4	warm	codec	native	scalar	214290227	ok	2.259	2.247159	2.27612	94.860662	3	2.235317,2.293239,2.259000	scalar
+tasic_cortex	rna	sweep	local	s1	4	warm	codec	native	avx2	214290227	ok	0.824036	0.823736	0.82441	260.049601	3	0.824785,0.824036,0.823435	avx2
+tasic_cortex	rna	sweep	local	s1	4	warm	codec	native	avx512	214290227	ok	0.822579	0.822182	0.942576	260.510281	3	1.062572,0.821786,0.822579	avx2
+tasic_cortex	rna	sweep	local	s1	4	warm	codec	canonical	scalar	214290227	ok	2.596281	2.560081	3.728347	82.537365	3	2.523880,2.596281,4.860413	scalar
+tasic_cortex	rna	sweep	local	s1	4	warm	codec	canonical	avx2	214290227	ok	1.107665	1.093327	1.114752	193.46127	3	1.107665,1.121839,1.078989	avx2
+tasic_cortex	rna	sweep	local	s1	4	warm	codec	canonical	avx512	214290227	ok	1.107091	1.10517	1.108682	193.561584	3	1.107091,1.103250,1.110273	avx2
+tasic_cortex	rna	sweep	local	s1	8	warm	codec	native	scalar	214290227	ok	1.19749	1.189696	1.205503	178.949493	3	1.181902,1.213515,1.197490	scalar
+tasic_cortex	rna	sweep	local	s1	8	warm	codec	native	avx2	214290227	ok	0.440333	0.440069	0.440829	486.65517	3	0.440333,0.441325,0.439805	avx2
+tasic_cortex	rna	sweep	local	s1	8	warm	codec	native	avx512	214290227	ok	0.440206	0.439731	0.441055	486.79529	3	0.440206,0.441905,0.439257	avx2
+tasic_cortex	rna	sweep	local	s1	8	warm	codec	canonical	scalar	214290227	ok	1.287518	1.287232	1.28781	166.436649	3	1.286946,1.287518,1.288102	scalar
+tasic_cortex	rna	sweep	local	s1	8	warm	codec	canonical	avx2	214290227	ok	0.570119	0.569894	0.570782	375.869597	3	0.570119,0.569670,0.571445	avx2
+tasic_cortex	rna	sweep	local	s1	8	warm	codec	canonical	avx512	214290227	ok	0.570497	0.570337	0.571589	375.620104	3	0.572681,0.570497,0.570177	avx2
+tasic_cortex	rna	sweep	local	s1	16	warm	codec	native	scalar	214290227	ok	0.590131	0.589514	0.591865	363.123448	3	0.593599,0.588898,0.590131	scalar
+tasic_cortex	rna	sweep	local	s1	16	warm	codec	native	avx2	214290227	ok	0.235498	0.234495	0.235516	909.946523	3	0.235534,0.233492,0.235498	avx2
+tasic_cortex	rna	sweep	local	s1	16	warm	codec	native	avx512	214290227	ok	0.23269	0.231449	0.237685	920.927463	3	0.242680,0.230209,0.232690	avx2
+tasic_cortex	rna	sweep	local	s1	16	warm	codec	canonical	scalar	214290227	ok	0.660613	0.660371	0.660957	324.381098	3	0.661301,0.660129,0.660613	scalar
+tasic_cortex	rna	sweep	local	s1	16	warm	codec	canonical	avx2	214290227	ok	0.303715	0.30233	0.304375	705.563338	3	0.305035,0.300946,0.303715	avx2
+tasic_cortex	rna	sweep	local	s1	16	warm	codec	canonical	avx512	214290227	ok	0.300945	0.300405	0.301764	712.057002	3	0.302582,0.300945,0.299865	avx2
+tasic_cortex	rna	sweep	local	s1	32	warm	codec	native	scalar	214290227	ok	0.311357	0.310953	0.312113	688.245481	3	0.312868,0.310549,0.311357	scalar
+tasic_cortex	rna	sweep	local	s1	32	warm	codec	native	avx2	214290227	ok	0.14207	0.141808	0.142314	1508.341725	3	0.142070,0.141546,0.142558	avx2
+tasic_cortex	rna	sweep	local	s1	32	warm	codec	native	avx512	214290227	ok	0.141883	0.141804	0.143469	1510.335551	3	0.141883,0.141725,0.145055	avx2
+tasic_cortex	rna	sweep	local	s1	32	warm	codec	canonical	scalar	214290227	ok	0.347997	0.347409	0.348921	615.782587	3	0.349844,0.346822,0.347997	scalar
+tasic_cortex	rna	sweep	local	s1	32	warm	codec	canonical	avx2	214290227	ok	0.176445	0.175253	0.177894	1214.485542	3	0.179342,0.176445,0.174061	avx2
+tasic_cortex	rna	sweep	local	s1	32	warm	codec	canonical	avx512	214290227	ok	0.177808	0.177256	0.179344	1205.175647	3	0.180879,0.177808,0.176703	avx2
+tasic_cortex	rna	sweep	local	s1	44	warm	codec	native	scalar	214290227	ok	0.246322	0.245892	0.246807	869.960771	3	0.246322,0.247292,0.245463	scalar
+tasic_cortex	rna	sweep	local	s1	44	warm	codec	native	avx2	214290227	ok	0.136022	0.135837	0.136631	1575.40636	3	0.137239,0.136022,0.135651	avx2
+tasic_cortex	rna	sweep	local	s1	44	warm	codec	native	avx512	214290227	ok	0.134582	0.134514	0.135245	1592.266574	3	0.135908,0.134447,0.134582	avx2
+tasic_cortex	rna	sweep	local	s1	44	warm	codec	canonical	scalar	214290227	ok	0.284035	0.283492	0.285321	754.449051	3	0.284035,0.282949,0.286607	scalar
+tasic_cortex	rna	sweep	local	s1	44	warm	codec	canonical	avx2	214290227	ok	0.158308	0.158185	0.158999	1353.631867	3	0.159691,0.158062,0.158308	avx2
+tasic_cortex	rna	sweep	local	s1	44	warm	codec	canonical	avx512	214290227	ok	0.163269	0.163212	0.163279	1312.50031	3	0.163290,0.163269,0.163156	avx2
+tasic_cortex	rna	sweep	local	h5ad_gzip	1	cold	file		auto	214290227	ok	7.173109	7.173027	7.318521	29.874107	3	7.463933,7.173109,7.172944	
+tasic_cortex	rna	sweep	local	h5ad_gzip	2	cold	file		auto	214290227	ok	7.177107	7.175955	7.193875	29.857465	3	7.210642,7.177107,7.174803	
+tasic_cortex	rna	sweep	local	h5ad_gzip	4	cold	file		auto	214290227	ok	7.184972	7.180774	7.207651	29.824782	3	7.230329,7.184972,7.176577	
+tasic_cortex	rna	sweep	local	h5ad_gzip	4	warm	file		auto	214290227	ok	6.964314	6.963997	6.964744	30.769755	3	6.964314,6.965174,6.963679	
+tasic_cortex	rna	sweep	local	h5ad_gzip	8	cold	file		auto	214290227	ok	7.185955	7.185737	7.208131	29.820703	3	7.230308,7.185955,7.185519	
+tasic_cortex	rna	sweep	local	h5ad_gzip	16	cold	file		auto	214290227	ok	7.170374	7.168722	7.189198	29.885501	3	7.208022,7.170374,7.167069	
+tasic_cortex	rna	sweep	local	h5ad_gzip	32	cold	file		auto	214290227	ok	7.16007	7.157852	7.188359	29.928509	3	7.216647,7.160070,7.155634	
+tasic_cortex	rna	sweep	local	h5ad_gzip	44	cold	file		auto	214290227	ok	7.152861	7.145681	7.170066	29.958673	3	7.187271,7.152861,7.138502	
+tasic_cortex	rna	sweep	local	csc_i32	1	cold	file		auto	214290227	ok	2.189578	2.187684	2.198745	97.86829	3	2.189578,2.185789,2.207913	
+tasic_cortex	rna	sweep	local	csc_i32	2	cold	file		auto	214290227	ok	2.166799	2.163223	2.189388	98.897121	3	2.211976,2.166799,2.159646	
+tasic_cortex	rna	sweep	local	csc_i32	4	cold	file		auto	214290227	ok	2.188957	2.178858	2.195759	97.896041	3	2.202560,2.188957,2.168759	
+tasic_cortex	rna	sweep	local	csc_i32	4	warm	file		auto	214290227	ok	0.614917	0.614122	0.618463	348.48628	3	0.622010,0.614917,0.613327	
+tasic_cortex	rna	sweep	local	csc_i32	8	cold	file		auto	214290227	ok	2.179326	2.172827	2.179625	98.328677	3	2.179924,2.179326,2.166328	
+tasic_cortex	rna	sweep	local	csc_i32	16	cold	file		auto	214290227	ok	2.190387	2.180054	2.192033	97.832151	3	2.193680,2.190387,2.169721	
+tasic_cortex	rna	sweep	local	csc_i32	32	cold	file		auto	214290227	ok	2.205872	2.198691	2.209041	97.14537	3	2.212210,2.205872,2.191509	
+tasic_cortex	rna	sweep	local	csc_i32	44	cold	file		auto	214290227	ok	2.185389	2.183815	2.187885	98.055854	3	2.190380,2.182240,2.185389	
+tasic_cortex	rna	sweep	memory	s1	1	memory	codec_cpp	native	scalar	214290227	ok	7.830291	7.822694	7.938977	27.366828	3	8.047663,7.815098,7.830291	scalar
+tasic_cortex	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx2	214290227	ok	2.261685	2.261268	2.269913	94.748043	3	2.261685,2.278140,2.260852	avx2
+tasic_cortex	rna	sweep	memory	s1	1	memory	codec_cpp	native	avx512	214290227	ok	2.270156	2.269944	2.278265	94.394494	3	2.269731,2.286374,2.270156	avx2
+tasic_cortex	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	scalar	214290227	ok	8.835007	8.827651	8.949381	24.254675	3	9.063755,8.835007,8.820295	scalar
+tasic_cortex	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx2	214290227	ok	3.303303	3.303243	3.312714	64.871502	3	3.322124,3.303303,3.303184	avx2
+tasic_cortex	rna	sweep	memory	s1	1	memory	codec_cpp	canonical	avx512	214290227	ok	3.301362	3.301159	3.31062	64.909642	3	3.319877,3.301362,3.300955	avx2
+tasic_cortex	rna	sweep	memory	s1	2	memory	codec_cpp	native	scalar	214290227	ok	4.301448	4.279211	6.326213	49.818161	3	4.301448,4.256975,8.350977	scalar
+tasic_cortex	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx2	214290227	ok	1.327282	1.319244	1.344035	161.450413	3	1.327282,1.360788,1.311207	avx2
+tasic_cortex	rna	sweep	memory	s1	2	memory	codec_cpp	native	avx512	214290227	ok	1.319888	1.311061	1.335236	162.354857	3	1.319888,1.350583,1.302234	avx2
+tasic_cortex	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	scalar	214290227	ok	9.444269	7.090892	9.462709	22.689975	3	4.737515,9.481149,9.444269	scalar
+tasic_cortex	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx2	214290227	ok	1.86802	1.835311	1.879317	114.715167	3	1.868020,1.890615,1.802602	avx2
+tasic_cortex	rna	sweep	memory	s1	2	memory	codec_cpp	canonical	avx512	214290227	ok	1.859701	1.830376	1.870892	115.228323	3	1.859701,1.882083,1.801051	avx2
+tasic_cortex	rna	sweep	memory	s1	4	memory	codec_cpp	native	scalar	214290227	ok	2.175312	2.171447	2.64969	98.510111	3	2.175312,3.124067,2.167581	scalar
+tasic_cortex	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx2	214290227	ok	0.677289	0.6772	0.677305	316.394075	3	0.677289,0.677111,0.677321	avx2
+tasic_cortex	rna	sweep	memory	s1	4	memory	codec_cpp	native	avx512	214290227	ok	0.67497	0.674816	0.674992	317.481113	3	0.675014,0.674970,0.674662	avx2
+tasic_cortex	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	scalar	214290227	ok	2.450702	2.444021	2.455878	87.440344	3	2.450702,2.437340,2.461053	scalar
+tasic_cortex	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx2	214290227	ok	0.934811	0.934418	0.938222	229.233746	3	0.934811,0.941632,0.934025	avx2
+tasic_cortex	rna	sweep	memory	s1	4	memory	codec_cpp	canonical	avx512	214290227	ok	0.952911	0.945708	0.953825	224.879582	3	0.938505,0.952911,0.954740	avx2
+tasic_cortex	rna	sweep	memory	s1	8	memory	codec_cpp	native	scalar	214290227	ok	1.093874	1.092116	1.094941	195.900284	3	1.093874,1.090357,1.096008	scalar
+tasic_cortex	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx2	214290227	ok	0.344879	0.344807	0.367892	621.349015	3	0.390906,0.344879,0.344736	avx2
+tasic_cortex	rna	sweep	memory	s1	8	memory	codec_cpp	native	avx512	214290227	ok	0.342233	0.342182	0.342375	626.153021	3	0.342233,0.342131,0.342516	avx2
+tasic_cortex	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	scalar	214290227	ok	1.23436	1.232524	1.235831	173.604319	3	1.234360,1.237301,1.230687	scalar
+tasic_cortex	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx2	214290227	ok	0.471226	0.471089	0.471283	454.750432	3	0.470953,0.471226,0.471341	avx2
+tasic_cortex	rna	sweep	memory	s1	8	memory	codec_cpp	canonical	avx512	214290227	ok	0.47218	0.472112	0.472194	453.831647	3	0.472043,0.472209,0.472180	avx2
+tasic_cortex	rna	sweep	memory	s1	16	memory	codec_cpp	native	scalar	214290227	ok	0.545266	0.545226	0.545516	393.001264	3	0.545766,0.545266,0.545186	scalar
+tasic_cortex	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx2	214290227	ok	0.177745	0.177715	0.177858	1205.60481	3	0.177745,0.177686,0.177970	avx2
+tasic_cortex	rna	sweep	memory	s1	16	memory	codec_cpp	native	avx512	214290227	ok	0.178447	0.178425	0.178486	1200.862032	3	0.178526,0.178403,0.178447	avx2
+tasic_cortex	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	scalar	214290227	ok	0.611042	0.61101	0.611124	350.696396	3	0.610978,0.611042,0.611206	scalar
+tasic_cortex	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx2	214290227	ok	0.242112	0.242057	0.242134	885.087179	3	0.242001,0.242156,0.242112	avx2
+tasic_cortex	rna	sweep	memory	s1	16	memory	codec_cpp	canonical	avx512	214290227	ok	0.241535	0.241527	0.24172	887.201553	3	0.241904,0.241535,0.241518	avx2
+tasic_cortex	rna	sweep	memory	s1	32	memory	codec_cpp	native	scalar	214290227	ok	0.276871	0.276807	0.277027	773.971369	3	0.277183,0.276871,0.276743	scalar
+tasic_cortex	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx2	214290227	ok	0.110055	0.110001	0.110384	1947.119413	3	0.110055,0.109947,0.110713	avx2
+tasic_cortex	rna	sweep	memory	s1	32	memory	codec_cpp	native	avx512	214290227	ok	0.110312	0.110167	0.110322	1942.583101	3	0.110312,0.110333,0.110021	avx2
+tasic_cortex	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	scalar	214290227	ok	0.309687	0.309562	0.309812	691.957451	3	0.309936,0.309687,0.309437	scalar
+tasic_cortex	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx2	214290227	ok	0.133519	0.133441	0.133922	1604.941821	3	0.134325,0.133519,0.133364	avx2
+tasic_cortex	rna	sweep	memory	s1	32	memory	codec_cpp	canonical	avx512	214290227	ok	0.133687	0.133665	0.133753	1602.924944	3	0.133820,0.133687,0.133642	avx2
+tasic_cortex	rna	sweep	memory	s1	44	memory	codec_cpp	native	scalar	214290227	ok	0.204663	0.204655	0.204763	1047.039411	3	0.204663,0.204647,0.204864	scalar
+tasic_cortex	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx2	214290227	ok	0.101542	0.101534	0.101889	2110.360511	3	0.101526,0.102236,0.101542	avx2
+tasic_cortex	rna	sweep	memory	s1	44	memory	codec_cpp	native	avx512	214290227	ok	0.101345	0.101249	0.101377	2114.462746	3	0.101408,0.101153,0.101345	avx2
+tasic_cortex	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	scalar	214290227	ok	0.228678	0.228646	0.229071	937.082828	3	0.228678,0.229464,0.228613	scalar
+tasic_cortex	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx2	214290227	ok	0.117117	0.117082	0.117215	1829.710691	3	0.117313,0.117117,0.117047	avx2
+tasic_cortex	rna	sweep	memory	s1	44	memory	codec_cpp	canonical	avx512	214290227	ok	0.113165	0.113117	0.113526	1893.608686	3	0.113165,0.113069,0.113887	avx2

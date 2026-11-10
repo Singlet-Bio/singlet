@@ -123,7 +123,7 @@ def test_stream_over_http_sends_a_batchs_requests_together(big):
     with rs.serve(str(p.parent), delay_s=0.05) as (url, _):
         seq = S1Stream(f"{url}/{p.name}", order="canonical", io_threads=1)
         par = S1Stream(f"{url}/{p.name}", order="canonical")
-        assert par.io_threads == 8  # "auto" over HTTP
+        assert par.io_threads == 32  # "auto" over HTTP
         out, took = {}, {}
         for name, s in (("seq", seq), ("par", par)):
             n0, t0 = s.requests, time.perf_counter()
@@ -145,6 +145,23 @@ def test_s1cells_prefetch_gives_the_same_batches(big):
         assert np.array_equal(u["X"].to_dense().numpy(), v["X"].to_dense().numpy())
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="DataLoader forks its workers on Linux")
+def test_s1cells_in_forked_workers_over_http(big):
+    """The dataset opens the object in the parent (for its shape); forked workers must not share that HTTP pool."""
+    import _s1_range_server as rs
+
+    p = big[0]
+    with rs.serve(str(p.parent)) as (url, _):
+        ds = S1Cells(f"{url}/{p.name}", batch_size=256, threads=1, order="canonical")
+        ref = {int(b["index"][0]): b["X"].to_dense().numpy() for b in ds}
+        dl = torch.utils.data.DataLoader(
+            ds, batch_size=None, num_workers=2, multiprocessing_context="fork"
+        )
+        got = {int(b["index"][0]): b["X"].to_dense().numpy() for b in dl}
+    assert got.keys() == ref.keys()
+    assert all(np.array_equal(got[k], ref[k]) for k in ref)
+
+
 def test_read_ahead_raises_errors_and_stops_when_closed():
     from singlet.torch._s1stream import _read_ahead
 
@@ -160,3 +177,74 @@ def test_read_ahead_raises_errors_and_stops_when_closed():
     g2 = _read_ahead(lambda i: i, list(range(1000)), 1)
     assert next(g2) == 0
     g2.close()  # returns: the producer is unblocked and stops
+
+
+@pytest.mark.parametrize("order", ["native", "canonical"])
+def test_decode_batch_matches_one_range_at_a_time(big, order):
+    p = big[0]
+    s = S1Stream(str(p), order=order, threads=3)
+    ranges = [
+        (2900, 2964),
+        (64, 192),
+        (1000, 1010),
+        (5, 5),
+        (2999, 3000),
+    ]  # out of order, an empty range, the last cell
+    bufs = [
+        s._get((int(s.mem.plan(a, b)["byte_off"]), int(s.mem.plan(a, b)["byte_len"])))
+        if b > a
+        else b""
+        for a, b in ranges
+    ]
+    ip, idx, val = s.mem.decode_batch(ranges, bufs, mode=order, threads=3, dtype="float32")
+    one = [s.mem.decode(a, b, mode=order, threads=1, dtype="float32") for a, b in ranges if b > a]
+    assert ip[-1] == len(idx) == len(val) == sum(int(d["nnz"]) for d in one)
+    want = sp.vstack(
+        [
+            sp.csr_matrix(
+                (d["data"], d["indices"], d["indptr"]), shape=(len(d["indptr"]) - 1, s.n_genes)
+            )
+            for d in one
+        ]
+    )
+    got = sp.csr_matrix((val, idx, ip), shape=(len(ip) - 1, s.n_genes))
+    assert (got != want).nnz == 0
+    with pytest.raises(ValueError):
+        s.mem.decode_batch(ranges, bufs[:-1])
+    with pytest.raises(ValueError):
+        s.mem.decode_batch([(0, 64)], [bufs[0][:10]])
+
+
+def test_stream_keeps_no_batch_bytes_and_iter_batches_matches(big):
+    p, x, _, _ = big
+    s = S1Stream(str(p), order="canonical", threads=2)
+    ep = block_batches(3000, batch_size=256, block_size=64, seed=4)
+    head = s.mem.prefix_len + (
+        1 << 18
+    )  # bytes past the first read: those come from the batch's own requests
+    checked = 0
+    for b in ep[:6]:
+        s.batch(b)
+        for c0, c1 in b:
+            q = s.mem.plan(c0, c1)
+            if int(q["byte_off"]) > head:
+                assert not s.mem.has(
+                    int(q["byte_off"]), int(q["byte_len"])
+                )  # nothing of a batch is kept
+                checked += 1
+    assert checked
+    for ahead in (0, 1, 3):
+        for b, t in zip(ep, s.iter_batches(ep, ahead=ahead)):
+            assert np.array_equal(t.to_dense().numpy(), _rows(x, b))
+
+
+def test_stream_over_http_opens_in_one_request(big):
+    import _s1_range_server as rs
+
+    p, x, _, _ = big
+    with rs.serve(str(p.parent)) as (url, rec):
+        s = S1Stream(f"{url}/{p.name}", order="canonical")
+        assert s.requests == 1  # the prefix read holds the header, member table and matrix prefix
+        blocks = [(10, 74), (2000, 2064)]
+        assert np.array_equal(s.batch(blocks).to_dense().numpy(), _rows(x, blocks))
+        assert s.requests <= 3  # a block inside the first read costs no request

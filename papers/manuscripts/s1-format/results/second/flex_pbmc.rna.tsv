@@ -1,0 +1,5 @@
+dataset	matrix	coder	in_bytes	out_bytes	ratio
+flex_pbmc	rna	zstd22	17849394	17840666	0.999511
+flex_pbmc	rna	xz9e	17849394	17840704	0.999513
+flex_pbmc	rna	brotli11	17849394	17849427	1.000002
+flex_pbmc	rna	bzip2_9	17849394	17924662	1.004217
