@@ -101,6 +101,13 @@ struct E2ERegion {
         return true;
     }
     void release() { if (base != nullptr) munmap(base, cap); base = nullptr; cap = 0; if (fd >= 0) close(fd); fd = -1; }
+    // the pages wholly inside [off, off + len) go back to the system (a hole in the memfd: every mapping then reads zeros there); for arrays no
+    // process reads again
+    void drop(uint64_t off, uint64_t len) const {
+        if (base == nullptr || off == 0 || len == 0 || off >= cap) return;
+        const uint64_t a = (off + 4095) & ~4095ull, b = std::min(off + len, cap) & ~4095ull;
+        if (b > a) madvise(base + a, b - a, MADV_REMOVE);
+    }
 };
 // one per process: created by the pipeline before it forks STAR (the child inherits the fd)
 inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
