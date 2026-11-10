@@ -156,8 +156,8 @@ int main() {
     }
     std::cout << "records: " << R.S.size() << " signatures, " << R.R.size() << " reads\n";
 
-    struct Cfg { int use_qual, skip_n, directional; const char* chunk; const char* block; };
-    const Cfg cfgs[] = {{1, 0, 1, nullptr, nullptr}, {0, 1, 1, "40000", "200000"}, {1, 0, 0, nullptr, "150000"}, {0, 0, 1, "1", nullptr}};
+    struct Cfg { int use_qual, skip_n, directional; const char* chunk; const char* block; const char* split; };
+    const Cfg cfgs[] = {{1, 0, 1, nullptr, nullptr, nullptr}, {0, 1, 1, "40000", "200000", "3000000"}, {1, 0, 0, nullptr, "150000", "8000000"}, {0, 0, 1, "1", nullptr, nullptr}};
     int ran = 0;
     const int pcts[] = {1, 0, 25, 1};   // the ALT-fraction floor: default, off, one that drops many sites, default
     int ci = 0;
@@ -165,6 +165,7 @@ int main() {
         const int pct = pcts[ci++];
         if (c.chunk) setenv("SINGLET_ALLSITE_GPU_CHUNK_READS", c.chunk, 1); else unsetenv("SINGLET_ALLSITE_GPU_CHUNK_READS");
         if (c.block) setenv("SINGLET_ALLSITE_GPU_BLOCK_HITS", c.block, 1); else unsetenv("SINGLET_ALLSITE_GPU_BLOCK_HITS");
+        if (c.split) setenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES", c.split, 1); else unsetenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES");   // contigs in windows
         if (c.block) setenv("SINGLET_ALLSITE_GPU_SLICE_BYTES", "1027", 1); else unsetenv("SINGLET_ALLSITE_GPU_SLICE_BYTES");   // 4 threads x 256 + 3: slices split records and leave a remainder
         A::Params P;
         P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = qwords; P.skip_n = c.skip_n; P.directional = c.directional; P.umi_len = 12; P.threads = 4; P.min_alt_pct = pct;
