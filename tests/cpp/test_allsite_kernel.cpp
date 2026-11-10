@@ -125,6 +125,17 @@ int main() {
     }
 
     struct Cfg { int umi_dedup, umi_len, directional, use_qual, skip_n; };
+    // ALT-fraction floor per config: the 1% rule, off, and a high floor that drops sites in both kernels
+    const int kPct[] = {1, 0, 30, 1, 1, 1};
+    {   // the floor's boundary: exactly 1% is kept, just under is dropped, depth 0 is dropped, pct 0 keeps everything
+        namespace R = A::rec;
+        CHECK(R::floor_keep(1, 100, 1) && R::floor_keep(2, 200, 1) && R::floor_keep(100, 100, 1), "floor: exactly 1% and above are kept");
+        CHECK(!R::floor_keep(1, 101, 1) && !R::floor_keep(99, 9901, 1) && !R::floor_keep(0, 5, 1), "floor: just under 1% is dropped");
+        CHECK(!R::floor_keep(0, 0, 1), "floor: depth 0 is dropped");
+        CHECK(R::floor_keep(0, 0, 0) && R::floor_keep(0, 7, 0), "floor: pct 0 keeps every site");
+        CHECK(R::floor_keep(3, 10, 30) && !R::floor_keep(2, 10, 30), "floor: 30% boundary");
+        CHECK(R::floor_keep(uint64_t(1) << 40, uint64_t(100) << 40, 1), "floor: large depths do not overflow");
+    }
     std::vector<Cfg> cfgs = {{1, 12, 1, 1, 0}, {1, 12, 0, 0, 1}, {1, 10, 1, 0, 0}, {0, 12, 1, 1, 0}, {1, 0, 1, 0, 1}, {1, 12, 1, 1, 0}};
     uint32_t nbc = NBC;
     for (size_t ci = 0; ci < cfgs.size(); ++ci) {
@@ -133,11 +144,11 @@ int main() {
             for (auto& x : rec.R) if (x.bc >= 0) x.bc = x.bc * 100003 + 7;
             nbc = NBC * 100003 + 16;
         }
-        std::string ref_d, ref_p; uint64_t ref_sites = 0;
+        std::string ref_d, ref_p; uint64_t ref_sites = 0, ref_drop = 0;
         for (int kernel : {0, 1}) for (unsigned th : {1u, 2u, 3u, 8u}) for (uint64_t bh : {uint64_t(300), uint64_t(8000000)}) {
             if (kernel == 0 && (th != 1 || bh != 300)) continue;
             A::Params P; P.min_mapq = 20; P.skip_tid = 1; P.use_qual = c.use_qual; P.qwords = 2; P.skip_n = c.skip_n;
-            P.umi_dedup = c.umi_dedup; P.umi_len = c.umi_len; P.directional = c.directional; P.threads = th; P.block_hits = bh; P.kernel = kernel; P.spill_dir = th == 2 ? "-" : "";
+            P.umi_dedup = c.umi_dedup; P.umi_len = c.umi_len; P.directional = c.directional; P.threads = th; P.block_hits = bh; P.kernel = kernel; P.spill_dir = th == 2 ? "-" : ""; P.min_alt_pct = kPct[ci];
             P.defer_build = true;
             A::Result r = A::run(rec, G, 3, nbc, P);
             r.prepare(nullptr);
@@ -166,14 +177,17 @@ int main() {
             const std::string tag = "umi_dedup " + std::to_string(c.umi_dedup) + " umi_len " + std::to_string(c.umi_len) + " directional " + std::to_string(c.directional)
                                   + " qual " + std::to_string(c.use_qual) + " kernel " + std::to_string(kernel) + " threads " + std::to_string(th) + " block " + std::to_string(bh);
             CHECK(ok, tag << ": matrices built");
-            if (kernel == 0) { ref_d = d; ref_p = pd; ref_sites = r.sites.size();
+            if (kernel == 0) { ref_d = d; ref_p = pd; ref_sites = r.sites.size(); ref_drop = r.sites_below_floor;
                 std::cout << "reference " << tag << ": " << r.sites.size() << " sites, " << r.molecules << " molecules, " << r.ambiguous << " ambiguous, " << r.other << " other, "
                           << r.dp_records << " DP records\n";
-                CHECK(r.sites.size() > 20 && r.molecules > 1000, tag << ": enough sites and molecules to test");
+                CHECK(r.sites.size() + r.sites_below_floor > 20 && r.sites.size() > 0 && r.molecules > 1000, tag << ": enough sites and molecules to test");
+                if (kPct[ci] == 30) CHECK(r.sites_below_floor > 0, tag << ": the 30% floor drops sites");
+                if (kPct[ci] == 0) CHECK(r.sites_below_floor == 0, tag << ": no floor, no drops");
             } else {
                 CHECK(d == ref_d, tag << ": digest " << d << " vs kernel 0 " << ref_d);
                 CHECK(pd == ref_p, tag << ": per-(barcode, site) pairs differ from kernel 0");
                 CHECK(r.sites.size() == ref_sites, tag << ": site count");
+                CHECK(r.sites_below_floor == ref_drop, tag << ": sites below the floor");
             }
         }
     }

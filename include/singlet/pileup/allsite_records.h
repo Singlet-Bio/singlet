@@ -53,6 +53,14 @@ inline uint64_t key(const Layout& y, uint32_t bc, uint64_t umi_f, uint8_t cls) {
 }
 
 
+// The pooled ALT-fraction floor, one rule for every kernel (host and device): a discovered site is kept only when its ALT molecules make
+// at least pct percent of its depth, both summed over every barcode once the site is counted (the ad and dp columns of sites.tsv). Integer
+// comparison, so exactly pct percent is kept; depth 0 is dropped. pct 0 turns the floor off (every discovered site is kept).
+inline bool floor_keep(uint64_t ad, uint64_t dp, int pct) {
+    if (pct <= 0) return true;
+    return dp > 0 && 100 * ad >= static_cast<uint64_t>(pct) * dp;
+}
+
 struct Counts {   // SnpConsensus's snp_molecules, _ambiguous, _other; then group sizes (molecules per (barcode, site)) for speed work
     uint64_t molecules = 0, ambiguous = 0, other = 0;
     uint64_t g1 = 0, g8 = 0, g64 = 0, g512 = 0, gbig = 0, m2 = 0;   // groups of 1, 2-8, 9-64, 65-512, more; sum of m^2 over groups of 2+
