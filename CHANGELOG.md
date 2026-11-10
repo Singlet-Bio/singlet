@@ -16,6 +16,16 @@ All notable changes to the singlet project.
 - **The content probe sees the same reads on every decode route.** The ingest route sampled one read per stride, while the
   decode routes offered every read to the content-hash sampler; both now offer every read, so the probe's read set (and
   everything derived from it) matches between routes.
+- **`write_s1(gene_pack=)` writes files that read back, and refuses ids it would lose (Python and R).** The member meta
+  had no `names.rows`, so a reader took a gene-level matrix's rows to be the pack's exon rows. `read_s1` then failed
+  with "vocabulary pack ... is not installed", even with the pack installed. Ids that were not the pack's were accepted
+  and silently replaced by the pack's names.
+  - `write_s1` now resolves the pack: installed, or downloaded from data.singlet.bio. It accepts the ids only if they
+    equal the pack's gene table (`names.rows.member` `"genes"`) or its rows (the pack's member, such as `"exon"`). Any
+    other ids, or a pack it cannot find, raise `ValueError` (an error in R).
+  - `read_s1` reports a row count that does not fit the pack as that, not as a missing pack.
+  - Files written with gene-level ids and a pack by 1.3.3 or earlier have no `names.rows`, so they read only with
+    `genes=`.
 
 ## [1.3.4] — 2026-11-06: the production engine on `main`
 
