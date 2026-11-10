@@ -220,6 +220,7 @@ struct E16Held { singlet_engine_gpu::Input *in = nullptr; singlet_engine_gpu::Ou
 struct E16Bg {
     std::thread th; bool on = false, okU = true, okR = true, ingHeld = false; std::string whyU, whyR;
     std::vector<uint32_t> reads; std::vector<std::string> out[2]; double sU = 0, sR = 0;
+    std::atomic<bool> fin{false};   // the thread's last read of the packed reads is done (it may not be joined yet)
     ~E16Bg() { if (th.joinable()) th.detach(); }   // a run stopped before STAR's loop ended
 } e16bg;
 // the Solo configuration E9's library reproduces byte for byte (E9-solo.md section 1); anything else: STAR's Solo counts (level 3)
@@ -1956,6 +1957,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                     e16bg.sU = std::chrono::duration<double>(b - a).count();
                     e16bg.sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - b).count();
                     singlet_tail::mark("prefill (bg): %zu Unmapped.out records formatted in %.3f s, RNA Q30 adjustment %.3f s", e16bg.reads.size(), e16bg.sU, e16bg.sR);
+                    e16bg.fin.store(true, std::memory_order_release);
                 });
             } else
             if (g_e10Level == 5) {   // E11: Gene/Summary.csv's RNA Q30 counts of the reads with a record over STAR's span [clip5, L - clip3)
@@ -2085,11 +2087,40 @@ void seqCacheGpuEarly(Parameters &P) {
 #endif
 }
 
+#ifdef SINGLET_HAVE_ENGINE_GPU
+// E16 "freeloop" (level 5): what only STAR's loop and the bg thread read, freed on a thread as soon as the loop is done, before Solo's device
+// step, the bg thread's join and Solo's writes. These buffers stayed until this process exited, while the pipeline built the hand-off reads and
+// the pileup's input, so a deep sample's host peak was their sum. Freed: the prefill's reads and engine output (E16 "free"), E13's packed
+// planes, level 4/5's read source of the reads without a record, and the sequence cache (STAR.cpp frees it after this function otherwise).
+// With E13's ingest the bg thread reads the packed reads: freed here only once it is done (fin), else after its join. True when freed.
+static bool e16FreeLoop(Parameters &P, bool bgJoined) {
+    if (e16bg.ingHeld && !bgJoined && !e16bg.fin.load(std::memory_order_acquire)) return false;
+    singlet_engine_gpu::Input *fIn = e16held.in; singlet_engine_gpu::Output *fOut = e16held.out;
+    const bool fIng = e16bg.ingHeld;
+    e16held = E16Held(); e16bg.ingHeld = false;
+    E10Source *src = new E10Source();
+    for (int im = 0; im < 2; im++) { src->buf[im].swap(e10src.buf[im]); src->end[im].swap(e10src.end[im]); }
+    src->iRead.swap(e10src.iRead);
+    SeqCache *cache = g_seqCache;
+    if (cache != nullptr) { P.inOut->logMain << cache->stats() << "\n" << flush; g_seqCache = nullptr; }
+    std::thread([fIn, fOut, fIng, src, cache]() {
+        const double a = singlet_tail::now();
+        delete fIn; delete fOut; delete src; delete cache;
+        if (fIng) ingRelease();
+        singlet_tail::mark("after mapping (bg): STAR's loop inputs freed in %.3f s (reads, engine output, packed planes, read source, cache)",
+                           singlet_tail::now() - a);
+    }).detach();
+    return true;
+}
+#endif
+
 // STAR.cpp, right after the mapping threads finished: E10's after-mapping steps (the entry check at level 2; the device's junctions into the
 // first thread's junction buffer at level >= 3, collapsed, so outputSJ merges them with STAR's own)
 void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
 #ifdef SINGLET_HAVE_ENGINE_GPU
     singlet_tail::mark("after mapping: start");
+    const bool freeLoop = g_e10Level == 5 && singlet_tail::cut("freeloop");
+    bool loopFreed = freeLoop && e16FreeLoop(P, false);
     // E11's Solo device part (the gather of STAR's loop annotations, soloRunKept under the device lock) as a step: E16 "solofirst" (level 5) runs it
     // first, before the other after-mapping steps, so that it holds the device before the pipeline's pileup asks for it (the BAM stream has just
     // closed); otherwise it runs where E11 ran it
@@ -2146,6 +2177,7 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
     if (e16bg.on) {   // E16 bg: the thread's records into STAR's streams (the mapping threads are done with them), its RNA counts for Solo's summary
         if (e16bg.th.joinable()) e16bg.th.join();
         e16bg.on = false;
+        if (freeLoop && !loopFreed) loopFreed = e16FreeLoop(P, true);   // E16 "freeloop": the thread was still reading them at the loop's end
         if (!e16bg.okU) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E16): Unmapped.out records not formatted: " + e16bg.whyU + "\n",
                                       std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         if (!e16bg.okR) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + e16bg.whyR + "\n", std::cerr, P.inOut->logMain,
