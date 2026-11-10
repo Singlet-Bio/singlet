@@ -2238,6 +2238,7 @@ public:
             e16_.rbg = singlet_tail::cut("rrnabg");
             e16_.ok = gpu_handoff_device_pass(e16_.reg, e16_.o, e16_.nRrna, e16_.sR, e16_.zc, e16_.rbg);
             if (!e16_.ok) { e16_.zc = false; e16_.rbg = false; }
+            else gpu_region_trim(e16_.reg, false);   // the stream still reads read -> record
             e16_.done = singlet_tail::now();
             if (e16_.rbg) {   // the region's arrays stay mapped until the join (e16_early_join without zc; zc: the input's mapping, gpu_pileup_apply)
                 const SigRec* S = e16_.reg.at<SigRec>(e16_.reg.hdr()->oSigs); const uint8_t* Q = e16_.reg.at<uint8_t>(e16_.reg.hdr()->oSeq);
@@ -2876,10 +2877,26 @@ public:
             if (e16_.rbg) { nRrna = 0; sR = -1; e16_.rrnaPending = true; }   // rrnabg: added by e16_rrna_join
             else { nRrna = e16_.nRrna; sR = e16_.sR; }
             e16_.o.log += "; E16: done " + std::to_string(e16_.lead) + " s before the stream ended";
-            return gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
+            const bool ok = gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
+            if (ok) gpu_region_trim(R, true);
+            return ok;
         }
         if (!gpu_handoff_device_pass(R, oLocal, nRrna, sR)) return false;
-        return gpu_handoff_merge(stats, H, oLocal, nRrna, sR, false);
+        const bool ok = gpu_handoff_merge(stats, H, oLocal, nRrna, sR, false);
+        if (ok) gpu_region_trim(R, true);
+        return ok;
+    }
+    // the region's per-read arrays (STAR's entries and low-quality masks, read -> record) are read only by e2ePass and (read -> record) by the
+    // stream's check in Collector::add. Once e2ePass is done their pages go back to the system (a hole in the memfd: 44 bytes per read that
+    // stayed until the pileup's input went; e2ePass unlocked them, E16 keepPinned keeps only the records locked); read -> record only once the
+    // stream drained (withRR). The records the pileup reads stay. SINGLET_E16_OFF=trim keeps them.
+    void gpu_region_trim(const singlet_engine_gpu::E2ERegion& R, bool withRR) {
+        if (R.base == nullptr || !singlet_tail::cut("trim")) return;
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
+        R.drop(H.oEntries, H.nReads * sizeof(gpupileup::ReadEntry));
+        if (H.oQMask) R.drop(H.oQMask, H.nReads * 8ull * singlet_qmask::words());
+        if (withRR) R.drop(H.oReadRecord, H.nReads * 4);
+        singlet_tail::mark("parent: region's per-read arrays dropped%s", withRR ? " (with read -> record)" : "");
     }
     // the hand-off pass's device part (e2ePass on the region R) and the rRNA detector on the reads it sends to the host; it only reads the
     // engine's state (barcode indexes, corrector, detector, sizes fixed before the stream), so it may run on its own thread during the stream (E16)
