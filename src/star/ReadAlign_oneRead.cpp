@@ -9,6 +9,23 @@
 #include "SeqCache.h"
 
 extern int g_e10Level; //singlet E10 (SeqCacheGpuPrefill.cpp)
+#include <mutex>
+#include <cstdio>
+//singlet align-w2: SINGLET_STAR_NDUMP=<file>: per read with N that STAR maps, u32 Lread, the bases, u32 B, B bytes of its sequence-cache
+//encoding (B = 0xFFFFFFFF: not encodable), for the comparison with the GPU's results of the same sequences (SINGLET_ENGINE_GPU_NREADS=check)
+static void starNDump(const char *r, uint64 L, bool enc, const std::vector<uint8> &b) {
+    static std::mutex mu;
+    static FILE *f = nullptr;
+    static bool tried = false;
+    std::lock_guard<std::mutex> lk(mu);
+    if (!tried) { tried = true; const char *p = getenv("SINGLET_STAR_NDUMP"); if (p != nullptr && p[0] != 0) f = fopen(p, "wb"); }
+    if (f == nullptr) return;
+    const uint32 L4 = (uint32) L, B4 = enc ? (uint32) b.size() : 0xFFFFFFFFu;
+    fwrite(&L4, 4, 1, f); fwrite(r, 1, L, f); fwrite(&B4, 4, 1, f);
+    if (enc && !b.empty()) fwrite(b.data(), 1, b.size(), f);
+    fflush(f);
+}
+static const bool g_starNDumpOn = getenv("SINGLET_STAR_NDUMP") != nullptr;
 
 int ReadAlign::oneRead() {//process one read: load, map, write
 
@@ -173,6 +190,11 @@ int ReadAlign::oneRead() {//process one read: load, map, write
             } else {
                 g_seqCache->nUncacheable++;
             };
+        };
+        if (g_starNDumpOn) {//singlet align-w2: the reads with N (the GPU's NREADS=check comparison)
+            bool hasN = false;
+            for (uint64 i=0; i<Lread && !hasN; i++) hasN = (uint8) Read1[0][i] > 3;
+            if (hasN) { std::vector<uint8> b; const bool enc = seqCacheEncode(b); starNDump(Read1[0], Lread, enc, b); };
         };
     };
     seqCacheBlob.clear();
