@@ -39,6 +39,7 @@
 #include <fstream>
 #include <zlib.h>
 #include <atomic>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -99,6 +100,7 @@
 #include "singlet/nvtx.h"
 #include "singlet/thread_name.h"
 #include "singlet/pileup/nonhost/nonhost_sample.h"
+#include "singlet/pileup/nonhost/nonhost_fastscan.h"
 #include "singlet/pileup/tagged_bam.h"
 #include "singlet/pileup/cb_tag_scan.h"
 #include "singlet/fq/sra_reader.h"
@@ -1922,10 +1924,20 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
         // the classified reads are the records of mate1 selected by nonhost_sample.h; the per-record outputs (nonhost_reads.fq, the per-cell
         // matrix) take the same records (nh_selected) so that they line up with multi_hits
+        // One parallel pass over mate1 (nonhost_fastscan.h) gives the same sample and an index of the selected records that the later passes
+        // use; a file that is not the regular 4-line layout, or SINGLET_NONHOST_SCAN=serial, takes the serial reader.
         singlet::nonhost::SampledReads nh_smp;
+        singlet::nonhost::fastscan::FastIndex nh_fi;
+        bool nh_fast = false;
         {
-            std::ifstream fq(mate1_path);
-            nh_smp = singlet::nonhost::sample_reads(fq, MAX_NONHOST_READS);
+            const char* scan_mode = std::getenv("SINGLET_NONHOST_SCAN");
+            if (!(scan_mode && std::string(scan_mode) == "serial"))
+                nh_fast = singlet::nonhost::fastscan::fast_sample(mate1_path, MAX_NONHOST_READS, std::max(1, n_threads), nh_smp, nh_fi);
+            if (!nh_fast) {
+                nh_fi = singlet::nonhost::fastscan::FastIndex{};
+                std::ifstream fq(mate1_path);
+                nh_smp = singlet::nonhost::sample_reads(fq, MAX_NONHOST_READS);
+            }
         }
         std::vector<std::string>& reads = nh_smp.reads;
         const bool nonhost_subsampled = nh_smp.subsampled;
@@ -2005,6 +2017,10 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // on the report thresholds), on the run's threads (bit-identical at any count)
         const EmFit em_fit_all = em_fit(multi_hits, /*max_iter=*/500, /*tol=*/1e-6f, /*min_prefilter_hr=*/0.05f, std::max(1, n_threads));
         n_em_iter = em_fit_all.iterations;
+        if (nh_time)
+            std::cerr << "[nonhost-time] em steps: group " << em_fit_all.sec_group << " s, invert " << em_fit_all.sec_invert << " s, iterate "
+                      << em_fit_all.sec_iterate << " s (" << em_fit_all.iterations << " iterations, " << em_fit_all.idx_to_species.size()
+                      << " species, " << em_fit_all.n_groups << " patterns), stats " << em_fit_all.sec_stats << " s\n";
         auto em_result = em_report(em_fit_all, kingdom_map, /*min_abundance=*/1e-4f, /*min_report_hr=*/0.30f,
                                    /*min_abs_reads=*/min_abs_reads);
         nh_mark("em");
@@ -2041,7 +2057,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                     }
                 }
                 singlet::nonhost::NonHostAligner sec_aligner(eff_ref_dir);
-                auto sec_results = sec_aligner.align(reads, em_result);
+                auto sec_results = sec_aligner.align(reads, em_result, std::max(1, n_threads));
                 if (!sec_results.empty())
                     singlet::nonhost::NonHostAligner::write_tsv(sec_results, out_prefix + "/nonhost");
             } else {
@@ -2059,9 +2075,11 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                 // Only EM-confirmed species are counted and only they use the reads below, so with none confirmed (most samples)
                 // the table is empty whatever the reads are: the two unmapped files (tens of GB on a deep sample) are not read.
                 std::vector<singlet::nonhost::TaggedRead> tagged;
-                if (!em_result.empty())
-                    tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                        mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                if (!em_result.empty()) {
+                    if (!(nh_fast && singlet::nonhost::fastscan::fast_tag_reads(mate2_path, nh_fi, reads, cb_len, umi_len, std::max(1, n_threads), tagged)))
+                        tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
+                            mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                }
 
                 nh_mark("read mate pairs");
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
@@ -2234,11 +2252,12 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         bool any_positive = (vf > 0.01 || bf > 0.01 || ff > 0.01);
         if (any_positive) {
             std::string fq_out_path = out_prefix + "/nonhost_reads.fq";
-            std::ofstream fq_out(fq_out_path);
-            std::ifstream fq_in(mate1_path);
-            singlet::nonhost::write_classified(fq_in, fq_out, nh_smp, [&](size_t i) {
-                return i < multi_hits.size() && multi_hits[i].top_category != NonHostCategory::UNKNOWN;
-            });
+            auto nh_keep = [&](size_t i) { return i < multi_hits.size() && multi_hits[i].top_category != NonHostCategory::UNKNOWN; };
+            if (!(nh_fast && singlet::nonhost::fastscan::fast_write_classified(nh_fi, nh_keep, std::max(1, n_threads), fq_out_path))) {
+                std::ofstream fq_out(fq_out_path);
+                std::ifstream fq_in(mate1_path);
+                singlet::nonhost::write_classified(fq_in, fq_out, nh_smp, nh_keep);
+            }
             std::cerr << "[nonhost] Wrote classified reads → " << fq_out_path << "\n";
         }
         nh_mark("write classified");
@@ -2248,6 +2267,73 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // Non-fatal — pipeline continues without nonhost output
     }
 }
+
+// ── The screen beside the export ─────────────────────────────────────────────
+// run_nonhost_em_screening() reads the unmapped files and writes only under out_prefix/nonhost, nonhost_reads.fq and the nonhost_* tables; the
+// export, the donor demultiplexing and the summary read none of them, so singlet_main starts the screen on a thread and joins it right after
+// export_results (before the output inventory, HLA typing and the chimeric pass, which do read or list those files). The screen's stderr lines
+// are held while it runs and written in one block at the join, so the log does not depend on timing.
+// SINGLET_NONHOST_ASYNC=0 runs it in place as before.
+static thread_local std::string* g_nh_capture = nullptr;
+class NhLogRouter : public std::streambuf {
+public:
+    explicit NhLogRouter(std::streambuf* o) : o_(o) {}
+protected:
+    int_type overflow(int_type c) override {
+        if (traits_type::eq_int_type(c, traits_type::eof())) return traits_type::not_eof(c);
+        if (g_nh_capture) { g_nh_capture->push_back(traits_type::to_char_type(c)); return c; }
+        return o_->sputc(traits_type::to_char_type(c));
+    }
+    std::streamsize xsputn(const char* s, std::streamsize n) override {
+        if (g_nh_capture) { g_nh_capture->append(s, static_cast<size_t>(n)); return n; }
+        return o_->sputn(s, n);
+    }
+    int sync() override { return g_nh_capture ? 0 : o_->pubsync(); }
+private:
+    std::streambuf* o_;
+};
+class NonhostBackground {
+public:
+    NonhostBackground() = default;
+    NonhostBackground(const NonhostBackground&) = delete;
+    NonhostBackground& operator=(const NonhostBackground&) = delete;
+    ~NonhostBackground() { join(); }
+    void start(std::function<void()> fn) {
+        router_ = std::make_unique<NhLogRouter>(std::cerr.rdbuf());
+        orig_ = std::cerr.rdbuf(router_.get());
+        running_ = true;
+        sw_ = StopWatch();
+        th_ = std::thread([this, fn = std::move(fn)]() {
+            g_nh_capture = &log_;
+            try { fn(); }
+            catch (const std::exception& e) { log_ += std::string("[nonhost] WARNING: screening failed: ") + e.what() + "\n"; }
+            catch (...) { log_ += "[nonhost] WARNING: screening failed\n"; }
+            wall_ = sw_.elapsed_s();
+            g_nh_capture = nullptr;
+        });
+    }
+    bool running() const { return running_; }
+    void join() {
+        if (!running_) return;
+        const double t0 = sw_.elapsed_s();
+        if (th_.joinable()) th_.join();
+        std::cerr.rdbuf(orig_);
+        running_ = false;
+        std::cerr << log_;
+        if (std::getenv("SINGLET_NONHOST_TIMING"))
+            std::cerr << "[nonhost-time] ran beside the export: " << wall_ << " s wall, the join waited " << (sw_.elapsed_s() - t0) << " s\n";
+        std::cerr << std::flush;
+        log_.clear();
+    }
+private:
+    std::unique_ptr<NhLogRouter> router_;
+    std::streambuf* orig_ = nullptr;
+    std::thread th_;
+    std::string log_;
+    StopWatch sw_;
+    double wall_ = 0;
+    bool running_ = false;
+};
 
 // ════════════════════════════════════════════════════════════
 // singlet build-nonhost-db — Build MinSketchIndex from a FASTA
@@ -9760,6 +9846,7 @@ static int singlet_main(int argc, char* argv[]) {
     // run_nonhost_em_screening() classifies reads with soft multi-hit threshold,
     // runs EM deconvolution, and writes nonhost_em_abundance.tsv + nonhost_summary.json.
     // Visium flows through this path (no early return above).
+    NonhostBackground nh_bg;   // joined after export_results
     if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty()) {
         mem_mark("before non-host");
         std::unordered_set<std::string> nonhost_valid_bcs;
@@ -9777,9 +9864,26 @@ static int singlet_main(int argc, char* argv[]) {
         }
         {
             SINGLET_NVTX("main: non-host screen");
-            singlet::name_omp_pool("sg-nonhost");   // STAR's child has exited: the screen's OpenMP pool too
-            run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
-                nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
+            auto run_nh = [=, bcs = std::move(nonhost_valid_bcs)]() {
+                singlet::name_omp_pool("sg-nonhost");   // STAR's child has exited: the screen's OpenMP pool too
+                run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
+                    nonhost_ref_dir, out_prefix, bcs, detected_bc_len, umi_len, star_threads);
+            };
+            const char* nh_async_env = std::getenv("SINGLET_NONHOST_ASYNC");
+            if (nh_async_env && std::string(nh_async_env) == "0") {
+                run_nh();
+            } else {
+#ifdef _OPENMP
+                {   // the screen sets these on its calling thread; the export keeps the settings it had when the screen ran in place
+                    struct stat nh_st{};
+                    if (stat((out_prefix + "/star_Unmapped.out.mate1").c_str(), &nh_st) == 0 && nh_st.st_size != 0) {
+                        omp_set_dynamic(0);
+                        omp_set_num_threads(std::max(1, star_threads));
+                    }
+                }
+#endif
+                nh_bg.start(run_nh);
+            }
         }
     }
 
@@ -10007,6 +10111,7 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+    if (nh_bg.running()) { singlet::rearm_stall_watchdog("non-host screen"); nh_bg.join(); }
 
     // ── D-101: HLA typing per sample and per donor (T1K on the input reads; private/hla/) ──
     // Reads only the input .1fq, so the CPU and GPU engines give the same output. Human genomes only (not the barnyard).
