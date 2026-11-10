@@ -77,6 +77,38 @@ void test_prefilter_bound() {
     CHECK(missed == 0, "missed " + std::to_string(missed) + " of " + std::to_string(tried) + " reads");
 }
 
+void test_rolling_hits() {
+    std::cout << "=== rolling hits() gives the answer of the per-k-mer reference ===\n";
+    std::mt19937 rng(23);
+    std::string allele(3000, 'A');
+    for (auto& c : allele) c = "ACGT"[rng() % 4];
+    singlet::hla::KmerSet ks; ks.add_sequence(allele); ks.build();
+    long n = 0, bad = 0, nhit = 0;
+    for (int rep = 0; rep < 200000; ++rep) {
+        const int L = static_cast<int>(rng() % 160);
+        std::vector<uint8_t> v(L);
+        if (rep % 3 == 0 && L > 0 && L < static_cast<int>(allele.size())) {   // a piece of the allele with a few changes, either strand
+            const size_t st = rng() % (allele.size() - L);
+            std::string s = allele.substr(st, L);
+            if (rep % 2) s = revcomp(s);
+            v = codes(s);
+            for (int k = rng() % 6; k > 0; --k) v[rng() % L] = static_cast<uint8_t>(rng() % 5);
+        } else {
+            for (auto& b : v) b = static_cast<uint8_t>(rng() % 23 == 0 ? 4 : rng() % 4);
+        }
+        // one 19-mer of the allele planted at a random offset in a third of the random reads, sometimes with an N in it
+        if (rep % 3 == 1 && L >= 19) {
+            const size_t st = rng() % (allele.size() - 19), at = rng() % (L - 18);
+            auto k = codes(allele.substr(st, 19));
+            for (int i = 0; i < 19; ++i) v[at + i] = k[i];
+            if (rng() % 4 == 0) v[at + rng() % 19] = 4;
+        }
+        const bool a = ks.hits(v.data(), L), b = ks.hits_ref(v.data(), L);
+        ++n; nhit += a; bad += a != b;
+    }
+    CHECK(bad == 0 && nhit > 1000, std::to_string(n) + " reads, " + std::to_string(nhit) + " hits, " + std::to_string(bad) + " disagree");
+}
+
 void test_donors_and_json() {
     std::cout << "=== read_donors / genotype_json ===\n";
     const std::string dir = "/tmp/test_hla_" + std::to_string(getpid());
@@ -233,6 +265,7 @@ void test_deferred_route() {
 int main() {
     test_kmers();
     test_prefilter_bound();
+    test_rolling_hits();
     test_donors_and_json();
     test_deferred_route();
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
