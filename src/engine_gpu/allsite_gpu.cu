@@ -325,8 +325,13 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
     const int bcBits = bitsFor(in.n_barcodes - 1), L = in.umi_len, loBits = 3 * L + 3;
     const u32 nCt = (u32) in.contigs.size();
 
-    int lockFd = -1;
-    const int device = lockDevice(&lockFd);
+    // the engine's device lock (a short holder). With SINGLET_GPU_PILEUP_UNLOCK=late the GPU pileup still holds it here, so the pass
+    // takes the device without it (SINGLET_ALLSITE_GPU_LOCK=0 does the same); the arena is sized from the memory free either way
+    int lockFd = -1, device = 0;
+    const char* ul = std::getenv("SINGLET_GPU_PILEUP_UNLOCK"); const char* lk = std::getenv("SINGLET_ALLSITE_GPU_LOCK");
+    if ((ul && std::string(ul) == "late") || (lk && lk[0] == '0')) {
+        if (const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE")) device = std::atoi(dv);
+    } else device = lockDevice(&lockFd);
     struct Unlock { int fd; ~Unlock() { unlockDevice(fd); } } unlock{lockFd};
     DrvCtx ctx;
     if (!ctx.make(device, out.why)) return false;
@@ -375,7 +380,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         }
         if (mxO >= 0xffffffffull || mxS >= 0xffffffffull) { out.why = "chunk arrays past 32-bit offsets"; return false; }
         std::unique_ptr<AD::Read[]> hR(new AD::Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
-        std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<u64[]> hQ(new u64[mxQ + 1]);
+        std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<uint64_t[]> hQ(new uint64_t[mxQ + 1]);
 
         u64 stat[2] = {0, 0};
         for (size_t k = 0; k + 1 < cut.size(); ++k) {
