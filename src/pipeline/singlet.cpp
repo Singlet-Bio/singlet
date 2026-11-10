@@ -1744,6 +1744,18 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
     }
 
     std::cerr << "[nonhost] Loading screening indices...\n";
+    // SINGLET_NONHOST_TIMING=1: wall and CPU seconds of each phase of the screen (speed work; no effect on any output)
+    const bool nh_time = std::getenv("SINGLET_NONHOST_TIMING") != nullptr;
+    StopWatch nh_sw;
+    double nh_last_w = 0, nh_last_c = 0;
+    auto nh_cpu = [] { rusage ru{}; getrusage(RUSAGE_SELF, &ru); return ru.ru_utime.tv_sec + ru.ru_stime.tv_sec + 1e-6 * (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec); };
+    const double nh_c0 = nh_cpu();
+    auto nh_mark = [&](const char* what) {
+        if (!nh_time) return;
+        const double w = nh_sw.elapsed_s(), c = nh_cpu() - nh_c0;
+        std::cerr << "[nonhost-time] " << what << ": " << (w - nh_last_w) << " s wall, " << (c - nh_last_c) << " s cpu (stage " << w << " s, " << c << " s)\n";
+        nh_last_w = w; nh_last_c = c;
+    };
     try {
         // ── Load viral / bacterial / fungal indices ───────────────────────────
         // --engine gpu: the host reads only the headers and species names (MinSketchIndex::load_names); the entries go to the
@@ -1886,6 +1898,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         const bool nonhost_subsampled = nh_smp.subsampled;
         auto nh_selected = [&](const std::string& name_l, const std::string& seq_l) { return nh_smp.selected(name_l, seq_l); };
         const size_t n_total = reads.size();
+        nh_mark("sample");
         if (nonhost_subsampled)
             std::cerr << "[nonhost] Subsampled to " << n_total
                       << " reads by read-name hash (file above " << MAX_NONHOST_READS << ")\n";
@@ -1945,6 +1958,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
 #ifdef SINGLET_HAVE_ENGINE_GPU
         }
 #endif
+        nh_mark("classify");
         // Key microbial species apart from viral ones before anything counts species (D-100). Outputs write raw ids.
         if (!singlet::nonhost::tag_microbial_keys(multi_hits))
             throw std::runtime_error("nonhost: a microbial species id uses bit 31, which the engine reserves for its species key");
@@ -1960,6 +1974,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         n_em_iter = em_fit_all.iterations;
         auto em_result = em_report(em_fit_all, kingdom_map, /*min_abundance=*/1e-4f, /*min_report_hr=*/0.30f,
                                    /*min_abs_reads=*/min_abs_reads);
+        nh_mark("em");
 
         std::cerr << "[nonhost] EM converged in " << n_em_iter
                   << " iterations, " << em_result.size() << " species above threshold\n";
@@ -2002,6 +2017,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        nh_mark("secondary alignment");
         // ── NONHOST-CB-SPECIES-MATRIX: build per-cell species count matrix ────
         if (!valid_barcodes.empty()) {
             const std::string mate2_path = out_prefix + "/star_Unmapped.out.mate2";
@@ -2014,6 +2030,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                     tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
                         mate1_path, mate2_path, cb_len, umi_len, nh_selected);
 
+                nh_mark("read mate pairs");
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
                 std::unordered_set<uint32_t> em_confirmed;
@@ -2031,6 +2048,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                 cell_mat.write(out_prefix + "/nonhost");
                 std::cerr << "[nonhost] per-cell matrix: " << cell_mat.n_records()
                           << " cell\xc3\x97species records\n";
+                nh_mark("cell matrix");
 
                 // Confirmed-species reads (nonhost_confirmed_reads.h): only with EM-confirmed species and a host filter, and never a read
                 // with a host k-mer. Absent otherwise (uninfected samples have no member).
@@ -2050,6 +2068,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        nh_mark("confirmed reads");
         // ── Write nonhost_candidates.tsv: every species the EM gives at least 10 reads, before the report thresholds ──
         // (em_result above keeps only species with a mean hit rate of 0.30 and max(500, 0.5%) reads; the calibration of the infection probability
         // and any taxon-specific check of a negative library need the evidence below those thresholds as well)
@@ -2177,6 +2196,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        nh_mark("tables and summary");
         // If any kingdom fraction > 1%, write nonhost_reads.fq for downstream mapping
         bool any_positive = (vf > 0.01 || bf > 0.01 || ff > 0.01);
         if (any_positive) {
@@ -2188,6 +2208,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             });
             std::cerr << "[nonhost] Wrote classified reads → " << fq_out_path << "\n";
         }
+        nh_mark("write classified");
 
     } catch (const std::exception& e) {
         std::cerr << "[nonhost] WARNING: screening failed: " << e.what() << "\n";
@@ -2701,6 +2722,35 @@ static int cmd_nonhost(int argc, char* argv[]) {
         if (stat(p.c_str(), &st) != 0) return -1.0;
         return static_cast<double>(st.st_size) / 1073741824.0;
     };
+
+    // Speed work: the screen alone, from the kept STAR unmapped files of a run.
+    //   singlet nonhost replay OUT_PREFIX [--barcodes FILE] [--cb-len N] [--umi-len N] [--threads N] [--ref-base PATH]
+    // OUT_PREFIX holds star_Unmapped.out.mate1 (and mate2); the outputs go where the pipeline writes them. The three indexes are the ones in
+    // <ref-base>/nonhost/. FILE lists the called barcodes, one per line (SINGLET_NONHOST_DUMP_DIR=DIR on a run writes it as DIR/barcodes.txt).
+    if (op == "replay") {
+        std::string out_prefix, bc_file, rb;
+        int cbl = 16, umil = 12, thr = 8;
+        for (int i = 1; i < argc; i++) {
+            std::string a = argv[i];
+            if (a == "--barcodes" && i + 1 < argc) bc_file = argv[++i];
+            else if (a == "--cb-len" && i + 1 < argc) cbl = std::atoi(argv[++i]);
+            else if (a == "--umi-len" && i + 1 < argc) umil = std::atoi(argv[++i]);
+            else if (a == "--threads" && i + 1 < argc) thr = std::atoi(argv[++i]);
+            else if (a == "--ref-base" && i + 1 < argc) rb = argv[++i];
+            else if (out_prefix.empty()) out_prefix = a;
+        }
+        if (rb.empty()) if (const char* e = getenv("SINGLET_REF_BASE")) rb = e;
+        if (out_prefix.empty() || rb.empty()) {
+            std::cerr << "usage: singlet nonhost replay OUT_PREFIX [--barcodes FILE] [--cb-len N] [--umi-len N] [--threads N] [--ref-base PATH]\n";
+            return 2;
+        }
+        std::unordered_set<std::string> bcs;
+        if (!bc_file.empty()) { std::ifstream bf(bc_file); for (std::string l; std::getline(bf, l);) if (!l.empty()) bcs.insert(l); }
+        setenv("SINGLET_REF_BASE", rb.c_str(), 0);
+        run_nonhost_em_screening(rb + "/nonhost/viral.snhskidx", rb + "/nonhost/bacterial.snhskidx", rb + "/nonhost/fungal.snhskidx",
+                                 "", out_prefix, bcs, cbl, umil, thr);
+        return 0;
+    }
 
     if (op == "status") {
         std::cerr << "[singlet nonhost] Cache directory: " << NONHOST_SHM_DIR << "\n";
@@ -9680,6 +9730,14 @@ static int singlet_main(int argc, char* argv[]) {
         if (engine_ptr) {
             const auto& bc_vec = engine_ptr->barcodes();
             nonhost_valid_bcs.insert(bc_vec.begin(), bc_vec.end());
+        }
+        if (const char* dd = std::getenv("SINGLET_NONHOST_DUMP_DIR")) {   // inputs of `singlet nonhost replay` (speed work)
+            std::ofstream bf(std::string(dd) + "/barcodes.txt");
+            std::vector<std::string> sorted_bcs(nonhost_valid_bcs.begin(), nonhost_valid_bcs.end());
+            std::sort(sorted_bcs.begin(), sorted_bcs.end());
+            for (const auto& b : sorted_bcs) bf << b << "\n";
+            std::ofstream af(std::string(dd) + "/args.txt");
+            af << "--cb-len " << detected_bc_len << " --umi-len " << umi_len << " --threads " << star_threads << "\n";
         }
         {
             SINGLET_NVTX("main: non-host screen");
