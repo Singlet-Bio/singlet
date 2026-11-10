@@ -2509,6 +2509,7 @@ public:
     // strand votes (non-mito contigs), wrong_strand, multigene, cross_gene_intron counters, poly(A) records (NH 1, gene assigned,
     // forward-oriented library) and VDJ usage. Same conditions as the loop: primary, barcode in the set, past the MAPQ gate.
     bool gpu_host_pass(const singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::PileupOutput& out, PileupStats& stats) {
+        singlet::ThreadNameScope tn_hp("sg-hostpass");   // its chunks' threads inherit it (per-thread CPU by role)
         // the arrays as [leading part read in place | vector] (E16; without leading parts, the vectors)
         const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
         const auto A = singlet_engine_gpu::pileupCat<AlnRec>(in.preAlns, in.alns.data(), in.alns.size());
@@ -3240,10 +3241,11 @@ public:
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
-        allsite_from_input(in);   // D-101: host pass over the same records (the input lives until this function returns)
+        { singlet::ThreadNameScope tn_as("sg-allsite"); allsite_from_input(in); }   // D-101: host pass over the same records (the input lives until this function returns)
         // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
         // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
         auto applyOut = [&]() {
+            singlet::ThreadNameScope tn_put("sg-gpput");   // the puts' threads inherit it (per-thread CPU by role)
             if (singlet_tail::cut("puts")) {   // E16 "puts" (level 5): one thread per accumulator (each fills its own vectors in the same order)
                 std::thread p1([&] { gpu_put(exon_acc_, out.exon); }), p2([&] { gpu_put(intron_acc_, out.intron); }), p3([&] { gpu_put(amb_acc_, out.amb); }),
                     p4([&] { gpu_put(snp_ad_, out.snpAd); }), p5([&] { gpu_put(snp_dp_, out.snpDp); }), p6([&] { gpu_put(mt_acc_rev_, out.mtRev); });
