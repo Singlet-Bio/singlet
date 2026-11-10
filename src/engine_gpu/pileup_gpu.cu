@@ -136,8 +136,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     else if (attempt == 1) {
         const size_t arena = pileupWiden(device, totB, arenaB, W);
         char nb[256]; snprintf(nb, sizeof nb, "wider arena: %d holder(s) asked to leave (free %.1f -> %.1f GB), %d of %d slots held, %.2f s: ", W.holders, W.free0 / 1e9, W.free1 / 1e9, W.held, W.slots, W.seconds);
-        notes += nb; fprintf(stderr, "[pileup] %s
-", nb);
+        notes += nb; fprintf(stderr, "[pileup] %s\n", nb);
         if (arena == 0) { notes += "no gain; "; W.release(); continue; }
         size_t a = arena;
         while (!A.try_init(a)) { a -= a / 16; if (a < arenaB) break; }   // the free memory moved: a little less
@@ -313,8 +312,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     } catch (const ArenaExhausted& e) {
         cudaDeviceSynchronize();
         cudaFree(A.base);
-        { char nb[160]; snprintf(nb, sizeof nb, "attempt %d: %zu MB needed, %zu MB arena; ", attempt, e.need >> 20, e.cap >> 20); notes += nb; fprintf(stderr, "[pileup] %s
-", nb); }
+        { char nb[160]; snprintf(nb, sizeof nb, "attempt %d: %zu MB needed, %zu MB arena; ", attempt, e.need >> 20, e.cap >> 20); notes += nb; fprintf(stderr, "[pileup] %s\n", nb); }
         if (attempt > 1) {
             po.log += "GPU memory: " + std::to_string(e.need >> 20) + " MB needed, " + std::to_string(e.cap >> 20) + " MB unified arena";
             cudaDeviceReset();
