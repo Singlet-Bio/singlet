@@ -2374,8 +2374,7 @@ public:
         allsite_ok_ = true;
         if (P.min_alt_pct > 0)
             std::cerr << "[allsite] ALT-fraction floor " << P.min_alt_pct << "%: " << allsite_.sites_below_floor << " of " << (allsite_.sites.size() + allsite_.sites_below_floor)
-                      << " discovered sites dropped (pooled ALT below the floor of the pooled depth)
-";
+                      << " discovered sites dropped (pooled ALT below the floor of the pooled depth)\n";
         std::cerr << "[allsite] " << allsite_.sites.size() << " sites (>= " << P.min_alt_molecules << " ALT molecules in >= " << P.min_alt_cells
                   << " barcodes), DP records " << allsite_.dp_records << ", AD records " << allsite_.ad_records << "; reads " << allsite_.reads_used
                   << ", mismatch observations " << allsite_.mismatch_obs << ", molecules " << allsite_.molecules << " (ambiguous " << allsite_.ambiguous
