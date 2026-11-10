@@ -9,8 +9,11 @@
 //   3. Speed regression (3000 cells, 5000 SNPs, K=1 must finish in < 30 s)
 //   4. Edge cases (tiny library, huge library, degenerate genotypes)
 //   5. Numerical stability (dp=0, unbalanced mixing)
+//   7. SNP-major VB kernel equals the cell-major reference bit for bit
 
 #include <cassert>
+#include <cstring>
+#include <limits>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -520,6 +523,291 @@ static void test_assignment_concordance() {
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
+// ─── Test 7: VB kernel identity ───────────────────────────────────────────────
+// The SNP-major run_vb_inplace must reproduce the cell-major loops it replaced bit for bit, at every thread count. The
+// reference below is a verbatim copy of those loops.
+namespace refvb {
+using namespace singlet;
+static void ref_run_vb_inplace(
+    const CoveredSNPData& data, int K,
+    const DonorDemuxConfig& cfg, VBResult& result,
+    int max_iter, int nthreads)
+{
+    const int nc = data.n_cells;
+    const int ns = data.n_covered_snps;
+    const float s1_prior = 1.0f, s2_prior = 1.0f;
+    nthreads = std::max(1, nthreads);
+
+    // Pre-allocate flat working buffers (one allocation, reused every iter)
+    std::vector<float> s1(ns * K);
+    std::vector<float> s2(ns * K);
+    // Digamma cache: precomputed once per M-step so the cell loop uses table lookups
+    std::vector<float> d1(ns * K);   // digamma(s1[j*K+k])
+    std::vector<float> d2(ns * K);   // digamma(s2[j*K+k])
+    std::vector<float> d12(ns * K);  // digamma(s1[j*K+k] + s2[j*K+k])
+
+    // Per-chunk M-step accumulators (allocated once, cleared per iter)
+    std::vector<std::vector<float>> s1_tl(kDetChunks, std::vector<float>(ns * K));
+    std::vector<std::vector<float>> s2_tl(kDetChunks, std::vector<float>(ns * K));
+
+    float prev_elbo = static_cast<float>(result.elbo);
+    const float log_inv_k  = -std::log(static_cast<float>(K));
+    const float lgamma_prior = demux_lgamma(s1_prior + s2_prior)
+                             - demux_lgamma(s1_prior) - demux_lgamma(s2_prior);
+
+    for (int iter = 0; iter < max_iter; ++iter) {
+
+        // ── M-step ─────────────────────────────────────────────────────────
+        // Each chunk of cells accumulates into its own s1_tl/s2_tl (no mutex); the chunks
+        // are added in order, so the sums are the same for any thread count.
+        parallel_det_chunks(nc, nthreads, [&](int ch, int c_start, int c_end) {
+            float* s1t = s1_tl[ch].data();
+            float* s2t = s2_tl[ch].data();
+            std::fill(s1t, s1t + ns * K, 0.0f);
+            std::fill(s2t, s2t + ns * K, 0.0f);
+            for (int c = c_start; c < c_end; ++c) {
+                const auto& cell = data.cells[c];
+                const float* qc  = result.id_prob[c].data();
+                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
+                    const int   j  = cell.snp_idx[si];
+                    const float ad = static_cast<float>(cell.ad[si]);
+                    const float bd = static_cast<float>(cell.dp[si]) - ad;
+                    float* s1j = s1t + j * K;
+                    float* s2j = s2t + j * K;
+                    for (int k = 0; k < K; ++k) {
+                        s1j[k] += qc[k] * ad;
+                        s2j[k] += qc[k] * bd;
+                    }
+                }
+            }
+        });
+        // Reduce (parallel over the flat ns*K index; each element sums chunks 0..kDetChunks-1)
+        parallel_chunks(ns * K, nthreads, [&](int, int i0, int i1) {
+            for (int i = i0; i < i1; ++i) {
+                float a = s1_prior, b = s2_prior;
+                for (int t = 0; t < kDetChunks; ++t) { a += s1_tl[t][i]; b += s2_tl[t][i]; }
+                s1[i] = a;  s2[i] = b;
+            }
+        });
+
+        // Update beta_mu / beta_sum (stored for output)
+        parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
+            for (int j = j0; j < j1; ++j) {
+                const float* s1j = s1.data() + j * K;
+                const float* s2j = s2.data() + j * K;
+                for (int k = 0; k < K; ++k) {
+                    result.beta_mu[j][k]  = s1j[k] / (s1j[k] + s2j[k]);
+                    result.beta_sum[j][k] = s1j[k] + s2j[k];
+                }
+            }
+        });
+
+        // ── Precompute digamma cache (KEY OPTIMISATION) ─────────────────────
+        // Costs O(ns × K) digamma calls once per iter instead of O(nc × snps/cell × K).
+        // For ns=5000 K=5: 75K calls vs 67.5M calls in the old inner loop. ~900× speedup.
+        parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
+            for (int j = j0; j < j1; ++j) {
+                const float* s1j = s1.data() + j * K;
+                const float* s2j = s2.data() + j * K;
+                float* d1j  = d1.data()  + j * K;
+                float* d2j  = d2.data()  + j * K;
+                float* d12j = d12.data() + j * K;
+                for (int k = 0; k < K; ++k) {
+                    d1j[k]  = digamma(s1j[k]);
+                    d2j[k]  = digamma(s2j[k]);
+                    d12j[k] = digamma(s1j[k] + s2j[k]);
+                }
+            }
+        });
+
+        // ── E-step ─────────────────────────────────────────────────────────
+        auto e_worker = [&](int c_start, int c_end) {
+            std::vector<float> ll(K);  // thread-local log-lik buffer; no alloc per cell
+            const float inv_k = 1.0f / K;
+            for (int c = c_start; c < c_end; ++c) {
+                const auto& cell = data.cells[c];
+                if (cell.snp_idx.empty()) {
+                    for (int k = 0; k < K; ++k) result.id_prob[c][k] = inv_k;
+                    continue;
+                }
+                std::fill(ll.begin(), ll.end(), 0.0f);
+                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
+                    const int   j  = cell.snp_idx[si];
+                    const float ad = static_cast<float>(cell.ad[si]);
+                    const float dp = static_cast<float>(cell.dp[si]);
+                    const float bd = dp - ad;
+                    const float* d1j  = d1.data()  + j * K;  // precomputed digamma(s1)
+                    const float* d2j  = d2.data()  + j * K;
+                    const float* d12j = d12.data() + j * K;
+                    for (int k = 0; k < K; ++k) {
+                        ll[k] += ad * d1j[k] + bd * d2j[k] - dp * d12j[k];
+                    }
+                }
+                float mx = ll[0];
+                for (int k = 1; k < K; ++k) if (ll[k] > mx) mx = ll[k];
+                float sm = 0.0f;
+                float* idp = result.id_prob[c].data();
+                for (int k = 0; k < K; ++k) { idp[k] = std::exp(ll[k] - mx); sm += idp[k]; }
+                const float inv = 1.0f / sm;
+                for (int k = 0; k < K; ++k) idp[k] *= inv;
+            }
+        };
+
+        if (nthreads == 1) {
+            e_worker(0, nc);
+        } else {
+            std::vector<std::thread> ts;
+            ts.reserve(nthreads);
+            for (int t = 0; t < nthreads; ++t) {
+                const int cs = t * nc / nthreads;
+                const int ce = (t + 1) * nc / nthreads;
+                ts.emplace_back(e_worker, cs, ce);
+            }
+            for (auto& t : ts) t.join();
+        }
+
+        // ── ELBO ───────────────────────────────────────────────────────────
+        // Partial sums per thread chunk (parallel; summed in a fixed order).
+        std::vector<double> e_part(kDetChunks, 0.0), e_part2(kDetChunks, 0.0);
+
+        // E[log p(x | z, theta)] — uses precomputed d1/d2/d12 (no digamma calls here)
+        // and -KL[q(z) || p(z)]
+        parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
+            double e = 0.0;
+            for (int c = c0; c < c1; ++c) {
+                const auto& cell = data.cells[c];
+                const float* qc = result.id_prob[c].data();
+                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
+                    const int   j  = cell.snp_idx[si];
+                    const float ad = static_cast<float>(cell.ad[si]);
+                    const float dp = static_cast<float>(cell.dp[si]);
+                    const float bd = dp - ad;
+                    const float* d1j  = d1.data()  + j * K;
+                    const float* d2j  = d2.data()  + j * K;
+                    const float* d12j = d12.data() + j * K;
+                    for (int k = 0; k < K; ++k) {
+                        const float qk = qc[k];
+                        if (qk < 1e-10f) continue;
+                        e += qk * (ad * d1j[k] + bd * d2j[k] - dp * d12j[k]);
+                    }
+                }
+                for (int k = 0; k < K; ++k) {
+                    const float qk = qc[k];
+                    if (qk > 1e-10f) e -= qk * (std::log(qk) + log_inv_k);
+                }
+            }
+            e_part[t] += e;
+        });
+        // -KL[q(theta) || p(theta)] — uses precomputed d1/d2 (3 lgamma + d1 + d2 + d12 per j,k)
+        parallel_det_chunks(ns, nthreads, [&](int t, int j0, int j1) {
+            double e = 0.0;
+            for (int j = j0; j < j1; ++j) {
+                const float* s1j  = s1.data()  + j * K;
+                const float* s2j  = s2.data()  + j * K;
+                const float* d1j  = d1.data()  + j * K;
+                const float* d2j  = d2.data()  + j * K;
+                const float* d12j = d12.data() + j * K;
+                for (int k = 0; k < K; ++k) {
+                    const float a = s1j[k], b = s2j[k];
+                    e -= demux_lgamma(a + b) - demux_lgamma(a) - demux_lgamma(b)
+                         - lgamma_prior
+                         + (a - s1_prior) * d1j[k] + (b - s2_prior) * d2j[k]
+                         - (a + b - s1_prior - s2_prior) * d12j[k];
+                }
+            }
+            e_part2[t] += e;
+        });
+        double elbo = 0.0;
+        for (double v : e_part) elbo += v;
+        for (double v : e_part2) elbo += v;
+
+        result.elbo = elbo;
+        result.n_iter++;
+
+        if (iter >= cfg.min_iter) {
+            if (static_cast<float>(elbo - prev_elbo) < cfg.eps_conv) break;
+        }
+        prev_elbo = static_cast<float>(elbo);
+    }
+}
+}  // namespace refvb
+
+static bool same_bits(const std::vector<std::vector<float>>& a, const std::vector<std::vector<float>>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i)
+        if (a[i].size() != b[i].size() || std::memcmp(a[i].data(), b[i].data(), a[i].size() * sizeof(float)) != 0) return false;
+    return true;
+}
+
+static void test_vb_kernel_identity() {
+    std::cout << "\n[Test 7] SNP-major VB kernel equals the cell-major reference bit for bit\n";
+    struct Case { int K_true, nc, ns, K, max_iter; double cover; double depth; };
+    const Case cases[] = {
+        {1,   300,  200,  1, 60, 0.30, 4.0},
+        {2,   300,  200,  2, 60, 0.30, 4.0},
+        {5,   500,  400,  5, 100, 0.30, 5.0},
+        {10, 1200,  600, 10, 60, 0.20, 5.0},
+        {3,    40,  100,  3,  5, 0.50, 5.0},
+        {2,     5,   50,  4, 30, 0.50, 5.0},
+        {13, 1500,  900, 13, 300, 0.10, 8.0},
+        {3, 20000,  300,  3, 40, 0.30, 4.0},
+        {4,  900,  500,  7,  1, 0.30, 5.0},
+        {4,  900,  500,  7,  2, 0.30, 5.0},
+    };
+    int ci = 0;
+    for (const Case& cs : cases) {
+        auto syn = make_synthetic(cs.K_true, cs.nc, cs.ns, cs.cover, cs.depth, 1000 + ci);
+        CoveredSNPData cov = syn.cov;                       // a copy starts without the SNP-major cache
+        for (int c = 0; c < cov.n_cells; c += 37) {         // a few cells without data
+            cov.cells[c].snp_idx.clear(); cov.cells[c].ad.clear(); cov.cells[c].dp.clear();
+        }
+        DonorDemuxConfig cfg;
+        auto make_init = [&]() {
+            VBResult r;
+            r.elbo = -std::numeric_limits<double>::infinity();
+            r.n_iter = 0;
+            std::mt19937 rng(7 + ci);
+            std::uniform_real_distribution<float> unif(0.0f, 1.0f);
+            r.beta_mu.assign(cov.n_covered_snps, std::vector<float>(cs.K, 0.5f));
+            r.beta_sum.assign(cov.n_covered_snps, std::vector<float>(cs.K, 30.0f));
+            r.id_prob.assign(cov.n_cells, std::vector<float>(cs.K));
+            for (auto& row : r.id_prob) {
+                float sum = 0.0f;
+                for (float& v : row) { v = unif(rng); sum += v; }
+                const float inv = 1.0f / sum;
+                for (float& v : row) v *= inv;
+            }
+            return r;
+        };
+        VBResult ref = make_init();
+        refvb::ref_run_vb_inplace(cov, cs.K, cfg, ref, cs.max_iter, 1);
+        for (int threads : {1, 3, 8, 24}) {
+            VBResult got = make_init();
+            run_vb_inplace(cov, cs.K, cfg, got, cs.max_iter, threads);
+            const bool ok = std::memcmp(&ref.elbo, &got.elbo, sizeof(double)) == 0 && ref.n_iter == got.n_iter &&
+                            same_bits(ref.id_prob, got.id_prob) && same_bits(ref.beta_mu, got.beta_mu) &&
+                            same_bits(ref.beta_sum, got.beta_sum);
+            char msg[200];
+            std::snprintf(msg, sizeof msg, "case %d (K=%d nc=%d ns=%d max_iter=%d) threads=%d: iters %d vs %d, elbo %.17g vs %.17g",
+                          ci, cs.K, cs.nc, cs.ns, cs.max_iter, threads, ref.n_iter, got.n_iter, ref.elbo, got.elbo);
+            CHECK(ok, msg);
+        }
+        // a continued fit (second call on the same data and state) must agree as well
+        {
+            VBResult g2 = make_init();
+            run_vb_inplace(cov, cs.K, cfg, g2, cs.max_iter, 4);
+            run_vb_inplace(cov, cs.K, cfg, g2, 30, 4);
+            VBResult r1 = make_init();
+            refvb::ref_run_vb_inplace(cov, cs.K, cfg, r1, cs.max_iter, 1);
+            refvb::ref_run_vb_inplace(cov, cs.K, cfg, r1, 30, 1);
+            const bool ok = std::memcmp(&r1.elbo, &g2.elbo, sizeof(double)) == 0 && r1.n_iter == g2.n_iter &&
+                            same_bits(r1.id_prob, g2.id_prob) && same_bits(r1.beta_mu, g2.beta_mu);
+            CHECK(ok, "continued fit identical");
+        }
+        ++ci;
+    }
+}
+
 int main() {
     std::cout << "=== test_donor_demux_perf ===\n";
 
@@ -529,6 +817,7 @@ int main() {
     test_edge_cases();
     test_numerical_stability();
     test_assignment_concordance();
+    test_vb_kernel_identity();
 
     std::cout << "\n=== Results: " << n_pass << " passed, " << n_fail << " failed ===\n";
     return (n_fail > 0) ? 1 : 0;
