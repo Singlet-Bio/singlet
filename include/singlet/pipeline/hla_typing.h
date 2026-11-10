@@ -55,7 +55,7 @@
 namespace singlet::hla {
 
 constexpr int kK = 19;          // prefilter k-mer
-constexpr int kStride = 4;      // sample every 4th k-mer of a read
+constexpr int kStride = 4;      // sample every 4th k-mer of a read (a power of two: hits() masks with it)
 constexpr double kDonorMinProb = 0.9;
 
 inline bool file_exists(const std::string& p) { struct stat st{}; return stat(p.c_str(), &st) == 0; }
@@ -99,8 +99,28 @@ public:
         return false;
     }
     size_t size() const { return n_; }
-    /// true when a 19-mer starting at a multiple of kStride (and the last one) of `seq` (codes 0..3, 4 = N) is in the set
+    /// true when a 19-mer starting at a multiple of kStride (and the last one) of `seq` (codes 0..3, 4 = N) is in the set. One rolling
+    /// pass over the read builds both strands' codes; a 19-mer that holds an N is skipped. Same k-mers as hits_ref, so the same answer.
     bool hits(const uint8_t* seq, int len) const {
+        if (len < kK) return false;
+        const int last = len - kK;
+        constexpr uint64_t mask = (1ull << (2 * kK)) - 1;
+        uint64_t f = 0, r = 0;
+        int run = 0;
+        for (int i = 0; i < len; ++i) {
+            const uint8_t b = seq[i];
+            if (b > 3) { run = 0; continue; }
+            f = ((f << 2) | b) & mask;
+            r = (r >> 2) | (uint64_t(3 - b) << (2 * (kK - 1)));
+            if (++run >= kK) {
+                const int p = i - (kK - 1);
+                if (((p & (kStride - 1)) == 0 || p == last) && contains(std::min(f, r))) return true;
+            }
+        }
+        return false;
+    }
+    /// The k-mers rebuilt one by one at each sampled start (the form before hits); kept as the reference of the tests and the bench.
+    bool hits_ref(const uint8_t* seq, int len) const {
         if (len < kK) return false;
         const int last = len - kK;
         for (int p = 0;; p += kStride) {
@@ -383,13 +403,21 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
         std::atomic<uint32_t> nx{0};
         auto work = [&]() {
             singlet::fq::DecodedBlock B;
+            // the quality column stays packed where the format allows it (2 bits a base, BINNED4 and ILLUMINA4): only the few kept reads
+            // need their Phred values, which are unpacked from it below exactly as the decoder unpacks them
+            B.keep_packed_qual = true;
+            std::vector<uint8_t> qbuf;
             for (uint32_t b; (b = nx++) < nb;) {
                 B.clear(); rs.decode(w0 + b, B);   // a staged source does not clear the block itself
                 const uint64_t base = file_base + rs.block_read_offset(w0 + b);
                 std::string& o = buf[b]; o.clear(); nscan[b] = nkept[b] = 0;
+                const bool packed = !B.r2_qual_packed.empty() && B.r2_qual_packed_phred;
+                size_t qoff = 0;   // read i's packed quality starts here (reads in order, packed_bytes(len) each)
                 for (uint32_t i = 0; i < B.n_reads; ++i) {
                     const uint32_t dup = B.dup_counts.empty() ? 1u : std::max<uint32_t>(1u, B.dup_counts[i]);
                     nscan[b] += dup;
+                    const size_t qthis = qoff;
+                    if (packed) qoff += singlet::fq::pack::packed_bytes(B.r2_len(i));
                     const uint8_t* s = cdna_is_r1 ? B.r1_seq(i) : B.r2_seq(i);
                     const int L = cdna_is_r1 ? B.r1_len(i) : B.r2_len(i);
                     if (!ks.hits(s, L)) continue;
@@ -400,7 +428,16 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
                         const int rl = std::min<int>(bc_len ? bc_len : 16, cdna_is_r1 ? B.r2_len(i) : B.r1_len(i));
                         for (int j = 0; j < rl; ++j) bc += "ACGTN"[r[j] < 5 ? r[j] : 4];
                     }
-                    const uint8_t* q = cdna_is_r1 ? nullptr : B.r2_quality(i);
+                    const uint8_t* q = nullptr;
+                    if (!cdna_is_r1 && packed) {
+                        const int n = B.r2_len(i);
+                        if (qthis + singlet::fq::pack::packed_bytes(n) <= B.r2_qual_packed.size()) {
+                            qbuf.resize(n);
+                            const uint8_t* src = B.r2_qual_packed.data() + qthis;
+                            for (int j = 0; j < n; ++j) qbuf[j] = B.r2_qual_packed_phred[(src[j >> 2] >> (6 - 2 * (j & 3))) & 3];
+                            q = qbuf.data();
+                        }
+                    } else if (!cdna_is_r1) q = B.r2_quality(i);
                     std::string seq(L, 'N'), qual(L, 'I');
                     for (int j = 0; j < L; ++j) { seq[j] = "ACGTN"[s[j] < 5 ? s[j] : 4]; if (q) qual[j] = static_cast<char>(33 + std::min<int>(q[j], 93)); }
                     for (uint32_t d = 0; d < dup; ++d) {
