@@ -1298,23 +1298,19 @@ static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
 //   singlet allsite-replay DIR [--threads N] [--kernel old|new] [--block-hits N]
 // Prints the pass's log line, wall seconds and a digest of the result over every barcode (sites, statistics, matrices).
 static int cmd_allsite_replay(int argc, char* argv[]) {
-    if (argc < 1) { std::cerr << "usage: singlet allsite-replay DIR [--threads N] [--kernel old|new] [--block-hits N]
-"; return 2; }
+    if (argc < 1) { std::cerr << "usage: singlet allsite-replay DIR [--threads N] [--kernel old|new] [--block-hits N]\n"; return 2; }
     namespace A = singlet::allsite;
     A::replay::Input in; std::string err;
-    if (!in.load(argv[0], &err)) { std::cerr << "[allsite-replay] cannot read " << err << "
-"; return 1; }
+    if (!in.load(argv[0], &err)) { std::cerr << "[allsite-replay] cannot read " << err << "\n"; return 1; }
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--threads" && i + 1 < argc) in.P.threads = static_cast<unsigned>(std::atoi(argv[++i]));
         else if (a == "--kernel" && i + 1 < argc) { const std::string k = argv[++i]; in.P.kernel = k == "old" ? 0 : 1; }
         else if (a == "--block-hits" && i + 1 < argc) in.P.block_hits = std::strtoull(argv[++i], nullptr, 10);
-        else { std::cerr << "[allsite-replay] unknown argument " << a << "
-"; return 2; }
+        else { std::cerr << "[allsite-replay] unknown argument " << a << "\n"; return 2; }
     }
     A::Genome G;
-    if (!G.open(in.genome_dir, in.tids, &err)) { std::cerr << "[allsite-replay] cannot read the reference (" << err << ")
-"; return 1; }
+    if (!G.open(in.genome_dir, in.tids, &err)) { std::cerr << "[allsite-replay] cannot read the reference (" << err << ")\n"; return 1; }
     in.P.defer_build = true;
     const auto t0 = std::chrono::steady_clock::now();
     A::Result r = A::run(in, G, in.n_tid, in.n_barcodes, in.P);
@@ -1322,8 +1318,7 @@ static int cmd_allsite_replay(int argc, char* argv[]) {
     std::cerr << "[allsite] " << r.sites.size() << " sites (>= " << in.P.min_alt_molecules << " ALT molecules in >= " << in.P.min_alt_cells
               << " barcodes), DP records " << r.dp_records << ", AD records " << r.ad_records << "; reads " << r.reads_used
               << ", mismatch observations " << r.mismatch_obs << ", molecules " << r.molecules << " (ambiguous " << r.ambiguous
-              << ", other " << r.other << ") in " << pass_s << " s
-";
+              << ", other " << r.other << ") in " << pass_s << " s\n";
     const auto t1 = std::chrono::steady_clock::now();
     const bool ok = r.finalize(nullptr);
     const double fin_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();

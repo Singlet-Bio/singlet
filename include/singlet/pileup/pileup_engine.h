@@ -2354,8 +2354,7 @@ public:
                 return RP::write_parts(d + "/" + f, c.a, c.na * sizeof(T), c.b, c.nb * sizeof(T)); };
             const bool ok = wr("sigs.bin", v.S) && wr("alns.bin", v.A) && wr("reads.bin", v.Rd) && wr("ops.bin", v.O) && wr("seq.bin", v.Q) && wr("lowq.bin", v.L)
                 && RP::write_meta(d, P, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), config_.allsite_genome_dir, tid_to_chrom_);
-            std::cerr << "[allsite] input written to " << d << (ok ? "" : " (FAILED)") << "
-";
+            std::cerr << "[allsite] input written to " << d << (ok ? "" : " (FAILED)") << "\n";
         }
         allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
         allsite_ok_ = true;
