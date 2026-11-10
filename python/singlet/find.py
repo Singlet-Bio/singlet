@@ -82,7 +82,9 @@ def _api_key() -> str | None:
     if env:
         return env
     try:
-        with open(os.path.join(os.path.expanduser("~"), ".singlet", "api_key"), encoding="utf-8") as f:
+        with open(
+            os.path.join(os.path.expanduser("~"), ".singlet", "api_key"), encoding="utf-8"
+        ) as f:
             return f.readline().strip() or None
     except OSError:
         return None
