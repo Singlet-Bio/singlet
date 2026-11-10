@@ -200,8 +200,7 @@ int run() {
         CHECK(ok1, std::string("one-shot device path ran (") + (perRead ? "per-read qualities" : "one quality factor") + ")");
         if (!ok1) { std::cout << log1; return 1; }
         CHECK(ref.nKeys > 1000 && ref.nMulti > 50 && ref.nMultiAccepted > 0, "the fixture exercises counted reads and the posterior");
-        std::cout << "  fixture: " << N << " reads, " << ref.nKeys << " counted, " << ref.nMulti << " with several matches (" << ref.nMultiAccepted << " given a CB), " << ref.nTuples << " tuples, " << ref.nSeg << " (CB,gene)
-";
+        std::cout << "  fixture: " << N << " reads, " << ref.nKeys << " counted, " << ref.nMulti << " with several matches (" << ref.nMultiAccepted << " given a CB), " << ref.nTuples << " tuples, " << ref.nSeg << " (CB,gene)" << std::endl;
         CHECK(ref.nSeg > 100 && ref.nTuples > ref.nSeg, "the fixture has several UMIs per (CB, gene)");
         struct Cfg { const char* name; u64 chunk, bucketKeys, bucketTarget; bool recHost; };
         const Cfg cfgs[] = {
