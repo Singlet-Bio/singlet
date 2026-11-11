@@ -35,8 +35,11 @@ calls; it is optimistic above 0.9 and is not a calibrated probability.
 **Sex** agrees with GEO sample metadata for 153 of 156 called samples (98.1%; the three disagreements are GEO errors).
 **Ancestry** is computed only for human donors whose per-donor coverage tables exist (about 1% of cells); elsewhere it is missing.
 
-**Hidden by default.** ``qc_doublet_score`` is an unvalidated layer (no benchmark supports it): it is left out of ``obs`` unless
-``include_unvalidated=True`` or it is named in ``columns=``. ``where=`` filters can still use it.
+**Hidden by default.** A default load returns uncorrected counts with their per-cell labels and QC, and leaves out call-layer
+outputs. ``qc_doublet_score`` is an unvalidated layer (no benchmark supports it), and ``don_best_doublet``, ``don_best_singlet`` and
+``don_cell_status`` are the donor assignment's doublet calls (``don_donor_id`` and ``don_prob_max`` stay). They are left out of
+``obs`` unless ``include_unvalidated=True`` or they are named in ``columns=``. ``where=`` filters can still use them. The
+ambient-corrected counts load only with ``modalities="ambient_corrected"``.
 """
 
 from __future__ import annotations
@@ -76,6 +79,11 @@ RENAMES = {
 }
 #: cells-table columns that no benchmark supports: hidden from obs unless asked for
 UNVALIDATED = ("qc_doublet_score",)
+#: call-layer outputs: the doublet calls of the genotype-free donor assignment. They are stored, but a default load leaves them out
+#: (the donor id and its probability stay); ``include_unvalidated=True`` or ``columns=`` returns them
+CALL_LAYER = ("don_best_doublet", "don_best_singlet", "don_cell_status")
+#: every column a default obs leaves out
+HIDDEN = UNVALIDATED + CALL_LAYER
 #: cells-table columns that only order or re-create legacy files (never shown)
 INTERNAL = ("barcode", "cc_pos", "cc_listed", "cc_pvalue")
 #: the columns in front of every obs, in this order (only those present)
@@ -251,7 +259,7 @@ def obs_columns(
     ``cols`` holds the stored cells-table columns (already restricted to the selected cells), ``cats`` the labels of the
     categorical ones (:func:`categories`). ``columns`` keeps only those obs names (stored names are accepted too, e.g.
     ``cell_type_cl``); otherwise every column is returned except :data:`INTERNAL` and, without ``include_unvalidated``,
-    :data:`UNVALIDATED`."""
+    :data:`HIDDEN` (the unvalidated columns and the doublet calls)."""
     cats = cats or {}
     out: Dict[str, np.ndarray] = {}
     out.update(cell_type_columns(cols, n, level=cell_type_level, min_score=cell_type_min_score))
@@ -268,7 +276,7 @@ def obs_columns(
     if columns is not None:
         want = {RENAMES.get(c, c) for c in columns}
     elif not include_unvalidated:
-        for c in UNVALIDATED:
+        for c in HIDDEN:
             out.pop(c, None)
     order = [c for c in LEAD if c in out] + [c for c in out if c not in LEAD]
     return {c: out[c] for c in order if want is None or c in want}

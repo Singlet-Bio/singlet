@@ -935,6 +935,50 @@ def _called_barcodes(out_dir: Path) -> Optional[set]:
     return set(called) if called is not None else None
 
 
+# Machine-specific text in published members: absolute paths (they carry the cluster's directory layout and the user name) and host
+# names. provenance.json and STAR's Log.out files (star_Log.out, cr4_probe/*_Log.out) record both; the public bundle keeps the file
+# names only and drops the compute node.
+_ABS_PATH = re.compile(r"(?<![\w.~:/-])(?:/+[\w.+@%=,-]+)+/*|(?<![\w])[A-Za-z]:\\(?:[^\\\s'\"]+\\)*[^\\\s'\"]*")
+_HOST = re.compile(r"\b(?:[A-Za-z0-9-]+\.)+(?:edu|org|com|net|gov|local|internal|lan|cluster)\b")
+_URL = re.compile(r"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"]+)")
+_KEEP_PATHS = {"/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr"}
+
+
+def _scrub_text(text: str) -> str:
+    def path(m: "re.Match") -> str:
+        p = m.group(0)
+        if p in _KEEP_PATHS:
+            return p
+        parts = [x for x in re.split(r"[\\/]+", p) if x and x not in (".", "..") and not re.fullmatch(r"[A-Za-z]:", x)]
+        return parts[-1] if parts else ""
+
+    # URLs (reference downloads, accessions) are public and kept verbatim; only the text between them is scrubbed
+    pieces = _URL.split(text)
+    return "".join(x if i % 2 else _HOST.sub("<host>", _ABS_PATH.sub(path, x)) for i, x in enumerate(pieces))
+
+
+def _scrub_json(v):
+    if isinstance(v, dict):
+        return {k: _scrub_json(x) for k, x in v.items() if not (k in ("node", "hostname") and isinstance(x, str))}
+    if isinstance(v, list):
+        return [_scrub_json(x) for x in v]
+    return _scrub_text(v) if isinstance(v, str) else v
+
+
+def _public_text_member(rel: str, data: bytes) -> bytes:
+    """``provenance.json`` and STAR ``*Log.out`` without absolute paths (file names kept) or host names; other members unchanged."""
+    name = rel.rsplit("/", 1)[-1]
+    if name == "provenance.json":
+        try:
+            doc = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return _scrub_text(data.decode("utf-8", "replace")).encode("utf-8")
+        return (json.dumps(_scrub_json(doc), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    if name.endswith("Log.out"):
+        return _scrub_text(data.decode("utf-8", "replace")).encode("utf-8")
+    return data
+
+
 def _reads_member(rel: str, data: bytes, called: Optional[set]) -> Optional[bytes]:
     """What the bundle holds of a reads-per-UMI member: None = not packed, else its bytes (the histogram restricted to the called cells)."""
     if rel in _RUN_DIR_ONLY_MEMBERS:
@@ -1333,6 +1377,8 @@ def pack_gse(
                     data = _reads_member(rel.as_posix(), data, called_set)
                     if data is None:
                         continue
+                    if not restricted:
+                        data = _public_text_member(rel.as_posix(), data)
                     compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )

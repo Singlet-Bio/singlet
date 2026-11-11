@@ -86,6 +86,7 @@ __all__ = [
 
 MANIFEST_VERSION_MAX = 1
 EXON, INTRON, CELLS = "exon_counts.1pz", "intron_counts.1pz", "cells"
+AMBIENT = "ambient_corrected_counts.1pz"  # gene rows like the exon matrix; loaded only on request
 WHOLE_MAX_BYTES = 48 << 20  # members up to this size (exon+intron+cells) are fetched whole
 COALESCE_GAP = (
     2 << 20
@@ -127,6 +128,12 @@ MODALITIES: Dict[str, ModalitySpec] = {
         ModalitySpec("spliced", (EXON,), "layers", 'layers["spliced"]: exon UMIs per gene'),
         ModalitySpec("unspliced", (INTRON,), "layers", 'layers["unspliced"]: intron UMIs per gene'),
         ModalitySpec(
+            "ambient_corrected",
+            (AMBIENT,),
+            "layers",
+            'layers["ambient_corrected"]: counts with the estimated ambient molecules of each called cell removed (only on request)',
+        ),
+        ModalitySpec(
             "splice_junctions", (SJ,), "obsm", 'obsm["splice_junctions"]: reads per junction'
         ),
         ModalitySpec(
@@ -157,6 +164,8 @@ _MODALITY_ALIASES = {
     "x": "counts",
     "exon": "spliced",
     "intron": "unspliced",
+    "ambient": "ambient_corrected",
+    "ambient_corrected_counts": "ambient_corrected",
     "junctions": "splice_junctions",
     "sj": "splice_junctions",
     "splice_psi": "psi",
@@ -169,7 +178,7 @@ _MODALITY_ALIASES = {
     "hashtag": "hto",
     "guides": "crispr",
 }
-GENE_MEMBERS = (EXON, INTRON)
+GENE_MEMBERS = (EXON, INTRON, AMBIENT)  # rows on the gene axis (fetched only when a modality names them)
 
 
 class S1Error(RuntimeError):
@@ -992,12 +1001,14 @@ class _SampleData:
     )  # feature-level member -> (cells x stored rows, row names)
     spatial: Optional[Dict[str, np.ndarray]] = None  # positions columns restricted to sel
     spatial_summary: Optional[dict] = None
+    ambient: Optional[_Part] = None  # ambient-corrected counts (genes), only when asked for
 
     @property
     def empty(self) -> bool:
         return (
             self.spliced is None
             and self.unspliced is None
+            and self.ambient is None
             and not self.features
             and self.spatial is None
         )
@@ -1217,7 +1228,7 @@ def _read_sample(
             for k, v in cols.items()
         }
 
-        parts: Dict[str, Optional[_Part]] = {EXON: None, INTRON: None}
+        parts: Dict[str, Optional[_Part]] = {EXON: None, INTRON: None, AMBIENT: None}
         features: Dict[str, Tuple[_Part, List[str]]] = {}
         spatial, spatial_summary = None, None
         if stored_wanted:
@@ -1323,6 +1334,7 @@ def _read_sample(
             features=features,
             spatial=spatial,
             spatial_summary=spatial_summary,
+            ambient=parts[AMBIENT],
         )
     finally:
         if own_src:
@@ -1688,10 +1700,10 @@ def _build_anndata(
     else:
         var = pd.DataFrame(index=pd.Index([], dtype=object, name="gene_id"))
     adata = ad.AnnData(X=X, obs=obs, var=var)
-    for lname in ("spliced", "unspliced"):
+    for lname, attr in (("spliced", "spliced"), ("unspliced", "unspliced"), ("ambient_corrected", "ambient")):
         if lname not in mods:
             continue
-        plist = [getattr(r, lname) for r in ok]
+        plist = [getattr(r, attr) for r in ok]
         if all(p is not None for p in plist):
             adata.layers[lname] = _vstack_parts(plist, n_genes, perms)  # type: ignore[arg-type]
             continue
