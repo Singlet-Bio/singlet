@@ -297,7 +297,7 @@ inline long long write_donors_vcf(const std::string& path, const DemuxResult& de
     }
 
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
-    GzOut f(path);
+    GzOut f(path, true);
     if (!f.ok()) return -1;
     f.put("##fileformat=VCFv4.2\n##source=singlet genotype_export\n"
           "##singlet_genotype_model=binomial on donor-summed UMI counts, error 0.01, flat prior; GT when the posterior >= 0.99\n"

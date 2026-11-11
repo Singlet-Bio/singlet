@@ -289,7 +289,7 @@ inline bool write_cells_tsv(const std::string& path, const std::vector<std::stri
 inline long long write_donors_vcf(const std::string& path, const Result& r, const std::vector<std::string>& tid_names, const DonorCalls& d) {
     if (d.K <= 0) return 0;
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
-    genotype::GzOut f(path);
+    genotype::GzOut f(path, true);
     if (!f.ok()) return -1;
     f.put("##fileformat=VCFv4.2\n##source=singlet allsite_store\n"
           "##singlet_genotype_model=binomial on donor-summed UMI counts, error 0.01, flat prior; GT when the posterior >= 0.99\n"
@@ -345,7 +345,7 @@ inline long long write_cells_vcf(const std::string& path, const DeltaStore& s, c
     for (uint32_t j = 0; j < nc; ++j)
         for (uint64_t k = s.off[j]; k < s.off[j + 1]; ++k) if (slot[s.row[k]] >= 0) by_row[static_cast<size_t>(slot[s.row[k]])].push_back({j, s.ad[k], s.dp[k]});
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
-    genotype::GzOut f(path);
+    genotype::GzOut f(path, true);
     if (!f.ok()) return -1;
     f.put("##fileformat=VCFv4.2\n##source=singlet allsite_store (per-cell delta)\n"
           "##singlet_cells=called cells; an entry is kept where the cell is informative against its donor genotype (rule " + std::string(kStoreRule) + ")\n");
