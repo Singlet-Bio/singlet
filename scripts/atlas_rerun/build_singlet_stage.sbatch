@@ -12,6 +12,7 @@
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; IMG=$W/images/cuda-12.4.1-devel-ubuntu22.04.sif
 TAG=${TAG:-campaign}; BARE=$W/repos/singlet-py.git; BR=${BRANCH:-claude/stage-1fg2}
+# VARIANTS: cpu (GPU engine off), gpu (GPU engine on: the launch binary; CUDA_ARCH as in the gated campaign builds, default 70;75;90), prof
 VARIANTS=${VARIANTS:-cpu}; XFLAGS=
 git -C $BARE fetch -q "$(git -C $BARE config remote.origin.url)" +refs/heads/$BR:refs/s9/$TAG
 COMMIT=$(git -C $BARE rev-parse refs/s9/$TAG); echo "COMMIT=$COMMIT"
@@ -31,9 +32,9 @@ export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gn
 export LDFLAGS="-L$ENV/lib -Wl,-rpath,$ENV/lib"
 \$CXX --version | head -1; nvcc --version | tail -1
 for v in $VARIANTS; do
-  E=OFF; XF="$XFLAGS"; [ \$v = prof ] && XF="-DSTAR_PROFILE"
+  E=OFF; XF="$XFLAGS"; [ \$v = prof ] && XF="-DSTAR_PROFILE"; [ \$v = gpu ] && E=ON
   cmake -S $S -B $SCR/b-\$v -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_GIT_COMMIT=$COMMIT -DSINGLET_ENGINE_GPU=\$E -DCMAKE_CXX_FLAGS="\$XF" \
-    -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="80;90" > $SCR/c-\$v.log 2>&1 \
+    -DCMAKE_CUDA_HOST_COMPILER=\$CXX -DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH:-70;75;90}" > $SCR/c-\$v.log 2>&1 \
     || { tail -40 $SCR/c-\$v.log; exit 1; }
   grep -i "GPU engine" $SCR/c-\$v.log || true
   cmake --build $SCR/b-\$v --target singlet singlet-stage -j 8 > $SCR/b-\$v.log 2>&1 || { grep -m30 -B3 -A8 "error" $SCR/b-\$v.log || tail -40 $SCR/b-\$v.log; exit 1; }

@@ -48,9 +48,12 @@ where the record does not say; \code{sample_facts = FALSE} leaves them out, and 
 0.9. Sex agrees with GEO metadata for 153 of 156 called samples (98.1\%). Ancestry is continental (HANCESTRO), for human donors
 with coverage only (under 2\% of cells).
 
-\strong{Not in Research Alpha:} the release policy strips per-cell mitochondrial DNA (\code{mts_*}) and doublet
-(\code{qc_doublet_score}, \code{dbl_*}) columns from every published object. \code{include_unvalidated = TRUE} only matters
-for local pipeline outputs that still carry \code{qc_doublet_score}, which is unvalidated and otherwise left out.
+\strong{Hidden by default:} a default load returns uncorrected counts with their labels and QC. It leaves out
+\code{qc_doublet_score} (unvalidated) and the donor assignment's doublet calls (\code{don_best_doublet},
+\code{don_best_singlet}, \code{don_cell_status}); \code{don_donor_id} and \code{don_prob_max} stay.
+\code{include_unvalidated = TRUE} or \code{columns = } returns them. The ambient-corrected counts load only with
+\code{modalities = "ambient_corrected"}. The release policy strips per-cell mitochondrial DNA (\code{mts_*}) columns from
+every published object.
 }
 \seealso{
 \code{\link{load}}, \code{\link{singlet_cells}}

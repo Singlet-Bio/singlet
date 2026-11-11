@@ -71,6 +71,19 @@ test_that("label columns: order, categories, renames and the hidden doublet scor
     expect_identical(cats, list(don_donor_id = c("donor0", "unassigned")))
 })
 
+test_that("the default colData keeps the donor and hides its doublet calls", {
+    calls <- list(don_best_doublet = c("donor0,donor1", "donor0,donor1"), don_best_singlet = c("donor0", "donor1"),
+                  don_cell_status = c("singlet", "doublet"))
+    cols <- c(list(barcode = c("AAA", "CCC"), called = c(TRUE, TRUE), don_donor_id = c("donor0", "donor1"),
+                   don_prob_max = c(0.99, 0.6)), calls)
+    expect_setequal(singlet:::.s1_label_call_layer, names(calls))
+    d <- singlet:::.s1_label_columns(cols, 2L)
+    expect_true(all(c("don_donor_id", "don_prob_max") %in% names(d)))
+    expect_false(any(names(calls) %in% names(d)))
+    expect_true(all(names(calls) %in% names(singlet:::.s1_label_columns(cols, 2L, include_unvalidated = TRUE))))
+    expect_identical(names(singlet:::.s1_label_columns(cols, 2L, columns = "don_cell_status")), "don_cell_status")
+})
+
 test_that("GEO sample metadata is prefixed and never collides with the per-cell labels", {
     df <- singlet:::.bundle_obs_frame("GSM1", list(organism = "Homo sapiens", enriched = list(meta_cell_type = "T cell")), 2L)
     expect_false(any(c("cell_type", "sex", "tissue") %in% names(df)))
@@ -143,12 +156,15 @@ test_that("load() puts the labels in colData, matching the Python client", {
         }
         expect_identical(one$called_ed, as.logical(truth$called_ed))
         expect_false("qc_doublet_score" %in% names(cd))
+        expect_true("don_prob_max" %in% names(cd))
+        expect_false(any(singlet:::.s1_label_call_layer %in% names(cd)))
         expect_identical(names(cd)[1:3], c("gsm_id", "cell_type", "cell_type_ontology_term_id"))
         expect_true(all(c("organism", "geo_cell_type", "geo_sex") %in% names(cd)))
         three <- cd[cd$gsm_id == "GSM9000003", , drop = FALSE]
         expect_true(nrow(three) == 25L && all(is.na(three$cell_type)) && all(is.na(three$called_ed)))
         sce2 <- suppressWarnings(load(mp, cell_type_level = 6L, cell_type_min_score = 0, include_unvalidated = TRUE))
         expect_true("qc_doublet_score" %in% names(SummarizedExperiment::colData(sce2)))
+        expect_true(all(singlet:::.s1_label_call_layer %in% names(SummarizedExperiment::colData(sce2))))
         expect_identical(max(sce2$cell_type_level, na.rm = TRUE), 4L)
     })
 })
@@ -164,6 +180,8 @@ test_that("singlet_cells() filters on labels and hides the doublet score unless 
         expect_true(ncol(hi) > 0L && !"qc_doublet_score" %in% names(SummarizedExperiment::colData(hi)))
         sh <- singlet_cells(st, qc_doublet_score > 0.5, samples = "GSM9000001", columns = c("qc_doublet_score", "cell_type"))
         expect_setequal(names(SummarizedExperiment::colData(sh)), c("gsm_id", "matrix_column", "qc_doublet_score", "cell_type"))
+        dbl <- singlet_cells(st, don_cell_status == "doublet", samples = "GSM9000001")  # the hidden calls still filter
+        expect_true(ncol(dbl) > 0L && !"don_cell_status" %in% names(SummarizedExperiment::colData(dbl)))
         both <- singlet_cells(st, called, samples = c("GSM9000001", "GSM9000003"))
         expect_identical(ncol(both), 65L)
     })
