@@ -593,7 +593,7 @@ public:
         if (!config_.edit_path.empty() && !take_pool_edit()) edit_thread = std::thread([&]() { edit_ok = parse_edit_panel(); });
         // TE loci (te_counts.h): loaded beside the gene model; exonic reads stay with the genes, so a gene model is required
         std::thread te_thread;
-        if (need_exons && !config_.te_gtf_path.empty())
+        if (need_exons && !config_.te_gtf_path.empty() && !take_pool_te())
             te_thread = std::thread([&]() { has_te_ = te_model_.load_gtf(config_.te_gtf_path) && !te_model_.empty(); });
 
         if (snp_thread.joinable()) snp_thread.join();
@@ -4547,11 +4547,17 @@ public:
         std::vector<EditSite> sites; std::vector<std::string> chroms; double sec = 0;
     };
     static std::vector<std::unique_ptr<PoolEdit>>& pool_edits() { static std::vector<std::unique_ptr<PoolEdit>> v; return v; }
+    struct PoolTe {     // TE loci (te_counts.h): TeModel::load_gtf's model
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        TeModel te; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolTe>>& pool_tes() { static std::vector<std::unique_ptr<PoolTe>> v; return v; }
 
     // In the pool, before any sample is forked: parse each distinct file of `snp_paths` and `gtf_paths` once (each file on a thread of its
     // own, as load_references runs its two loaders). Returns a log line.
     static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths,
-                                               const std::vector<std::string>& edit_paths = {}) {
+                                               const std::vector<std::string>& edit_paths = {},
+                                               const std::vector<std::string>& te_paths = {}) {
         std::string log;
         if (!pool_refs_enabled()) return "off (SINGLET_POOL_REFS=0)";
         std::vector<std::thread> th;
@@ -4608,6 +4614,21 @@ public:
                 e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             });
         }
+        for (const std::string& p : te_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "TE annotation " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_tes()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_tes().push_back(std::make_unique<PoolTe>());
+            PoolTe* e = pool_tes().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                e->ok = e->te.load_gtf(e->path) && !e->te.empty();
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
         for (auto& t : th) t.join();
         char b[64];
         for (const auto& e : pool_snps()) {
@@ -4622,6 +4643,10 @@ public:
         for (const auto& e : pool_edits()) {
             std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
             log += "editing panel " + e->path + ": " + (e->ok ? std::to_string(e->sites.size()) + " sites" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_tes()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "TE annotation " + e->path + ": " + (e->ok ? std::to_string(e->te.n_loci()) + " loci" : std::string("failed")) + b;
         }
         return log.empty() ? "no reference files" : log;
     }
@@ -4652,6 +4677,20 @@ private:
             e->taken = true;
             std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites from " << config_.edit_path
                       << " (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // the TE thread's result from the pool, for config_.te_gtf_path (false: the thread runs)
+    bool take_pool_te() {
+        if (pool_tes().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.te_gtf_path, id)) return false;
+        for (auto& e : pool_tes()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            te_model_ = std::move(e->te);
+            has_te_ = true;
+            e->taken = true;
             return true;
         }
         return false;

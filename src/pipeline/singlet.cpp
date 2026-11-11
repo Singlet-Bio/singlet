@@ -3516,7 +3516,7 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
         return r;
     };
     auto has = [](const std::vector<std::string>& v, const char* k) { return std::find(v.begin(), v.end(), std::string(k)) != v.end(); };
-    std::vector<std::string> snps, gtfs, edits;
+    std::vector<std::string> snps, gtfs, edits, tes;
     for (const auto& a : item_args) {
         const std::string gd = val(a, "--genome-dir");
         std::string gtf = val(a, "--exons"), snp = val(a, "--snps");
@@ -3543,8 +3543,21 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
             if (!rb.empty() && !panel.empty()) ed = rb + "/pileup_indices/" + panel;
         }
         if (!ed.empty()) edits.push_back(ed);
+        // TE annotation: --te-gtf, else --pipeline's default rmsk GTF for a human or mouse genome (as singlet_main resolves it)
+        std::string te = val(a, "--te-gtf");
+        if (te.empty() && has(a, "--pipeline") && !has(a, "--no-te") && !gd.empty()) {
+            std::string rb = val(a, "--ref-base");
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            const bool human = gd.find("GRCh38") != std::string::npos || gd.find("hg38") != std::string::npos;
+            const bool mouse = gd.find("GRCm39") != std::string::npos || gd.find("mm39") != std::string::npos;
+            std::string f;
+            if (human && !mouse) f = "GRCh38_GENCODE_rmsk_TE.gtf.gz";
+            else if (mouse && !human) f = "GRCm39_GENCODE_rmsk_TE.gtf.gz";
+            if (!rb.empty() && !f.empty()) te = rb + "/pileup_indices/te/" + f;
+        }
+        if (!te.empty()) tes.push_back(te);
     }
-    return singlet::PileupEngine::preload_pool_references(snps, gtfs, edits);
+    return singlet::PileupEngine::preload_pool_references(snps, gtfs, edits, tes);
 }
 
 int main(int argc, char* argv[]) {
@@ -5633,19 +5646,40 @@ static int singlet_main(int argc, char* argv[]) {
                     uint64_t n_exact = 0;
                     const auto& dflat = runs->bc_dict_flat();
                     const uint16_t dlen = runs->bc_length();
+                    // The whitelist lookups (c.find, const) run on the job's threads into one slot per entry; the counts are then added in the
+                    // serial order, so the histogram and cbx_nonexact (an unordered_map: its insertion order is kept) are the serial loop's.
+                    auto par_for = [nt](size_t n, auto&& fn) {
+                        const int T = static_cast<int>(std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(nt), n / 65536 + 1)));
+                        if (T == 1) { fn(size_t(0), n); return; }
+                        std::vector<std::thread> th;
+                        for (int t = 0; t < T; ++t) th.emplace_back([&fn, n, t, T] { fn(n * t / T, n * (t + 1) / T); });
+                        for (auto& x : th) x.join();
+                    };
                     if (dlen == static_cast<uint16_t>(cbl)) {
-                        char bcs[32];
+                        std::vector<int64_t> wk(dict.size(), -1);
+                        par_for(dict.size(), [&](size_t k0, size_t k1) {
+                            char bcs[32];
+                            for (size_t k = k0; k < k1; ++k) {
+                                if (!dict[k]) continue;
+                                for (int j = 0; j < cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(dflat[k * dlen + j], 4)];
+                                wk[k] = c.find(bcs);
+                            }
+                        });
                         for (size_t k = 0; k < dict.size(); ++k) {
                             if (!dict[k]) continue;
-                            for (int j = 0; j < cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(dflat[k * dlen + j], 4)];
-                            const int64_t w = c.find(bcs);
+                            const int64_t w = wk[k];
                             if (w >= 0) { c.add_exact(w, dict[k]); n_exact += dict[k]; }
                             else if (cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + k * dlen, cbl)] += dict[k];   // #153: the pass-1 input of the corrected barcode universe
                         }
                     }
+                    std::vector<const std::string*> rawp;
+                    for (const auto& v : raws) for (const auto& cb : v) rawp.push_back(&cb);
+                    std::vector<int64_t> wr(rawp.size(), -1);
+                    par_for(rawp.size(), [&](size_t i0, size_t i1) { for (size_t i = i0; i < i1; ++i) wr[i] = c.find(rawp[i]->c_str()); });
+                    size_t ri = 0;
                     for (const auto& v : raws)
                         for (const auto& cb : v) {
-                            const int64_t w = c.find(cb.c_str());
+                            const int64_t w = wr[ri++];
                             if (w >= 0) { c.add_exact(w, 1); ++n_exact; }
                             else if (cbl <= 21) {
                                 uint8_t cd[32];
