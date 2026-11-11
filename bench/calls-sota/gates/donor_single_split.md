@@ -28,3 +28,6 @@ Verdict: all three pass means the donor label is enforced for K>=2 samples; a sp
 
 ## Not covered
 Single-donor libraries with genotype truth (Osorio single lines, GSE230239 single lines) have no stored demultiplexer output; see results.md for the cheapest route.
+
+## Amendment A (2026-11-11, before the in silico run; the pilot-library results above were already seen when this was written)
+Second test with genotype truth: the Kang 2018 batch 2 control lane (GSE96583), eight donors. For each donor, the demultiplexer is run alone on the truth singlets of that donor (demuxlet identity from the authors' table), using the stored allele counts of the pool (private snp_ad and snp_dp, all barcodes) and the standalone harness bench/modalities/demux_fix/demux_harness.cpp compiled against the frozen headers (tag v1.3.7, donor_demux.h blob aeef964e), K auto (-1), default settings, seed 42. Same definitions and pass rule as above. Eight subsets are eight tests of K=1 on real data with known single donor; each is a library for the pooled rate. Caveat: the subset is a computational restriction of a pool, so ambient and doublet structure of a true single-donor library are absent.
