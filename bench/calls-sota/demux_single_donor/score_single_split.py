@@ -7,7 +7,8 @@ import pandas as pd
 def score(path):
     d = pd.read_csv(path, sep="\t")
     n_all = len(d)
-    lab = d[(d["cell_status"] == "cell") & d["donor_id"].astype(str).str.startswith("donor")]
+    m = (d["cell_status"] == "cell") if "cell_status" in d else (d["donor_id"] == d["donor_id"])
+    lab = d[m & d["donor_id"].astype(str).str.startswith("donor")]
     vc = lab["donor_id"].value_counts()
     n = int(vc.sum())
     dom = vc.index[0] if n else None
