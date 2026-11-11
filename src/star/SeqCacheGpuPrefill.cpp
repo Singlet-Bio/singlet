@@ -1506,8 +1506,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     if (e2eWant) { in.e2e = &e2r; in.outSAMmapqUnique = P.outSAMmapqUnique; in.outSAMflagAND = P.outSAMflagAND; in.outSAMflagOR = P.outSAMflagOR; }
     // E16 "handover": at level 5 with E11 nothing reads the host records after mapDistinct (no summaries, no cache inserts), so the records'
-    // phase releases their pages as it uploads them; a fallback that would need them stops the run instead (needHost below)
-    in.e2eHandover = e2eWant && e10Level >= 5 && in.e10.soloModel != nullptr && readSourceFree() && getenv("SINGLET_ENGINE_GPU_DUMP") == nullptr
+    // phase releases their pages as it uploads them. A run that would then fall back (and read them) is decided in mapDistinct, which fails with
+    // handoverRetry, and runs again here without the handover (below): the fallback finds every record, as without the handover
+    in.e2eHandover = e2eWant && e10Level >= 5 && in.e10.soloModel != nullptr && in.e10.on && !tableMode && readSourceFree()
+                     && getenv("SINGLET_ENGINE_GPU_DUMP") == nullptr
                      && getenv("SINGLET_ENGINE_GPU_E2E_CHECK") == nullptr && singlet_tail::cut("handover");
     // E13: R11's exact CB histogram from the decode to the pipeline (engine_gpu_ingest.h publishR11), before the device runs: the stream's CB
     // correction needs it whatever happens next; the device's, where E10 computes one, is compared after mapDistinct
@@ -1556,6 +1558,20 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // The waits (15, 30, 45 s) cover another slot's device hold (about 34 s per pbmc1k_v3 run).
     in.oomFatal = oomTries > 1;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
+    auto handoverAgain = [&]() {   // E16 handover: a fallback needs the records it released; the same call without it (not an attempt)
+        in.e2eHandover = false;
+        P.inOut->logMain << "ENGINE_GPU: E16 handover: the run would fall back and read the released host records; the engine runs again without "
+                            "the handover. Its log:
+" << out.log << flush;
+        singlet_tail::mark("prefill: E16 handover: the engine again without it (a fallback reads the host records)");
+        in.release(); in.reacquire(1);
+        if (e2hSaved) *e2r.hdr() = e2h0;
+        out = singlet_engine_gpu::Output{};
+        out.log = "engine_gpu: E16 handover off: the engine again for a fallback that reads the host records
+";
+        ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
+    };
+    if (!ok && out.handoverRetry) handoverAgain();
     for (int a = 2; !ok && !out.budgetFail && a <= oomTries; a++) {
         in.release();
         const int waitS = 15 * (a - 1);
@@ -1567,6 +1583,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         out = singlet_engine_gpu::Output{};
         out.log = "engine_gpu: retry: attempt " + std::to_string(a) + " of " + std::to_string(oomTries) + "\n";
         ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
+        if (!ok && out.handoverRetry) handoverAgain();
     }
     in.release();
     singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
