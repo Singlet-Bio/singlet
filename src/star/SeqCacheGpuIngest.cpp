@@ -84,7 +84,9 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
     out.n = N;
     out.r1L = pl.r1L; out.r1w = (pl.r1L + 20) / 21;
     try {   // the fused pass's reservations are bounds: a refusal falls back to the two passes
-        out.seq.resize(B);
+        out.seq = std::make_shared<PackedSeq>();
+        out.seq->w.resize(std::max<uint64_t>(1, Q));   // 2 bits per base, the quality plane's blocks
+        out.seq->runs.resize(nB);
         out.off.resize(N + 1);
         out.qual.resize(std::max<uint64_t>(1, Q));
         out.r1.resize(std::max<uint64_t>(1, N * out.r1w));
@@ -171,6 +173,7 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
             const uint64_t rEnd = F[b + 1], posEnd = BA[b + 1];
             uint64_t r = F[b], pos = BA[b], k = 0;
             uint8_t* qd = out.qual.data() + out.qualAt[b];
+            PackedSeqWriter sw(out.seq->w.data() + out.qualAt[b], BA[b], &out.seq->runs[b]);
             uint8_t qacc = 0;
             const bool packedQ = !blk.r2_qual_packed.empty();
             const bool hasQ = !blk.r2_qual.empty();
@@ -185,7 +188,8 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
                 if (r >= rEnd || pos + L2 > posEnd) { fail("block " + std::to_string(b) + " has more reads or bases than the head scan counted"); return; }
                 if (L1 != pl.r1L) { fail("barcode read length " + std::to_string(L1) + " in block " + std::to_string(b)); return; }
                 // cDNA: codes and offsets
-                std::memcpy(out.seq.data() + pos, blk.r2_seq(i), L2);
+                sw.put((const uint8_t*) blk.r2_seq(i), L2);
+                if (sw.bad) { fail("block " + std::to_string(b) + ": a cDNA base code other than A, C, G, T or N"); return; }
                 out.off[r + 1] = pos + L2;
                 if (packedQ) {
                     if (qs > qsEnd) { fail("block " + std::to_string(b) + ": the quality column is shorter than its reads"); return; }
@@ -233,6 +237,7 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
                 r++;
             }
             if ((k & 3) != 0) qd[k >> 2] = qacc;
+            sw.finish();
             if (packedQ)
                 for (int v = 0; v < 256; v++)
                     if (bytesOf[v]) for (int j = 0; j < 4; j++) hist[(v >> (2 * j)) & 3] += bytesOf[v];
@@ -250,11 +255,12 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
     if (fz) {   // the reads and bases given to STAR
         N = out.first[nB];
         out.n = N;
-        out.seq.resize(out.baseAt[nB]);
         out.off.resize(N + 1);
         out.qual.resize(std::max<uint64_t>(1, out.qualAt[nB]));
         out.r1.resize(std::max<uint64_t>(1, N * out.r1w));
+        out.seq->w.resize(std::max<uint64_t>(1, out.qualAt[nB]));
     }
+    out.seq->baseAt = out.baseAt; out.seq->byteAt = out.qualAt; out.seq->total = out.baseAt[nB];
     for (const Acc& a : acc)
         for (int c = 0; c < 4; c++) out.qualHist[c] += a.hist[c];
     out.sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
