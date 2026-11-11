@@ -1,0 +1,544 @@
+{
+ "schema": "singlet-design-catalog-0.1",
+ "study": "GSE190760",
+ "tier": "candidate",
+ "flags": [],
+ "design_class": "mixed",
+ "summary": "Seven participants sampled at four time points around AAV gene therapy and prednisone, split by factor IX activity at week 26.",
+ "factors": [
+  {
+   "id": "F1",
+   "name": "FIX activity at week 26",
+   "type": "response",
+   "unit": "donor",
+   "source": "characteristics:response",
+   "confidence": "high",
+   "evidence": "cellular immunity was elevated in patients with FIX:C less then 40IU/dl at week 26",
+   "levels": [
+    {
+     "id": "F1.a",
+     "label": "FIX:C<40IU/dl",
+     "standard": "low factor IX activity (below 40 IU/dl)",
+     "role": "other",
+     "ontology": []
+    },
+    {
+     "id": "F1.b",
+     "label": "FIX:C>40IU/dl",
+     "standard": "high factor IX activity (above 40 IU/dl)",
+     "role": "other",
+     "ontology": []
+    }
+   ]
+  },
+  {
+   "id": "F2",
+   "name": "time point",
+   "type": "time",
+   "unit": "sample",
+   "source": "characteristics:time point",
+   "confidence": "high",
+   "evidence": "Day-7(before glucocorticoids treatment)",
+   "levels": [
+    {
+     "id": "F2.a",
+     "label": "Day -7",
+     "standard": "day -7, before glucocorticoids",
+     "role": "reference",
+     "ontology": []
+    },
+    {
+     "id": "F2.b",
+     "label": "Day 0",
+     "standard": "day 0, before AAV infusion",
+     "role": "test",
+     "ontology": []
+    },
+    {
+     "id": "F2.c",
+     "label": "Day 7",
+     "standard": "day 7, after AAV infusion",
+     "role": "test",
+     "ontology": []
+    },
+    {
+     "id": "F2.d",
+     "label": "stop GCs",
+     "standard": "two weeks after glucocorticoid withdrawal",
+     "role": "test",
+     "ontology": []
+    }
+   ]
+  }
+ ],
+ "units": [
+  {
+   "unit_id": "GSM5731055",
+   "gsm": "GSM5731055",
+   "library": "gex",
+   "biosample_key": "GSM5731055",
+   "donor": "Participant4",
+   "pool": {
+    "type": "none",
+    "n_members": null,
+    "mapping": "na"
+   },
+   "levels": {
+    "F1": "F1.a",
+    "F2": "F2.a"
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": false
+  },
+  {
+   "unit_id": "GSM5731056",
+   "gsm": "GSM5731056",
+   "library": "gex",
+   "biosample_key": "GSM5731056",
+   "donor": "Participant4",
+   "pool": {
+    "type": "none",
+    "n_members": null,
+    "mapping": "na"
+   },
+   "levels": {
+    "F1": "F1.a",
+    "F2": "F2.b"
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": false
+  },
+  {
+   "unit_id": "GSM5731057",
+   "gsm": "GSM5731057",
+   "library": "gex",
+   "biosample_key": "GSM5731057",
+   "donor": "Participant4",
+   "pool": {
+    "type": "none",
+    "n_members": null,
+    "mapping": "na"
+   },
+   "levels": {
+    "F1": "F1.a",
+    "F2": "F2.c"
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": false
+  },
+  {
+   "unit_id": "GSM5731058",
+   "gsm": "GSM5731058",
+   "library": "gex",
+   "biosample_key": "GSM5731058",
+   "donor": "Participant4",
+   "pool": {
+    "type": "none",
+    "n_members": null,
+    "mapping": "na"
+   },
+   "levels": {
+    "F1": "F1.a",
+    "F2": "F2.d"
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": false
+  },
+  {
+   "unit_id": "GSM5731059",
+   "gsm": "GSM5731059",
+   "library": "gex",
+   "biosample_key": "GSM5731059",
+   "donor": "Participant5",
+   "pool": {
+    "type": "none",
+    "n_members": null,
+    "mapping": "na"
+   },
+   "levels": {
+    "F1": "F1.a",
+    "F2": "F2.a"
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": false
+  },
+  {
+   "unit_id": "GSM5731060",
+   "gsm": "GSM5731060",
+   "library": "gex",
+   "biosample_key": "GSM5731060",
+   "donor": "Participant5",
+   "pool": {
+    "type": "none",
+    "n_members": null,
+    "mapping": "na"
+   },
+   "levels": {
+    "F1": "F1.a",
+    "F2": "F2.b"
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": false
+  }
+ ],
+ "contrasts": [
+  {
+   "id": "GSE190760.c1",
+   "factor": "FIX activity at week 26",
+   "factor_id": "F1",
+   "factor_type": "response",
+   "test": "low factor IX activity (below 40 IU/dl)",
+   "reference": null,
+   "test_level": "F1.a",
+   "reference_level": null,
+   "symmetric": true,
+   "other_arm": "high factor IX activity (above 40 IU/dl)",
+   "ontology": {
+    "test": [],
+    "reference": []
+   },
+   "kind": "derived",
+   "replication_unit": "donor",
+   "n": {
+    "test_units": 12,
+    "test_donors": 3,
+    "reference_units": 16,
+    "reference_donors": 4
+   },
+   "pairing": "unknown",
+   "shared": {
+    "library": "gex",
+    "molecule": "polyA RNA",
+    "organism": "Homo sapiens",
+    "source_name": "peripheral blood mononuclear cell",
+    "strategy": "RNA-Seq"
+   },
+   "differs": [
+    {
+     "attribute": "factor:F2",
+     "test_values": [
+      "F2.a",
+      "F2.b",
+      "F2.c",
+      "F2.d"
+     ],
+     "reference_values": [
+      "F2.a",
+      "F2.b",
+      "F2.c",
+      "F2.d"
+     ],
+     "aligned_with_arms": false
+    },
+    {
+     "attribute": "time point",
+     "test_values": [
+      "Day -7",
+      "Day 0",
+      "Day 7",
+      "stop GCs"
+     ],
+     "reference_values": [
+      "Day -7",
+      "Day 0",
+      "Day 7",
+      "stop GCs"
+     ],
+     "aligned_with_arms": false
+    }
+   ],
+   "notes": [],
+   "confounds": [],
+   "grade": "B",
+   "status": "candidate",
+   "unassigned_units_in_factor": 0,
+   "evidence": [
+    {
+     "source": "design:factor:characteristics:response",
+     "quote": "cellular immunity was elevated in patients with FIX:C less then 40IU/dl at week 26"
+    }
+   ]
+  },
+  {
+   "id": "GSE190760.c2",
+   "factor": "time point",
+   "factor_id": "F2",
+   "factor_type": "time",
+   "test": "day 0, before AAV infusion",
+   "reference": "day -7, before glucocorticoids",
+   "test_level": "F2.b",
+   "reference_level": "F2.a",
+   "symmetric": false,
+   "other_arm": null,
+   "ontology": {
+    "test": [],
+    "reference": []
+   },
+   "kind": "author_stated",
+   "replication_unit": "donor",
+   "n": {
+    "test_units": 7,
+    "test_donors": 7,
+    "reference_units": 7,
+    "reference_donors": 7
+   },
+   "pairing": "paired",
+   "shared": {
+    "library": "gex",
+    "molecule": "polyA RNA",
+    "organism": "Homo sapiens",
+    "source_name": "peripheral blood mononuclear cell",
+    "strategy": "RNA-Seq"
+   },
+   "differs": [
+    {
+     "attribute": "factor:F1",
+     "test_values": [
+      "F1.a",
+      "F1.b"
+     ],
+     "reference_values": [
+      "F1.a",
+      "F1.b"
+     ],
+     "aligned_with_arms": false
+    },
+    {
+     "attribute": "response",
+     "test_values": [
+      "FIX:C<40IU/dl",
+      "FIX:C>40IU/dl"
+     ],
+     "reference_values": [
+      "FIX:C<40IU/dl",
+      "FIX:C>40IU/dl"
+     ],
+     "aligned_with_arms": false
+    }
+   ],
+   "notes": [],
+   "confounds": [],
+   "grade": "A",
+   "status": "candidate",
+   "unassigned_units_in_factor": 0,
+   "evidence": [
+    {
+     "source": "design:comparison",
+     "quote": "before AAV infusion"
+    }
+   ]
+  },
+  {
+   "id": "GSE190760.c3",
+   "factor": "time point",
+   "factor_id": "F2",
+   "factor_type": "time",
+   "test": "day 7, after AAV infusion",
+   "reference": "day -7, before glucocorticoids",
+   "test_level": "F2.c",
+   "reference_level": "F2.a",
+   "symmetric": false,
+   "other_arm": null,
+   "ontology": {
+    "test": [],
+    "reference": []
+   },
+   "kind": "author_stated",
+   "replication_unit": "donor",
+   "n": {
+    "test_units": 7,
+    "test_donors": 7,
+    "reference_units": 7,
+    "reference_donors": 7
+   },
+   "pairing": "paired",
+   "shared": {
+    "library": "gex",
+    "molecule": "polyA RNA",
+    "organism": "Homo sapiens",
+    "source_name": "peripheral blood mononuclear cell",
+    "strategy": "RNA-Seq"
+   },
+   "differs": [
+    {
+     "attribute": "factor:F1",
+     "test_values": [
+      "F1.a",
+      "F1.b"
+     ],
+     "reference_values": [
+      "F1.a",
+      "F1.b"
+     ],
+     "aligned_with_arms": false
+    },
+    {
+     "attribute": "response",
+     "test_values": [
+      "FIX:C<40IU/dl",
+      "FIX:C>40IU/dl"
+     ],
+     "reference_values": [
+      "FIX:C<40IU/dl",
+      "FIX:C>40IU/dl"
+     ],
+     "aligned_with_arms": false
+    }
+   ],
+   "notes": [],
+   "confounds": [],
+   "grade": "A",
+   "status": "candidate",
+   "unassigned_units_in_factor": 0,
+   "evidence": [
+    {
+     "source": "design:comparison",
+     "quote": "Day 7(after AAV infusion)"
+    }
+   ]
+  },
+  {
+   "id": "GSE190760.c4",
+   "factor": "time point",
+   "factor_id": "F2",
+   "factor_type": "time",
+   "test": "two weeks after glucocorticoid withdrawal",
+   "reference": "day -7, before glucocorticoids",
+   "test_level": "F2.d",
+   "reference_level": "F2.a",
+   "symmetric": false,
+   "other_arm": null,
+   "ontology": {
+    "test": [],
+    "reference": []
+   },
+   "kind": "author_stated",
+   "replication_unit": "donor",
+   "n": {
+    "test_units": 7,
+    "test_donors": 7,
+    "reference_units": 7,
+    "reference_donors": 7
+   },
+   "pairing": "paired",
+   "shared": {
+    "library": "gex",
+    "molecule": "polyA RNA",
+    "organism": "Homo sapiens",
+    "source_name": "peripheral blood mononuclear cell",
+    "strategy": "RNA-Seq"
+   },
+   "differs": [
+    {
+     "attribute": "factor:F1",
+     "test_values": [
+      "F1.a",
+      "F1.b"
+     ],
+     "reference_values": [
+      "F1.a",
+      "F1.b"
+     ],
+     "aligned_with_arms": false
+    },
+    {
+     "attribute": "response",
+     "test_values": [
+      "FIX:C<40IU/dl",
+      "FIX:C>40IU/dl"
+     ],
+     "reference_values": [
+      "FIX:C<40IU/dl",
+      "FIX:C>40IU/dl"
+     ],
+     "aligned_with_arms": false
+    }
+   ],
+   "notes": [],
+   "confounds": [],
+   "grade": "A",
+   "status": "candidate",
+   "unassigned_units_in_factor": 0,
+   "evidence": [
+    {
+     "source": "design:comparison",
+     "quote": "2 weeks after glucocorticoids withdrawal(stop GCs)"
+    }
+   ]
+  }
+ ],
+ "comparisons": [
+  {
+   "factor": "F2",
+   "test": "F2.b",
+   "reference": "F2.a",
+   "within": "same participant, paired across time points",
+   "stated_by_authors": false,
+   "evidence": "before AAV infusion"
+  },
+  {
+   "factor": "F2",
+   "test": "F2.c",
+   "reference": "F2.a",
+   "within": "same participant, paired across time points",
+   "stated_by_authors": false,
+   "evidence": "Day 7(after AAV infusion)"
+  },
+  {
+   "factor": "F2",
+   "test": "F2.d",
+   "reference": "F2.a",
+   "within": "same participant, paired across time points",
+   "stated_by_authors": false,
+   "evidence": "2 weeks after glucocorticoids withdrawal(stop GCs)"
+  }
+ ],
+ "conflicts": [],
+ "needs": {
+  "paper": "helpful",
+  "supplementary_file": "none",
+  "why": "Glucocorticoid exposure at Day 0 and Day 7 comes from the paper's protocol, not from the sample fields."
+ },
+ "abstentions": [
+  "Glucocorticoid exposure at each time point is not stated per sample, so it is not coded as a factor.",
+  "Authors compare FIX:C below and above 40 IU/dl, but no reference level is explicit, so no contrast is listed.",
+  "Sex and age are not stated per sample."
+ ],
+ "residual": {},
+ "provenance": {
+  "model": "haiku",
+  "prompt_version": "0.2-317bd2df",
+  "bundle_hash": "4ffe90d66d926259",
+  "bundle_mode": "full",
+  "n_samples_shown": 28,
+  "method": "claude-code-subagent",
+  "paper_used": false,
+  "pubmed": [
+   "35598604"
+  ]
+ }
+}

@@ -245,6 +245,9 @@ from singlet.pipeline import PipelineError, Run
 from singlet.pipeline import run as run_pipeline
 from singlet.s1.client import cells as cells  # per-sample objects, cell slicing
 from singlet.s1.client import open_study as open_study
+from singlet.s1.design import contrasts as contrasts  # design catalog sidecars (candidate = unverified)
+from singlet.s1.design import design as design
+from singlet.s1.design import sample_status as sample_status
 from singlet.s1.write import read_s1, write_s1
 
 __all__ = [
@@ -279,6 +282,10 @@ __all__ = [
     "open_bundle",
     "write_s1",
     "read_s1",
+    # Design catalog (sidecar readers; tier candidate = model-curated, unverified)
+    "design",
+    "contrasts",
+    "sample_status",
     # (gene_programs / project / annotate stay importable so old code gets a
     # clear NotImplementedError, but are no longer advertised.)
     # I/O

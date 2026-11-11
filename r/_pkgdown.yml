@@ -72,6 +72,14 @@ reference:
     contents:
       - as_sce
       - as_seurat
+  - title: Study design catalog
+    desc: >
+      Factors, levels, contrasts and processing status of a study, read from its design sidecar. Tier
+      `candidate` means model-curated and unverified.
+    contents:
+      - s1_design
+      - s1_contrasts
+      - s1_sample_status
   - title: Package
     contents:
       - singlet-package
