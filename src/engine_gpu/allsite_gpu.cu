@@ -431,6 +431,9 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_FRAC")) { const double v = atof(e); if (v > 0 && v <= 0.95) frac = v; }
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_MAXGB")) { const double v = atof(e); if (v > 0) maxGB = v; }
         size_t want = (size_t) std::min<double>(frac * (double) fr - 512.0 * 1048576.0, maxGB * 1073741824.0);
+        // the slot's E17 share (memBudget: SINGLET_ENGINE_GPU_MEM_GB, else (device - 2 GB - shared index) / slots) less 1 GiB for the context:
+        // the free memory also holds the other slots' unused shares, and an arena taken from them left their prefill no room (E17 stop)
+        if (const uint64_t bud = memBudget((uint64_t) tot)) want = (size_t) std::min<double>((double) want, (double) bud - 1073741824.0);
         const size_t minBytes = (size_t) 1536 << 20;
         if ((double) want < (double) minBytes) { out.why = "device memory: " + std::to_string(fr >> 20) + " MiB free"; return false; }
         while (cudaMalloc((void**) &A.base, want) != cudaSuccess) {
