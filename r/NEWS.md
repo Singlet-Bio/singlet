@@ -1,5 +1,9 @@
 # singlet (R) — NEWS
 
+## singlet 1.3.7
+
+Version aligned with the Python package for the Research Beta campaign engine.
+
 ## singlet 1.3.5
 
 Version aligned with the Python package for the Research Beta freeze. The notes below (written as 1.2.2) are carried forward unchanged.

@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -54,7 +55,7 @@
 namespace singlet::hla {
 
 constexpr int kK = 19;          // prefilter k-mer
-constexpr int kStride = 4;      // sample every 4th k-mer of a read
+constexpr int kStride = 4;      // sample every 4th k-mer of a read (a power of two: hits() masks with it)
 constexpr double kDonorMinProb = 0.9;
 
 inline bool file_exists(const std::string& p) { struct stat st{}; return stat(p.c_str(), &st) == 0; }
@@ -78,28 +79,72 @@ public:
         keys_.erase(std::unique(keys_.begin(), keys_.end()), keys_.end());
         size_t cap = 1; while (cap < keys_.size() * 2 + 16) cap <<= 1;
         table_.assign(cap, 0); mask_ = cap - 1;
-        bits_.assign(size_t(1) << (kBitsLog2 - 6), 0);
+        bits_.assign(size_t(1) << kWordsLog2, 0);
         for (uint64_t k : keys_) {
-            const uint64_t hk = hash(k);
-            size_t h = hk & mask_;
+            size_t h = hash(k) & mask_;
             while (table_[h] != 0) h = (h + 1) & mask_;
             table_[h] = k + 1;
-            bits_[hk >> (64 - kBitsLog2 + 6)] |= uint64_t(1) << ((hk >> (64 - kBitsLog2)) & 63);
+            bits_[word(k)] |= filter_bits(k);
         }
         n_ = keys_.size();
         keys_.clear(); keys_.shrink_to_fit();
     }
     bool contains(uint64_t k) const {
-        // the bitset (512 KB, in L2) answers most misses; the table decides the rest, so membership is exact
-        const uint64_t hk = hash(k);
-        if (!((bits_[hk >> (64 - kBitsLog2 + 6)] >> ((hk >> (64 - kBitsLog2)) & 63)) & 1)) return false;
-        size_t h = hk & mask_;
+        // The filter (512 KB, in L2: two bits of one word per k-mer, ~1.5% of misses pass) answers most misses; the table decides the
+        // rest, so membership is exact.
+        const uint64_t m = filter_bits(k);
+        if ((bits_[word(k)] & m) != m) return false;
+        size_t h = hash(k) & mask_;
         while (table_[h] != 0) { if (table_[h] == k + 1) return true; h = (h + 1) & mask_; }
         return false;
     }
     size_t size() const { return n_; }
-    /// true when a 19-mer starting at a multiple of kStride (and the last one) of `seq` (codes 0..3, 4 = N) is in the set
+    /// true when a 19-mer starting at a multiple of kStride (and the last one) of `seq` (codes 0..3, 4 = N) is in the set. One rolling
+    /// pass over the read builds both strands' codes; a 19-mer that holds an N is skipped. Same k-mers as hits_ref, so the same answer.
     bool hits(const uint8_t* seq, int len) const {
+        if (len < kK) return false;
+        uint8_t any = 0;
+        for (int i = 0; i < len; ++i) any |= seq[i];
+        if (any > 3) return hits_n(seq, len);
+        // no N: every 19-mer is valid, so step kStride bases between checks
+        const int last = len - kK;
+        constexpr uint64_t mask = (1ull << (2 * kK)) - 1;
+        uint64_t f = 0, r = 0;
+        auto push = [&](uint8_t b) { f = ((f << 2) | b) & mask; r = (r >> 2) | (uint64_t(3 - b) << (2 * (kK - 1))); };
+        int i = 0;
+        for (; i < kK; ++i) push(seq[i]);
+        if (contains(std::min(f, r))) return true;
+        int p = 0;
+        for (; p + kStride <= last; p += kStride) {
+            for (int j = 0; j < kStride; ++j) push(seq[i + j]);
+            i += kStride;
+            if (contains(std::min(f, r))) return true;
+        }
+        if (p == last) return false;
+        for (; i < len; ++i) push(seq[i]);
+        return contains(std::min(f, r));
+    }
+    /// hits() for a read that holds an N: the rolling pass with a run counter.
+    bool hits_n(const uint8_t* seq, int len) const {
+        if (len < kK) return false;
+        const int last = len - kK;
+        constexpr uint64_t mask = (1ull << (2 * kK)) - 1;
+        uint64_t f = 0, r = 0;
+        int run = 0;
+        for (int i = 0; i < len; ++i) {
+            const uint8_t b = seq[i];
+            if (b > 3) { run = 0; continue; }
+            f = ((f << 2) | b) & mask;
+            r = (r >> 2) | (uint64_t(3 - b) << (2 * (kK - 1)));
+            if (++run >= kK) {
+                const int p = i - (kK - 1);
+                if (((p & (kStride - 1)) == 0 || p == last) && contains(std::min(f, r))) return true;
+            }
+        }
+        return false;
+    }
+    /// The k-mers rebuilt one by one at each sampled start (the form before hits); kept as the reference of the tests and the bench.
+    bool hits_ref(const uint8_t* seq, int len) const {
         if (len < kK) return false;
         const int last = len - kK;
         for (int p = 0;; p += kStride) {
@@ -121,7 +166,14 @@ public:
     }
 private:
     static uint64_t hash(uint64_t x) { x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ULL; x ^= x >> 33; return x; }
-    static constexpr int kBitsLog2 = 22;   // 2^22-bit membership filter in front of the table (~5% of misses pass it)
+    // the filter's index: one multiply (Fibonacci hashing); the top 16 bits pick the word, the next 12 bits the two bits in it
+    static constexpr int kWordsLog2 = 16;  // 2^16 64-bit words
+    static uint64_t fib(uint64_t k) { return k * 0x9e3779b97f4a7c15ULL; }
+    static size_t word(uint64_t k) { return size_t(fib(k) >> (64 - kWordsLog2)); }
+    static uint64_t filter_bits(uint64_t k) {
+        const uint64_t h = fib(k);
+        return (uint64_t(1) << ((h >> (58 - kWordsLog2)) & 63)) | (uint64_t(1) << ((h >> (52 - kWordsLog2)) & 63));
+    }
     std::vector<uint64_t> keys_, table_, bits_;
     size_t mask_ = 0, n_ = 0;
 };
@@ -324,6 +376,19 @@ struct Session {
     bool made = false;         // the temporary directory exists (the input checks passed)
     bool stopped = false;      // a prefilter error after it was made: finish_stage returns res as it is
     double t1k_sample_s = 0;   // the sample's T1K (with the index prior), part of seconds_t1k
+    // hla_candidate_reads.fq.gz (level 6, one deflate stream, so it cannot be split) is compressed on one thread beside T1K, which
+    // leaves a core idle for most of its serial stretches; finish_stage moves the file in. A failed or absent compression is redone there.
+    std::future<bool> gz;
+    std::string gz_tmp;
+    bool wait_gz() { return gz.valid() ? gz.get() : false; }
+    // The donor stage (donor_stage): T1K on each donor's candidate reads, in tmp. It needs only the sample stage and the donor
+    // assignments, so the pipeline starts it as soon as demux has written them; finish_stage runs it when nobody did and moves its
+    // results in. donor_reads[k] counts donor k's candidate reads, donor_ok[k] says its T1K call succeeded.
+    bool donors_run = false;
+    int n_donors = 0;
+    std::vector<uint64_t> donor_reads;
+    std::vector<char> donor_ok;
+    double donor_s = 0;        // wall seconds of the donor stage
 };
 
 /// Move a file, across file systems too (Config::tmp_dir may be on another one than the run directory).
@@ -335,9 +400,9 @@ inline void move_file(const std::string& from, const std::string& to) {
     std::remove(from.c_str());
 }
 
-inline bool t1k_call(const Session& s, const std::string& in, const std::string& prefix, bool no_extract) {
+inline bool t1k_call(const Session& s, const std::string& in, const std::string& prefix, bool no_extract, const std::string& threads = "") {
     const std::string runt1k = s.cfg.t1k_dir + "/bin/run-t1k";
-    const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(s.tref) + " -t " + s.T + " -o " + shq(prefix) +
+    const std::string cmd = "perl " + shq(runt1k) + " -u " + shq(in) + " --preset hla -f " + shq(s.tref) + " -t " + (threads.empty() ? s.T : threads) + " -o " + shq(prefix) +
                             " --od " + shq(s.tmp) + (no_extract ? " --noExtraction" : "") + " >> " + shq(s.log) + " 2>&1";
     return run_sh(cmd.c_str()) == 0;
 }
@@ -369,13 +434,21 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
         std::atomic<uint32_t> nx{0};
         auto work = [&]() {
             singlet::fq::DecodedBlock B;
+            // the quality column stays packed where the format allows it (2 bits a base, BINNED4 and ILLUMINA4): only the few kept reads
+            // need their Phred values, which are unpacked from it below exactly as the decoder unpacks them
+            B.keep_packed_qual = true;
+            std::vector<uint8_t> qbuf;
             for (uint32_t b; (b = nx++) < nb;) {
                 B.clear(); rs.decode(w0 + b, B);   // a staged source does not clear the block itself
                 const uint64_t base = file_base + rs.block_read_offset(w0 + b);
                 std::string& o = buf[b]; o.clear(); nscan[b] = nkept[b] = 0;
+                const bool packed = !B.r2_qual_packed.empty() && B.r2_qual_packed_phred;
+                size_t qoff = 0;   // read i's packed quality starts here (reads in order, packed_bytes(len) each)
                 for (uint32_t i = 0; i < B.n_reads; ++i) {
                     const uint32_t dup = B.dup_counts.empty() ? 1u : std::max<uint32_t>(1u, B.dup_counts[i]);
                     nscan[b] += dup;
+                    const size_t qthis = qoff;
+                    if (packed) qoff += singlet::fq::pack::packed_bytes(B.r2_len(i));
                     const uint8_t* s = cdna_is_r1 ? B.r1_seq(i) : B.r2_seq(i);
                     const int L = cdna_is_r1 ? B.r1_len(i) : B.r2_len(i);
                     if (!ks.hits(s, L)) continue;
@@ -386,7 +459,16 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
                         const int rl = std::min<int>(bc_len ? bc_len : 16, cdna_is_r1 ? B.r2_len(i) : B.r1_len(i));
                         for (int j = 0; j < rl; ++j) bc += "ACGTN"[r[j] < 5 ? r[j] : 4];
                     }
-                    const uint8_t* q = cdna_is_r1 ? nullptr : B.r2_quality(i);
+                    const uint8_t* q = nullptr;
+                    if (!cdna_is_r1 && packed) {
+                        const int n = B.r2_len(i);
+                        if (qthis + singlet::fq::pack::packed_bytes(n) <= B.r2_qual_packed.size()) {
+                            qbuf.resize(n);
+                            const uint8_t* src = B.r2_qual_packed.data() + qthis;
+                            for (int j = 0; j < n; ++j) qbuf[j] = B.r2_qual_packed_phred[(src[j >> 2] >> (6 - 2 * (j & 3))) & 3];
+                            q = qbuf.data();
+                        }
+                    } else if (!cdna_is_r1) q = B.r2_quality(i);
                     std::string seq(L, 'N'), qual(L, 'I');
                     for (int j = 0; j < L; ++j) { seq[j] = "ACGTN"[s[j] < 5 ? s[j] : 4]; if (q) qual[j] = static_cast<char>(33 + std::min<int>(q[j], 93)); }
                     for (uint32_t d = 0; d < dup; ++d) {
@@ -440,6 +522,11 @@ inline void type_sample(Session& s) {
         std::cerr << "[hla] frequency prior (>= " << cfg.min_cells << " cells): " << (kept > 0 ? std::to_string(kept) + " of " + std::to_string(total) + " alleles" : std::string("not applied")) << "\n";
     } else if (cfg.min_cells > 0) {
         std::cerr << "[hla] frequency prior not applied: no Allele_status.txt in " << cfg.t1k_dir << "/hlaidx\n";
+    }
+    if (res.reads_kept > 0 && !s.gz.valid()) {
+        s.gz_tmp = s.tmp + "/hla_candidate_reads.fq.gz";
+        const std::string from = s.kept_fq, to = s.gz_tmp;
+        s.gz = std::async(std::launch::async, [from, to] { return gzip_file(from, to, "wb6"); });
     }
     if (res.reads_kept == 0) { res.why_not = "no read shares a k-mer with the HLA index"; }
     else if (!t1k_call(s, s.kept_fq, "sample", false)) { res.why_not = "run-t1k failed (" + s.log + ")"; }
@@ -547,6 +634,66 @@ inline Result write_pending(Session& s) {
     return res;
 }
 
+/// The donor stage: the sample's candidate reads (T1K's sample_candidate.fq) split by donor (called cells of one donor with prob_max
+/// >= 0.9), then T1K --noExtraction on each donor's reads, all in Session::tmp; finish_stage moves the genotype tables in. Runs once.
+/// Several donors are typed at a time, each with a share of the threads; every T1K call gets the same reads and index as one call per
+/// donor in turn, and T1K's results do not depend on its thread count. SINGLET_HLA_DONOR_JOBS=N caps the concurrent calls (1: in turn).
+/// Writes nothing into the run directory, so it may run while export is still writing there.
+inline void donor_stage(Session& s) {
+    if (s.donors_run) return;
+    s.donors_run = true;
+    const Config& cfg = s.cfg;
+    const Result& res = s.res;
+    if (!s.made || s.stopped || !res.ran) return;
+    if (cfg.donor_assignments.empty() || !file_exists(cfg.donor_assignments)) return;
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::string& tmp = s.tmp;
+    int n_donors = 0;
+    const std::unordered_map<std::string, int> bc2d = read_donors(cfg.donor_assignments, n_donors);
+    if (n_donors < 2) return;
+    s.n_donors = n_donors;
+    s.donor_reads.assign(n_donors, 0);
+    s.donor_ok.assign(n_donors, 0);
+    {
+        std::vector<FILE*> fo(n_donors, nullptr);
+        for (int k = 0; k < n_donors; ++k) fo[k] = std::fopen((tmp + "/donor" + std::to_string(k) + ".fq").c_str(), "wb");
+        std::ifstream cf(tmp + "/sample_candidate.fq");
+        std::string h, sq, p, q;
+        while (std::getline(cf, h) && std::getline(cf, sq) && std::getline(cf, p) && std::getline(cf, q)) {
+            std::string bc = h.substr(h.find('_') == std::string::npos ? h.size() : h.find('_') + 1);
+            const auto sp = bc.find_first_of(" \t"); if (sp != std::string::npos) bc.resize(sp);
+            auto it = bc2d.find(bc);
+            if (it == bc2d.end() || !fo[it->second]) continue;
+            std::fprintf(fo[it->second], "%s\n%s\n%s\n%s\n", h.c_str(), sq.c_str(), p.c_str(), q.c_str());
+            ++s.donor_reads[it->second];
+        }
+        for (auto* f : fo) if (f) std::fclose(f);
+    }
+    // the donors with reads, largest first; P calls at a time with T / P threads each (at least 4 threads per call)
+    std::vector<int> order;
+    for (int k = 0; k < n_donors; ++k) if (s.donor_reads[k] > 0) order.push_back(k);
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return s.donor_reads[a] > s.donor_reads[b]; });
+    const int T = std::max(1, cfg.threads);
+    int P = std::max(1, std::min<int>(static_cast<int>(order.size()), T / 4));
+    if (const char* e = std::getenv("SINGLET_HLA_DONOR_JOBS")) { const int j = std::atoi(e); if (j > 0) P = std::min(P, j); }
+    const std::string per = P == 1 ? s.T : std::to_string(std::max(1, T / P));
+    std::atomic<size_t> next{0};
+    auto work = [&]() {
+        for (size_t i; (i = next++) < order.size();) {
+            const int k = order[i];
+            const std::string name = "donor" + std::to_string(k);
+            s.donor_ok[k] = t1k_call(s, tmp + "/" + name + ".fq", name, true, per) ? 1 : 0;
+        }
+    };
+    std::vector<std::thread> th;
+    for (int t = 1; t < P; ++t) th.emplace_back(work);
+    work();
+    for (auto& t : th) t.join();
+    s.donor_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    std::cerr << "[hla] donor stage: " << order.size() << " of " << n_donors << " donors with candidate reads, " << P << " T1K calls at a time ("
+              << per << " threads each), " << s.donor_s << " s\n";
+}
+
 inline Result finish_stage(Session& s) {
     const Config& cfg = s.cfg;
     Result& res = s.res;
@@ -567,40 +714,25 @@ inline Result finish_stage(Session& s) {
         move_file(tmp + "/sample_allele.vcf", dir + "/hla_allele.vcf");
     }
 
-    // 3. donors: candidate reads of each donor's cells
+    // 3. donors: candidate reads of each donor's cells (typed by donor_stage, here unless the pipeline started it after demux)
+    donor_stage(s);
     std::string donors_json = "{}";
-    int n_donors = 0;
-    std::unordered_map<std::string, int> bc2d;
-    if (res.ran && !cfg.donor_assignments.empty() && file_exists(cfg.donor_assignments)) bc2d = read_donors(cfg.donor_assignments, n_donors);
-    if (res.ran && n_donors >= 2) {
-        std::vector<FILE*> fo(n_donors, nullptr);
-        std::vector<uint64_t> nr(n_donors, 0);
-        for (int k = 0; k < n_donors; ++k) fo[k] = std::fopen((tmp + "/donor" + std::to_string(k) + ".fq").c_str(), "wb");
-        std::ifstream cf(tmp + "/sample_candidate.fq");
-        std::string h, sq, p, q;
-        while (std::getline(cf, h) && std::getline(cf, sq) && std::getline(cf, p) && std::getline(cf, q)) {
-            std::string bc = h.substr(h.find('_') == std::string::npos ? h.size() : h.find('_') + 1);
-            const auto sp = bc.find_first_of(" \t"); if (sp != std::string::npos) bc.resize(sp);
-            auto it = bc2d.find(bc);
-            if (it == bc2d.end() || !fo[it->second]) continue;
-            std::fprintf(fo[it->second], "%s\n%s\n%s\n%s\n", h.c_str(), sq.c_str(), p.c_str(), q.c_str());
-            ++nr[it->second];
-        }
-        for (auto* f : fo) if (f) std::fclose(f);
+    if (s.n_donors >= 2) {
         donors_json = "{";
-        for (int k = 0; k < n_donors; ++k) {
+        for (int k = 0; k < s.n_donors; ++k) {
             const std::string name = "donor" + std::to_string(k);
+            const uint64_t nr = s.donor_reads[k];
             std::string calls = "null";
-            if (nr[k] > 0 && t1k_call(s, tmp + "/" + name + ".fq", name, true)) {
+            if (nr > 0 && s.donor_ok[k]) {
                 move_file(tmp + "/" + name + "_genotype.tsv", dir + "/donors/" + name + "_genotype.tsv");
                 calls = genotype_json(dir + "/donors/" + name + "_genotype.tsv");
                 ++res.n_donors_typed;
-            } else if (nr[k] > 0) {
+            } else if (nr > 0) {
                 ++res.n_donors_failed;
                 std::cerr << "[hla] T1K failed for " << name << "; end of its log:\n" << std::flush;
                 run_sh(("tail -n 20 " + shq(s.log) + " 1>&2").c_str());
             }
-            donors_json += std::string(k ? ", " : "") + "\"" + name + "\": {\"candidate_reads\": " + std::to_string(nr[k]) + ", \"calls\": " + calls + "}";
+            donors_json += std::string(k ? ", " : "") + "\"" + name + "\": {\"candidate_reads\": " + std::to_string(nr) + ", \"calls\": " + calls + "}";
         }
         donors_json += "}";
     }
@@ -609,11 +741,9 @@ inline Result finish_stage(Session& s) {
 
     // keep the prefiltered reads (owner-only) so HLA can be typed again once the reads are gone
     if (res.reads_kept > 0) {
-        gzFile g = gzopen((dir + "/hla_candidate_reads.fq.gz").c_str(), "wb6");
-        std::ifstream kf(s.kept_fq, std::ios::binary);
-        std::vector<char> b(1 << 20);
-        while (g && kf) { kf.read(b.data(), b.size()); if (kf.gcount() > 0) gzwrite(g, b.data(), static_cast<unsigned>(kf.gcount())); }
-        if (g) gzclose(g);
+        const std::string gzout = dir + "/hla_candidate_reads.fq.gz";
+        if (s.gz.valid() && s.wait_gz()) move_file(s.gz_tmp, gzout);
+        else gzip_file(s.kept_fq, gzout, "wb6");
     }
     std::string manifest = slurp(cfg.t1k_dir + "/manifest.json");
     while (!manifest.empty() && (manifest.back() == '\n' || manifest.back() == ' ')) manifest.pop_back();
@@ -676,7 +806,7 @@ inline Result run_pending(const std::string& pending_dir, const std::string& t1k
     s.tmp = tmp_dir.empty() ? s.dir + "/.t1k" : tmp_dir;
     if (!file_exists(cfg.t1k_dir + "/hlaidx/hlaidx_rna_seq.fa") || !file_exists(cfg.t1k_dir + "/bin/run-t1k")) { bad.why_not = "T1K or its HLA index not found in " + cfg.t1k_dir; return bad; }
     run_sh(("mkdir -p " + shq(s.tmp)).c_str());
-    auto clean = [&]() { if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str()); };
+    auto clean = [&]() { if (s.gz.valid()) s.gz.wait(); if (!std::getenv("SINGLET_HLA_KEEP_TMP")) run_sh(("rm -rf " + shq(s.tmp)).c_str()); };
     s.kept_fq = s.tmp + "/prefilter.fq";
     if (kept > 0) {   // the reads as the prefilter wrote them, checked against the manifest
         gzFile g = gzopen((pend + "/" + kPendingReads).c_str(), "rb");

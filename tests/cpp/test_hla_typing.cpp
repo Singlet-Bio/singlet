@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -75,6 +76,65 @@ void test_prefilter_bound() {
         }
     }
     CHECK(missed == 0, "missed " + std::to_string(missed) + " of " + std::to_string(tried) + " reads");
+}
+
+void test_rolling_hits() {
+    std::cout << "=== rolling hits() gives the answer of the per-k-mer reference ===\n";
+    std::mt19937 rng(23);
+    std::string allele(3000, 'A');
+    for (auto& c : allele) c = "ACGT"[rng() % 4];
+    singlet::hla::KmerSet ks; ks.add_sequence(allele); ks.build();
+    long n = 0, bad = 0, nhit = 0;
+    for (int rep = 0; rep < 200000; ++rep) {
+        const int L = static_cast<int>(rng() % 160);
+        std::vector<uint8_t> v(L);
+        if (rep % 3 == 0 && L > 0 && L < static_cast<int>(allele.size())) {   // a piece of the allele with a few changes, either strand
+            const size_t st = rng() % (allele.size() - L);
+            std::string s = allele.substr(st, L);
+            if (rep % 2) s = revcomp(s);
+            v = codes(s);
+            for (int k = rng() % 6; k > 0; --k) v[rng() % L] = static_cast<uint8_t>(rng() % 5);
+        } else {
+            const bool with_n = rep % 4 < 2;   // half the random reads hold no N (the fast path of hits)
+            for (auto& b : v) b = static_cast<uint8_t>(with_n && rng() % 23 == 0 ? 4 : rng() % 4);
+        }
+        // one 19-mer of the allele planted at a random offset in a third of the random reads, sometimes with an N in it
+        if (rep % 3 == 1 && L >= 19) {
+            const size_t st = rng() % (allele.size() - 19), at = rng() % (L - 18);
+            auto k = codes(allele.substr(st, 19));
+            for (int i = 0; i < 19; ++i) v[at + i] = k[i];
+            if (rng() % 4 == 0) v[at + rng() % 19] = 4;
+        }
+        const bool a = ks.hits(v.data(), L), b = ks.hits_ref(v.data(), L);
+        ++n; nhit += a; bad += a != b;
+    }
+    CHECK(bad == 0 && nhit > 1000, std::to_string(n) + " reads, " + std::to_string(nhit) + " hits, " + std::to_string(bad) + " disagree");
+}
+
+void test_contains_exact() {
+    std::cout << "=== KmerSet::contains is exact (filter in front of the table) ===\n";
+    std::mt19937_64 rng(31);
+    std::string seq(400000, 'A');
+    for (auto& c : seq) c = "ACGT"[rng() % 4];
+    singlet::hla::KmerSet ks; ks.add_sequence(seq); ks.build();
+    std::unordered_set<uint64_t> ref;
+    constexpr uint64_t mask = (1ull << 38) - 1;
+    uint64_t f = 0, r = 0;
+    for (size_t i = 0; i < seq.size(); ++i) {
+        const uint64_t b = uint64_t(singlet::hla::KmerSet::code(seq[i]));
+        f = ((f << 2) | b) & mask; r = (r >> 2) | ((3 - b) << 36);
+        if (i >= 18) ref.insert(std::min(f, r));
+    }
+    long bad = 0;
+    for (uint64_t k : ref) bad += !ks.contains(k);
+    long probes = 0, in = 0;
+    for (int i = 0; i < 4000000; ++i) {
+        const uint64_t k = rng() & mask;
+        const bool a = ks.contains(k), b = ref.count(k) > 0;
+        bad += a != b; in += a; ++probes;
+    }
+    CHECK(bad == 0 && ks.size() == ref.size(), std::to_string(ref.size()) + " k-mers, " + std::to_string(probes) + " random probes, " +
+          std::to_string(in) + " members, " + std::to_string(bad) + " wrong");
 }
 
 void test_donors_and_json() {
@@ -182,6 +242,22 @@ void test_deferred_route() {
       CHECK(same, "every output is byte-identical to the direct route");
       CHECK(no_timing(read_all(a + "/private/hla/hla_summary.json")) == no_timing(read_all(moved + "/private/hla/hla_summary.json")), "the summary is identical apart from its timing lines");
     }
+    { // the donor stage with two T1K calls at a time, and started before finish_stage as the pipeline does after demux: same outputs
+      const std::string c = d + "/concurrent", e = d + "/early";
+      { Session s; make_stage(s, t1k, c, 10, false); s.cfg.threads = 8; type_sample(s); finish_stage(s); }
+      { Session s; make_stage(s, t1k, e, 10, false); s.cfg.threads = 8; type_sample(s); donor_stage(s);
+        CHECK(s.donors_run && s.n_donors == 2 && s.donor_reads[0] == 5 && s.donor_reads[1] == 5 && s.donor_ok[0] && s.donor_ok[1],
+              "the donor stage types both donors");
+        CHECK(!exists(e + "/private/hla"), "the donor stage writes nothing into the run directory");
+        finish_stage(s); }
+      for (const std::string& r : {c, e}) {
+          bool same = true;
+          for (const char* f : {"hla_genotype.tsv", "hla_allele.tsv", "hla_allele.vcf", "hla_candidate_reads.fq.gz", "donors/donor0_genotype.tsv", "donors/donor1_genotype.tsv"})
+              if (!exists(r + "/private/hla/" + f) || read_all(a + "/private/hla/" + f) != read_all(r + "/private/hla/" + f)) { same = false; std::cout << "  differs: " << f << "\n"; }
+          CHECK(same && no_timing(read_all(a + "/private/hla/hla_summary.json")) == no_timing(read_all(r + "/private/hla/hla_summary.json")),
+                "concurrent or early donor stage: outputs identical to the serial route");
+      }
+    }
     auto retained = [&](const std::string& r, const Result& res, const char* what) {
         CHECK(!res.landed && exists(r + pendRel + "/manifest.json") && !exists(r + "/private/hla/hla_summary.json"), what);
     };
@@ -217,6 +293,8 @@ void test_deferred_route() {
 int main() {
     test_kmers();
     test_prefilter_bound();
+    test_rolling_hits();
+    test_contains_exact();
     test_donors_and_json();
     test_deferred_route();
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";

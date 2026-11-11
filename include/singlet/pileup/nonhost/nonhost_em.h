@@ -27,7 +27,9 @@
 
 #include "nonhost_screener.h"  // MultiHit, NonHostCategory
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -120,6 +122,8 @@ struct EmFit {
     std::vector<double>   hit_rate_sum, weight_sum;
     double                N = 0.0;          // reads that entered the EM
     int                   iterations = 0;
+    size_t                n_groups = 0;      // distinct hit patterns (diagnostics)
+    double                sec_group = 0, sec_invert = 0, sec_iterate = 0, sec_stats = 0;   // wall seconds of the steps (diagnostics only)
 };
 
 namespace em_detail {
@@ -146,6 +150,9 @@ inline EmFit em_fit(
         int      nthreads         = 1) {
     EmFit fit;
     if (multi_hits.empty()) return fit;
+    using em_clock = std::chrono::steady_clock;
+    auto em_t0 = em_clock::now();
+    auto em_lap = [&]() { const auto t1 = em_clock::now(); const double d = std::chrono::duration<double>(t1 - em_t0).count(); em_t0 = t1; return d; };
 
     // ── Step 1: Group the reads by their hit pattern ──────────────────────────
     // A read is the set of (species, hit_rate) it hits after the pre-filter, with
@@ -157,53 +164,120 @@ inline EmFit em_fit(
     // the number of threads that produced them.
 
     using Pattern = std::vector<std::pair<uint32_t, float>>;   // (species_id, rate), species ascending
-    std::map<Pattern, uint64_t> pattern_count;
-
-    for (const auto& mh : multi_hits) {
-        if (mh.viral_hits.empty() && mh.microbial_hits.empty()) continue;
-
-        // A key in both lists takes the maximum rate. After tag_microbial_keys() the lists share no key, so this only
-        // matters for untagged input (the unit tests), where an id shared by both indices is one species.
-        std::map<uint32_t, float> merged;
-        for (const auto& [sid, rate] : mh.viral_hits)
-            merged[sid] = std::max(merged[sid], rate);   // default-initialises to 0.0
-        for (const auto& [sid, rate] : mh.microbial_hits)
-            merged[sid] = std::max(merged[sid], rate);
-
-        // Pre-filter: hits with hit_rate < min_prefilter_hr are almost always spurious
-        // random minimizer collisions and must not enter the EM.
-        Pattern pat;
-        pat.reserve(merged.size());
-        for (const auto& [sid, rate] : merged) {
-            if (rate <= 0.0f) continue;
-            if (min_prefilter_hr > 0.0f && rate < min_prefilter_hr) continue;
-            pat.emplace_back(sid, rate);
+    // Each thread counts the patterns of a contiguous range of reads in a hash map and sorts its distinct patterns; the sorted lists are
+    // merged pairwise (equal patterns add their counts). The result is the sorted list of distinct patterns with their counts, the
+    // content of the std::map<Pattern, uint64_t> the serial loop built, whatever the thread count (counts are integers, and the
+    // order of patterns is the lexicographic order of (species, rate) pairs).
+    struct PatHash {
+        size_t operator()(const Pattern& p) const noexcept {
+            uint64_t h = 1469598103934665603ULL;
+            for (const auto& [sid, rate] : p) {
+                uint32_t rb;
+                std::memcpy(&rb, &rate, sizeof rb);
+                h ^= sid; h *= 1099511628211ULL;
+                h ^= rb;  h *= 1099511628211ULL;
+            }
+            return static_cast<size_t>(h ^ (h >> 29));
         }
-        if (!pat.empty()) ++pattern_count[std::move(pat)];
+    };
+    using PatCount = std::vector<std::pair<Pattern, uint64_t>>;
+    const size_t nmh = multi_hits.size();
+    const int nt1 = (nmh >= 200000) ? std::max(1, nthreads) : 1;
+    std::vector<PatCount> parts(nt1);
+    auto build_part = [&](int t) {
+        const size_t rb = nmh * static_cast<size_t>(t) / nt1, re = nmh * static_cast<size_t>(t + 1) / nt1;
+        std::unordered_map<Pattern, uint64_t, PatHash> local;
+        std::vector<std::pair<uint32_t, float>> tmp;
+        for (size_t i = rb; i < re; ++i) {
+            const auto& mh = multi_hits[i];
+            if (mh.viral_hits.empty() && mh.microbial_hits.empty()) continue;
+            // A key in both lists takes the maximum rate (0.0 floor). After tag_microbial_keys() the lists share no key, so this only
+            // matters for untagged input (the unit tests), where an id shared by both indices is one species.
+            tmp.clear();
+            for (const auto& [sid, rate] : mh.viral_hits) tmp.emplace_back(sid, std::max(0.0f, rate));
+            for (const auto& [sid, rate] : mh.microbial_hits) tmp.emplace_back(sid, std::max(0.0f, rate));
+            std::sort(tmp.begin(), tmp.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+            // Pre-filter: hits with hit_rate < min_prefilter_hr are almost always spurious
+            // random minimizer collisions and must not enter the EM.
+            Pattern pat;
+            pat.reserve(tmp.size());
+            for (size_t x = 0; x < tmp.size();) {
+                float m = 0.0f;
+                size_t z = x;
+                for (; z < tmp.size() && tmp[z].first == tmp[x].first; ++z) m = std::max(m, tmp[z].second);
+                const uint32_t sid = tmp[x].first;
+                x = z;
+                if (m <= 0.0f) continue;
+                if (min_prefilter_hr > 0.0f && m < min_prefilter_hr) continue;
+                pat.emplace_back(sid, m);
+            }
+            if (!pat.empty()) ++local[std::move(pat)];
+        }
+        PatCount pc;
+        pc.reserve(local.size());
+        while (!local.empty()) {
+            auto nh = local.extract(local.begin());
+            pc.emplace_back(std::move(nh.key()), nh.mapped());
+        }
+        std::sort(pc.begin(), pc.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        parts[t] = std::move(pc);
+    };
+    if (nt1 == 1) {
+        build_part(0);
+    } else {
+        std::vector<std::thread> ts;
+        for (int t = 0; t < nt1; ++t) ts.emplace_back(build_part, t);
+        for (auto& th : ts) th.join();
     }
+    auto merge2 = [](PatCount&& x, PatCount&& y) {
+        PatCount out;
+        out.reserve(x.size() + y.size());
+        size_t i = 0, j = 0;
+        while (i < x.size() && j < y.size()) {
+            if (x[i].first < y[j].first) out.push_back(std::move(x[i++]));
+            else if (y[j].first < x[i].first) out.push_back(std::move(y[j++]));
+            else { out.push_back(std::move(x[i])); out.back().second += y[j].second; ++i; ++j; }
+        }
+        while (i < x.size()) out.push_back(std::move(x[i++]));
+        while (j < y.size()) out.push_back(std::move(y[j++]));
+        return out;
+    };
+    while (parts.size() > 1) {
+        std::vector<PatCount> next((parts.size() + 1) / 2);
+        std::vector<std::thread> ts;
+        for (size_t q = 0; q < next.size(); ++q) {
+            if (2 * q + 1 < parts.size()) ts.emplace_back([&, q]() { next[q] = merge2(std::move(parts[2 * q]), std::move(parts[2 * q + 1])); });
+            else next[q] = std::move(parts[2 * q]);
+        }
+        for (auto& th : ts) th.join();
+        parts = std::move(next);
+    }
+    const PatCount pattern_count = parts.empty() ? PatCount{} : std::move(parts[0]);
 
     // species index = rank of the species id
     std::vector<uint32_t>& idx_to_species = fit.idx_to_species;   // ascending species ids
     {
-        std::set<uint32_t> ids;
+        std::unordered_set<uint32_t> ids;
         for (const auto& [pat, cnt] : pattern_count)
             for (const auto& [sid, rate] : pat) ids.insert(sid);
         idx_to_species.assign(ids.begin(), ids.end());
+        std::sort(idx_to_species.begin(), idx_to_species.end());
     }
     struct Group { std::vector<std::pair<uint32_t, float>> hits; double count; };   // (species index, rate)
-    std::vector<Group> groups;
-    groups.reserve(pattern_count.size());
+    std::vector<Group> groups(pattern_count.size());
     uint64_t n_reads_total = 0;
-    for (const auto& [pat, cnt] : pattern_count) {
-        Group g;
-        g.count = static_cast<double>(cnt);
-        n_reads_total += cnt;
-        for (const auto& [sid, rate] : pat) {
-            const auto it = std::lower_bound(idx_to_species.begin(), idx_to_species.end(), sid);
-            g.hits.emplace_back(static_cast<uint32_t>(it - idx_to_species.begin()), rate);
+    for (const auto& [pat, cnt] : pattern_count) n_reads_total += cnt;
+    em_detail::par_ranges(pattern_count.size(), (pattern_count.size() >= 20000) ? std::max(1, nthreads) : 1, nullptr, [&](size_t b, size_t e) {
+        for (size_t gi = b; gi < e; ++gi) {
+            Group& g = groups[gi];
+            g.count = static_cast<double>(pattern_count[gi].second);
+            g.hits.reserve(pattern_count[gi].first.size());
+            for (const auto& [sid, rate] : pattern_count[gi].first) {
+                const auto it = std::lower_bound(idx_to_species.begin(), idx_to_species.end(), sid);
+                g.hits.emplace_back(static_cast<uint32_t>(it - idx_to_species.begin()), rate);
+            }
         }
-        groups.push_back(std::move(g));
-    }
+    });
 
     const uint32_t K = static_cast<uint32_t>(idx_to_species.size());
     const double   N = static_cast<double>(n_reads_total);   // number of nonhost reads
@@ -229,6 +303,8 @@ inline EmFit em_fit(
             prior_hr[k] = (prior_count[k] > 0.0) ? prior_hr[k] / prior_count[k] : 0.0;
     }
 
+    fit.sec_group = em_lap();
+    fit.n_groups = groups.size();
     // Inverted lists: per species index its (pattern, rate) terms in pattern order; species ranges cut by term count
     const size_t G = groups.size();
     std::vector<size_t> inv_off(K + 1, 0);
@@ -251,12 +327,26 @@ inline EmFit em_fit(
             kcut[t] = k;
         }
     }
+    // The patterns' terms and counts as flat arrays (the same terms in the same order as groups[gi].hits): the iterations read them
+    // contiguously instead of through each pattern's own vector. The sums are the same operations in the same order.
+    std::vector<size_t> gh_off(G + 1, 0);
+    for (size_t gi = 0; gi < G; ++gi) gh_off[gi + 1] = gh_off[gi] + groups[gi].hits.size();
+    std::vector<uint32_t> gh_k(gh_off[G]);
+    std::vector<float> gh_r(gh_off[G]);
+    std::vector<double> gcnt(G);
+    em_detail::par_ranges(G, nt, nullptr, [&](size_t b, size_t e) {
+        for (size_t gi = b; gi < e; ++gi) {
+            size_t q = gh_off[gi];
+            for (const auto& kh : groups[gi].hits) { gh_k[q] = kh.first; gh_r[q] = kh.second; ++q; }
+            gcnt[gi] = groups[gi].count;
+        }
+    });
     std::vector<double> denom(G);
     auto compute_denoms = [&](const std::vector<double>& th) {
         em_detail::par_ranges(G, nt, nullptr, [&](size_t b, size_t e) {
             for (size_t gi = b; gi < e; ++gi) {
                 double d = 0.0;
-                for (const auto& kh : groups[gi].hits) d += th[kh.first] * static_cast<double>(kh.second);
+                for (size_t q = gh_off[gi], qe = gh_off[gi + 1]; q < qe; ++q) d += th[gh_k[q]] * static_cast<double>(gh_r[q]);
                 denom[gi] = d;
             }
         });
@@ -268,6 +358,7 @@ inline EmFit em_fit(
     std::vector<double> theta_new(K);
 
     // ── Step 3: EM iteration ─────────────────────────────────────────────────
+    fit.sec_invert = em_lap();
     int iter = 0;
     for (; iter < max_iter; ++iter) {
         // E-step: θ_new[k] = Σ over patterns (in order) of count * θ_k * h_ik / denom; patterns with denom <= 0 are skipped
@@ -278,7 +369,7 @@ inline EmFit em_fit(
                 for (size_t q = inv_off[k]; q < inv_off[k + 1]; ++q) {
                     const double d = denom[inv[q].first];
                     if (d <= 0.0) continue;  // numerical safety
-                    acc += groups[inv[q].first].count * (theta[k] * static_cast<double>(inv[q].second) / d);
+                    acc += gcnt[inv[q].first] * (theta[k] * static_cast<double>(inv[q].second) / d);
                 }
                 theta_new[k] = acc;
             }
@@ -311,6 +402,7 @@ inline EmFit em_fit(
         }
     }
     fit.iterations = iter;
+    fit.sec_iterate = em_lap();
 
     // ── Step 4: Compute per-species stats ────────────────────────────────────
     // mean_hit_rate[k] = Σ_i (h_ik * w_ik) / Σ_i w_ik   (posterior-weighted mean)
@@ -332,6 +424,7 @@ inline EmFit em_fit(
             fit.weight_sum[k]   = ws;
         }
     });
+    fit.sec_stats = em_lap();
     return fit;
 }
 

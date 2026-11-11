@@ -15,6 +15,7 @@
 //
 // All lookups are O(1) hash or O(log n) interval tree.
 
+#include "../thread_name.h"
 #include <htslib/sam.h>
 #include <htslib/hts.h>
 #include <htslib/bgzf.h>
@@ -592,7 +593,7 @@ public:
         if (!config_.edit_path.empty() && !take_pool_edit()) edit_thread = std::thread([&]() { edit_ok = parse_edit_panel(); });
         // TE loci (te_counts.h): loaded beside the gene model; exonic reads stay with the genes, so a gene model is required
         std::thread te_thread;
-        if (need_exons && !config_.te_gtf_path.empty())
+        if (need_exons && !config_.te_gtf_path.empty() && !take_pool_te())
             te_thread = std::thread([&]() { has_te_ = te_model_.load_gtf(config_.te_gtf_path) && !te_model_.empty(); });
 
         if (snp_thread.joinable()) snp_thread.join();
@@ -1458,6 +1459,7 @@ public:
         mol_store_.set_staging(false);   // seals: the groups as record_read() would have built them, before anything reads them
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
+        singlet::ThreadNameScope tn_handoff("sg-handoff");   // the hand-off pass and the GPU pileup's host part (per-thread CPU by role)
         if (gpu_covers_ && !gpu_handoff_pass(stats)) {
             std::cerr << "[gpu_pileup] ERROR: the hand-off pass failed (see above); rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
@@ -2238,6 +2240,7 @@ public:
             e16_.rbg = singlet_tail::cut("rrnabg");
             e16_.ok = gpu_handoff_device_pass(e16_.reg, e16_.o, e16_.nRrna, e16_.sR, e16_.zc, e16_.rbg);
             if (!e16_.ok) { e16_.zc = false; e16_.rbg = false; }
+            else gpu_region_trim(e16_.reg, false);   // the stream still reads read -> record
             e16_.done = singlet_tail::now();
             if (e16_.rbg) {   // the region's arrays stay mapped until the join (e16_early_join without zc; zc: the input's mapping, gpu_pileup_apply)
                 const SigRec* S = e16_.reg.at<SigRec>(e16_.reg.hdr()->oSigs); const uint8_t* Q = e16_.reg.at<uint8_t>(e16_.reg.hdr()->oSeq);
@@ -2507,6 +2510,7 @@ public:
     // strand votes (non-mito contigs), wrong_strand, multigene, cross_gene_intron counters, poly(A) records (NH 1, gene assigned,
     // forward-oriented library) and VDJ usage. Same conditions as the loop: primary, barcode in the set, past the MAPQ gate.
     bool gpu_host_pass(const singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::PileupOutput& out, PileupStats& stats) {
+        singlet::ThreadNameScope tn_hp("sg-hostpass");   // its chunks' threads inherit it (per-thread CPU by role)
         // the arrays as [leading part read in place | vector] (E16; without leading parts, the vectors)
         const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
         const auto A = singlet_engine_gpu::pileupCat<AlnRec>(in.preAlns, in.alns.data(), in.alns.size());
@@ -2876,10 +2880,26 @@ public:
             if (e16_.rbg) { nRrna = 0; sR = -1; e16_.rrnaPending = true; }   // rrnabg: added by e16_rrna_join
             else { nRrna = e16_.nRrna; sR = e16_.sR; }
             e16_.o.log += "; E16: done " + std::to_string(e16_.lead) + " s before the stream ended";
-            return gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
+            const bool ok = gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
+            if (ok) gpu_region_trim(R, true);
+            return ok;
         }
         if (!gpu_handoff_device_pass(R, oLocal, nRrna, sR)) return false;
-        return gpu_handoff_merge(stats, H, oLocal, nRrna, sR, false);
+        const bool ok = gpu_handoff_merge(stats, H, oLocal, nRrna, sR, false);
+        if (ok) gpu_region_trim(R, true);
+        return ok;
+    }
+    // the region's per-read arrays (STAR's entries and low-quality masks, read -> record) are read only by e2ePass and (read -> record) by the
+    // stream's check in Collector::add. Once e2ePass is done their pages go back to the system (a hole in the memfd: 44 bytes per read that
+    // stayed until the pileup's input went; e2ePass unlocked them, E16 keepPinned keeps only the records locked); read -> record only once the
+    // stream drained (withRR). The records the pileup reads stay. SINGLET_E16_OFF=trim keeps them.
+    void gpu_region_trim(const singlet_engine_gpu::E2ERegion& R, bool withRR) {
+        if (R.base == nullptr || !singlet_tail::cut("trim")) return;
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
+        R.drop(H.oEntries, H.nReads * sizeof(gpupileup::ReadEntry));
+        if (H.oQMask) R.drop(H.oQMask, H.nReads * 8ull * singlet_qmask::words());
+        if (withRR) R.drop(H.oReadRecord, H.nReads * 4);
+        singlet_tail::mark("parent: region's per-read arrays dropped%s", withRR ? " (with read -> record)" : "");
     }
     // the hand-off pass's device part (e2ePass on the region R) and the rRNA detector on the reads it sends to the host; it only reads the
     // engine's state (barcode indexes, corrector, detector, sizes fixed before the stream), so it may run on its own thread during the stream (E16)
@@ -3238,10 +3258,11 @@ public:
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
-        allsite_from_input(in);   // D-101: host pass over the same records (the input lives until this function returns)
+        { singlet::ThreadNameScope tn_as("sg-allsite"); allsite_from_input(in); }   // D-101: host pass over the same records (the input lives until this function returns)
         // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
         // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
         auto applyOut = [&]() {
+            singlet::ThreadNameScope tn_put("sg-gpput");   // the puts' threads inherit it (per-thread CPU by role)
             if (singlet_tail::cut("puts")) {   // E16 "puts" (level 5): one thread per accumulator (each fills its own vectors in the same order)
                 std::thread p1([&] { gpu_put(exon_acc_, out.exon); }), p2([&] { gpu_put(intron_acc_, out.intron); }), p3([&] { gpu_put(amb_acc_, out.amb); }),
                     p4([&] { gpu_put(snp_ad_, out.snpAd); }), p5([&] { gpu_put(snp_dp_, out.snpDp); }), p6([&] { gpu_put(mt_acc_rev_, out.mtRev); });
@@ -3944,8 +3965,8 @@ private:
                 if (post_on) B.post.resize(kRecs);
                 for (auto& r : B.rec) r = bam_init1();
             }
-            th = std::thread([this] { read(); });
-            if (post_on) th_post = std::thread([this] { post(); });
+            th = std::thread([this] { singlet::set_thread_name("sg-sreader"); read(); });
+            if (post_on) th_post = std::thread([this] { singlet::set_thread_name("sg-spost"); post(); });
         }
         ~LookAhead() {
             finish();
@@ -4543,11 +4564,17 @@ public:
         std::vector<EditSite> sites; std::vector<std::string> chroms; double sec = 0;
     };
     static std::vector<std::unique_ptr<PoolEdit>>& pool_edits() { static std::vector<std::unique_ptr<PoolEdit>> v; return v; }
+    struct PoolTe {     // TE loci (te_counts.h): TeModel::load_gtf's model
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        TeModel te; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolTe>>& pool_tes() { static std::vector<std::unique_ptr<PoolTe>> v; return v; }
 
     // In the pool, before any sample is forked: parse each distinct file of `snp_paths` and `gtf_paths` once (each file on a thread of its
     // own, as load_references runs its two loaders). Returns a log line.
     static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths,
-                                               const std::vector<std::string>& edit_paths = {}) {
+                                               const std::vector<std::string>& edit_paths = {},
+                                               const std::vector<std::string>& te_paths = {}) {
         std::string log;
         if (!pool_refs_enabled()) return "off (SINGLET_POOL_REFS=0)";
         std::vector<std::thread> th;
@@ -4604,6 +4631,21 @@ public:
                 e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             });
         }
+        for (const std::string& p : te_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "TE annotation " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_tes()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_tes().push_back(std::make_unique<PoolTe>());
+            PoolTe* e = pool_tes().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                e->ok = e->te.load_gtf(e->path) && !e->te.empty();
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
         for (auto& t : th) t.join();
         char b[64];
         for (const auto& e : pool_snps()) {
@@ -4618,6 +4660,10 @@ public:
         for (const auto& e : pool_edits()) {
             std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
             log += "editing panel " + e->path + ": " + (e->ok ? std::to_string(e->sites.size()) + " sites" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_tes()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "TE annotation " + e->path + ": " + (e->ok ? std::to_string(e->te.n_loci()) + " loci" : std::string("failed")) + b;
         }
         return log.empty() ? "no reference files" : log;
     }
@@ -4648,6 +4694,20 @@ private:
             e->taken = true;
             std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites from " << config_.edit_path
                       << " (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // the TE thread's result from the pool, for config_.te_gtf_path (false: the thread runs)
+    bool take_pool_te() {
+        if (pool_tes().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.te_gtf_path, id)) return false;
+        for (auto& e : pool_tes()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            te_model_ = std::move(e->te);
+            has_te_ = true;
+            e->taken = true;
             return true;
         }
         return false;

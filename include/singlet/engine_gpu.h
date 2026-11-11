@@ -101,6 +101,13 @@ struct E2ERegion {
         return true;
     }
     void release() { if (base != nullptr) munmap(base, cap); base = nullptr; cap = 0; if (fd >= 0) close(fd); fd = -1; }
+    // the pages wholly inside [off, off + len) go back to the system (a hole in the memfd: every mapping then reads zeros there); for arrays no
+    // process reads again
+    void drop(uint64_t off, uint64_t len) const {
+        if (base == nullptr || off == 0 || len == 0 || off >= cap) return;
+        const uint64_t a = (off + 4095) & ~4095ull, b = std::min(off + len, cap) & ~4095ull;
+        if (b > a) madvise(base + a, b - a, MADV_REMOVE);
+    }
 };
 // one per process: created by the pipeline before it forks STAR (the child inherits the fd)
 inline E2ERegion& e2eRegion() { static E2ERegion r; return r; }
@@ -204,9 +211,78 @@ template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U, class... A> void construct(U* p, A&&... a) { ::new ((void*) p) U(std::forward<A>(a)...); }
 };
 template <class T> using NoInitVector = std::vector<T, NoInitAlloc<T>>;
+// E16 handover: release the whole pages inside [p, p + len) (their contents read as zeros afterwards; the allocation stays valid)
+inline void dropPages(const void* p, uint64_t len) {
+    const uint64_t a = ((uint64_t) p + 4095) & ~4095ull, b = ((uint64_t) p + len) & ~4095ull;
+    if (len && b > a) madvise((void*) a, b - a, MADV_DONTNEED);
+}
+
+// Read sequence kept 2 bits per base (A0 C1 G2 T3) with an exact sparse record of the N bases (code 4), in place of one byte per base.
+// Blocks (a block is a run of reads, as the .1fq stores them) start on a byte: base k of block b is at bits 2 * (k & 3) of byte byteAt[b] + k / 4,
+// so threads decoding different blocks never share a byte. An N base is stored as A in the plane and its position in runs[b], sorted and
+// disjoint (global base positions); get() returns the original codes byte for byte.
+struct NRun { uint64_t pos, len; };
+struct PackedSeq {
+    uint64_t total = 0;                       // bases
+    std::vector<uint64_t> baseAt, byteAt;     // nBlocks + 1: first base, first byte of each block
+    NoInitVector<uint8_t> w;
+    std::vector<std::vector<NRun>> runs;      // per block
+    uint32_t blockOf(uint64_t p) const { return (uint32_t) (std::upper_bound(baseAt.begin(), baseAt.end(), p) - baseAt.begin()) - 1; }
+    // the codes of bases [p, p + len) into dst (any span, over block edges too)
+    void get(uint64_t p, uint64_t len, char* dst) const {
+        static const struct Tab { uint32_t t[256]; Tab() { for (int v = 0; v < 256; v++) { unsigned char b[4] = {(unsigned char) (v & 3), (unsigned char) ((v >> 2) & 3), (unsigned char) ((v >> 4) & 3), (unsigned char) (v >> 6)}; std::memcpy(&t[v], b, 4); } } } tab;
+        while (len > 0) {
+            const uint32_t b = blockOf(p);
+            const uint64_t e = std::min<uint64_t>(p + len, baseAt[b + 1]);
+            const uint64_t n = e - p, k = p - baseAt[b];
+            const uint8_t* s = w.data() + byteAt[b];
+            uint64_t i = 0;
+            for (; i < n && ((k + i) & 3) != 0; i++) dst[i] = (char) ((s[(k + i) >> 2] >> (2 * ((k + i) & 3))) & 3);
+            for (; i + 4 <= n; i += 4) std::memcpy(dst + i, &tab.t[s[(k + i) >> 2]], 4);
+            for (; i < n; i++) dst[i] = (char) ((s[(k + i) >> 2] >> (2 * ((k + i) & 3))) & 3);
+            const std::vector<NRun>& R = runs[b];
+            size_t lo = 0, hi = R.size();
+            while (lo < hi) { const size_t mid = (lo + hi) / 2; if (R[mid].pos + R[mid].len <= p) lo = mid + 1; else hi = mid; }
+            for (; lo < R.size() && R[lo].pos < e; lo++) {
+                const uint64_t a = std::max<uint64_t>(R[lo].pos, p), z = std::min<uint64_t>(R[lo].pos + R[lo].len, e);
+                std::memset(dst + (a - p), 4, z - a);
+            }
+            dst += n; p = e; len -= n;
+        }
+    }
+};
+// Packs one block's reads in order into its bytes (d), recording N runs. Codes above 3 must be 4 (bad is set otherwise).
+struct PackedSeqWriter {
+    uint8_t* d; uint64_t base; std::vector<NRun>* runs;   // the block's bytes, its first base, its runs
+    uint64_t k = 0; uint8_t acc = 0; bool bad = false;
+    PackedSeqWriter(uint8_t* d_, uint64_t base_, std::vector<NRun>* r) : d(d_), base(base_), runs(r) {}
+    void put1(uint8_t c) {
+        if (c > 3) {
+            if (c != 4) bad = true;
+            const uint64_t p = base + k;
+            if (!runs->empty() && runs->back().pos + runs->back().len == p) runs->back().len++; else runs->push_back(NRun{p, 1});
+            c = 0;
+        }
+        acc = (uint8_t) (acc | (c << (2 * (k & 3))));
+        if ((k & 3) == 3) { d[k >> 2] = acc; acc = 0; }
+        k++;
+    }
+    void put(const uint8_t* s, uint32_t L) {
+        uint32_t j = 0;
+        while (j < L && (k & 3) != 0) put1(s[j++]);
+        for (; j + 4 <= L; j += 4) {
+            uint32_t v; std::memcpy(&v, s + j, 4);
+            if (v & 0xFCFCFCFCu) { for (int x = 0; x < 4; x++) put1(s[j + x]); }
+            else { d[k >> 2] = (uint8_t) ((v & 3u) | ((v >> 6) & 0xCu) | ((v >> 12) & 0x30u) | ((v >> 18) & 0xC0u)); k += 4; }
+        }
+        while (j < L) put1(s[j++]);
+    }
+    void finish() { if ((k & 3) != 0) d[k >> 2] = acc; }
+};
 
 struct Input {
     NoInitVector<char> seq;          // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4); not zero-filled on resize (E13)
+    std::shared_ptr<const PackedSeq> pseq;   // E13 with the 2-bit store: the sequences live here and `seq` stays empty (the engine decodes the spans it needs)
     NoInitVector<uint64_t> off{0};   // seq[off[i] .. off[i+1]) is sequence i
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends
@@ -224,6 +300,11 @@ struct Input {
     // E8: with e2e set, mapDistinct also builds the pileup's records on the device and copies them into e2e (E2EHeader); the host lane
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
     E2ERegion* e2e = nullptr;
+    // E16 "handover" (level 5): the caller reads no host record (out.seq, out.blob) after mapDistinct, so the records' phase releases their
+    // pages as it uploads them to build the region's records (Output::hostDropped says it did). When the
+    // run would then not reach level 5 (a fallback that reads them), mapDistinct fails with Output::handoverRetry and the caller runs it again
+    // without the handover, so every fallback finds the records as before
+    bool e2eHandover = false;
     int outSAMmapqUnique = 255; uint16_t outSAMflagAND = 65535, outSAMflagOR = 0;
     // E10 (level >= 2, with e2e): per read what the host decode packs (the target ingest format: CB+UMI key and quality bits), from which the
     // device builds the per-read entries; and STAR's options the per-read products depend on
@@ -254,6 +335,8 @@ struct Output {
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
+    bool hostDropped = false;           // E16 handover: seq and blob keep their sizes, but their pages were released (zeros); offsets intact
+    bool handoverRetry = false;         // E16 handover: the call failed because a fallback would read the released records; run it again without
     bool e2eOk = false;                 // E8: the records are in Input::e2e (arrays and nRec..nSeq; readRecord and magic are the caller's)
     // E10: what the device computed for the reads with a record (valid with e10.ok)
     struct E10 {
