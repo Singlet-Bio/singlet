@@ -9998,7 +9998,9 @@ static int singlet_main(int argc, char* argv[]) {
     // with: --tail-threads N or SINGLET_TAIL_THREADS=N, taken when above --threads. Every export stage is thread-count independent (fixed chunking,
     // ordered reductions), so the outputs do not change.
     if (tail_threads <= 0) if (const char* e = std::getenv("SINGLET_TAIL_THREADS")) tail_threads = std::atoi(e);
-    if (tail_threads > export_cfg.threads) {
+    // SINGLET_TAIL_THREADS_EXACT=1 (measurement only): the value is taken as given, also below --threads, to time the export phase at the thread count of a smaller run.
+    const bool tail_exact = std::getenv("SINGLET_TAIL_THREADS_EXACT") != nullptr && tail_threads > 0;
+    if (tail_threads > export_cfg.threads || (tail_exact && tail_threads != export_cfg.threads)) {
         std::cerr << "[singlet] tail threads: " << export_cfg.threads << " -> " << tail_threads << " for the export phase and the HLA donor stage" << "\n";
         export_cfg.threads = tail_threads;
     }
@@ -10222,7 +10224,7 @@ static int singlet_main(int argc, char* argv[]) {
                 hla_bg.donor_th = std::thread([&hla_bg, tail_n] {
                     if (hla_bg.th.joinable()) hla_bg.th.join();
                     // the sample stage is over: the donors are typed with the tail's thread count (T1K's calls do not depend on it)
-                    if (tail_n > hla_bg.s.cfg.threads) { hla_bg.s.cfg.threads = tail_n; hla_bg.s.T = std::to_string(tail_n); }
+                    if (tail_n > hla_bg.s.cfg.threads || std::getenv("SINGLET_TAIL_THREADS_EXACT")) { hla_bg.s.cfg.threads = tail_n; hla_bg.s.T = std::to_string(tail_n); }
                     singlet::hla::donor_stage(hla_bg.s);
                 });
                 std::cerr << "[hla] donor stage started after demux\n";
