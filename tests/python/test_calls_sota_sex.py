@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 from singlet.celllabels import sex as SX
 
 _p = Path(__file__).resolve().parents[2] / "bench" / "calls-sota" / "sex" / "score.py"
