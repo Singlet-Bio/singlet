@@ -1808,7 +1808,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     // mt_allele_counts_rev = the reverse-strand subset (forward-strand count = total - reverse).
     // Every barcode stays a column, so the barcode list matches the other members. Calls are metadata (D-137..D-141): the members hold
     // the kept universe, not the called cells only (safeguards::uncalled_mode: 0 called cells only, 1 the universe in the same members,
-    // 2 called cells in these members and the uncalled barcodes in mt_allele_counts_uncalled*). The pooled counts of the uncalled
+    // 2 called cells in these members, no per-barcode uncalled mt file, 3 as 2 plus mt_allele_counts_uncalled*). The pooled counts of the uncalled
     // barcodes are always written (mt_allele_counts_uncalled.tsv.gz).
     if (pileup_cfg.count_mt && mt_csc.data.size() > 0) {
         std::filesystem::create_directories(out_prefix + "/private");
@@ -1831,7 +1831,7 @@ inline ExportStats export_results(const PileupEngine& engine,
                 if (whole) write_matrix("private/mt_allele_counts_rev", mt_rev_csc, mt_feat_names);
                 else { auto m = safeguards::select_columns(mt_rev_csc, *called_mask, 1); write_matrix("private/mt_allele_counts_rev", m, mt_feat_names); }
             });
-        if (has_call && unc_mode == 2) {
+        if (has_call && unc_mode == 3) {
             SINGLET_TIMED(write_threads, [&, called_mask]() {
                 auto m = safeguards::select_columns(mt_csc, *called_mask, 0);
                 write_matrix("private/mt_allele_counts_uncalled", m, mt_feat_names);
@@ -2036,7 +2036,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (!ok_ctsv) record_failed_write("private/allsite/cells.tsv.gz");
         if (!ok_sites) record_failed_write("private/allsite/sites.tsv.gz");
         const auto stats = allsite::store_stats(store, calls, donor_of, cells, bytes, n_called_cols);
-        if (unc_mode == 2 && !uncalled_cells.empty()) {   // the uncalled barcodes in files of their own; the called-cell members above are as before
+        if (unc_mode >= 2 && !uncalled_cells.empty()) {   // the uncalled barcodes in files of their own; the called-cell members above are as before
             allsite::DeltaStore ustore;
             const std::vector<std::string> uassign(uncalled_cells.size(), "uncalled");
             allsite::build_store(engine.allsite(), nb, uncalled_cells, donor_of, calls, ustore);
@@ -2064,7 +2064,7 @@ inline ExportStats export_results(const PileupEngine& engine,
             std::vector<uint64_t> n_iv;
             const long long nm = safeguards::write_callable_masks(out_prefix + "/private/donor", demux_result, callable_depths, engine.snp_names(),
                                                                   engine.contig_names(), &engine.allsite(), &calls, &n_iv);
-            if (nm < 0) record_failed_write("private/donor/donor0_callable.bed.gz");
+            if (nm < 0) record_failed_write("private/donor/donor0_callable.rle.gz");
             else std::cerr << "[callable] " << nm << " intervals over " << K << " donors (panel and all-site sites)\n";
             result.failed_writes = failed_writes;
         }
@@ -2074,7 +2074,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     else if (demux_thread_ran && demux_result.n_donors_k > 0 && have_callable_depths) {   // no all-site member: the panel sites only
         const long long nm = safeguards::write_callable_masks(out_prefix + "/private/donor", demux_result, callable_depths, engine.snp_names(),
                                                               engine.contig_names(), nullptr, nullptr);
-        if (nm < 0) record_failed_write("private/donor/donor0_callable.bed.gz");
+        if (nm < 0) record_failed_write("private/donor/donor0_callable.rle.gz");
         else std::cerr << "[callable] " << nm << " intervals over " << demux_result.n_donors_k << " donors (panel sites)\n";
         result.failed_writes = failed_writes;
     }

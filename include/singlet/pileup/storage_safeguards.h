@@ -10,7 +10,7 @@
 //  * The barcode set of the two private members that used to hold called cells only (private/mt_allele_counts*, private/allsite/*) is the
 //    kept universe (every matrix column, barcodes with >= 5 reads), or, in mode 2, the uncalled part goes to files of its own and the
 //    called-cell members stay as they were (uncalled_mode()).
-//  * private/donor/donor<k>_callable.bed.gz: where each donor's depth supports a confident genotype, so that the donor's variant file can
+//  * private/donor/donor<k>_callable.rle.gz: where each donor's depth supports a confident genotype, so that the donor's variant file can
 //    say "matches the reference" instead of "not seen" (genotype::donor_gt_index is the rule of the VCF's GT column).
 
 #pragma once
@@ -35,14 +35,15 @@ namespace singlet { namespace safeguards {
 // Barcode set of the private chrM allele-count and all-site members.
 //   0  called cells only (the layout before this change)
 //   1  the kept universe in the same members (uncalled columns after the called ones in the all-site store)
-//   2  called cells in the same members, as before; the uncalled barcodes in separate members (mt_allele_counts_uncalled*,
-//      allsite/allele_delta_uncalled.bin, allsite/cells_uncalled.tsv.gz)
+//   2  called cells in the same members, as before; the uncalled barcodes of the all-site member in separate files
+//      (allsite/allele_delta_uncalled.bin, allsite/cells_uncalled.tsv.gz); the uncalled mt counts only pooled
+//   3  as 2, and the per-barcode uncalled mt counts too (mt_allele_counts_uncalled*.1pz)
 // SINGLET_UNCALLED_MODE overrides the default (measurement runs).
 constexpr int kDefaultUncalledMode = 2;   // measured on the gate samples: mode 1 grew the two members by 63-207% (mt) and 65-81% (all-site), far over 15%
 inline int uncalled_mode() {
     if (const char* e = std::getenv("SINGLET_UNCALLED_MODE")) {
         const int m = std::atoi(e);
-        if (m >= 0 && m <= 2) return m;
+        if (m >= 0 && m <= 3) return m;
     }
     return kDefaultUncalledMode;
 }
@@ -110,7 +111,8 @@ inline long long write_mt_uncalled_pooled(const std::string& path, const CSC& to
 // One donor's covered position: contig index into the writer's table, 0-based position, donor depths.
 struct Covered { uint32_t ci; int32_t pos; uint32_t ad, dp; };
 
-// private/donor/donor<k>_callable.bed.gz for every donor: BED3 intervals (0-based, half open) of the positions where the donor's summed depth
+// private/donor/donor<k>_callable.rle.gz for every donor: run-length coded intervals (per contig a ">name" line, then one "gap<TAB>length" line per
+// interval: start = previous end + gap, end = start + length, 0-based half open) of the positions where the donor's summed depth
 // gives a confident genotype (genotype::donor_gt_index >= 0), from the panel sites (aggregated depths of the donor's cells) and from the
 // all-site member's sites (r, calls; null without it). A position in both takes the deeper record. Adjacent positions are merged.
 // Returns the intervals written over all donors, or -1 on a write failure.
@@ -153,19 +155,22 @@ inline long long write_callable_masks(const std::string& dir, const DemuxResult&
             if (a.dp != b.dp) return a.dp > b.dp;
             return a.ad < b.ad;
         });
-        const std::string path = dir + "/donor" + std::to_string(k) + "_callable.bed.gz";
+        const std::string path = dir + "/donor" + std::to_string(k) + "_callable.rle.gz";
         const std::string tmp = path + ".tmp";
         gzFile f = gzopen(tmp.c_str(), "wb6");
         if (!f) return -1;
-        std::string out = "#singlet donor_callable v1: positions where the depth summed over the donor's cells gives a confident genotype (GT rule of the donor VCFs: posterior >= 0.99)\n"
+        std::string out = "#singlet donor_callable v2 (run-length): positions where the depth summed over the donor's cells gives a confident genotype (GT rule of the donor VCFs: posterior >= 0.99)\n"
                           "#sources: the SNP panel and the sites of the all-site member; positions outside both are not recorded\n"
-                          "#BED3, 0-based half-open, adjacent positions merged\n";
+                          "#per contig a >name line, then gap<TAB>length lines: start = previous end + gap (0 at the contig start), end = start + length; 0-based half-open, adjacent positions merged\n";
         bool ok = gzwrite(f, out.data(), static_cast<unsigned>(out.size())) > 0;
         uint64_t n = 0;
-        uint32_t cur_ci = 0; int32_t s0 = 0, e0 = 0; bool open = false;
+        uint32_t cur_ci = 0, last_ci = 0; int32_t s0 = 0, e0 = 0, prev_end = 0; bool open = false, have_ci = false;
         auto flush = [&]() {
             if (!open) return;
-            out = names[cur_ci] + "\t" + std::to_string(s0) + "\t" + std::to_string(e0) + "\n";
+            out.clear();
+            if (!have_ci || cur_ci != last_ci) { out = ">" + names[cur_ci] + "\n"; last_ci = cur_ci; have_ci = true; prev_end = 0; }
+            out += std::to_string(s0 - prev_end) + "\t" + std::to_string(e0 - s0) + "\n";
+            prev_end = e0;
             if (ok) ok = gzwrite(f, out.data(), static_cast<unsigned>(out.size())) > 0;
             ++n; open = false;
         };

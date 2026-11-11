@@ -16,11 +16,11 @@ goes to **`<out>/private/`**:
 | `private/snp_ad.*`, `private/snp_dp.*` | per-cell alt / total depth over the SNP panel (were `donor/snp_*`) |
 | `private/ase_counts.tsv` | allele-specific counts per cell and SNP (was top level) |
 | `private/donor/donor*.vcf`, coverage maps | per-donor genotypes from demux (were in `donor/`) |
-| `private/mt_allele_counts.*`, `private/mt_allele_counts_rev.*` | raw per-cell chrM allele counts, all reads and the reverse-strand subset (forward = total - reverse); features `chrM:<pos>:<A/C/G/T>`; columns of non-called barcodes empty (the uncalled barcodes are in `mt_allele_counts_uncalled.*`, below) |
-| `private/mt_allele_counts_uncalled.*`, `private/mt_allele_counts_uncalled_rev.*` | the same layout for the barcodes that are not called cells (the other columns empty), so a later change of the cell calls needs no reads |
+| `private/mt_allele_counts.*`, `private/mt_allele_counts_rev.*` | raw per-cell chrM allele counts, all reads and the reverse-strand subset (forward = total - reverse); features `chrM:<pos>:<A/C/G/T>`; columns of non-called barcodes empty (uncalled barcodes: see below) |
+| `private/mt_allele_counts_uncalled.*`, `_rev.*` | the same layout for the uncalled barcodes; written only with `SINGLET_UNCALLED_MODE=3` (off by default: the pooled file below covers the ambient mitochondrial share) |
 | `private/mt_allele_counts_uncalled.tsv.gz` | the chrM allele counts of all uncalled barcodes pooled: one row per covered position (A C G T, then the reverse-strand subset), for the ambient share of mitochondrial alleles |
 | `private/allsite/allele_delta_uncalled.bin`, `cells_uncalled.tsv.gz` | the all-site delta store of the uncalled barcodes (stored against the reference genome), same format as `allele_delta.bin` / `cells.tsv.gz` |
-| `private/donor/donorN_callable.bed.gz` | BED3 intervals where donor N's summed depth gives a confident genotype (panel and all-site sites), so a donor VCF can tell reference from not covered |
+| `private/donor/donorN_callable.rle.gz` | run-length coded intervals where donor N's summed depth gives a confident genotype (panel and all-site sites): per contig a `>name` line, then `gap<TAB>length` lines (start = previous end + gap); a donor VCF can tell reference from not covered |
 | `private/mt/donorN_mt_variants.vcf`, `donorN_mt_consensus.fa`, `het_site_donor_af.tsv` | mt haplotypes per donor (homoplasmic calls with DP/AD/AF/SB/NC) |
 | `private/mt_sites.tsv` | every chrM site the caller looked at, with its class and the filters it failed |
 | `private/editing/editing_alt.*`, `private/editing/editing_dp.*` | per-cell edited / total UMIs at the REDIportal A-to-I sites covered in called cells (rows `chrom:pos:A>G` or `chrom:pos:T>C`, genome strand); same pileup kernels and filters as the SNP panel |
