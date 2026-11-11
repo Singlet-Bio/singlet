@@ -2417,6 +2417,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             hostBytes = SU.bytes;
             if (in.e2eHandover && singlet_tail::cut("handover") && e10 && in.e10.soloModel != nullptr) {   // E16 handover: read for the last time
                 singlet_engine_gpu::dropPages(out.blob.data(), nB); singlet_engine_gpu::dropPages(out.seq.data(), nS); out.hostDropped = true;
+                out.log += "engine_gpu: E16 handover: the host records' pages released after their upload (" + gbs(nB + nS) + ")
+";
             }
         } else {
         // the gather: per chunk the lanes' packed results (device-resident; the host lane's uploaded), per record its source and sequence
@@ -2746,6 +2748,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             devNote();
         }
         hostMark("records pass 2 done (RC)", nRec);
+        if (out.hostDropped) out.log += "engine_gpu: E16 handover: the host records' pages released as pass 2 uploaded them (" + gbs(out.blob.size() + out.seq.size()) + ")
+";
         singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
         E2H.nRec = nRec; E2H.nAln = nAln; E2H.nOps = nOps; E2H.nSeq = nSeqT;
         E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
@@ -2934,6 +2938,19 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         dumpOutput(dp, P, H, out);
         snprintf(line, sizeof line, "engine_gpu: E6 dump of %llu records -> %s (%.1f s)\n", (unsigned long long)(out.seqOff.size() - 1), dp, now() - td);
         out.log += line;
+    }
+    // E16 handover: the host records' pages were released. Unless every condition of level 5 holds (the E8 records, E10's products, E11's keep,
+    // the masks, room for readRecord in the region: the caller's conditions for no summaries and no cache inserts), a fallback would read them:
+    // fail, and the caller runs mapDistinct again without the handover (SINGLET_E16_FORCE_FALLBACK=1 forces it, for the gate)
+    if (out.hostDropped) {
+        const u64 room = in.e2e ? in.e2e->cap : 0, o = in.e2e ? ((in.e2e->hdr()->used + 63) & ~63ull) : 0;
+        const char* why = !out.e2eOk ? "no E8 records" : !out.e10.ok ? "no E10 products" : !out.e10.soloKept ? "no E11 keep"
+                          : (out.e10.oQMask != 0) != in.e10.wantMask ? "the masks" : o + std::max<u64>(1, out.readRecord.size()) * 4 > room ? "the region is full"
+                          : std::getenv("SINGLET_E16_FORCE_FALLBACK") != nullptr ? "forced (SINGLET_E16_FORCE_FALLBACK)" : nullptr;
+        if (why != nullptr) {
+            out.handoverRetry = true;
+            return fail(std::string("E16 handover: a fallback would read the released host records (") + why + "); the caller runs mapDistinct again without the handover");
+        }
     }
     if (in.oomFatal && !e10Oom.empty()) return fail("E10 ran out of device memory (" + e10Oom + "); the caller runs mapDistinct again");
     return true;

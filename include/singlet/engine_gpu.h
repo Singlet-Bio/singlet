@@ -237,7 +237,9 @@ struct Input {
     // then runs before the device is released. STAR's alignBAM parameters the records need besides Params' filters:
     E2ERegion* e2e = nullptr;
     // E16 "handover" (level 5): the caller reads no host record (out.seq, out.blob) after mapDistinct, so the records' phase releases their
-    // pages as it uploads them to build the region's records (Output::hostDropped says it did)
+    // pages as it uploads them to build the region's records (Output::hostDropped says it did). When the
+    // run would then not reach level 5 (a fallback that reads them), mapDistinct fails with Output::handoverRetry and the caller runs it again
+    // without the handover, so every fallback finds the records as before
     bool e2eHandover = false;
     int outSAMmapqUnique = 255; uint16_t outSAMflagAND = 65535, outSAMflagOR = 0;
     // E10 (level >= 2, with e2e): per read what the host decode packs (the target ingest format: CB+UMI key and quality bits), from which the
@@ -270,6 +272,7 @@ struct Output {
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
     bool hostDropped = false;           // E16 handover: seq and blob keep their sizes, but their pages were released (zeros); offsets intact
+    bool handoverRetry = false;         // E16 handover: the call failed because a fallback would read the released records; run it again without
     bool e2eOk = false;                 // E8: the records are in Input::e2e (arrays and nRec..nSeq; readRecord and magic are the caller's)
     // E10: what the device computed for the reads with a record (valid with e10.ok)
     struct E10 {
