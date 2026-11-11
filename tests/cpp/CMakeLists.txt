@@ -287,6 +287,7 @@ add_pileup_test(test_donor_genotype_call)
 add_pileup_test(test_genotype_export)
 add_pileup_test(test_allsite)
 add_pileup_test(test_allsite_store)
+add_pileup_test(test_storage_safeguards)   # pooled chrM empties, callable masks, uncalled store columns
 # The all-site pass's device route against the host pass (allsite_device.h); SKIP (77) without a GPU build or a CUDA device.
 add_pileup_test(test_allsite_gpu)
 set_tests_properties(test_allsite_gpu PROPERTIES SKIP_RETURN_CODE 77)

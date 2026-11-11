@@ -1360,6 +1360,12 @@ def pack_gse(
                     # (the count matrix is reconstructable from exon/intron_counts.1pz).
                     if rel.parts[0] in {"star_Solo.out", "filtered_feature_bc_matrix"}:
                         continue
+                    # The ambient-corrected matrix is the output of an estimator that is not released, it goes stale when the estimator
+                    # changes, and it holds a second copy of the called cells' counts. It is not packed: the corrected values are computed
+                    # at download from the stored per-cell ambient fraction and soup profile (ambient_contamination.*, ambient_profile.tsv,
+                    # both kept in the private sidecar) and the raw counts.
+                    if len(rel.parts) == 1 and rel.name.startswith("ambient_corrected_counts."):
+                        continue
                     if fpath.suffix == ".1fq" or fpath.name in {
                         "star_Unmapped.out.mate1",
                         "star_Unmapped.out.mate2",
