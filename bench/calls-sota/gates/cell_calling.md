@@ -82,4 +82,20 @@ Searched on 2026-11-11 by `git grep -i` over `origin/main` of Singlet-Bio/single
 
 * CellBender on held-out libraries (no GPU).
 * Genotyped pool: scHi-HOST has reads only. Stored counts and genotype truth need a registered engine run and the genotype pipeline.
-* Hashed nuclei: GSE129578 deposits processed matrices without the empty-droplet barcodes of the nuclei library. An all-barcode matrix needs an engine run on the SRA reads.
+* Hashed nuclei: see Amendment A below (the deposited nuclei matrix turned out to hold all barcodes, so the call is possible without an engine run, but tag counts exist only for the authors' retained barcodes).
+
+## Amendment A: hashed nuclei truth (committed before the nuclei library was scored; the CellPlex library was already scored)
+
+The probe of GSE129578 on 2026-11-11 showed that `GSE129578_POC_nuc_matrix.mtx.gz` covers all 1,474,560 barcode columns of the
+library (all-barcode input, so the call is possible without an engine run), while the MULTI-seq tag counts (`POC_nuc_MULTI_matrix.csv`)
+exist only for the 10,581 barcodes the authors retained. Tag evidence for empties therefore does not exist. For this library only:
+
+* Truth = tag-confirmed nuclei: barcodes whose tag table total `nUMI_Bar` is at least 100. All other barcodes are unknown (no empties are declared).
+* Metrics = recall of tag-confirmed nuclei at each tool's own call, and recall at a matched number of called cells (N = number of tag-confirmed
+  nuclei, calls first, then UMIs). Precision and F1 are not computed. The share of each tool's calls that lie outside the authors' retained set is
+  reported as class T information only.
+* Bar: Singlet within 0.005 of the best tool on both recall figures.
+* The genes of this matrix are human and mouse together and the counts are exon-only Cell Ranger counts. The EmptyDrops comparator is the same
+  `DropletUtils::emptyDrops` call as for the CellPlex library.
+
+Neither held-out library was used to choose a setting. Both ran at the defaults named above.
