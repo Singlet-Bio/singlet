@@ -79,22 +79,22 @@ public:
         keys_.erase(std::unique(keys_.begin(), keys_.end()), keys_.end());
         size_t cap = 1; while (cap < keys_.size() * 2 + 16) cap <<= 1;
         table_.assign(cap, 0); mask_ = cap - 1;
-        bits_.assign(size_t(1) << (kBitsLog2 - 6), 0);
+        bits_.assign(size_t(1) << kWordsLog2, 0);
         for (uint64_t k : keys_) {
-            const uint64_t hk = hash(k);
-            size_t h = hk & mask_;
+            size_t h = hash(k) & mask_;
             while (table_[h] != 0) h = (h + 1) & mask_;
             table_[h] = k + 1;
-            bits_[hk >> (64 - kBitsLog2 + 6)] |= uint64_t(1) << ((hk >> (64 - kBitsLog2)) & 63);
+            bits_[word(k)] |= filter_bits(k);
         }
         n_ = keys_.size();
         keys_.clear(); keys_.shrink_to_fit();
     }
     bool contains(uint64_t k) const {
-        // the bitset (512 KB, in L2) answers most misses; the table decides the rest, so membership is exact
-        const uint64_t hk = hash(k);
-        if (!((bits_[hk >> (64 - kBitsLog2 + 6)] >> ((hk >> (64 - kBitsLog2)) & 63)) & 1)) return false;
-        size_t h = hk & mask_;
+        // The filter (512 KB, in L2: two bits of one word per k-mer, ~1.5% of misses pass) answers most misses; the table decides the
+        // rest, so membership is exact.
+        const uint64_t m = filter_bits(k);
+        if ((bits_[word(k)] & m) != m) return false;
+        size_t h = hash(k) & mask_;
         while (table_[h] != 0) { if (table_[h] == k + 1) return true; h = (h + 1) & mask_; }
         return false;
     }
@@ -102,6 +102,30 @@ public:
     /// true when a 19-mer starting at a multiple of kStride (and the last one) of `seq` (codes 0..3, 4 = N) is in the set. One rolling
     /// pass over the read builds both strands' codes; a 19-mer that holds an N is skipped. Same k-mers as hits_ref, so the same answer.
     bool hits(const uint8_t* seq, int len) const {
+        if (len < kK) return false;
+        uint8_t any = 0;
+        for (int i = 0; i < len; ++i) any |= seq[i];
+        if (any > 3) return hits_n(seq, len);
+        // no N: every 19-mer is valid, so step kStride bases between checks
+        const int last = len - kK;
+        constexpr uint64_t mask = (1ull << (2 * kK)) - 1;
+        uint64_t f = 0, r = 0;
+        auto push = [&](uint8_t b) { f = ((f << 2) | b) & mask; r = (r >> 2) | (uint64_t(3 - b) << (2 * (kK - 1))); };
+        int i = 0;
+        for (; i < kK; ++i) push(seq[i]);
+        if (contains(std::min(f, r))) return true;
+        int p = 0;
+        for (; p + kStride <= last; p += kStride) {
+            for (int j = 0; j < kStride; ++j) push(seq[i + j]);
+            i += kStride;
+            if (contains(std::min(f, r))) return true;
+        }
+        if (p == last) return false;
+        for (; i < len; ++i) push(seq[i]);
+        return contains(std::min(f, r));
+    }
+    /// hits() for a read that holds an N: the rolling pass with a run counter.
+    bool hits_n(const uint8_t* seq, int len) const {
         if (len < kK) return false;
         const int last = len - kK;
         constexpr uint64_t mask = (1ull << (2 * kK)) - 1;
@@ -142,7 +166,14 @@ public:
     }
 private:
     static uint64_t hash(uint64_t x) { x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ULL; x ^= x >> 33; return x; }
-    static constexpr int kBitsLog2 = 22;   // 2^22-bit membership filter in front of the table (~5% of misses pass it)
+    // the filter's index: one multiply (Fibonacci hashing); the top 16 bits pick the word, the next 12 bits the two bits in it
+    static constexpr int kWordsLog2 = 16;  // 2^16 64-bit words
+    static uint64_t fib(uint64_t k) { return k * 0x9e3779b97f4a7c15ULL; }
+    static size_t word(uint64_t k) { return size_t(fib(k) >> (64 - kWordsLog2)); }
+    static uint64_t filter_bits(uint64_t k) {
+        const uint64_t h = fib(k);
+        return (uint64_t(1) << ((h >> (58 - kWordsLog2)) & 63)) | (uint64_t(1) << ((h >> (52 - kWordsLog2)) & 63));
+    }
     std::vector<uint64_t> keys_, table_, bits_;
     size_t mask_ = 0, n_ = 0;
 };
