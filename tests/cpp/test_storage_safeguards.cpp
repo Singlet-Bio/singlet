@@ -59,7 +59,7 @@ int main() {
     CHECK(txt.find("#barcodes_pooled=2 called_cells=2 entries_pooled=4\n") != std::string::npos, "header counts");
     // position 1: C = 2 + 1 = 3 (rev 1); position 2: C = 4 (rev 0), T = 2 (rev 2)
     CHECK(txt.find("\npos\tA\tC\tG\tT\trevA\trevC\trevG\trevT\n1\t0\t3\t0\t0\t0\t1\t0\t0\n2\t0\t4\t0\t2\t0\t0\t0\t2\n") != std::string::npos, "pooled rows");
-    const long long n2 = SG::write_mt_uncalled_pooled(p, tot, nullptr, is_cell, 2);
+    const long long n2 = SG::write_mt_uncalled_pooled(p, tot, static_cast<const CSC*>(nullptr), is_cell, 2);
     CHECK(n2 == 2 && slurp_gz(p).find("1\t0\t3\t0\t0\t0\t0\t0\t0\n") != std::string::npos, "no reverse-strand matrix: zero reverse counts");
     std::remove(p.c_str());
 
