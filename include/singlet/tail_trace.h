@@ -56,6 +56,18 @@ inline void mark(const char* fmt, ...) {
     va_end(ap);
     std::fprintf(stderr, "[e16] %.3f %d %s\n", now(), (int) getpid(), b);
 }
+// this process's resident anonymous and shared memory in GB (/proc/self/status RssAnon, RssShmem): the memory marks
+inline void rss(double& anonGB, double& shmemGB) {
+    anonGB = shmemGB = 0;
+    if (FILE* f = std::fopen("/proc/self/status", "r")) {
+        char l[256]; unsigned long long v;
+        while (std::fgets(l, sizeof l, f)) {
+            if (std::sscanf(l, "RssAnon: %llu", &v) == 1) anonGB = v / 1048576.0;
+            else if (std::sscanf(l, "RssShmem: %llu", &v) == 1) shmemGB = v / 1048576.0;
+        }
+        std::fclose(f);
+    }
+}
 // the processes holding the write end of the pipe with inode ino (/proc/<pid>/fd links "pipe:[ino]" whose fdinfo flags say O_WRONLY):
 // " pid (comm) fd" per holder, " none" if no process does (E16: STAR's BAM pipe after STAR closed it)
 inline std::string pipeWriters(unsigned long ino) {

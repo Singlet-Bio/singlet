@@ -779,17 +779,31 @@ __host__ __device__ __forceinline__ uint32_t cell_part(int32_t bc, uint32_t K) {
     x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL; x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL; x ^= x >> 31;
     return (uint32_t)(x % K);
 }
-__global__ void k_readbytes(const ReadRec* R, int n, const GRes* G, const uint32_t* c_sj, const uint32_t* c_snp, const uint32_t* c_mt,
-                            const uint32_t* c_ind, uint64_t* w) {
-    int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return;
-    const ReadRec x = R[r]; if (x.bc < 0) { w[r] = 0; return; }
-    w[r] = kBytesRead + (G[x.sig].flags != 0 ? kBytesGene : 0) + c_sj[x.sig] * kBytesSj + c_snp[x.sig] * kBytesSnp + c_mt[x.sig] * kBytesMt + c_ind[x.sig] * kBytesInd;
+// the partition sizing's per-read bound, summed per partition for a trial K (bytes) and counted (reads), without a per-read array: each block
+// bins in shared memory and adds its bins to the global ones once (K <= kMaxParts)
+__global__ void k_binsum(const ReadRec* R, int n, const GRes* G, const uint32_t* c_sj, const uint32_t* c_snp, const uint32_t* c_mt,
+                         const uint32_t* c_ind, uint32_t K, unsigned long long* bins, unsigned long long* cnt) {
+    __shared__ unsigned long long sb[kMaxParts], sc[kMaxParts];
+    for (uint32_t i = threadIdx.x; i < K; i += blockDim.x) { sb[i] = 0; sc[i] = 0; }
+    __syncthreads();
+    int r = blockIdx.x * blockDim.x + threadIdx.x;
+    if (r < n) {
+        const ReadRec x = R[r];
+        if (x.bc >= 0) {
+            const unsigned long long w = kBytesRead + (G[x.sig].flags != 0 ? kBytesGene : 0) + c_sj[x.sig] * kBytesSj + c_snp[x.sig] * kBytesSnp + c_mt[x.sig] * kBytesMt + c_ind[x.sig] * kBytesInd;
+            const uint32_t p = cell_part(x.bc, K);
+            atomicAdd(&sb[p], w); atomicAdd(&sc[p], 1ull);
+        }
+    }
+    __syncthreads();
+    for (uint32_t i = threadIdx.x; i < K; i += blockDim.x) { if (sc[i]) { atomicAdd(&bins[i], sb[i]); atomicAdd(&cnt[i], sc[i]); } }
 }
-__global__ void k_binsum(const ReadRec* R, int n, const uint64_t* w, uint32_t K, unsigned long long* bins) {
-    int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n || R[r].bc < 0) return;
-    atomicAdd(&bins[cell_part(R[r].bc, K)], (unsigned long long)w[r]); }
-__global__ void k_partflag(const ReadRec* R, int n, uint32_t K, uint32_t p, uint32_t* f) {
-    int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) f[r] = (R[r].bc >= 0 && cell_part(R[r].bc, K) == p) ? 1u : 0u; }
+// the partition of every read (255: no barcode); with it a partition's reads are one stable selection (ascending read index)
+__global__ void k_partid(const ReadRec* R, int n, uint32_t K, uint8_t* pid) {
+    int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) pid[r] = R[r].bc >= 0 ? (uint8_t)cell_part(R[r].bc, K) : (uint8_t)255; }
+struct IsPart { const uint8_t* pid; uint8_t p; __device__ __forceinline__ bool operator()(const uint32_t& i) const { return pid[i] == p; } };
+__global__ void k_gatherr(const ReadRec* R, const uint32_t* ridx, int n, ReadRec* out) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) out[i] = R[ridx[i]]; }
 
 // R9 per gene: for the m unique (cell, feature, UMI) entries (run structure `seg` over the n tuples sorted by `ord`), the gene store component of
 // each, from the smallest gene over the entry's reads (UmiFeatureCollapse::add); nullptr when there is no store
@@ -1042,29 +1056,48 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int GR0 = (nR + TB - 1) / TB;
     const size_t base = A.mark();
     int K = 1;
-    std::vector<unsigned long long> est;
+    std::vector<unsigned long long> est, estn;   // per partition: the bound in bytes, the reads
     {
-        uint64_t* w = A.alloc<uint64_t>(std::max(nR, 1));
-        k_readbytes<<<GR0, TB>>>(in.R, nR, gr, c_sj, c_snp, c_mt, c_ind, w);
-        unsigned long long* bins = A.alloc<unsigned long long>(kMaxParts);
+        // no per-read array: the bound is summed in k_binsum from the signature tables. K starts at the least value whose mean partition fits
+        // the arena (a trial K only needs the per-partition sums, so each trial is one pass over the reads)
+        unsigned long long* bins = A.alloc<unsigned long long>(2 * kMaxParts);
+        unsigned long long* cnt = bins + kMaxParts;
         const size_t budget = A.cap > base + kArenaReserve ? A.cap - base - kArenaReserve : 0;
         const int forced = g_force_parts;
-        for (K = forced > 0 ? forced : 1; K <= kMaxParts; K++) {
-            CK(cudaMemset(bins, 0, K * 8));
-            if (nR > 0) k_binsum<<<GR0, TB>>>(in.R, nR, w, (uint32_t)K, bins);
-            est.assign(K, 0); CK(cudaMemcpy(est.data(), bins, K * 8, cudaMemcpyDeviceToHost));
+        const size_t qbytes = in.dp.use_q ? 8 * (size_t)in.dp.qw : 0;
+        auto trial = [&](int k) {
+            CK(cudaMemset(bins, 0, 2 * kMaxParts * 8));
+            if (nR > 0) k_binsum<<<GR0, TB>>>(in.R, nR, gr, c_sj, c_snp, c_mt, c_ind, (uint32_t)k, bins, cnt);
+            est.assign(k, 0); estn.assign(k, 0);
+            CK(cudaMemcpy(est.data(), bins, k * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(estn.data(), cnt, k * 8, cudaMemcpyDeviceToHost));
+        };
+        int k0 = 1;
+        if (forced <= 0) {   // the K = 1 trial gives the total; the mean partition cannot be smaller than total / K
+            trial(1);
+            const double tot = (double)est[0];
+            k0 = budget > 0 ? (int)std::min<double>(kMaxParts, std::max(1.0, std::floor(tot / (double)budget))) : kMaxParts;
+        }
+        for (K = forced > 0 ? forced : k0; K <= kMaxParts; K++) {
+            if (!(forced <= 0 && K == 1 && est.size() == 1)) trial(K);
             const unsigned long long mx = *std::max_element(est.begin(), est.end());
-            // K > 1 also holds the partition scratch for all reads (flags, compacted reads, their index: 24 B per read)
-            const size_t scratch = K > 1 ? (size_t)nR * (4 + sizeof(ReadRec) + 4 + (in.dp.use_q ? 8 * (size_t)in.dp.qw : 0)) : 0;
+            const unsigned long long mn = *std::max_element(estn.begin(), estn.end());
+            // K > 1 also holds the partition scratch: the partition of every read (1 B) and, for the largest partition, its reads, their global index and masks
+            const size_t scratch = K > 1 ? (size_t)nR + (size_t)(mn + 1) * (sizeof(ReadRec) + 4 + qbytes) + 4096 : 0;
             if (forced > 0 || mx + scratch <= budget) break;
         }
-        if (K > kMaxParts) K = kMaxParts;   // nothing fits: the largest K, and the unified-memory retry catches the rest
+        if (K > kMaxParts) { K = kMaxParts; trial(K); }   // nothing fits: the largest K, and the next attempt (more memory, then unified memory) catches the rest
         A.reset(base);
     }
     g_parts_used = K; g_parts_log.clear();
-    uint32_t* pf = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr; uint64_t* Qg = nullptr;
-    const size_t base2 = [&] {   // K > 1: partition scratch that outlives each partition (flags, compacted reads, their global index)
-        if (K > 1) { pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1); if (in.dp.use_q) Qg = A.alloc<uint64_t>((size_t)in.dp.qw * std::max(nR, 1)); }
+    fprintf(stderr, "[pileup] K %d of at most %d, arena %.2f GB, shared tables %.2f GB, reads %d\n", K, kMaxParts, A.cap / 1e9, base / 1e9, nR);
+    uint8_t* pid = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr; uint64_t* Qg = nullptr;
+    const size_t base2 = [&] {   // K > 1: partition scratch that outlives each partition (the partition of each read; the largest partition's reads, their global index, masks)
+        if (K > 1) {
+            const size_t mn = *std::max_element(estn.begin(), estn.end()) + 1;
+            pid = A.alloc<uint8_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(mn); ridx = A.alloc<uint32_t>(mn); dnp = A.alloc<int>(1);
+            if (in.dp.use_q) Qg = A.alloc<uint64_t>((size_t)in.dp.qw * mn);
+            if (nR > 0) k_partid<<<GR0, TB>>>(in.R, nR, (uint32_t)K, pid);
+        }
         return A.mark(); }();
     std::vector<std::pair<uint32_t, std::array<uint32_t, 4>>> indels;   // (global read index, indel): read order, as for K = 1
     const int jb = bits_of(std::max(nj, 1)), sb = bits_of(std::max<uint64_t>(in.par.n_snps, 1)), cb = bits_of(std::max<uint64_t>(in.ncells, 1));
@@ -1078,13 +1111,13 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         int nRp = 0; const uint64_t* Qp = nullptr;   // Qp: the partition's per-read low-quality masks (dp.use_q)
         if (K == 1) { Rp = in.R; nRp = nR; Qp = in.dp.use_q ? in.Q : nullptr; }   // one partition: the reads as they are (the kernels skip reads without a barcode)
         else if (nR > 0) {
-            k_partflag<<<GR0, TB>>>(in.R, nR, (uint32_t)K, (uint32_t)part, pf);
-            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, in.R, pf, Rp, dnp, nR); });
-            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), pf, ridx, dnp, nR); });
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::If(t, b, cub::CountingInputIterator<uint32_t>(0), ridx, dnp, nR, IsPart{pid, (uint8_t)part}); });
             CK(cudaMemcpy(&nRp, dnp, 4, cudaMemcpyDeviceToHost));
+            if (nRp > 0) k_gatherr<<<(nRp + TB - 1) / TB, TB>>>(in.R, ridx, nRp, Rp);
             if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, in.dp.qw, ridx, nRp, Qg); Qp = Qg; }
         }
         T.mark("part.select");
+        fprintf(stderr, "[pileup] partition %d/%d selected: %d reads\n", part, K, nRp);
         const int GR = (nRp + TB - 1) / TB;
         const size_t s0 = A.mark();
         // 4 expand to read level: gene tuples + counts / offsets of the other streams
@@ -1218,6 +1251,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             fExtra(); fSj(); fSn(); fMt(); fInd();
         }
         T.mark("fetch");
+        fprintf(stderr, "[pileup] partition %d/%d fetched\n", part, K);
     }
     A.reset(base2); A.peak = peak_all;
     T.finish();

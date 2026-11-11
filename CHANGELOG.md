@@ -2,6 +2,13 @@
 
 All notable changes to the singlet project.
 
+## [1.3.7] — the Research Beta campaign engine
+
+The campaign engine: the 1.3.6 storage safeguards (per-barcode uncalled mt counts off by default, run-length coded callable
+mask) combined with the faster freeze candidate (deep-sample memory path, alignment, host-cost and HLA typing work, a 2-bit
+read store with an exact N mask, and the deep pileup). HLA typing uses the `t1k-p3b` route. Outputs equal 1.3.5 apart from
+the storage files and `pileup_stats.json` metadata.
+
 ## [1.3.5] — the Research Beta freeze (date set at the tag)
 
 The launch candidate of the Research Beta engine, on top of `main` at 1.3.4. The client APIs are those of 1.3.4 plus the

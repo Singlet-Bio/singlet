@@ -12,6 +12,7 @@
 #include "records_gpu.h"   // E8: the pileup's records from the device-resident results (SINGLET_ENGINE_GPU_E2E=1)
 #include "singlet/qmask_words.h"   // P3-ENG-14
 #include "singlet/nvtx.h"
+#include "singlet/tail_trace.h"   // E16 marks (SINGLET_E16_TRACE): host memory per step
 #include "singlet/thread_name.h"
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
@@ -27,6 +28,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/copy.h>
 #include <thrust/reduce.h>
+#include <thrust/count.h>
 #include <thrust/system/cuda/execution_policy.h>
 #include <algorithm>
 #include <new>
@@ -90,7 +92,7 @@ __global__ void k_hash(const char* seq, const u64* off, u64 n, u64* h1, u64* h2,
         a = (a ^ c) * 0x100000001B3ULL; a ^= a >> 29;
         b = (b + c + 1) * 0xFF51AFD7ED558CCDULL; b ^= b >> 31;
     }
-    h1[i] = a; h2[i] = b; hasN[i] = N | (off[i + 1] == off[i]);   // an empty (fully clipped) read is not cached either
+    h1[i] = a; h2[i] = b; hasN[i] = N | (off[i + 1] == off[i] ? 2 : 0);   // an empty (fully clipped) read is not cached either (bit 1: N, bit 2: empty)
 }
 // group boundaries after the sort, and the byte-for-byte check of every member against the group's first read
 __global__ void k_groups(const char* seq, const u64* off, const u64* h1, const u64* h2, const uint32_t* order, u64 n,
@@ -251,15 +253,15 @@ __global__ void k_collide(const char* seq, const u64* off, const uint32_t* order
 // E12: the dedup's products on the device (before: three arrays to the host and two serial passes over the reads there). Per sorted
 // position its group's first position (k_heads, then an inclusive max-scan), per read its representative (the group's first read; NONE
 // for a sequence with N), and the representatives without N in hash order (stream compaction)
-__global__ void k_readrep(const uint32_t* order, const uint32_t* hp, const uint8_t* hasN, u64 n, uint32_t* readRep) {
+__global__ void k_readrep(const uint32_t* order, const uint32_t* hp, const uint8_t* hasN, u64 n, uint32_t* readRep, uint8_t rrMask) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
     if (k >= n) return;
     const uint32_t f = order[hp[k]];
-    readRep[order[k]] = hasN[f] ? 0xFFFFFFFFu : f;
+    readRep[order[k]] = (hasN[f] & rrMask) ? 0xFFFFFFFFu : f;
 }
 struct RepPred {
-    const uint32_t* head; const uint8_t* hasN; const uint32_t* order;
-    __host__ __device__ bool operator()(u64 k) const { return head[k] && !hasN[order[k]]; }
+    const uint32_t* head; const uint8_t* hasN; const uint32_t* order; uint8_t mask;
+    __host__ __device__ bool operator()(u64 k) const { return head[k] && !(hasN[order[k]] & mask); }
 };
 __global__ void k_prefix_key(const char* seq, const u64* off, const uint32_t* rep, u64 n, u64* key) {
     u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -282,7 +284,7 @@ __global__ void k_hash_span(const char* seq, const u64* off, const u64* cs, cons
         a = (a ^ c) * 0x100000001B3ULL; a ^= a >> 29;
         b = (b + c + 1) * 0xFF51AFD7ED558CCDULL; b ^= b >> 31;
     }
-    h1[i] = a; h2[i] = b; hasN[i] = N | (L == 0);
+    h1[i] = a; h2[i] = b; hasN[i] = N | (L == 0 ? 2 : 0);   // bit 1: N, bit 2: empty
 }
 // P3-MEM-03: per read (local index in its hash partition) its group's first read, from the sort's order and the max-scanned heads
 __global__ void k_group_head(const uint32_t* order, const uint32_t* hp, u64 n, uint32_t* gh) {
@@ -683,7 +685,8 @@ static inline double b2gb(u64 b) { return (double)b / (double)(1ull << 30); }
 // E12 (docs/gpu-engine/fable/E12-prefill.md): wall time of each step of mapDistinct (s, host clock; a device step ends where the code
 // synchronises), summed over chunks and logged as one line "engine_gpu: steps (s): ..." in the order the steps first ran
 static std::vector<std::pair<std::string, double>> g_steps;
-static void stepAdd(const std::string& k, double s) { for (auto& p : g_steps) if (p.first == k) { p.second += s; return; } g_steps.push_back({k, s}); }
+static std::mutex g_stepMu;   // align-w2: the records thread and the read-chunk thread add steps beside the main thread
+static void stepAdd(const std::string& k, double s) { std::lock_guard<std::mutex> lk(g_stepMu); for (auto& p : g_steps) if (p.first == k) { p.second += s; return; } g_steps.push_back({k, s}); }
 static std::string stepLine() {
     std::string s; char b[96];
     for (auto& p : g_steps) { snprintf(b, sizeof b, "%s%s %.3f", s.empty() ? "" : ", ", p.first.c_str(), p.second); s += b; }
@@ -991,6 +994,15 @@ template <class F> static void parallelFor(u64 n, int nt, F fn) {
     for (auto& x : th) x.join();
 }
 
+// a span of the 2-bit store decoded into a buffer of the calling thread (two slots: valid until that thread's next call with the same slot)
+static const char* packedRead(const singlet_engine_gpu::PackedSeq& ps, u64 p, u64 L, int slot) {
+    static thread_local std::vector<char> tb[2];
+    std::vector<char>& b = tb[slot & 1];
+    if (b.size() < L + 8) b.resize(L + 8);
+    ps.get(p, L, b.data());
+    return b.data();
+}
+
 template <class T> bool upload(const T* h, u64 n, T*& d, std::string& err, u64 pad = 0) {
     EG_CK(dmal(&d, (n + pad) * sizeof(T) + 8));
     if (pad) EG_CK(cudaMemset(d, 0, (n + pad) * sizeof(T) + 8));
@@ -1155,7 +1167,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const bool NEW0 = !(cfgE && std::string(cfgE) == "old");
     const double tF0 = now();
     double tS = tF0;   // E12: start of the current step
-    auto step = [&](const char* k) { const double t = now(); stepAdd(k, t - tS); tS = t; };
+    auto step = [&](const char* k) {
+        const double t = now(); stepAdd(k, t - tS); tS = t;
+        if (singlet_tail::on()) { double a, sh; singlet_tail::rss(a, sh); singlet_tail::mark("engine: step %s, host anon %.1f GB, shmem %.1f GB", k, a, sh); }
+    };
     const cudaError_t initRc = cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());   // before the context exists: a waiting host thread sleeps, not spins
     if (initRc != cudaSuccess) cudaGetLastError();
     if (cudaSetDevice(device) != cudaSuccess) return fail("cannot select device");
@@ -1198,7 +1213,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     g_bud.reset(cap, std::min<u64>(tB0 - fB0, 1ull << 30));
     const u64 ctx = g_bud.used;
     const u64 SLACK = 1ull << 30;   // what the tally does not see: the modules' temporaries (E8, E10, E11), the driver's local memory for the kernels
-    const u64 n0 = in.off.size() - 1, S0 = in.seq.size();
+    const u64 n0 = in.off.size() - 1, S0 = in.pseq ? in.pseq->total : in.seq.size();
     const bool e10W = in.e10.on && in.e2e != nullptr && in.e2e->base != nullptr && n0 > 0 && in.e10.nw >= 1 && in.e10.aux.size() == n0 * (2 + (u64)in.e10.nw);
     const u64 IDX = SHC.on && !SHC.priv ? 0 : budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
     const u64 TAB = ((u64)H.nChr * 2 + 1 + H.chrBinN + (u64)H.sjdbN * 4) * 8 + (u64)H.sjdbN * 4 + (24ull << 20);
@@ -1305,6 +1320,17 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     char* dSeq = nullptr; u64* dOff = nullptr;
     g_bud.at = "reads";
     if (RC) {}   // P3-MEM-03: by chunks, at the dedup below
+    else if (in.pseq) {   // the 2-bit store: decoded on the host threads and uploaded in steps
+        const u64 SB = in.pseq->total, STEP = 64ull << 20;
+        if (dmal(&dSeq, SB + 8) != cudaSuccess || dmal(&dOff, (n + 1) * 8 + 8) != cudaSuccess) return fail("out of device memory (reads)");
+        singlet_engine_gpu::NoInitVector<char> hb(std::min(SB, STEP) + 8);
+        for (u64 p0 = 0; p0 < SB; p0 += STEP) {
+            const u64 m0 = std::min(STEP, SB - p0);
+            parallelFor(m0, hostThreads, [&](u64 lo, u64 hi) { in.pseq->get(p0 + lo, hi - lo, hb.data() + lo); });
+            if (cudaMemcpy(dSeq + p0, hb.data(), m0, cudaMemcpyHostToDevice) != cudaSuccess) return fail("reads upload");
+        }
+        if (cudaMemcpy(dOff, in.off.data(), (n + 1) * 8, cudaMemcpyHostToDevice) != cudaSuccess) return fail("reads upload");
+    }
     else if (staged) {
         if (dmal(&dSeq, in.seq.size() + 8) != cudaSuccess || dmal(&dOff, (n + 1) * 8 + 8) != cudaSuccess) return fail("out of device memory (reads)");
         if (!SR.copy(dSeq, in.seq.data(), in.seq.size()) || !SR.copy(dOff, in.off.data(), (n + 1) * 8) || !SR.finish()) return fail("reads upload");
@@ -1510,8 +1536,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     if ((lean || split) && !RC) entToRegion();
     memMark("reads+clip");
     // a read's (clipped) sequence on the host
-    auto rseq = [&](u64 i) { return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i]; };
     auto rlen = [&](u64 i) { return hcs.empty() ? in.off[i + 1] - in.off[i] : hoffC[i + 1] - hoffC[i]; };
+    // with the 2-bit store the read is decoded into one of the calling thread's two buffers (valid until its next call with the same slot)
+    auto rseq = [&](u64 i, int slot = 0) -> const char* {
+        if (!in.pseq) return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i];
+        return packedRead(*in.pseq, hcs.empty() ? in.off[i] : hcs[i], rlen(i), slot);
+    };
     cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
     out.secUpload = now() - t0;
     step("clip.rest");
@@ -1519,6 +1549,26 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     std::vector<uint32_t> rep;   // one read per distinct sequence without N
     const uint32_t NONE = 0xFFFFFFFFu;
     singlet_engine_gpu::NoInitVector<uint32_t> readRep(n);
+    // align-w2 (SINGLET_ENGINE_GPU_NREADS): the sequences with N on the device too (STAR's mapOneRead splits them with qualitySplit and
+    // scores N as neither match nor mismatch; the port, stitch.cuh, does the same). 1 (the default): they get records like every other
+    // sequence (records byte-identical to STAR's on 3 samples, 1.68 M reads at 300 M). 0: as before, STAR maps them. check: the lanes map them and their results go to SINGLET_ENGINE_GPU_NCHECK_OUT (no records: STAR still maps
+    // their reads, and SINGLET_STAR_NDUMP writes STAR's results for the comparison). The flag per read: bit 1 N, bit 2 empty (never on the device).
+    const char* nrE = std::getenv("SINGLET_ENGINE_GPU_NREADS");
+    const int nreads = !nrE ? 1 : std::string(nrE) == "check" ? 2 : nrE[0] == '0' ? 0 : 1;
+    const uint8_t repMask = nreads ? 2 : 3, rrMask = nreads == 1 ? 2 : 3;   // the flag bits that keep a sequence out of rep / its reads without a record
+    struct NDump { FILE* f = nullptr; std::mutex mu; u64 n = 0; ~NDump() { if (f) fclose(f); } } ndump;   // check: per sequence u32 L, L bases, u32 B, B bytes
+    if (nreads == 2) if (const char* np = std::getenv("SINGLET_ENGINE_GPU_NCHECK_OUT")) ndump.f = std::fopen(np, "wb");
+    // align-w2: the read chunks' byte-for-byte check of every hash group against its head runs on host threads beside the index, the lanes
+    // and the host lane (it only proves that no two different sequences share a hash; readRep and rep do not depend on it). It is joined
+    // before anything leaves the lanes (the records, the region's records, the host assembly): a collision then fails the GPU path, as
+    // before. SINGLET_ENGINE_GPU_VERIFY=inline: the check inside the dedup, as before.
+    struct BgVerify {
+        singlet_engine_gpu::NoInitVector<uint32_t> I, gh;   // per read in partition order: the read, its group head's position in the partition
+        std::vector<u64> pBeg;
+        std::thread th; std::atomic<u64> coll{0}; double t0 = 0, t1 = 0, waited = 0; bool on = false;
+        void join() { if (th.joinable()) th.join(); }
+        ~BgVerify() { join(); }
+    } bgv;
     if (!RC) {
     // ---- dedup
     nvch.next("mapDistinct: dedup");
@@ -1571,11 +1621,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         uint32_t* dRR; uint32_t* dRep;
         if (dmal(&dRR, n * 4) || dmal(&dRep, n * 4)) return fail("out of device memory (dedup)");
         const unsigned G = (unsigned)((n + 255) / 256);
-        k_readrep<<<G, 256>>>(dOrder, dHp, dN, n, dRR);
+        k_readrep<<<G, 256>>>(dOrder, dHp, dN, n, dRR, rrMask);
         const u64 nDist = thrust::reduce(TP, thrust::device_ptr<uint32_t>(dHead), thrust::device_ptr<uint32_t>(dHead + n), (u64)0);
         const u64 nRep = (u64)(thrust::copy_if(TP, thrust::device_ptr<uint32_t>(dOrder), thrust::device_ptr<uint32_t>(dOrder + n), thrust::counting_iterator<u64>(0),
-                                               thrust::device_ptr<uint32_t>(dRep), RepPred{dHead, dN, dOrder}) - thrust::device_ptr<uint32_t>(dRep));
-        out.nDistinct = nDist; out.nWithN = nDist - nRep;
+                                               thrust::device_ptr<uint32_t>(dRep), RepPred{dHead, dN, dOrder, repMask}) - thrust::device_ptr<uint32_t>(dRep));
+        out.nDistinct = nDist;
+        out.nWithN = nDist - (nreads == 0 ? nRep : (u64) thrust::count_if(TP, thrust::counting_iterator<u64>(0), thrust::counting_iterator<u64>(n), RepPred{dHead, dN, dOrder, 3}));
         dfree(dHp);
         step("dedup.dev");
         if (g_d2h ? !g_d2h->copy(readRep.data(), dRR, n * 4) : cudaMemcpy(readRep.data(), dRR, n * 4, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("dedup copy");
@@ -1601,8 +1652,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     cudaMemcpy(hasN.data(), dN, n, cudaMemcpyDeviceToHost);
     step("dedup.d2h");
     dfree(dH1); dfree(dH2); dfree(dN); dfree(dOrder); dfree(dHead); dfree(dColl);
-    for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; else rep.push_back(order[k]); }
-    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = hasN[order[k]] ? NONE : order[k]; readRep[order[k]] = cur; } }
+    for (u64 k = 0; k < n; k++) if (head[k]) { out.nDistinct++; if (hasN[order[k]]) out.nWithN++; if (!(hasN[order[k]] & repMask)) rep.push_back(order[k]); }
+    { uint32_t cur = NONE; for (u64 k = 0; k < n; k++) { if (head[k]) cur = (hasN[order[k]] & rrMask) ? NONE : order[k]; readRep[order[k]] = cur; } }
     step("dedup.host");
     }
     // map them in sequence order (first 32 bases), not hash order: neighbouring threads then search the same SA ranges and loci
@@ -1684,41 +1735,51 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     }
     singlet_engine_gpu::NoInitVector<u64> hH1(n), hH2(n); singlet_engine_gpu::NoInitVector<uint8_t> hN(n);
     if (in.clip.on) { hcs.resize(n); hoffC.resize(n + 1); hoffC[0] = 0; }
-    singlet_engine_gpu::NoInitVector<u64> ho(RCN + 1), hcl(in.clip.on ? RCN : 0);
     u64 nClipped = 0; float msEnt = 0, msR = 0;
     double tUp = 0, tKer = 0, tD2H = 0;
-    for (u64 r0 = 0; r0 < n; r0 += RCN) {
-        const u64 m = std::min(RCN, n - r0), b0 = in.off[r0], nb = in.off[r0 + m] - b0;
+    // align-w2: two sets of the chunk's inputs (sequences, offsets, aux, clip lengths): the main thread uploads chunk k + 1 while a second host
+    // thread runs chunk k's kernels and its copies to the host (and to the region). Every chunk's kernels and copies are the ones before, in
+    // chunk order. One set (as before) when the second does not fit or SINGLET_ENGINE_GPU_RCPIPE=0.
+    struct InSet { char* seq = nullptr; u64* off = nullptr; uint64_t* aux = nullptr; uint16_t *p5 = nullptr, *p3 = nullptr; singlet_engine_gpu::NoInitVector<u64> ho; };
+    InSet ins[2];
+    singlet_engine_gpu::NoInitVector<char> hSeqC;   // the 2-bit store's chunk, decoded
+    ins[0].seq = cSeq; ins[0].off = cOff; ins[0].aux = cAux; ins[0].p5 = cP5; ins[0].p3 = cP3; ins[0].ho.resize(RCN + 1);
+    const char* rpipeE = std::getenv("SINGLET_ENGINE_GPU_RCPIPE");
+    bool rpipe = n > RCN && !(rpipeE && rpipeE[0] == '0');
+    if (rpipe) {
+        std::vector<void*> got;
+        auto al1 = [&](auto*& q, u64 b) -> bool { if (dmal(&q, b + 8) != cudaSuccess) { cudaGetLastError(); q = nullptr; return false; } got.push_back((void*) q); return true; };
+        const bool ok = al1(ins[1].seq, maxB) && al1(ins[1].off, (RCN + 1) * 8) && (!cAux || al1(ins[1].aux, RCN * strideAux * 8))
+                        && (!cP5 || (al1(ins[1].p5, RCN * 2) && al1(ins[1].p3, RCN * 2)));
+        if (ok) { for (void* q : got) rcf.p.push_back(q); ins[1].ho.resize(RCN + 1); }
+        else { for (void* q : got) dfree(q); rpipe = false; }
+    }
+    singlet_engine_gpu::NoInitVector<u64> hcl(in.clip.on ? RCN : 0);
+    // chunk at r0 from input set S: kernels, copies to the host and the region (on the second host thread when rpipe). why: "" or what failed;
+    // oom: E10 turned off for lack of device memory with in.oomFatal
+    auto rcProcess = [&](u64 r0, InSet& S, std::string& why, bool& oom) {
+        const u64 m = std::min(RCN, n - r0), b0 = in.off[r0];
         const unsigned G = (unsigned) ((m + 255) / 256);
         double ta = now();
-        parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) ho[k] = in.off[r0 + k] - b0; });
-        const bool up = staged ? SR.copy(cSeq, in.seq.data() + b0, nb) && SR.copy(cOff, ho.data(), (m + 1) * 8)
-                                 && (!e10 || SR.copy(cAux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8)) && SR.finish()
-                               : cudaMemcpy(cSeq, in.seq.data() + b0, nb, cudaMemcpyHostToDevice) == cudaSuccess
-                                 && cudaMemcpy(cOff, ho.data(), (m + 1) * 8, cudaMemcpyHostToDevice) == cudaSuccess
-                                 && (!e10 || cudaMemcpy(cAux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8, cudaMemcpyHostToDevice) == cudaSuccess);
-        if (!up) return fail("reads upload (read chunk at " + std::to_string(r0) + ")");
-        if (cpre && (cudaMemcpy(cP5, in.pre5.data() + r0, m * 2, cudaMemcpyHostToDevice) != cudaSuccess
-                     || cudaMemcpy(cP3, in.pre3.data() + r0, m * 2, cudaMemcpyHostToDevice) != cudaSuccess)) return fail("host clip lengths upload");
-        tUp += now() - ta; ta = now();
+        auto lchk = [&](const char* what) -> bool { const cudaError_t e = cudaGetLastError(); if (e != cudaSuccess) { why = std::string(what) + " launch: " + cudaGetErrorString(e); return false; } return true; };
         if (ccr4) {
             const unsigned g4 = (unsigned) ((m + 127) / 128);
-            if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(cSeq, cOff, m, c4, cP5, cP3, cInfo);
-            else k_cr4<0><<<g4, 128>>>(cSeq, cOff, m, c4, cP5, cP3, cInfo);
-            if (!launched("CellRanger4 clip kernel")) return fail(err);
-            if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
-            if (!d2h(out.cr4info.data() + r0, cInfo, m)) return fail("CellRanger4 clip: info copy");
+            if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo);
+            else k_cr4<0><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo);
+            if (!lchk("CellRanger4 clip kernel")) return;
+            if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
+            if (!d2h(out.cr4info.data() + r0, cInfo, m)) { why = "CellRanger4 clip: info copy"; return; }
         }
         if (in.clip.on) {
-            ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t) in.clip.ad3.size(), in.clip.adMMp, cAd, cP5, cP3};
-            k_clip<<<G, 256>>>(cSeq, cOff, m, c, cCs, cCl);
-            if (!launched("clip kernel")) return fail(err);
-            if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
+            ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t) in.clip.ad3.size(), in.clip.adMMp, cAd, S.p5, S.p3};
+            k_clip<<<G, 256>>>(S.seq, S.off, m, c, cCs, cCl);
+            if (!lchk("clip kernel")) return;
+            if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
         }
         if (e10) {   // E10: the original reads and their clip; i0 = r0 keeps the hook's sample of the whole-sample run
             float ms = 0; std::string w;
-            if (!singlet_hostloop_gpu::entries(cSeq, (const uint64_t*) cOff, (const uint64_t*) cCs, (const uint64_t*) cCl, m, cAux, in.e10.nw, in.e10.hook,
-                                               cEnt, cQm, ms, w, r0)) { e10Off("entries: " + w); if (e10OomNow()) return fail(e10OomWhy()); }
+            if (!singlet_hostloop_gpu::entries(S.seq, (const uint64_t*) S.off, (const uint64_t*) cCs, (const uint64_t*) cCl, m, S.aux, in.e10.nw, in.e10.hook,
+                                               cEnt, cQm, ms, w, r0)) { e10Off("entries: " + w); if (e10OomNow()) { oom = true; return; } }
             else {
                 msEnt += ms;
                 singlet_engine_gpu::E2ERegion& RG = *in.e2e;
@@ -1727,29 +1788,62 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             }
             if (e10 && r11On) {
                 float mr = 0; std::string wr;
-                if (singlet_hostloop_gpu::r11(cAux, in.e10.nw, m, cWL, in.e10.nWL, in.e10.cbL, in.e10.umiL, cHist, mr, wr) && d2h(r11t.data(), cHist, in.e10.nWL * 4)) {
+                if (singlet_hostloop_gpu::r11(S.aux, in.e10.nw, m, cWL, in.e10.nWL, in.e10.cbL, in.e10.umiL, cHist, mr, wr) && d2h(r11t.data(), cHist, in.e10.nWL * 4)) {
                     msR += mr;
                     parallelFor(in.e10.nWL, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) out.e10.r11[k] += r11t[k]; });
                 } else { cudaGetLastError(); r11On = false; out.e10.r11.clear(); out.e10.log += "engine_gpu: E10: R11 histogram not computed (" + wr + ")\n"; }
             }
         }
-        k_hash_span<<<G, 256>>>(cSeq, cOff, in.clip.on ? cCs : nullptr, cCl, m, cH1, cH2, cN);
-        if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("hash kernel: ") + cudaGetErrorString(cudaGetLastError()));
+        k_hash_span<<<G, 256>>>(S.seq, S.off, in.clip.on ? cCs : nullptr, cCl, m, cH1, cH2, cN);
+        if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("hash kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
         tKer += now() - ta; ta = now();
         if (!d2h(hH1.data() + r0, cH1, m * 8) || !d2h(hH2.data() + r0, cH2, m * 8) || !d2h(hN.data() + r0, cN, m)
-            || (in.clip.on && (!d2h(hcs.data() + r0, cCs, m * 8) || !d2h(hcl.data(), cCl, m * 8)))) return fail("read chunk copy");
+            || (in.clip.on && (!d2h(hcs.data() + r0, cCs, m * 8) || !d2h(hcl.data(), cCl, m * 8)))) { why = "read chunk copy"; return; }
         if (in.clip.on) {
             parallelFor(m, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) hcs[r0 + k] += b0; });
-            for (u64 k = 0; k < m; k++) { hoffC[r0 + k + 1] = hoffC[r0 + k] + hcl[k]; nClipped += hcl[k] != ho[k + 1] - ho[k]; }
+            for (u64 k = 0; k < m; k++) { hoffC[r0 + k + 1] = hoffC[r0 + k] + hcl[k]; nClipped += hcl[k] != S.ho[k + 1] - S.ho[k]; }
         }
         tD2H += now() - ta;
+    };
+    std::thread rcTh; std::string rcWhy; bool rcOom = false;
+    struct RcJoin { std::thread& t; ~RcJoin() { if (t.joinable()) t.join(); } } rcJoin{rcTh};
+    auto rcFinish = [&]() -> int {   // 0: ok, 1: failed (rcWhy), 2: E10 out of memory with in.oomFatal
+        if (rcTh.joinable()) rcTh.join();
+        return rcOom ? 2 : rcWhy.empty() ? 0 : 1;
+    };
+    for (u64 r0 = 0, kc = 0; r0 < n; r0 += RCN, kc++) {
+        InSet& S = ins[rpipe ? (kc & 1) : 0];
+        const u64 m = std::min(RCN, n - r0), b0 = in.off[r0], nb = in.off[r0 + m] - b0;
+        double ta = now();
+        parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) S.ho[k] = in.off[r0 + k] - b0; });
+        const bool upAux = S.aux != nullptr;
+        const char* spc = in.seq.data() + b0;
+        if (in.pseq) {   // the 2-bit store's chunk, decoded on the host threads (the main thread alone uploads, so one buffer)
+            hSeqC.resize(nb);
+            parallelFor(nb, hostThreads, [&](u64 lo, u64 hi) { in.pseq->get(b0 + lo, hi - lo, hSeqC.data() + lo); });
+            spc = hSeqC.data();
+        }
+        const bool up = staged ? SR.copy(S.seq, spc, nb) && SR.copy(S.off, S.ho.data(), (m + 1) * 8)
+                                 && (!upAux || SR.copy(S.aux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8))
+                                 && (!cpre || (SR.copy(S.p5, in.pre5.data() + r0, m * 2) && SR.copy(S.p3, in.pre3.data() + r0, m * 2))) && SR.finish()
+                               : cudaMemcpy(S.seq, spc, nb, cudaMemcpyHostToDevice) == cudaSuccess
+                                 && cudaMemcpy(S.off, S.ho.data(), (m + 1) * 8, cudaMemcpyHostToDevice) == cudaSuccess
+                                 && (!upAux || cudaMemcpy(S.aux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8, cudaMemcpyHostToDevice) == cudaSuccess)
+                                 && (!cpre || (cudaMemcpy(S.p5, in.pre5.data() + r0, m * 2, cudaMemcpyHostToDevice) == cudaSuccess
+                                               && cudaMemcpy(S.p3, in.pre3.data() + r0, m * 2, cudaMemcpyHostToDevice) == cudaSuccess));
+        tUp += now() - ta;
+        { const int f = rcFinish(); if (f == 2) return fail(e10OomWhy()); if (f == 1) return fail(rcWhy); }   // the previous chunk (its input set is free again)
+        if (!up) return fail("reads upload (read chunk at " + std::to_string(r0) + ")");
+        if (rpipe) rcTh = std::thread([&, r0, Sp = &S]() { cudaSetDevice(device); singlet::ThreadNameScope tnR("gpu-rchunk"); rcProcess(r0, *Sp, rcWhy, rcOom); });
+        else rcProcess(r0, S, rcWhy, rcOom);
     }
+    { const int f = rcFinish(); if (f == 2) return fail(e10OomWhy()); if (f == 1) return fail(rcWhy); }
     if (e10) {
         entHost = true; e10Done = true; out.e10.msEntries = msEnt;
         if (r11On) { for (uint32_t c : out.e10.r11) out.e10.r11Total += c; out.e10.msR11 = msR; }
     }
     rcf.all();
-    decltype(ho)().swap(ho); decltype(hcl)().swap(hcl);
+    decltype(hcl)().swap(hcl);
     if (in.clip.on) {
         clipHostFill = [&, tR0, nClipped]() {
             const double th = now();
@@ -1799,7 +1893,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     if (!al(pk1, maxP * 8) || !al(pk2, maxP * 8) || !al(pOrd, maxP * 4) || !al(pHead, maxP * 4) || !al(pHp, maxP * 4) || !al(pGh, maxP * 4))
         return failBudget("the dedup's largest hash partition (" + std::to_string(maxP) + " reads of " + std::to_string(NP) + " partitions) does not fit ("
                           + gbs(g_bud.used) + " in use), within " + budName + budHint);
-    singlet_engine_gpu::NoInitVector<u64> s1(maxP), s2(maxP); singlet_engine_gpu::NoInitVector<uint32_t> ghH(maxP);
+    const char* vfE = std::getenv("SINGLET_ENGINE_GPU_VERIFY");
+    const bool bgOn = !(vfE && std::string(vfE) == "inline");
+    singlet_engine_gpu::NoInitVector<u64> s1(maxP), s2(maxP); singlet_engine_gpu::NoInitVector<uint32_t> ghH(bgOn ? 0 : maxP);
+    if (bgOn) bgv.gh.resize(n);
     std::atomic<u64> coll{0};
     u64 nDist = 0, nWN = 0;
     std::vector<std::vector<uint32_t>> repT(nT);
@@ -1825,20 +1922,25 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             return failBudget(std::string("the dedup's sort of a hash partition (") + std::to_string(m) + " reads): " + e.what() + ", within " + budName + budHint);
         }
         if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("dedup kernels: ") + cudaGetErrorString(cudaGetLastError()));
-        if (!d2h(ghH.data(), pGh, m * 4)) return fail("dedup copy");
+        uint32_t* const gh = bgOn ? bgv.gh.data() + pBeg[p] : ghH.data();
+        if (!d2h(gh, pGh, m * 4)) return fail("dedup copy");
         tSort += now() - ta; ta = now();
         std::vector<u64> dT(nT, 0), nT1(nT, 0), cT(nT, 0);
         std::vector<std::thread> th;
         for (u64 t = 0; t < nT; t++) th.emplace_back([&, t]() {
             for (u64 j = m * t / nT, e = m * (t + 1) / nT; j < e; j++) {
-                const uint32_t h = ghH[j], gj = I[j], gH = I[h];
+                const uint32_t h = gh[j], gj = I[j], gH = I[h];
                 if (h != j) {
-                    const u64 L = rlen(gj);
-                    if (L != rlen(gH) || std::memcmp(rseq(gj), rseq(gH), L) != 0) cT[t]++;
-                    readRep[gj] = hN[gH] ? NONE : gH;
+                    if (!bgOn) {
+                        const u64 L = rlen(gj);
+                        if (L != rlen(gH) || std::memcmp(rseq(gj, 0), rseq(gH, 1), L) != 0) cT[t]++;
+                    }
+                    readRep[gj] = (hN[gH] & rrMask) ? NONE : gH;
                 } else {
                     dT[t]++;
-                    if (hN[gj]) { nT1[t]++; readRep[gj] = NONE; } else { readRep[gj] = gj; repT[t].push_back(gj); }
+                    if (hN[gj]) nT1[t]++;
+                    readRep[gj] = (hN[gj] & rrMask) ? NONE : gj;
+                    if (!(hN[gj] & repMask)) repT[t].push_back(gj);
                 }
             }
         });
@@ -1847,8 +1949,35 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         tHostD += now() - ta;
     }
     rcf.all();
-    decltype(hH1)().swap(hH1); decltype(hH2)().swap(hH2); decltype(hN)().swap(hN); decltype(Ip)().swap(Ip);
+    decltype(hH1)().swap(hH1); decltype(hH2)().swap(hH2); decltype(hN)().swap(hN);
     decltype(s1)().swap(s1); decltype(s2)().swap(s2); decltype(ghH)().swap(ghH);
+    if (bgOn) {   // the check of every group member against its head, beside what follows (joined before the records)
+        bgv.I.swap(Ip); bgv.pBeg = pBeg; bgv.on = true; bgv.t0 = now();
+        const int nv = (int) nT;
+        bgv.th = std::thread([&bgv, &rseq, &rlen, nv]() {
+            singlet::ThreadNameScope tnV("gpu-verify");
+            const u64 nAll = bgv.I.size();
+            std::vector<std::thread> tv;
+            for (int t = 0; t < nv; t++) tv.emplace_back([&, t]() {
+                u64 c = 0;
+                const u64 lo = nAll * (u64) t / (u64) nv, hi = nAll * (u64) (t + 1) / (u64) nv;
+                u64 p = (u64) (std::upper_bound(bgv.pBeg.begin(), bgv.pBeg.end(), lo) - bgv.pBeg.begin()) - 1;
+                for (u64 j = lo; j < hi; j++) {
+                    while (j >= bgv.pBeg[p + 1]) p++;
+                    const u64 b = bgv.pBeg[p];
+                    const uint32_t h = bgv.gh[j];
+                    if (b + h == j) continue;
+                    const uint32_t gj = bgv.I[j], gH = bgv.I[b + h];
+                    const u64 L = rlen(gj);
+                    if (L != rlen(gH) || std::memcmp(rseq(gj), rseq(gH), L) != 0) c++;
+                }
+                bgv.coll += c;
+            });
+            for (auto& x : tv) x.join();
+            bgv.t1 = now();
+        });
+    }
+    decltype(Ip)().swap(Ip);
     if (coll) return fail("hash collision between different sequences (" + std::to_string(coll.load()) + "): GPU path not used");
     out.nDistinct = nDist; out.nWithN = nWN;
     // map them in sequence order (first 32 bases, as k_prefix_key), stable
@@ -1885,9 +2014,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     {
         char l[600];
         snprintf(l, sizeof l, "engine_gpu: P3-MEM-03 reads phase in %llu read chunks of %llu: upload %.2f s, kernels %.2f s, to the host %.2f s; dedup in %llu hash "
-                 "partitions (largest %llu reads): sort %.2f s, groups on the host %.2f s, %llu distinct (%llu with N), 0 collisions; order %.2f s (%s)\n",
+                 "partitions (largest %llu reads): sort %.2f s, groups on the host %.2f s, %llu distinct (%llu with N), %s; order %.2f s (%s)\n",
                  (unsigned long long) nRC, (unsigned long long) RCN, tUp, tKer, tD2H, (unsigned long long) NP, (unsigned long long) maxP, tSort, tHostD,
-                 (unsigned long long) nDist, (unsigned long long) nWN, now() - tO0, sorted || nRep == 0 ? "device" : "host");
+                 (unsigned long long) nDist, (unsigned long long) nWN, bgOn ? "byte check beside the lanes" : "0 collisions", now() - tO0, sorted || nRep == 0 ? "device" : "host");
         out.log += l;
     }
     step("rc.dedup");
@@ -2265,11 +2394,24 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         cr.okv.assign(nK, 1); cr.sOff.assign(nK + 1, 0); cr.bOff.assign(nK + 1, 0); cr.rank.assign(nK + 1, 0);
         std::vector<uint8_t>& okv = cr.okv; std::vector<u64>& sOff = cr.sOff; std::vector<u64>& bOff = cr.bOff; std::vector<uint32_t>& rank = cr.rank;
         parallelFor(nK, hostThreads, [&](u64 lo, u64 hi) {
+            std::vector<uint8_t> nb;   // NREADS=check: this range's sequences with N and their results
             for (u64 k = lo; k < hi; k++) {
                 const uint8_t* p; u64 len; bool ok;
                 laneOf(cr, k, p, len, ok);
+                if (ok && nreads == 2) {
+                    const char* q = rseq(repc[k]); const u64 L = rlen(repc[k]);
+                    bool hasN = false;
+                    for (u64 j = 0; j < L && !hasN; j++) hasN = (uint8_t) q[j] > 3;
+                    if (hasN) {
+                        const uint32_t L4 = (uint32_t) L, B4 = (uint32_t) len;
+                        nb.insert(nb.end(), (const uint8_t*) &L4, (const uint8_t*) &L4 + 4); nb.insert(nb.end(), (const uint8_t*) q, (const uint8_t*) q + L);
+                        nb.insert(nb.end(), (const uint8_t*) &B4, (const uint8_t*) &B4 + 4); nb.insert(nb.end(), p, p + len);
+                        ok = false;   // no record: STAR maps its reads
+                    }
+                }
                 okv[k] = ok; sOff[k + 1] = ok ? rlen(repc[k]) : 0; bOff[k + 1] = ok ? len : 0; rank[k + 1] = ok ? 1 : 0;
             }
+            if (!nb.empty() && ndump.f) { std::lock_guard<std::mutex> lk(ndump.mu); std::fwrite(nb.data(), 1, nb.size(), ndump.f); }
         });
         for (u64 k = 0; k < nK; k++) { sOff[k + 1] += sOff[k]; bOff[k + 1] += bOff[k]; rank[k + 1] += rank[k]; if (!okv[k]) out.nFailed++; }   // not cached: STAR maps it
         stepAdd("records.prep", now() - tR0);
@@ -2301,32 +2443,81 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         std::vector<u64>().swap(cr.sOff); std::vector<u64>().swap(cr.bOff); std::vector<uint32_t>().swap(cr.rank); std::vector<uint32_t>().swap(cr.repc);
         stepAdd("records.copy", now() - tC);
     };
-    // E12: every chunk's sizes first, then the records' arrays allocated once at their final size without a zero-fill (before: grown per
-    // chunk by resize, i.e. a serial zero-fill and a copy of the earlier chunks), filled by the parallel copies
-    auto hostAll = [&]() -> bool {
-        for (auto& cr : chunks) if (!hostPrep(cr)) return false;
+    // align-w2 (SINGLET_ENGINE_GPU_RECASYNC, default on): the records assembled chunk by chunk on a second host thread while the device maps the
+    // next chunk (before: every chunk's records after the last chunk's lanes). Chunks in order, each at the offsets the earlier ones leave, so
+    // the records and their order are the ones before. The arrays are reserved once for every distinct sequence (sequences and offsets exactly,
+    // the blob from the first chunk's mean) and grown only if the blob passes that. =0: as before (E12, after the lanes).
+    const char* raE = std::getenv("SINGLET_ENGINE_GPU_RECASYNC");
+    const bool recAsync = !(raE && raE[0] == '0');
+    u64 recNext = 0, recS = 0, recB = 0, recR = 0; bool recInit = false, recOk = true;
+    std::vector<uint32_t> rrPos;   // per read: its representative's position in rep, or NONE (readRecord = recOfPos of it, once the records exist)
+    auto recOne = [&](u64 c) -> bool {
+        ChunkRes& cr = chunks[c];
+        if (!hostPrep(cr)) return false;
         const double tA0 = now();
-        u64 S = out.seq.size(), Bt = out.blob.size(), R = out.seqOff.size() - 1;
-        std::vector<u64> s0(chunks.size()), b0(chunks.size()), r0(chunks.size());
-        for (u64 c = 0; c < chunks.size(); c++) {
-            const u64 nK = chunks[c].repc.size();
-            s0[c] = S; b0[c] = Bt; r0[c] = R;
-            S += chunks[c].sOff[nK]; Bt += chunks[c].bOff[nK]; R += chunks[c].rank[nK];
+        const u64 nK = cr.repc.size();
+        if (!recInit) {
+            recInit = true;
+            recS = out.seq.size(); recB = out.blob.size(); recR = out.seqOff.size() - 1;
+            std::atomic<u64> sAll{0};
+            parallelFor(nRep, hostThreads, [&](u64 lo, u64 hi) { u64 s = 0; for (u64 k = lo; k < hi; k++) s += rlen(rep[k]); sAll += s; });
+            const u64 kept = cr.rank[nK], bpr = kept ? (cr.bOff[nK] + kept - 1) / kept : 64;
+            out.seq.reserve(recS + sAll.load()); out.seqOff.reserve(recR + nRep + 1); out.blobOff.reserve(recR + nRep + 1);
+            out.blob.reserve(recB + nRep * bpr + nRep / 4 * bpr + (64u << 20));
+            if (e2e) { recSrc.reserve(recR + nRep); recRead.reserve(recR + nRep); }
+            const double tP0 = now();
+            {   // readRecord's first half (it depends on the dedup and rep's order only)
+                singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);
+                parallelFor(nRep, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
+                rrPos.resize(n);
+                parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; rrPos[i] = r != NONE ? posOf[r] : NONE; } });
+            }
+            stepAdd("readRecord.pre", now() - tP0);
         }
-        out.seq.resize(S); out.blob.resize(Bt); out.seqOff.resize(R + 1); out.blobOff.resize(R + 1);
-        if (e2e) { recSrc.resize(R); recRead.resize(R); }
+        const u64 s0 = recS, b0 = recB, r0 = recR;
+        recS += cr.sOff[nK]; recB += cr.bOff[nK]; recR += cr.rank[nK];
+        out.seq.resize(recS); out.blob.resize(recB); out.seqOff.resize(recR + 1); out.blobOff.resize(recR + 1);
+        if (e2e) { recSrc.resize(recR); recRead.resize(recR); }
         stepAdd("records.alloc", now() - tA0);
-        for (u64 c = 0; c < chunks.size(); c++) hostCopy(chunks[c], s0[c], b0[c], r0[c]);
+        hostCopy(cr, s0, b0, r0);
         return true;
+    };
+    auto recUpTo = [&](u64 end) -> bool { for (; recNext < end; recNext++) if (!recOne(recNext)) return false; return true; };
+    std::thread recTh;
+    struct RecJoin { std::thread& t; ~RecJoin() { if (t.joinable()) t.join(); } } recJoinG{recTh};
+    double recWaited = 0;
+    auto recJoin = [&]() -> bool { if (recTh.joinable()) { const double tw = now(); recTh.join(); recWaited += now() - tw; } return recOk; };
+    // E12 (=0) / the rest of the chunks, after the async thread's: every chunk's records in order
+    auto hostAll = [&]() -> bool {
+        if (!recJoin()) return false;
+        if (recAsync) { stepAdd("records.wait", recWaited); recWaited = 0; }
+        return recUpTo(chunks.size());
     };
     tS = now();
     chunks.reserve(nChunks);
     for (u64 c0 = 0; c0 < rep.size(); c0 += CHUNK) {
         std::vector<uint32_t> repc(rep.begin() + c0, rep.begin() + std::min<u64>(rep.size(), c0 + CHUNK));
-        if (!gpuPart(repc, c0)) { return budFail ? failBudget(err) : fail(err); }
+        if (!gpuPart(repc, c0)) { recJoin(); return budFail ? failBudget(err) : fail(err); }
+        if (recAsync && chunks.capacity() >= nChunks) {   // capacity: chunks never moves while the thread reads it (reserved for nChunks)
+            if (!recJoin()) return fail(err);
+            const u64 e = chunks.size();
+            recTh = std::thread([&, e]() { singlet::ThreadNameScope tnRec("gpu-records"); recOk = recUpTo(e); });
+        }
     }
     if (!drainB()) return fail(err);
     if (lean) { decltype(leanSeq)().swap(leanSeq); decltype(leanOff)().swap(leanOff); }   // P3-MEM-03: the lanes are done; the records copy from the reads
+    if (bgv.on) {   // align-w2: the read chunks' group check, joined before any result leaves the lanes
+        const double tw = now();
+        bgv.join();
+        bgv.waited = now() - tw;
+        stepAdd("dedup.verify.wait", bgv.waited);
+        char l[240];
+        snprintf(l, sizeof l, "engine_gpu: dedup check of every hash group beside the index and the lanes: %.2f s, waited %.2f s for it after the lanes, %llu collisions\n",
+                 bgv.t1 - bgv.t0, bgv.waited, (unsigned long long) bgv.coll.load());
+        out.log += l;
+        decltype(bgv.I)().swap(bgv.I); decltype(bgv.gh)().swap(bgv.gh);
+        if (bgv.coll) return fail("hash collision between different sequences (" + std::to_string(bgv.coll.load()) + "): GPU path not used");
+    }
     tS = now();
     // E8: the pileup's records built on the device (E6 buildRecords) from the device-resident results and copied into the shared region
     // (in.e2e). Runs after hostPart (the host lane's results and the record order exist). false: the region is left without magic and the
@@ -2362,6 +2553,18 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         return g_bud.used + eIn + eBuild + eProd + eKeep + SLACK;
     };
     u64 capRec = cap; int recSlots = 1;
+    // E16 trace: what the host holds at a point of the records' phase (sizes only)
+    auto hostMark = [&](const char* where, u64 nRec) {
+        if (!singlet_tail::on()) return;
+        u64 hb = 0; for (auto& cr : chunks) hb += cr.hBlob.size() + cr.hOff.size() * 8;
+        double a, sh; singlet_tail::rss(a, sh);
+        const double G = 1073741824.0;
+        singlet_tail::mark("engine: %s: host anon %.1f GB, shmem %.1f GB; records seq %.1f, blob %.1f, offsets %.1f, recSrc+recRead %.1f, host lane %.1f, "
+                           "reads seq %.1f, off %.1f, aux %.1f, readRecord %.1f, clip %.1f GB (%llu records, %llu reads, RC %d, gatherDev %d)", where, a, sh,
+                           out.seq.size() / G, out.blob.size() / G, (out.seqOff.size() + out.blobOff.size()) * 8 / G, (recSrc.size() * 8 + recRead.size() * 4) / G,
+                           hb / G, in.seq.size() / G, in.off.size() * 8 / G, in.e10.aux.size() * 8 / G, out.readRecord.size() * 4 / G,
+                           (out.clip5.size() + out.clip3.size()) * 2 / G, (unsigned long long) nRec, (unsigned long long) n, (int) RC, (int) gatherDev);
+    };
     auto e2eBuild = [&](std::string& why) -> bool {
         singlet_engine_gpu::E2ERegion& RG = *in.e2e;
         const u64 nRec = out.seqOff.size() - 1;
@@ -2385,6 +2588,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             dfree(dA2);
             stepAdd("e2e.keep", now() - tk);
         }
+        hostMark("records phase", nRec);
         const double tg = now();
         LaneSrc* dTab = nullptr; u64 *dSrc = nullptr, *dBOff = nullptr, *dSOff = nullptr; uint32_t* dRd = nullptr; uint8_t* dBlob = nullptr; char* dRS = nullptr;
         u64 nB = 0, nS = 0, hostBytes = 0;
@@ -2398,6 +2602,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             if (!SU.init(std::max(1, std::min(8, hostThreads))) || !SU.copy(dBOff, out.blobOff.data(), (nRec + 1) * 8) || !SU.copy(dSOff, out.seqOff.data(), (nRec + 1) * 8)
                 || !SU.copy(dBlob, out.blob.data(), nB) || !SU.copy(dRS, out.seq.data(), nS) || !SU.finish()) { why = "records upload"; return false; }
             hostBytes = SU.bytes;
+            if (in.e2eHandover && singlet_tail::cut("handover") && e10 && in.e10.soloModel != nullptr) {   // E16 handover: read for the last time
+                singlet_engine_gpu::dropPages(out.blob.data(), nB); singlet_engine_gpu::dropPages(out.seq.data(), nS); out.hostDropped = true;
+                out.log += "engine_gpu: E16 handover: the host records' pages released after their upload (" + gbs(nB + nS) + ")\n";
+            }
         } else {
         // the gather: per chunk the lanes' packed results (device-resident; the host lane's uploaded), per record its source and sequence
         std::vector<LaneSrc> tab(chunks.size() * 4, LaneSrc{nullptr, nullptr});
@@ -2602,6 +2810,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             if (keep) { keepTally = budRound(std::max<u64>(1, n) * 8) * 2; g_bud.used += keepTally; g_bud.note(); }
             stepAdd("e2e.keep", now() - t0r);
         }
+        hostMark("records phase (RC)", nRec);
         // readRecord on the device (products' and E11's read -> record map); per chunk its local copy
         DB dRRg, dRRl;
         if (!dalc(dRRg, n * 4) || !dalc(dRRl, n * 4) || cudaMemcpy(dRRg.p, out.readRecord.data(), n * 4, cudaMemcpyHostToDevice) != cudaSuccess) {
@@ -2670,9 +2879,16 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         bool prodOk = e10;
         if (e10) out.e10.recMapped.assign(nRec, 0);
         u64 aB = 0, oB = 0, sB = 0;
+        // E16 handover: the host records are read for the last time by pass 2's upload of each chunk (the level-5 caller reads none after)
+        const bool handover = in.e2eHandover && singlet_tail::cut("handover");
         for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
             const u64 m = std::min(RRN, nRec - q0);
             if (!upChunk(q0, m)) { why = "records upload"; return false; }
+            if (handover && prodOk && keep) {
+                singlet_engine_gpu::dropPages(out.blob.data() + out.blobOff[q0], out.blobOff[q0 + m] - out.blobOff[q0]);
+                singlet_engine_gpu::dropPages(out.seq.data() + out.seqOff[q0], out.seqOff[q0 + m] - out.seqOff[q0]);
+                out.hostDropped = true;
+            }
             double ta = now();
             singlet_records_gpu::DeviceRecords R6; std::string e6err;
             struct R6Free { singlet_records_gpu::DeviceRecords& r; ~R6Free() { singlet_records_gpu::release(r); } } r6f{R6};
@@ -2717,6 +2933,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             tProd += now() - ta;
             devNote();
         }
+        hostMark("records pass 2 done (RC)", nRec);
+        if (out.hostDropped) out.log += "engine_gpu: E16 handover: the host records' pages released as pass 2 uploaded them (" + gbs(out.blob.size() + out.seq.size()) + ")\n";
         singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
         E2H.nRec = nRec; E2H.nAln = nAln; E2H.nOps = nOps; E2H.nSeq = nSeqT;
         E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
@@ -2789,6 +3007,11 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     };
     // per read: its record (sequence-cache result) or NONE; final once every hostPart ran
     auto fillReadRecord = [&]() {
+        if (rrPos.size() == n) {   // align-w2: the positions came with the records; one pass in place
+            out.readRecord.swap(rrPos); std::vector<uint32_t>().swap(rrPos);
+            parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t p = out.readRecord[i]; if (p != NONE) out.readRecord[i] = recOfPos[p]; } });
+            return;
+        }
         singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);   // set for every representative, the only reads readRep names
         parallelFor(rep.size(), hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) posOf[rep[k]] = (uint32_t)k; });
         out.readRecord.assign(n, NONE);
@@ -2905,6 +3128,19 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         dumpOutput(dp, P, H, out);
         snprintf(line, sizeof line, "engine_gpu: E6 dump of %llu records -> %s (%.1f s)\n", (unsigned long long)(out.seqOff.size() - 1), dp, now() - td);
         out.log += line;
+    }
+    // E16 handover: the host records' pages were released. Unless every condition of level 5 holds (the E8 records, E10's products, E11's keep,
+    // the masks, room for readRecord in the region: the caller's conditions for no summaries and no cache inserts), a fallback would read them:
+    // fail, and the caller runs mapDistinct again without the handover (SINGLET_E16_FORCE_FALLBACK=1 forces it, for the gate)
+    if (out.hostDropped) {
+        const u64 room = in.e2e ? in.e2e->cap : 0, o = in.e2e ? ((in.e2e->hdr()->used + 63) & ~63ull) : 0;
+        const char* why = !out.e2eOk ? "no E8 records" : !out.e10.ok ? "no E10 products" : !out.e10.soloKept ? "no E11 keep"
+                          : (out.e10.oQMask != 0) != in.e10.wantMask ? "the masks" : o + std::max<u64>(1, out.readRecord.size()) * 4 > room ? "the region is full"
+                          : std::getenv("SINGLET_E16_FORCE_FALLBACK") != nullptr ? "forced (SINGLET_E16_FORCE_FALLBACK)" : nullptr;
+        if (why != nullptr) {
+            out.handoverRetry = true;
+            return fail(std::string("E16 handover: a fallback would read the released host records (") + why + "); the caller runs mapDistinct again without the handover");
+        }
     }
     if (in.oomFatal && !e10Oom.empty()) return fail("E10 ran out of device memory (" + e10Oom + "); the caller runs mapDistinct again");
     return true;

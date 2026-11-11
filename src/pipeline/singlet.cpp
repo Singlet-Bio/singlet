@@ -39,6 +39,7 @@
 #include <fstream>
 #include <zlib.h>
 #include <atomic>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -99,6 +100,7 @@
 #include "singlet/nvtx.h"
 #include "singlet/thread_name.h"
 #include "singlet/pileup/nonhost/nonhost_sample.h"
+#include "singlet/pileup/nonhost/nonhost_fastscan.h"
 #include "singlet/pileup/tagged_bam.h"
 #include "singlet/pileup/cb_tag_scan.h"
 #include "singlet/fq/sra_reader.h"
@@ -1777,6 +1779,20 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
     }
 
     std::cerr << "[nonhost] Loading screening indices...\n";
+    // SINGLET_NONHOST_TIMING=1: wall and CPU seconds of each phase of the screen (speed work; no effect on any output)
+    const bool nh_time = std::getenv("SINGLET_NONHOST_TIMING") != nullptr;
+    StopWatch nh_sw;
+    double nh_last_w = 0, nh_last_c = 0;
+    auto nh_cpu = [] { rusage ru{}; getrusage(RUSAGE_SELF, &ru); return ru.ru_utime.tv_sec + ru.ru_stime.tv_sec + 1e-6 * (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec); };
+    const double nh_c0 = nh_cpu();
+    auto nh_mark = [&](const char* what) {
+        if (!nh_time) return;
+        const double w = nh_sw.elapsed_s(), c = nh_cpu() - nh_c0;
+        char buf[256];
+        std::snprintf(buf, sizeof buf, "[nonhost-time] %s: %.2f s wall, %.2f s cpu (stage %.2f s, %.2f s)\n", what, w - nh_last_w, c - nh_last_c, w, c);
+        std::cerr << buf;
+        nh_last_w = w; nh_last_c = c;
+    };
     try {
         // ── Load viral / bacterial / fungal indices ───────────────────────────
         // --engine gpu: the host reads only the headers and species names (MinSketchIndex::load_names); the entries go to the
@@ -1910,15 +1926,26 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         static constexpr size_t MAX_NONHOST_READS = 20'000'000;
         // the classified reads are the records of mate1 selected by nonhost_sample.h; the per-record outputs (nonhost_reads.fq, the per-cell
         // matrix) take the same records (nh_selected) so that they line up with multi_hits
+        // One parallel pass over mate1 (nonhost_fastscan.h) gives the same sample and an index of the selected records that the later passes
+        // use; a file that is not the regular 4-line layout, or SINGLET_NONHOST_SCAN=serial, takes the serial reader.
         singlet::nonhost::SampledReads nh_smp;
+        singlet::nonhost::fastscan::FastIndex nh_fi;
+        bool nh_fast = false;
         {
-            std::ifstream fq(mate1_path);
-            nh_smp = singlet::nonhost::sample_reads(fq, MAX_NONHOST_READS);
+            const char* scan_mode = std::getenv("SINGLET_NONHOST_SCAN");
+            if (!(scan_mode && std::string(scan_mode) == "serial"))
+                nh_fast = singlet::nonhost::fastscan::fast_sample(mate1_path, MAX_NONHOST_READS, std::max(1, n_threads), nh_smp, nh_fi);
+            if (!nh_fast) {
+                nh_fi = singlet::nonhost::fastscan::FastIndex{};
+                std::ifstream fq(mate1_path);
+                nh_smp = singlet::nonhost::sample_reads(fq, MAX_NONHOST_READS);
+            }
         }
         std::vector<std::string>& reads = nh_smp.reads;
         const bool nonhost_subsampled = nh_smp.subsampled;
         auto nh_selected = [&](const std::string& name_l, const std::string& seq_l) { return nh_smp.selected(name_l, seq_l); };
         const size_t n_total = reads.size();
+        nh_mark("sample");
         if (nonhost_subsampled)
             std::cerr << "[nonhost] Subsampled to " << n_total
                       << " reads by read-name hash (file above " << MAX_NONHOST_READS << ")\n";
@@ -1978,6 +2005,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
 #ifdef SINGLET_HAVE_ENGINE_GPU
         }
 #endif
+        nh_mark("classify");
         // Key microbial species apart from viral ones before anything counts species (D-100). Outputs write raw ids.
         if (!singlet::nonhost::tag_microbial_keys(multi_hits))
             throw std::runtime_error("nonhost: a microbial species id uses bit 31, which the engine reserves for its species key");
@@ -1991,8 +2019,16 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // on the report thresholds), on the run's threads (bit-identical at any count)
         const EmFit em_fit_all = em_fit(multi_hits, /*max_iter=*/500, /*tol=*/1e-6f, /*min_prefilter_hr=*/0.05f, std::max(1, n_threads));
         n_em_iter = em_fit_all.iterations;
+        if (nh_time) {
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "[nonhost-time] em steps: group %.2f s, invert %.2f s, iterate %.2f s (%d iterations, %zu species, %zu patterns), stats %.2f s\n",
+                          em_fit_all.sec_group, em_fit_all.sec_invert, em_fit_all.sec_iterate, em_fit_all.iterations, em_fit_all.idx_to_species.size(),
+                          em_fit_all.n_groups, em_fit_all.sec_stats);
+            std::cerr << buf;
+        }
         auto em_result = em_report(em_fit_all, kingdom_map, /*min_abundance=*/1e-4f, /*min_report_hr=*/0.30f,
                                    /*min_abs_reads=*/min_abs_reads);
+        nh_mark("em");
 
         std::cerr << "[nonhost] EM converged in " << n_em_iter
                   << " iterations, " << em_result.size() << " species above threshold\n";
@@ -2026,7 +2062,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                     }
                 }
                 singlet::nonhost::NonHostAligner sec_aligner(eff_ref_dir);
-                auto sec_results = sec_aligner.align(reads, em_result);
+                auto sec_results = sec_aligner.align(reads, em_result, std::max(1, n_threads));
                 if (!sec_results.empty())
                     singlet::nonhost::NonHostAligner::write_tsv(sec_results, out_prefix + "/nonhost");
             } else {
@@ -2035,6 +2071,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        nh_mark("secondary alignment");
         // ── NONHOST-CB-SPECIES-MATRIX: build per-cell species count matrix ────
         if (!valid_barcodes.empty()) {
             const std::string mate2_path = out_prefix + "/star_Unmapped.out.mate2";
@@ -2043,10 +2080,13 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                 // Only EM-confirmed species are counted and only they use the reads below, so with none confirmed (most samples)
                 // the table is empty whatever the reads are: the two unmapped files (tens of GB on a deep sample) are not read.
                 std::vector<singlet::nonhost::TaggedRead> tagged;
-                if (!em_result.empty())
-                    tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
-                        mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                if (!em_result.empty()) {
+                    if (!(nh_fast && singlet::nonhost::fastscan::fast_tag_reads(mate2_path, nh_fi, reads, cb_len, umi_len, std::max(1, n_threads), tagged)))
+                        tagged = singlet::nonhost::NonHostCellMatrix::read_mate_pairs(
+                            mate1_path, mate2_path, cb_len, umi_len, nh_selected);
+                }
 
+                nh_mark("read mate pairs");
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
                 std::unordered_set<uint32_t> em_confirmed;
@@ -2064,6 +2104,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                 cell_mat.write(out_prefix + "/nonhost");
                 std::cerr << "[nonhost] per-cell matrix: " << cell_mat.n_records()
                           << " cell\xc3\x97species records\n";
+                nh_mark("cell matrix");
 
                 // Confirmed-species reads (nonhost_confirmed_reads.h): only with EM-confirmed species and a host filter, and never a read
                 // with a host k-mer. Absent otherwise (uninfected samples have no member).
@@ -2083,6 +2124,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        nh_mark("confirmed reads");
         // ── Write nonhost_candidates.tsv: every species the EM gives at least 10 reads, before the report thresholds ──
         // (em_result above keeps only species with a mean hit rate of 0.30 and max(500, 0.5%) reads; the calibration of the infection probability
         // and any taxon-specific check of a negative library need the evidence below those thresholds as well)
@@ -2210,23 +2252,96 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             }
         }
 
+        nh_mark("tables and summary");
         // If any kingdom fraction > 1%, write nonhost_reads.fq for downstream mapping
         bool any_positive = (vf > 0.01 || bf > 0.01 || ff > 0.01);
         if (any_positive) {
             std::string fq_out_path = out_prefix + "/nonhost_reads.fq";
-            std::ofstream fq_out(fq_out_path);
-            std::ifstream fq_in(mate1_path);
-            singlet::nonhost::write_classified(fq_in, fq_out, nh_smp, [&](size_t i) {
-                return i < multi_hits.size() && multi_hits[i].top_category != NonHostCategory::UNKNOWN;
-            });
+            auto nh_keep = [&](size_t i) { return i < multi_hits.size() && multi_hits[i].top_category != NonHostCategory::UNKNOWN; };
+            if (!(nh_fast && singlet::nonhost::fastscan::fast_write_classified(nh_fi, nh_keep, std::max(1, n_threads), fq_out_path))) {
+                std::ofstream fq_out(fq_out_path);
+                std::ifstream fq_in(mate1_path);
+                singlet::nonhost::write_classified(fq_in, fq_out, nh_smp, nh_keep);
+            }
             std::cerr << "[nonhost] Wrote classified reads → " << fq_out_path << "\n";
         }
+        nh_mark("write classified");
 
     } catch (const std::exception& e) {
         std::cerr << "[nonhost] WARNING: screening failed: " << e.what() << "\n";
         // Non-fatal — pipeline continues without nonhost output
     }
 }
+
+// ── The screen beside the export ─────────────────────────────────────────────
+// run_nonhost_em_screening() reads the unmapped files and writes only under out_prefix/nonhost, nonhost_reads.fq and the nonhost_* tables; the
+// export, the donor demultiplexing and the summary read none of them, so singlet_main starts the screen on a thread and joins it right after
+// export_results (before the output inventory, HLA typing and the chimeric pass, which do read or list those files). The screen's stderr lines
+// are held while it runs and written in one block at the join, so the log does not depend on timing.
+// SINGLET_NONHOST_ASYNC=0 runs it in place as before.
+static thread_local std::string* g_nh_capture = nullptr;
+class NhLogRouter : public std::streambuf {
+public:
+    explicit NhLogRouter(std::streambuf* o) : o_(o) {}
+protected:
+    int_type overflow(int_type c) override {
+        if (traits_type::eq_int_type(c, traits_type::eof())) return traits_type::not_eof(c);
+        if (g_nh_capture) { g_nh_capture->push_back(traits_type::to_char_type(c)); return c; }
+        return o_->sputc(traits_type::to_char_type(c));
+    }
+    std::streamsize xsputn(const char* s, std::streamsize n) override {
+        if (g_nh_capture) { g_nh_capture->append(s, static_cast<size_t>(n)); return n; }
+        return o_->sputn(s, n);
+    }
+    int sync() override { return g_nh_capture ? 0 : o_->pubsync(); }
+private:
+    std::streambuf* o_;
+};
+class NonhostBackground {
+public:
+    NonhostBackground() = default;
+    NonhostBackground(const NonhostBackground&) = delete;
+    NonhostBackground& operator=(const NonhostBackground&) = delete;
+    ~NonhostBackground() { join(); }
+    void start(std::function<void()> fn) {
+        router_ = std::make_unique<NhLogRouter>(std::cerr.rdbuf());
+        orig_ = std::cerr.rdbuf(router_.get());
+        running_ = true;
+        sw_ = StopWatch();
+        th_ = std::thread([this, fn = std::move(fn)]() {
+            g_nh_capture = &log_;
+            try { fn(); }
+            catch (const std::exception& e) { log_ += std::string("[nonhost] WARNING: screening failed: ") + e.what() + "\n"; }
+            catch (...) { log_ += "[nonhost] WARNING: screening failed\n"; }
+            wall_ = sw_.elapsed_s();
+            g_nh_capture = nullptr;
+        });
+    }
+    bool running() const { return running_; }
+    void join() {
+        if (!running_) return;
+        const double t0 = sw_.elapsed_s();
+        if (th_.joinable()) th_.join();
+        std::cerr.rdbuf(orig_);
+        running_ = false;
+        std::cerr << log_;
+        if (std::getenv("SINGLET_NONHOST_TIMING")) {
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "[nonhost-time] ran beside the export: %.2f s wall, the join waited %.2f s\n", wall_, sw_.elapsed_s() - t0);
+            std::cerr << buf;
+        }
+        std::cerr << std::flush;
+        log_.clear();
+    }
+private:
+    std::unique_ptr<NhLogRouter> router_;
+    std::streambuf* orig_ = nullptr;
+    std::thread th_;
+    std::string log_;
+    StopWatch sw_;
+    double wall_ = 0;
+    bool running_ = false;
+};
 
 // ════════════════════════════════════════════════════════════
 // singlet build-nonhost-db — Build MinSketchIndex from a FASTA
@@ -2734,6 +2849,35 @@ static int cmd_nonhost(int argc, char* argv[]) {
         if (stat(p.c_str(), &st) != 0) return -1.0;
         return static_cast<double>(st.st_size) / 1073741824.0;
     };
+
+    // Speed work: the screen alone, from the kept STAR unmapped files of a run.
+    //   singlet nonhost replay OUT_PREFIX [--barcodes FILE] [--cb-len N] [--umi-len N] [--threads N] [--ref-base PATH]
+    // OUT_PREFIX holds star_Unmapped.out.mate1 (and mate2); the outputs go where the pipeline writes them. The three indexes are the ones in
+    // <ref-base>/nonhost/. FILE lists the called barcodes, one per line (SINGLET_NONHOST_DUMP_DIR=DIR on a run writes it as DIR/barcodes.txt).
+    if (op == "replay") {
+        std::string out_prefix, bc_file, rb;
+        int cbl = 16, umil = 12, thr = 8;
+        for (int i = 1; i < argc; i++) {
+            std::string a = argv[i];
+            if (a == "--barcodes" && i + 1 < argc) bc_file = argv[++i];
+            else if (a == "--cb-len" && i + 1 < argc) cbl = std::atoi(argv[++i]);
+            else if (a == "--umi-len" && i + 1 < argc) umil = std::atoi(argv[++i]);
+            else if (a == "--threads" && i + 1 < argc) thr = std::atoi(argv[++i]);
+            else if (a == "--ref-base" && i + 1 < argc) rb = argv[++i];
+            else if (out_prefix.empty()) out_prefix = a;
+        }
+        if (rb.empty()) if (const char* e = getenv("SINGLET_REF_BASE")) rb = e;
+        if (out_prefix.empty() || rb.empty()) {
+            std::cerr << "usage: singlet nonhost replay OUT_PREFIX [--barcodes FILE] [--cb-len N] [--umi-len N] [--threads N] [--ref-base PATH]\n";
+            return 2;
+        }
+        std::unordered_set<std::string> bcs;
+        if (!bc_file.empty()) { std::ifstream bf(bc_file); for (std::string l; std::getline(bf, l);) if (!l.empty()) bcs.insert(l); }
+        setenv("SINGLET_REF_BASE", rb.c_str(), 0);
+        run_nonhost_em_screening(rb + "/nonhost/viral.snhskidx", rb + "/nonhost/bacterial.snhskidx", rb + "/nonhost/fungal.snhskidx",
+                                 "", out_prefix, bcs, cbl, umil, thr);
+        return 0;
+    }
 
     if (op == "status") {
         std::cerr << "[singlet nonhost] Cache directory: " << NONHOST_SHM_DIR << "\n";
@@ -3372,7 +3516,7 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
         return r;
     };
     auto has = [](const std::vector<std::string>& v, const char* k) { return std::find(v.begin(), v.end(), std::string(k)) != v.end(); };
-    std::vector<std::string> snps, gtfs, edits;
+    std::vector<std::string> snps, gtfs, edits, tes;
     for (const auto& a : item_args) {
         const std::string gd = val(a, "--genome-dir");
         std::string gtf = val(a, "--exons"), snp = val(a, "--snps");
@@ -3399,8 +3543,21 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
             if (!rb.empty() && !panel.empty()) ed = rb + "/pileup_indices/" + panel;
         }
         if (!ed.empty()) edits.push_back(ed);
+        // TE annotation: --te-gtf, else --pipeline's default rmsk GTF for a human or mouse genome (as singlet_main resolves it)
+        std::string te = val(a, "--te-gtf");
+        if (te.empty() && has(a, "--pipeline") && !has(a, "--no-te") && !gd.empty()) {
+            std::string rb = val(a, "--ref-base");
+            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+            const bool human = gd.find("GRCh38") != std::string::npos || gd.find("hg38") != std::string::npos;
+            const bool mouse = gd.find("GRCm39") != std::string::npos || gd.find("mm39") != std::string::npos;
+            std::string f;
+            if (human && !mouse) f = "GRCh38_GENCODE_rmsk_TE.gtf.gz";
+            else if (mouse && !human) f = "GRCm39_GENCODE_rmsk_TE.gtf.gz";
+            if (!rb.empty() && !f.empty()) te = rb + "/pileup_indices/te/" + f;
+        }
+        if (!te.empty()) tes.push_back(te);
     }
-    return singlet::PileupEngine::preload_pool_references(snps, gtfs, edits);
+    return singlet::PileupEngine::preload_pool_references(snps, gtfs, edits, tes);
 }
 
 int main(int argc, char* argv[]) {
@@ -4757,6 +4914,9 @@ static int singlet_main(int argc, char* argv[]) {
     bool cb_hist_ready = false;
     // Reads whose CR is not an exact whitelist barcode (1MM / N), by packed 3-bit barcode, weighted by duplicates: the pass-1 input of the corrected barcode universe
     std::unordered_map<uint64_t, uint64_t> cbx_nonexact;
+    // The same input as flat (barcode, reads) runs from the .1fq head scan's R11 counts; a barcode may recur across runs. The universe
+    // resolves every entry on its own and sums integer counts, so the two containers add up to the same universe.
+    std::vector<std::pair<uint64_t, uint64_t>> cbx_flat;
     auto cbx_pack = [](const uint8_t* codes, int n) {
         uint64_t k = 0;
         for (int j = 0; j < n; ++j) k = (k << 3) | std::min<uint8_t>(codes[j], 4);
@@ -5449,7 +5609,7 @@ static int singlet_main(int argc, char* argv[]) {
                 // E8 region, where STAR's prefill wrote them right after its decode, or else (no region, no prefill decode) from the .1fq here
                 const int cb0 = r11_cb0, cbl = r11_cbl, umi0 = r11_umi0, umil = r11_umil;
                 const int nt = std::max(1, star_threads);
-                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack, r11_dict, r11_raws](singlet::CbCorrector& c) {
+                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, &cbx_flat, cbx_pack, r11_dict, r11_raws](singlet::CbCorrector& c) {
                     StopWatch sw;
                     std::vector<std::pair<uint64_t, uint64_t>> pairs;
                     uint64_t nwl = 0, tot = 0;
@@ -5489,26 +5649,87 @@ static int singlet_main(int argc, char* argv[]) {
                     uint64_t n_exact = 0;
                     const auto& dflat = runs->bc_dict_flat();
                     const uint16_t dlen = runs->bc_length();
+                    // The whitelist lookups (c.find, const) and the packing of the other barcodes run on the job's threads, one slot per
+                    // entry; the exact counts are integer sums. SINGLET_R11_FLAT=0: the non-exact barcodes go into cbx_nonexact one by one.
+                    const char* fe = std::getenv("SINGLET_R11_FLAT");
+                    const bool flat = !(fe && fe[0] == '0') && cbl <= 21;
+                    auto par_for = [nt](size_t n, auto&& fn) {
+                        const int T = static_cast<int>(std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(nt), n / 65536 + 1)));
+                        if (T == 1) { fn(size_t(0), n, 0); return T; }
+                        std::vector<std::thread> th;
+                        for (int t = 0; t < T; ++t) th.emplace_back([&fn, n, t, T] { fn(n * t / T, n * (t + 1) / T, t); });
+                        for (auto& x : th) x.join();
+                        return T;
+                    };
+                    // sorted (barcode, reads) runs of one thread's keys, appended to cbx_flat
+                    auto runs_of = [](std::vector<uint64_t>& keys, std::vector<std::pair<uint64_t, uint64_t>>& out) {
+                        std::sort(keys.begin(), keys.end());
+                        for (size_t a = 0; a < keys.size();) {
+                            size_t b = a + 1;
+                            while (b < keys.size() && keys[b] == keys[a]) ++b;
+                            out.emplace_back(keys[a], static_cast<uint64_t>(b - a));
+                            a = b;
+                        }
+                        std::vector<uint64_t>().swap(keys);
+                    };
                     if (dlen == static_cast<uint16_t>(cbl)) {
-                        char bcs[32];
+                        std::vector<int64_t> wk(dict.size(), -1);
+                        par_for(dict.size(), [&](size_t k0, size_t k1, int) {
+                            char bcs[32];
+                            for (size_t k = k0; k < k1; ++k) {
+                                if (!dict[k]) continue;
+                                for (int j = 0; j < cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(dflat[k * dlen + j], 4)];
+                                wk[k] = c.find(bcs);
+                            }
+                        });
                         for (size_t k = 0; k < dict.size(); ++k) {
                             if (!dict[k]) continue;
-                            for (int j = 0; j < cbl; ++j) bcs[j] = kNt[std::min<uint8_t>(dflat[k * dlen + j], 4)];
-                            const int64_t w = c.find(bcs);
+                            const int64_t w = wk[k];
                             if (w >= 0) { c.add_exact(w, dict[k]); n_exact += dict[k]; }
+                            else if (flat) cbx_flat.emplace_back(cbx_pack(dflat.data() + k * dlen, cbl), dict[k]);   // distinct dictionary barcodes
                             else if (cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + k * dlen, cbl)] += dict[k];   // #153: the pass-1 input of the corrected barcode universe
                         }
                     }
-                    for (const auto& v : raws)
-                        for (const auto& cb : v) {
-                            const int64_t w = c.find(cb.c_str());
-                            if (w >= 0) { c.add_exact(w, 1); ++n_exact; }
-                            else if (cbl <= 21) {
-                                uint8_t cd[32];
-                                for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
-                                cbx_nonexact[cbx_pack(cd, cbl)] += 1;
-                            }
+                    std::vector<const std::string*> rawp;
+                    for (const auto& v : raws) for (const auto& cb : v) rawp.push_back(&cb);
+                    std::vector<int64_t> wr(rawp.size(), -1);
+                    std::vector<std::vector<uint64_t>> tkeys(static_cast<size_t>(nt));
+                    par_for(rawp.size(), [&](size_t i0, size_t i1, int t) {
+                        for (size_t i = i0; i < i1; ++i) {
+                            const std::string& cb = *rawp[i];
+                            wr[i] = c.find(cb.c_str());
+                            if (wr[i] >= 0 || !flat) continue;
+                            uint8_t cd[32];
+                            for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
+                            tkeys[static_cast<size_t>(t)].push_back(cbx_pack(cd, cbl));
                         }
+                    });
+                    if (flat) {
+                        std::vector<std::vector<std::pair<uint64_t, uint64_t>>> truns(tkeys.size());
+                        par_for(tkeys.size() * 65536, [&](size_t a, size_t b, int) {
+                            for (size_t t = a / 65536; t < b / 65536; ++t) runs_of(tkeys[t], truns[t]);
+                        });
+                        for (auto& r : truns) cbx_flat.insert(cbx_flat.end(), r.begin(), r.end());
+                        for (size_t i = 0; i < rawp.size(); ++i)
+                            if (wr[i] >= 0) { c.add_exact(wr[i], 1); ++n_exact; }
+                    } else {
+                        size_t ri = 0;
+                        for (const auto& v : raws)
+                            for (const auto& cb : v) {
+                                const int64_t w = wr[ri++];
+                                if (w >= 0) { c.add_exact(w, 1); ++n_exact; }
+                                else if (cbl <= 21) {
+                                    uint8_t cd[32];
+                                    for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
+                                    cbx_nonexact[cbx_pack(cd, cbl)] += 1;
+                                }
+                            }
+                    }
+                    // the raw barcodes are freed on the job's threads
+                    std::vector<const std::string*>().swap(rawp);
+                    par_for(raws.size() * 65536, [&](size_t a, size_t b, int) {
+                        for (size_t q = a / 65536; q < b / 65536; ++q) std::vector<std::string>().swap(raws[q]);
+                    });
                     std::cerr << "[1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): " << n_exact << " reads over a "
                               << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s" << (early ? " (counted by the head scan)" : "") << "\n";
                 });
@@ -6426,26 +6647,30 @@ static int singlet_main(int argc, char* argv[]) {
         std::atomic<uint64_t> n_corrected{0}, n_lost{0};
         {
             const size_t nbk = cbx_nonexact.bucket_count();
-            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk, 1024))));
-            std::atomic<size_t> next_bk{0};
+            const size_t nfl = cbx_flat.size();
+            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk + nfl / 4096, 1024))));
+            std::atomic<size_t> next_bk{0}, next_fl{0};
             auto work = [&]() {
                 uint64_t corr = 0, lost = 0;
                 char raw[32], fixed_bc[40];
+                auto one = [&](uint64_t k, uint64_t n) {
+                    for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+                    raw[L] = '\0';
+                    const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+                    if (st < 0) { lost += n; return; }
+                    fixed_bc[L] = '\0';
+                    const int64_t w = cb_corrector.find(fixed_bc);
+                    if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
+                };
                 constexpr size_t kChunk = 4096;
                 for (size_t b0; (b0 = next_bk.fetch_add(kChunk)) < nbk;) {
                     const size_t b1 = std::min(nbk, b0 + kChunk);
                     for (size_t bk = b0; bk < b1; ++bk)
-                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) {
-                            const uint64_t n = it->second;
-                            uint64_t k = it->first;
-                            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
-                            raw[L] = '\0';
-                            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
-                            if (st < 0) { lost += n; continue; }
-                            fixed_bc[L] = '\0';
-                            const int64_t w = cb_corrector.find(fixed_bc);
-                            if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
-                        }
+                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) one(it->first, it->second);
+                }
+                for (size_t f0; (f0 = next_fl.fetch_add(kChunk)) < nfl;) {
+                    const size_t f1 = std::min(nfl, f0 + kChunk);
+                    for (size_t q = f0; q < f1; ++q) one(cbx_flat[q].first, cbx_flat[q].second);
                 }
                 n_corrected += corr; n_lost += lost;
             };
@@ -7523,13 +7748,17 @@ static int singlet_main(int argc, char* argv[]) {
     // The HLA sample stage (prefilter + sample T1K) reads only the input .1fq, so it runs on a thread from the STAR fork on,
     // in a temporary directory outside the run directory; the HLA step joins it and finishes (donors, summary) after export.
     // No fork happens in the parent while it runs. SINGLET_HLA_BG=0 runs the whole step after export as before.
+    // The donor stage (T1K per donor) needs the sample stage and donor_assignments.tsv only: export starts it on donor_th the moment
+    // demux has written the assignments (SINGLET_HLA_EARLY_DONORS=0: after export, as before). It works in the temporary directory.
     struct HlaBackground {
         singlet::hla::Session s;
-        std::thread th;
+        std::thread th, donor_th;
         bool on = false, finished = false;
         StopWatch sw;
         void stop() {   // join; an exit before the HLA step leaves no temporary files
+            if (donor_th.joinable()) donor_th.join();
             if (th.joinable()) th.join();
+            if (s.gz.valid()) s.gz.wait();
             if (on && !finished && !s.tmp.empty()) { std::error_code ec; std::filesystem::remove_all(s.tmp, ec); }
             finished = true;
         }
@@ -8908,7 +9137,7 @@ static int singlet_main(int argc, char* argv[]) {
                               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
                 hla_bg.on = true;
                 hla_bg.sw = StopWatch();
-                hla_bg.th = std::thread([&hla_bg] { singlet::hla::sample_stage(hla_bg.s); });
+                hla_bg.th = std::thread([&hla_bg] { singlet::set_thread_name("sg-hla"); singlet::hla::sample_stage(hla_bg.s); });
                 std::cerr << "[hla] sample stage started in the background (" << c.tmp_dir << ")\n";
             }
         }
@@ -9710,6 +9939,7 @@ static int singlet_main(int argc, char* argv[]) {
     // run_nonhost_em_screening() classifies reads with soft multi-hit threshold,
     // runs EM deconvolution, and writes nonhost_em_abundance.tsv + nonhost_summary.json.
     // Visium flows through this path (no early return above).
+    NonhostBackground nh_bg;   // joined after export_results
     if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty()) {
         mem_mark("before non-host");
         std::unordered_set<std::string> nonhost_valid_bcs;
@@ -9717,11 +9947,36 @@ static int singlet_main(int argc, char* argv[]) {
             const auto& bc_vec = engine_ptr->barcodes();
             nonhost_valid_bcs.insert(bc_vec.begin(), bc_vec.end());
         }
+        if (const char* dd = std::getenv("SINGLET_NONHOST_DUMP_DIR")) {   // inputs of `singlet nonhost replay` (speed work)
+            std::ofstream bf(std::string(dd) + "/barcodes.txt");
+            std::vector<std::string> sorted_bcs(nonhost_valid_bcs.begin(), nonhost_valid_bcs.end());
+            std::sort(sorted_bcs.begin(), sorted_bcs.end());
+            for (const auto& b : sorted_bcs) bf << b << "\n";
+            std::ofstream af(std::string(dd) + "/args.txt");
+            af << "--cb-len " << detected_bc_len << " --umi-len " << umi_len << " --threads " << star_threads << "\n";
+        }
         {
             SINGLET_NVTX("main: non-host screen");
-            singlet::name_omp_pool("sg-nonhost");   // STAR's child has exited: the screen's OpenMP pool too
-            run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
-                nonhost_ref_dir, out_prefix, nonhost_valid_bcs, detected_bc_len, umi_len, star_threads);
+            auto run_nh = [=, bcs = std::move(nonhost_valid_bcs)]() {
+                singlet::name_omp_pool("sg-nonhost");   // STAR's child has exited: the screen's OpenMP pool too
+                run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
+                    nonhost_ref_dir, out_prefix, bcs, detected_bc_len, umi_len, star_threads);
+            };
+            const char* nh_async_env = std::getenv("SINGLET_NONHOST_ASYNC");
+            if (nh_async_env && std::string(nh_async_env) == "0") {
+                run_nh();
+            } else {
+#ifdef _OPENMP
+                {   // the screen sets these on its calling thread; the export keeps the settings it had when the screen ran in place
+                    struct stat nh_st{};
+                    if (stat((out_prefix + "/star_Unmapped.out.mate1").c_str(), &nh_st) == 0 && nh_st.st_size != 0) {
+                        omp_set_dynamic(0);
+                        omp_set_num_threads(std::max(1, star_threads));
+                    }
+                }
+#endif
+                nh_bg.start(run_nh);
+            }
         }
     }
 
@@ -9948,7 +10203,20 @@ static int singlet_main(int argc, char* argv[]) {
                   << " metadata fields from " << metadata_json_path << "\n";
     }
 
+    if (hla_bg.on) {
+        const char* early = std::getenv("SINGLET_HLA_EARLY_DONORS");
+        if (!(early && std::string(early) == "0"))
+            export_cfg.on_donor_assignments = [&hla_bg]() {
+                if (hla_bg.donor_th.joinable()) return;
+                hla_bg.donor_th = std::thread([&hla_bg] {
+                    if (hla_bg.th.joinable()) hla_bg.th.join();
+                    singlet::hla::donor_stage(hla_bg.s);
+                });
+                std::cerr << "[hla] donor stage started after demux\n";
+            };
+    }
     auto export_stats = singlet::export_results(*engine_ptr, config, export_cfg);
+    if (nh_bg.running()) { singlet::rearm_stall_watchdog("non-host screen"); nh_bg.join(); }
 
     // ── D-101: HLA typing per sample and per donor (T1K on the input reads; private/hla/) ──
     // Reads only the input .1fq, so the CPU and GPU engines give the same output. Human genomes only (not the barnyard).
@@ -9961,6 +10229,7 @@ static int singlet_main(int argc, char* argv[]) {
                 std::cerr << "[hla] skipped: no T1K install at " << t1k << "\n";
             } else if (hla_bg.on) {
                 StopWatch wait_sw;
+                if (hla_bg.donor_th.joinable()) hla_bg.donor_th.join();   // it joined the sample stage first
                 if (hla_bg.th.joinable()) hla_bg.th.join();
                 const double waited = wait_sw.elapsed_s();
                 const auto hr = singlet::hla::finish_stage(hla_bg.s);

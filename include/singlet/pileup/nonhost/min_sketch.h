@@ -24,6 +24,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -32,6 +33,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -304,6 +306,68 @@ public:
         if (flat_mins.empty()) return;
         for_each_run([&](const MinSketchEntry* run, size_t n_run) {
             batch_query_run(run, n_run, flat_mins, results);
+        });
+    }
+
+    // The scan of batch_query_presorted on up to `nt` threads, returned as events instead of map increments. flat_mins is split into slices at
+    // hash boundaries (equal hashes stay together); each slice scans its own part of each run. out gets one vector per (run, slice), runs in
+    // for_each_run order and slices in ascending hash order; an element is read_idx << 32 | species_id, in the order in which the serial scan
+    // does results[read_idx][species_id]++ (query outer, entry inner). Replaying the elements of one read in the order of the vectors therefore
+    // gives each read's map the serial scan's insertion sequence.
+    void batch_query_events(const std::vector<std::pair<uint64_t, uint32_t>>& flat_mins, int nt,
+                            std::vector<std::vector<uint64_t>>& out) const {
+        out.clear();
+        const size_t nq = flat_mins.size();
+        if (nq == 0) return;
+        const size_t ns = std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(std::max(1, nt)) * 4, nq / 4096 + 1));
+        std::vector<size_t> qb(ns + 1, nq);
+        qb[0] = 0;
+        for (size_t i = 1; i < ns; ++i) {
+            size_t b = std::max(nq * i / ns, qb[i - 1]);
+            while (b > 0 && b < nq && flat_mins[b].first == flat_mins[b - 1].first) ++b;
+            qb[i] = b;
+        }
+        for_each_run([&](const MinSketchEntry* run, size_t n_run) {
+            const size_t base = out.size();
+            out.resize(base + ns);
+            if (n_run == 0) return;
+            auto slice = [&](size_t i) {
+                const size_t b = qb[i], e = qb[i + 1];
+                if (b >= e) return;
+                std::vector<uint64_t>& ev = out[base + i];
+                size_t qi = b;
+                size_t di = static_cast<size_t>(std::lower_bound(run, run + n_run, flat_mins[b].first,
+                                                [](const MinSketchEntry& x, uint64_t v) { return x.kmer_hash < v; }) - run);
+                while (qi < e && di < n_run) {
+                    const uint64_t qh = flat_mins[qi].first, dh = run[di].kmer_hash;
+                    if (qh < dh) { ++qi; continue; }
+                    if (qh > dh) {   // first entry >= qh, galloping from di (run[di] < qh)
+                        size_t lo = di, step = 1, hi = di + 1;
+                        while (hi < n_run && run[hi].kmer_hash < qh) { lo = hi; step <<= 1; hi = lo + step; }
+                        hi = std::min(hi, n_run);
+                        di = static_cast<size_t>(std::lower_bound(run + lo + 1, run + hi, qh,
+                                                 [](const MinSketchEntry& x, uint64_t v) { return x.kmer_hash < v; }) - run);
+                        continue;
+                    }
+                    const size_t qs = qi;
+                    while (qi < e && flat_mins[qi].first == qh) ++qi;
+                    const size_t ds = di;
+                    while (di < n_run && run[di].kmer_hash == qh) ++di;
+                    for (size_t qj = qs; qj < qi; ++qj)
+                        for (size_t dj = ds; dj < di; ++dj)
+                            ev.push_back((static_cast<uint64_t>(flat_mins[qj].second) << 32) | run[dj].species_id);
+                }
+            };
+            const size_t nth = std::min<size_t>(std::max(1, nt), ns);
+            if (nth <= 1) {
+                for (size_t i = 0; i < ns; ++i) slice(i);
+            } else {
+                std::atomic<size_t> next{0};
+                std::vector<std::thread> ts;
+                for (size_t t = 0; t < nth; ++t)
+                    ts.emplace_back([&]() { for (size_t i; (i = next.fetch_add(1)) < ns;) slice(i); });
+                for (auto& th : ts) th.join();
+            }
         });
     }
 

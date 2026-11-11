@@ -38,6 +38,10 @@
 #include "min_sketch.h"
 #include "host_kmer_filter.h"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <chrono>
 #include <numeric>
 #include <string>
 #include <unordered_set>
@@ -251,6 +255,91 @@ public:
 #endif
     }
 
+    // The flat (hash, read) list of the reads' minimizers, filled on nt threads (the same list a serial fill gives).
+    static void build_flat(const std::vector<std::vector<uint64_t>>& read_mins, int nt,
+                           std::vector<std::pair<uint64_t, uint32_t>>& flat) {
+        const size_t n_reads = read_mins.size();
+        std::vector<size_t> off(n_reads + 1, 0);
+        for (size_t ri = 0; ri < n_reads; ++ri) off[ri + 1] = off[ri] + read_mins[ri].size();
+        flat.resize(off[n_reads]);
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(static) num_threads(nt)
+#endif
+        for (long ri = 0; ri < static_cast<long>(n_reads); ++ri) {
+            size_t o = off[ri];
+            for (uint64_t h : read_mins[ri]) flat[o++] = {h, static_cast<uint32_t>(ri)};
+        }
+        (void) nt;
+    }
+
+    // Phases C and D on nt threads. The scan runs on slices of the sorted list (MinSketchIndex::batch_query_events); the events of each read
+    // are put back in the order of the serial scan (a counting sort by read, stable over the event vectors), and each read's two hit maps are
+    // filled from them in that order, which gives the maps the insertion sequence of batch_query_presorted, hence the same MultiHits.
+    std::vector<MultiHit> hits_parallel(const std::vector<std::pair<uint64_t, uint32_t>>& flat,
+                                        const std::vector<std::vector<uint64_t>>& read_mins,
+                                        float soft_threshold_multiplier, int nt) const {
+        const size_t n_reads = read_mins.size();
+        struct Grouped { std::vector<uint64_t> off; std::vector<uint32_t> sp; };
+        auto group = [&](const MinSketchIndex& idx, Grouped& g) {
+            std::vector<std::vector<uint64_t>> lists;
+            idx.batch_query_events(flat, nt, lists);
+            size_t total = 0;
+            for (const auto& l : lists) total += l.size();
+            const size_t S = std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(std::max(1, nt)), 8));
+            // segment q of the concatenated event stream: [total*q/S, total*(q+1)/S)
+            std::vector<size_t> lstart(lists.size() + 1, 0);
+            for (size_t i = 0; i < lists.size(); ++i) lstart[i + 1] = lstart[i] + lists[i].size();
+            auto for_segment = [&](size_t q, auto&& fn) {
+                const size_t b = total * q / S, e = total * (q + 1) / S;
+                if (b >= e) return;
+                size_t li = static_cast<size_t>(std::upper_bound(lstart.begin(), lstart.end(), b) - lstart.begin()) - 1;
+                for (size_t pos = b; pos < e; ++li) {
+                    const size_t lo = std::max(pos, lstart[li]), hi = std::min(e, lstart[li + 1]);
+                    for (size_t k = lo; k < hi; ++k) fn(lists[li][k - lstart[li]]);
+                    pos = std::max(pos, hi);
+                }
+            };
+            std::vector<uint32_t> cnt(n_reads * S, 0);   // read-major: cnt[read * S + segment]
+            auto run_segments = [&](auto&& fn) {
+                if (S == 1) { fn(size_t(0)); return; }
+                std::vector<std::thread> ts;
+                for (size_t q = 0; q < S; ++q) ts.emplace_back([&, q]() { fn(q); });
+                for (auto& th : ts) th.join();
+            };
+            run_segments([&](size_t q) { for_segment(q, [&](uint64_t ev) { ++cnt[(ev >> 32) * S + q]; }); });
+            g.off.assign(n_reads + 1, 0);
+            for (size_t r = 0; r < n_reads; ++r) {
+                uint64_t run = g.off[r];
+                for (size_t q = 0; q < S; ++q) { const uint32_t c = cnt[r * S + q]; cnt[r * S + q] = static_cast<uint32_t>(run - g.off[r]); run += c; }
+                g.off[r + 1] = run;
+            }
+            g.sp.resize(total);
+            run_segments([&](size_t q) {
+                for_segment(q, [&](uint64_t ev) {
+                    const size_t r = ev >> 32;
+                    g.sp[g.off[r] + cnt[r * S + q]++] = static_cast<uint32_t>(ev & 0xffffffffu);
+                });
+            });
+            std::vector<std::vector<uint64_t>>().swap(lists);
+        };
+        Grouped gv, gm;
+        group(viral_, gv);
+        group(microbial_, gm);
+        std::vector<MultiHit> results(n_reads);
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic, 64) num_threads(nt)
+#endif
+        for (long ri = 0; ri < static_cast<long>(n_reads); ++ri) {
+            const uint32_t np = static_cast<uint32_t>(read_mins[ri].size());
+            if (np == 0) continue;
+            std::unordered_map<uint32_t, uint32_t> vh, mh;
+            for (uint64_t k = gv.off[ri]; k < gv.off[ri + 1]; ++k) vh[gv.sp[k]]++;
+            for (uint64_t k = gm.off[ri]; k < gm.off[ri + 1]; ++k) mh[gm.sp[k]]++;
+            results[ri] = hits_to_multi_hit(vh, mh, np, soft_threshold_multiplier);
+        }
+        return results;
+    }
+
     // Build per-read MultiHit from batch-query hit maps (Phase D helper).
     // viral_hits[ri]    : {species_id → hit_count} from viral DB
     // microbial_hits[ri]: {species_id → hit_count} from microbial DB
@@ -324,28 +413,12 @@ public:
 
         // Phase B: build flat (hash, read_idx) list and sort in parallel
         std::vector<std::pair<uint64_t, uint32_t>> flat;
-        flat.reserve(total_mins);
-        for (uint32_t ri = 0; ri < static_cast<uint32_t>(n_reads); ++ri)
-            for (uint64_t h : read_mins[ri])
-                flat.push_back({h, ri});
+        build_flat(read_mins, nt, flat);
         parallel_sort_flat(flat, nt);
+        (void) total_mins;
 
-        // Phase C: batch merge-scan against both DBs (sequential, cache-friendly)
-        std::vector<std::unordered_map<uint32_t, uint32_t>> vh(n_reads), mh(n_reads);
-        viral_.batch_query_presorted(flat, vh);
-        microbial_.batch_query_presorted(flat, mh);
-
-        // Phase D: convert raw hit maps to MultiHit results in parallel
-        std::vector<MultiHit> results(n_reads);
-#ifdef _OPENMP
-        #pragma omp parallel for schedule(dynamic, 64) num_threads(nt)
-#endif
-        for (int ri = 0; ri < static_cast<int>(n_reads); ++ri) {
-            const uint32_t np = static_cast<uint32_t>(read_mins[ri].size());
-            if (np == 0) continue;
-            results[ri] = hits_to_multi_hit(vh[ri], mh[ri], np, soft_threshold_multiplier);
-        }
-        return results;
+        // Phases C and D: batch merge-scan against both DBs and the hit maps, on threads
+        return hits_parallel(flat, read_mins, soft_threshold_multiplier, nt);
     }
 
     // Classify a batch of reads with host-subtraction using sort-merge batch query.
@@ -365,6 +438,10 @@ public:
         const int nt = 1;
 #endif
 
+        const bool tm_on = std::getenv("SINGLET_NONHOST_TIMING") != nullptr;
+        auto tm_t0 = std::chrono::steady_clock::now();
+        double tm_a = 0, tm_flat = 0, tm_sort = 0, tm_c = 0;
+        auto tm_lap = [&](double& dst) { const auto t1 = std::chrono::steady_clock::now(); dst = std::chrono::duration<double>(t1 - tm_t0).count(); tm_t0 = t1; };
         // Phase A: extract + filter minimizers per read (parallel)
         // Reads with < kMinNonhostMins non-host minimizers stay empty (treated UNKNOWN).
         std::vector<std::vector<uint64_t>> read_mins(n_reads);  // filtered per-read
@@ -383,30 +460,24 @@ public:
                 read_mins[ri] = std::move(kept);
         }
         for (const auto& m : read_mins) total_mins += m.size();
+        tm_lap(tm_a);
 
         // Phase B: build flat list and sort in parallel
         std::vector<std::pair<uint64_t, uint32_t>> flat;
-        flat.reserve(total_mins);
-        for (uint32_t ri = 0; ri < static_cast<uint32_t>(n_reads); ++ri)
-            for (uint64_t h : read_mins[ri])
-                flat.push_back({h, ri});
+        build_flat(read_mins, nt, flat);
+        tm_lap(tm_flat);
         parallel_sort_flat(flat, nt);
+        tm_lap(tm_sort);
 
-        // Phase C: batch merge-scan against both DBs
-        std::vector<std::unordered_map<uint32_t, uint32_t>> vh(n_reads), mh(n_reads);
-        viral_.batch_query_presorted(flat, vh);
-        microbial_.batch_query_presorted(flat, mh);
-
-        // Phase D: convert hit maps to MultiHit results in parallel
-        std::vector<MultiHit> results(n_reads);
-#ifdef _OPENMP
-        #pragma omp parallel for schedule(dynamic, 64) num_threads(nt)
-#endif
-        for (int ri = 0; ri < static_cast<int>(n_reads); ++ri) {
-            const uint32_t np = static_cast<uint32_t>(read_mins[ri].size());
-            if (np == 0) continue;
-            // Use n_nonhost (filtered count) as denominator — same as classify_multi_filtered
-            results[ri] = hits_to_multi_hit(vh[ri], mh[ri], np, soft_threshold_multiplier);
+        // Phases C and D: batch merge-scan against both DBs and the hit maps (n_nonhost, the filtered count, is the denominator, as in
+        // classify_multi_filtered), on threads
+        std::vector<MultiHit> results = hits_parallel(flat, read_mins, soft_threshold_multiplier, nt);
+        tm_lap(tm_c);
+        if (tm_on) {
+            char buf[320];
+            std::snprintf(buf, sizeof buf, "[nonhost-time] cpu classify: minimizers+host filter %.2f s, flat list %.2f s (%zu minimizers), sort %.2f s, scan and hit maps %.2f s\n",
+                          tm_a, tm_flat, total_mins, tm_sort, tm_c);
+            std::cerr << buf;
         }
         return results;
     }

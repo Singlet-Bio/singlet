@@ -14,6 +14,7 @@
 //
 // Annotation: a TEtranscripts-style GTF (Tam and Hammell, GRCh38_GENCODE_rmsk_TE.gtf / GRCm39_GENCODE_rmsk_TE.gtf, from UCSC
 // RepeatMasker): one line per locus, gene_id = subfamily, transcript_id = locus, family_id, class_id.
+#include <cstdlib>
 #include <zlib.h>
 
 #include <algorithm>
@@ -104,6 +105,7 @@ public:
         int32_t max_tid = -1;
         for (const auto& kv : chrom_to_tid) max_tid = std::max(max_tid, kv.second);
         trees_.assign(static_cast<size_t>(max_tid + 1), IntervalTree());
+        bins_.assign(static_cast<size_t>(max_tid + 1), Bins());
         locus_tid_.assign(locus_fam_.size(), -1);
         for (auto& kv : chrom_intervals_) {
             int32_t tid = -1;
@@ -113,6 +115,7 @@ public:
             if (it != chrom_to_tid.end()) tid = it->second;
             if (tid < 0) continue;
             for (const auto& iv : kv.second) locus_tid_[iv.index] = tid;
+            build_bins(static_cast<size_t>(tid), kv.second);
             trees_[static_cast<size_t>(tid)].build(std::move(kv.second));
             ++n_resolved_;
         }
@@ -141,8 +144,10 @@ public:
         if (tr.size() == 0) return false;
         // per locus: aligned bases inside it (a read touches a handful of loci)
         hits_.clear();
+        const Bins& bn = bins_[static_cast<size_t>(tid)];
         for (const auto& b : blocks) {
-            tr.query(b.first, b.second, scratch);
+            if (bins_on()) bin_query(bn, b.first, b.second, scratch);   // the tree's set of loci (assign() does not depend on their order)
+            else tr.query(b.first, b.second, scratch);
             for (uint32_t li : scratch) {
                 const int32_t ov = std::min(b.second, locus_end_[li]) - std::max(b.first, locus_start_[li]);
                 if (ov <= 0) continue;
@@ -180,6 +185,52 @@ public:
     }
 
 private:
+    // assign()'s overlap query as fixed-width bins: every locus is listed in each 4 kb bin it overlaps, in start order, so a query reads
+    // one or two short contiguous lists instead of walking the tree. The same loci as IntervalTree::query (start < qend and end > qstart);
+    // a locus already listed in an earlier bin of the query is skipped. SINGLET_TE_BINS=0 queries the tree.
+    static constexpr int kBinShift = 12;
+    struct Bins { std::vector<uint32_t> off; std::vector<Interval> iv; };
+    std::vector<Bins> bins_;
+    static bool bins_on() {
+        static const bool on = [] { const char* v = std::getenv("SINGLET_TE_BINS"); return !(v && v[0] == '0'); }();
+        return on;
+    }
+    void build_bins(size_t tid, const std::vector<Interval>& ivs) {
+        Bins& B = bins_[tid];
+        int32_t maxEnd = 0;
+        for (const auto& iv : ivs) maxEnd = std::max(maxEnd, iv.end);
+        const size_t nb = static_cast<size_t>(maxEnd >> kBinShift) + 2;
+        std::vector<Interval> sorted(ivs);
+        std::stable_sort(sorted.begin(), sorted.end(), [](const Interval& a, const Interval& b) { return a.start < b.start; });
+        B.off.assign(nb + 1, 0);
+        for (const auto& iv : sorted) {
+            if (iv.end <= iv.start) continue;
+            for (size_t b = static_cast<size_t>(iv.start >> kBinShift), e = static_cast<size_t>((iv.end - 1) >> kBinShift); b <= e; ++b) ++B.off[b + 1];
+        }
+        for (size_t b = 0; b < nb; ++b) B.off[b + 1] += B.off[b];
+        B.iv.resize(B.off[nb]);
+        std::vector<uint32_t> fill(B.off.begin(), B.off.end() - 1);
+        for (const auto& iv : sorted) {
+            if (iv.end <= iv.start) continue;
+            for (size_t b = static_cast<size_t>(iv.start >> kBinShift), e = static_cast<size_t>((iv.end - 1) >> kBinShift); b <= e; ++b) B.iv[fill[b]++] = iv;
+        }
+    }
+    static void bin_query(const Bins& B, int32_t qs, int32_t qe, std::vector<uint32_t>& out) {
+        out.clear();
+        if (qe <= qs || B.off.size() < 2 || qe <= 0) return;
+        const size_t nb = B.off.size() - 1;
+        const size_t b0 = static_cast<size_t>(std::max(qs, 0) >> kBinShift);
+        const size_t b1 = std::min(static_cast<size_t>((qe - 1) >> kBinShift), nb - 1);
+        for (size_t b = b0; b <= b1; ++b) {
+            const int32_t binStart = static_cast<int32_t>(b << kBinShift);
+            for (uint32_t k = B.off[b], ke = B.off[b + 1]; k < ke; ++k) {
+                const Interval& iv = B.iv[k];
+                if (iv.start >= qe) break;                                // in start order: nothing later overlaps
+                if (b > b0 && iv.start < binStart) continue;               // listed in bin b - 1, which this query read
+                if (iv.end > qs) out.push_back(iv.index);
+            }
+        }
+    }
     std::vector<std::string> fam_names_;  // subfamily:family:class
     std::vector<uint32_t> locus_fam_;
     std::vector<int32_t> locus_start_, locus_end_, locus_tid_;
