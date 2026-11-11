@@ -205,8 +205,72 @@ template <class T> struct NoInitAlloc : std::allocator<T> {
 };
 template <class T> using NoInitVector = std::vector<T, NoInitAlloc<T>>;
 
+// Read sequence kept 2 bits per base (A0 C1 G2 T3) with an exact sparse record of the N bases (code 4), in place of one byte per base.
+// Blocks (a block is a run of reads, as the .1fq stores them) start on a byte: base k of block b is at bits 2 * (k & 3) of byte byteAt[b] + k / 4,
+// so threads decoding different blocks never share a byte. An N base is stored as A in the plane and its position in runs[b], sorted and
+// disjoint (global base positions); get() returns the original codes byte for byte.
+struct NRun { uint64_t pos, len; };
+struct PackedSeq {
+    uint64_t total = 0;                       // bases
+    std::vector<uint64_t> baseAt, byteAt;     // nBlocks + 1: first base, first byte of each block
+    NoInitVector<uint8_t> w;
+    std::vector<std::vector<NRun>> runs;      // per block
+    uint32_t blockOf(uint64_t p) const { return (uint32_t) (std::upper_bound(baseAt.begin(), baseAt.end(), p) - baseAt.begin()) - 1; }
+    // the codes of bases [p, p + len) into dst (any span, over block edges too)
+    void get(uint64_t p, uint64_t len, char* dst) const {
+        static const struct Tab { uint32_t t[256]; Tab() { for (int v = 0; v < 256; v++) { unsigned char b[4] = {(unsigned char) (v & 3), (unsigned char) ((v >> 2) & 3), (unsigned char) ((v >> 4) & 3), (unsigned char) (v >> 6)}; std::memcpy(&t[v], b, 4); } } } tab;
+        while (len > 0) {
+            const uint32_t b = blockOf(p);
+            const uint64_t e = std::min<uint64_t>(p + len, baseAt[b + 1]);
+            const uint64_t n = e - p, k = p - baseAt[b];
+            const uint8_t* s = w.data() + byteAt[b];
+            uint64_t i = 0;
+            for (; i < n && ((k + i) & 3) != 0; i++) dst[i] = (char) ((s[(k + i) >> 2] >> (2 * ((k + i) & 3))) & 3);
+            for (; i + 4 <= n; i += 4) std::memcpy(dst + i, &tab.t[s[(k + i) >> 2]], 4);
+            for (; i < n; i++) dst[i] = (char) ((s[(k + i) >> 2] >> (2 * ((k + i) & 3))) & 3);
+            const std::vector<NRun>& R = runs[b];
+            size_t lo = 0, hi = R.size();
+            while (lo < hi) { const size_t mid = (lo + hi) / 2; if (R[mid].pos + R[mid].len <= p) lo = mid + 1; else hi = mid; }
+            for (; lo < R.size() && R[lo].pos < e; lo++) {
+                const uint64_t a = std::max<uint64_t>(R[lo].pos, p), z = std::min<uint64_t>(R[lo].pos + R[lo].len, e);
+                std::memset(dst + (a - p), 4, z - a);
+            }
+            dst += n; p = e; len -= n;
+        }
+    }
+};
+// Packs one block's reads in order into its bytes (d), recording N runs. Codes above 3 must be 4 (bad is set otherwise).
+struct PackedSeqWriter {
+    uint8_t* d; uint64_t base; std::vector<NRun>* runs;   // the block's bytes, its first base, its runs
+    uint64_t k = 0; uint8_t acc = 0; bool bad = false;
+    PackedSeqWriter(uint8_t* d_, uint64_t base_, std::vector<NRun>* r) : d(d_), base(base_), runs(r) {}
+    void put1(uint8_t c) {
+        if (c > 3) {
+            if (c != 4) bad = true;
+            const uint64_t p = base + k;
+            if (!runs->empty() && runs->back().pos + runs->back().len == p) runs->back().len++; else runs->push_back(NRun{p, 1});
+            c = 0;
+        }
+        acc = (uint8_t) (acc | (c << (2 * (k & 3))));
+        if ((k & 3) == 3) { d[k >> 2] = acc; acc = 0; }
+        k++;
+    }
+    void put(const uint8_t* s, uint32_t L) {
+        uint32_t j = 0;
+        while (j < L && (k & 3) != 0) put1(s[j++]);
+        for (; j + 4 <= L; j += 4) {
+            uint32_t v; std::memcpy(&v, s + j, 4);
+            if (v & 0xFCFCFCFCu) { for (int x = 0; x < 4; x++) put1(s[j + x]); }
+            else { d[k >> 2] = (uint8_t) ((v & 3u) | ((v >> 6) & 0xCu) | ((v >> 12) & 0x30u) | ((v >> 18) & 0xC0u)); k += 4; }
+        }
+        while (j < L) put1(s[j++]);
+    }
+    void finish() { if ((k & 3) != 0) d[k >> 2] = acc; }
+};
+
 struct Input {
     NoInitVector<char> seq;          // concatenated sequences, STAR's numeric code (A0 C1 G2 T3, other 4); not zero-filled on resize (E13)
+    std::shared_ptr<const PackedSeq> pseq;   // E13 with the 2-bit store: the sequences live here and `seq` stays empty (the engine decodes the spans it needs)
     NoInitVector<uint64_t> off{0};   // seq[off[i] .. off[i+1]) is sequence i
     Clip clip;
     std::vector<uint16_t> pre5, pre3;   // with clip.pre: per read the bases STAR's CPU clip removes from its 5' and 3' ends

@@ -43,7 +43,9 @@ namespace ingest {
 // 4/5's read source, E11's RNA Q30 adjustment) reads the text of a read back from seq, qual and r1.
 struct PackedReads {
     uint64_t n = 0;                          // reads
-    NoInitVector<char> seq;                  // cDNA (mate 1 for STAR), STAR's numeric code A0 C1 G2 T3 N4; read r is [off[r], off[r + 1])
+    // cDNA (mate 1 for STAR), STAR's numeric code A0 C1 G2 T3 N4, kept 2 bits per base with an exact N record (PackedSeq, engine_gpu.h); read r is
+    // bases [off[r], off[r + 1]). Its blocks are the quality plane's (byteAt == qualAt), so the planes cost the same.
+    std::shared_ptr<PackedSeq> seq;
     NoInitVector<uint64_t> off;              // n + 1
     uint32_t nw = 0;                         // E10: quality words per read (0: no aux)
     NoInitVector<uint64_t> aux;              // E10: per read cr3, ur3, nw words (Input::E10::aux's layout)
@@ -73,7 +75,7 @@ struct PackedReads {
     uint64_t name(uint32_t b, uint64_t r) const { return nameAt[b] + (r - first[b]); }
     void release() { PackedReads e; swap(e); }
     void swap(PackedReads& o) {
-        std::swap(n, o.n); seq.swap(o.seq); off.swap(o.off); std::swap(nw, o.nw); aux.swap(o.aux); qual.swap(o.qual);
+        std::swap(n, o.n); std::swap(seq, o.seq); off.swap(o.off); std::swap(nw, o.nw); aux.swap(o.aux); qual.swap(o.qual);
         for (int k = 0; k < 4; k++) std::swap(qualPhred[k], o.qualPhred[k]);
         std::swap(r1L, o.r1L); std::swap(r1w, o.r1w); r1.swap(o.r1); first.swap(o.first); baseAt.swap(o.baseAt); qualAt.swap(o.qualAt);
         nameAt.swap(o.nameAt); std::swap(q30Rna, o.q30Rna); std::swap(nRna, o.nRna); std::swap(q30Cb, o.q30Cb); std::swap(nCb, o.nCb);

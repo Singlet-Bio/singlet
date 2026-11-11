@@ -112,7 +112,7 @@ E10Files e10f;
 // above; their host planes (cDNA quality, barcode read) stay here until the prefill returns, the sequences are in Input (ingSeq, ingOff)
 singlet_engine_gpu::ingest::PackedReads ing;
 bool ingOn = false;
-const char *ingSeq = nullptr;
+const singlet_engine_gpu::PackedSeq *ingPs = nullptr;   // the sequences (2 bits per base, exact N), owned by Input::pseq from ingestReads on
 const uint64_t *ingOff = nullptr;
 // what the prefill takes from the decode: phases A (decodeReads) and B (barcodes) of SeqCacheGpuIngest.cpp and C (cr4Clip, STAR's
 // CellRanger4 clip). startEarly's thread th0 runs A from STAR's first moment, beside the CR4 probe, then C with STAR's fixed CellRanger4
@@ -168,7 +168,7 @@ void ingRelease() {
         ingClipFree(*ingPrep);
         ingPrep->reads.release();
     }
-    ing.release(); ingOn = false; ingSeq = nullptr; ingOff = nullptr;
+    ing.release(); ingOn = false; ingPs = nullptr; ingOff = nullptr;
 }
 // STAR's read source is free for the prefill's own (level 4/5): none set, or the pipeline's E13 chunk source over the .1fq
 inline bool readSourceFree() { return g_starReadSource == nullptr || (const void *) g_starReadSource == singlet_engine_gpu::ingest::plan().fallback; }
@@ -797,7 +797,7 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
     const uint64 N = R.n;
     W.pre5.assign(N, 0); W.pre3.assign(N, 0); W.info.assign(N, 0);
     const uint64 Wl = (uint64) singlet_engine_gpu::ingest::plan().maxR2 + 1;
-    const char *sq = R.seq.data();
+    const singlet_engine_gpu::PackedSeq &PS = *R.seq;   // 2 bits per base: a read is decoded into a thread's buffer where its bytes are needed
     const uint64_t *of = R.off.data();
     auto par = [T](const std::function<void(int)> &f) {
         std::vector<std::thread> th;
@@ -819,12 +819,14 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
         rep.resize(N);
         par([&](int t) {
             for (uint64 i = cap * t / T, e = cap * (t + 1) / T; i < e; i++) tab[i] = 0;
+            std::vector<char> tb(Wl + 16);
             for (uint64 r = N * t / T, e = N * (t + 1) / T; r < e; r++) {
                 const uint64 a = of[r], L = of[r + 1] - a;
+                PS.get(a, L, tb.data());
                 uint64 x = 0x9E3779B97F4A7C15ull ^ (L * 0xC2B2AE3D27D4EB4Full), w;
                 uint64 j = 0;
-                for (; j + 8 <= L; j += 8) { memcpy(&w, sq + a + j, 8); x = (x ^ w) * 0xFF51AFD7ED558CCDull; x ^= x >> 32; }
-                if (j < L) { w = 0; memcpy(&w, sq + a + j, L - j); x = (x ^ w) * 0xFF51AFD7ED558CCDull; x ^= x >> 32; }
+                for (; j + 8 <= L; j += 8) { memcpy(&w, tb.data() + j, 8); x = (x ^ w) * 0xFF51AFD7ED558CCDull; x ^= x >> 32; }
+                if (j < L) { w = 0; memcpy(&w, tb.data() + j, L - j); x = (x ^ w) * 0xFF51AFD7ED558CCDull; x ^= x >> 32; }
                 x ^= x >> 29; x *= 0xC4CEB9FE1A85EC53ull; x ^= x >> 32;
                 h[r] = x;
             }
@@ -832,15 +834,17 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
         std::vector<uint64> nd(T, 0);
         par([&](int t) {
             uint64 n = 0;
+            std::vector<char> tb(Wl + 16), tq(Wl + 16);
             for (uint64 r = N * t / T, e = N * (t + 1) / T; r < e; r++) {
                 const uint64 a = of[r], L = of[r + 1] - a;
+                PS.get(a, L, tb.data());
                 for (uint64 sl = h[r] & mask;; sl = (sl + 1) & mask) {
                     uint32_t v = __atomic_load_n(&tab[sl], __ATOMIC_ACQUIRE);
                     if (v == 0) {
                         if (__atomic_compare_exchange_n(&tab[sl], &v, (uint32_t) (r + 1), false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) { rep[r] = (uint32_t) r; n++; break; }
                     }
                     const uint64 q = v - 1;   // the read in that slot (v: the value the exchange found)
-                    if (h[q] == h[r] && of[q + 1] - of[q] == L && memcmp(sq + of[q], sq + a, L) == 0) { rep[r] = (uint32_t) q; break; }
+                    if (h[q] == h[r] && of[q + 1] - of[q] == L && (PS.get(of[q], L, tq.data()), memcmp(tq.data(), tb.data(), L) == 0)) { rep[r] = (uint32_t) q; break; }
                 }
             }
             nd[t] = n;
@@ -867,7 +871,8 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
             for (int k = 0; k < nb; k++) {
                 const uint64 a = of[bat[k]], L = of[bat[k] + 1] - a;
                 char *d = asc.data() + k * Wl;
-                for (uint64 j = 0; j < L && j < Wl; j++) d[j] = kNt[(int) sq[a + j] & 7];
+                PS.get(a, std::min<uint64>(L, Wl), d);
+                for (uint64 j = 0; j < L && j < Wl; j++) d[j] = kNt[(int) d[j] & 7];
                 cr->opalFillOneSeq(k, d, (uint32) std::min<uint64>(L, Wl));
             }
             cr->opalAlign((uint8 *) c5.adSeqNum.data(), c5.adSeqNum.size(), nb);
@@ -878,7 +883,7 @@ void cr4Clip(const singlet_engine_gpu::ingest::PackedReads &R, const ClipMate &m
                 const uint64 rr = bat[k], a = of[rr], L = of[rr + 1] - a;
                 uint c5n = 0, c3n = 0;
                 if (L <= DEF_readSeqLengthMax) {
-                    memcpy(cbuf.data(), sq + a, L);
+                    PS.get(a, L, cbuf.data());
                     uint Lread = (uint) L;
                     c5.clippedInfo = (char) info;
                     c5n = c5.clip(Lread, cbuf.data());
@@ -975,8 +980,8 @@ bool ingestReads(Parameters &P, singlet_engine_gpu::Input &in, std::string &why,
         in.clip.dev = true; in.clip.cr4q.assign(W.cr4q.begin(), W.cr4q.end());
         in.clip.cr4n5 = W.cr4n5; in.clip.cr4after5 = W.cr4after5; in.clip.cr4n3 = W.cr4n3; in.clip.cr4after3 = W.cr4after3;
     }
-    in.seq.swap(ing.seq); in.off.swap(ing.off);
-    ingSeq = in.seq.data(); ingOff = in.off.data(); ingOn = true;
+    in.pseq = std::move(ing.seq); in.off.swap(ing.off);
+    ingPs = in.pseq.get(); ingOff = in.off.data(); ingOn = true;
     if (in.e10.on) {
         if (ing.nw == 0) {
             in.e10.on = false; in.e10.nw = 0;
@@ -1121,7 +1126,8 @@ inline bool ingRecord(uint64 r, E10Rec &x) {
     o.resize(aQ1 + L1);
     char *w = &o[0];
     w[0] = '@'; w[1] = 'r'; std::memcpy(w + 2, nb, nl);
-    for (uint64 j = 0; j < L; j++) w[aS0 + j] = kNt[(int) ingSeq[s0 + j] & 7];
+    ingPs->get(s0, L, w + aS0);
+    for (uint64 j = 0; j < L; j++) w[aS0 + j] = kNt[(int) w[aS0 + j] & 7];
     {
         char qc[4];
         for (int c = 0; c < 4; c++) qc[c] = (char) (ing.qualPhred[c] + 33);
@@ -1442,7 +1448,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         if (!ingestReads(P, in, why, waited)) return skip("E13 decode: " + why);
         const IngPrep &W = *ingPrep;
         P.inOut->logMain << "ENGINE_GPU: E13: " << ing.n << " reads decoded from the .1fq into the packed buffers in " << W.secA << " s (" << P.runThreadN
-                         << " threads; " << in.seq.size() << " cDNA bases, " << ing.qual.size() << " quality bytes, " << ing.r1.size() * 8 << " barcode-read bytes; "
+                         << " threads; " << (in.pseq ? in.pseq->total : (uint64_t) in.seq.size()) << " cDNA bases (" << (in.pseq ? "2-bit" : "bytes") << "), " << ing.qual.size() << " quality bytes, " << ing.r1.size() * 8 << " barcode-read bytes; "
                          << (!W.early ? std::string("decoded here (SINGLET_ENGINE_GPU_INGEST_EARLY=0)")
                              : (W.fromParent ? std::string("by the pipeline before it forked STAR") : "started with STAR's process, done " + std::to_string(W.doneA)
                                 + " s later") + ", taken " + std::to_string(W.waitA) + " s after STAR read its parameters")
@@ -1850,7 +1856,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                             for (uint64 k = hk.size() * t / nt; k < hk.size() * (t + 1) / nt; k++) {
                                 const uint64 i = hk[k], L = in.off[i + 1] - in.off[i];
                                 sq.resize(L);
-                                for (uint64 j = 0; j < L; j++) sq[j] = "ACGTN"[(int) in.seq[in.off[i] + j]];
+                                if (in.pseq) { in.pseq->get(in.off[i], L, &sq[0]); for (uint64 j = 0; j < L; j++) sq[j] = "ACGTN"[(int) sq[j] & 7]; }
+                                else for (uint64 j = 0; j < L; j++) sq[j] = "ACGTN"[(int) in.seq[in.off[i] + j]];
                                 E[i].flags |= g_handoffReadHook(i, sq.data(), L) & 0x1Cu;
                             }
                         });

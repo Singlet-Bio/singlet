@@ -991,6 +991,15 @@ template <class F> static void parallelFor(u64 n, int nt, F fn) {
     for (auto& x : th) x.join();
 }
 
+// a span of the 2-bit store decoded into a buffer of the calling thread (two slots: valid until that thread's next call with the same slot)
+static const char* packedRead(const singlet_engine_gpu::PackedSeq& ps, u64 p, u64 L, int slot) {
+    static thread_local std::vector<char> tb[2];
+    std::vector<char>& b = tb[slot & 1];
+    if (b.size() < L + 8) b.resize(L + 8);
+    ps.get(p, L, b.data());
+    return b.data();
+}
+
 template <class T> bool upload(const T* h, u64 n, T*& d, std::string& err, u64 pad = 0) {
     EG_CK(dmal(&d, (n + pad) * sizeof(T) + 8));
     if (pad) EG_CK(cudaMemset(d, 0, (n + pad) * sizeof(T) + 8));
@@ -1198,7 +1207,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     g_bud.reset(cap, std::min<u64>(tB0 - fB0, 1ull << 30));
     const u64 ctx = g_bud.used;
     const u64 SLACK = 1ull << 30;   // what the tally does not see: the modules' temporaries (E8, E10, E11), the driver's local memory for the kernels
-    const u64 n0 = in.off.size() - 1, S0 = in.seq.size();
+    const u64 n0 = in.off.size() - 1, S0 = in.pseq ? in.pseq->total : in.seq.size();
     const bool e10W = in.e10.on && in.e2e != nullptr && in.e2e->base != nullptr && n0 > 0 && in.e10.nw >= 1 && in.e10.aux.size() == n0 * (2 + (u64)in.e10.nw);
     const u64 IDX = SHC.on && !SHC.priv ? 0 : budRound(H.nGenome + 2 * PAD + 8) + budRound(saBytes + 72) + budRound(saiBytes + 72);
     const u64 TAB = ((u64)H.nChr * 2 + 1 + H.chrBinN + (u64)H.sjdbN * 4) * 8 + (u64)H.sjdbN * 4 + (24ull << 20);
@@ -1305,6 +1314,17 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     char* dSeq = nullptr; u64* dOff = nullptr;
     g_bud.at = "reads";
     if (RC) {}   // P3-MEM-03: by chunks, at the dedup below
+    else if (in.pseq) {   // the 2-bit store: decoded on the host threads and uploaded in steps
+        const u64 SB = in.pseq->total, STEP = 64ull << 20;
+        if (dmal(&dSeq, SB + 8) != cudaSuccess || dmal(&dOff, (n + 1) * 8 + 8) != cudaSuccess) return fail("out of device memory (reads)");
+        singlet_engine_gpu::NoInitVector<char> hb(std::min(SB, STEP) + 8);
+        for (u64 p0 = 0; p0 < SB; p0 += STEP) {
+            const u64 m0 = std::min(STEP, SB - p0);
+            parallelFor(m0, hostThreads, [&](u64 lo, u64 hi) { in.pseq->get(p0 + lo, hi - lo, hb.data() + lo); });
+            if (cudaMemcpy(dSeq + p0, hb.data(), m0, cudaMemcpyHostToDevice) != cudaSuccess) return fail("reads upload");
+        }
+        if (cudaMemcpy(dOff, in.off.data(), (n + 1) * 8, cudaMemcpyHostToDevice) != cudaSuccess) return fail("reads upload");
+    }
     else if (staged) {
         if (dmal(&dSeq, in.seq.size() + 8) != cudaSuccess || dmal(&dOff, (n + 1) * 8 + 8) != cudaSuccess) return fail("out of device memory (reads)");
         if (!SR.copy(dSeq, in.seq.data(), in.seq.size()) || !SR.copy(dOff, in.off.data(), (n + 1) * 8) || !SR.finish()) return fail("reads upload");
@@ -1510,8 +1530,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     if ((lean || split) && !RC) entToRegion();
     memMark("reads+clip");
     // a read's (clipped) sequence on the host
-    auto rseq = [&](u64 i) { return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i]; };
     auto rlen = [&](u64 i) { return hcs.empty() ? in.off[i + 1] - in.off[i] : hoffC[i + 1] - hoffC[i]; };
+    // with the 2-bit store the read is decoded into one of the calling thread's two buffers (valid until its next call with the same slot)
+    auto rseq = [&](u64 i, int slot = 0) -> const char* {
+        if (!in.pseq) return hcs.empty() ? in.seq.data() + in.off[i] : in.seq.data() + hcs[i];
+        return packedRead(*in.pseq, hcs.empty() ? in.off[i] : hcs[i], rlen(i), slot);
+    };
     cudaStreamSynchronize(0);   // E12: not the device (the index copy stream runs on)
     out.secUpload = now() - t0;
     step("clip.rest");
@@ -1687,14 +1711,21 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     singlet_engine_gpu::NoInitVector<u64> ho(RCN + 1), hcl(in.clip.on ? RCN : 0);
     u64 nClipped = 0; float msEnt = 0, msR = 0;
     double tUp = 0, tKer = 0, tD2H = 0;
+    singlet_engine_gpu::NoInitVector<char> hSeqC;   // the 2-bit store's chunk, decoded
     for (u64 r0 = 0; r0 < n; r0 += RCN) {
         const u64 m = std::min(RCN, n - r0), b0 = in.off[r0], nb = in.off[r0 + m] - b0;
         const unsigned G = (unsigned) ((m + 255) / 256);
         double ta = now();
         parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) ho[k] = in.off[r0 + k] - b0; });
-        const bool up = staged ? SR.copy(cSeq, in.seq.data() + b0, nb) && SR.copy(cOff, ho.data(), (m + 1) * 8)
+        const char* spc = in.seq.data() + b0;
+        if (in.pseq) {
+            hSeqC.resize(nb);
+            parallelFor(nb, hostThreads, [&](u64 lo, u64 hi) { in.pseq->get(b0 + lo, hi - lo, hSeqC.data() + lo); });
+            spc = hSeqC.data();
+        }
+        const bool up = staged ? SR.copy(cSeq, spc, nb) && SR.copy(cOff, ho.data(), (m + 1) * 8)
                                  && (!e10 || SR.copy(cAux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8)) && SR.finish()
-                               : cudaMemcpy(cSeq, in.seq.data() + b0, nb, cudaMemcpyHostToDevice) == cudaSuccess
+                               : cudaMemcpy(cSeq, spc, nb, cudaMemcpyHostToDevice) == cudaSuccess
                                  && cudaMemcpy(cOff, ho.data(), (m + 1) * 8, cudaMemcpyHostToDevice) == cudaSuccess
                                  && (!e10 || cudaMemcpy(cAux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8, cudaMemcpyHostToDevice) == cudaSuccess);
         if (!up) return fail("reads upload (read chunk at " + std::to_string(r0) + ")");
@@ -1834,7 +1865,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                 const uint32_t h = ghH[j], gj = I[j], gH = I[h];
                 if (h != j) {
                     const u64 L = rlen(gj);
-                    if (L != rlen(gH) || std::memcmp(rseq(gj), rseq(gH), L) != 0) cT[t]++;
+                    if (L != rlen(gH) || std::memcmp(rseq(gj, 0), rseq(gH, 1), L) != 0) cT[t]++;
                     readRep[gj] = hN[gH] ? NONE : gH;
                 } else {
                     dT[t]++;
