@@ -38,7 +38,7 @@ namespace singlet { namespace safeguards {
 //   2  called cells in the same members, as before; the uncalled barcodes in separate members (mt_allele_counts_uncalled*,
 //      allsite/allele_delta_uncalled.bin, allsite/cells_uncalled.tsv.gz)
 // SINGLET_UNCALLED_MODE overrides the default (measurement runs).
-constexpr int kDefaultUncalledMode = 1;
+constexpr int kDefaultUncalledMode = 2;   // measured on the gate samples: mode 1 grew the two members by 63-207% (mt) and 65-81% (all-site), far over 15%
 inline int uncalled_mode() {
     if (const char* e = std::getenv("SINGLET_UNCALLED_MODE")) {
         const int m = std::atoi(e);
