@@ -1620,8 +1620,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         const double G = 1073741824.0;
         singlet_tail::mark("prefill: host anon %.1f GB, shmem %.1f GB; records seq %.1f, blob %.1f, offsets %.1f; reads seq %.1f, off %.1f, aux %.1f; "
                            "planes qual %.1f, r1 %.1f, seq %.1f, aux %.1f; readRecord %.1f GB", a, sh, out.seq.size() / G, out.blob.size() / G,
-                           (out.seqOff.size() + out.blobOff.size()) * 8 / G, in.seq.size() / G, in.off.size() * 8 / G, in.e10.aux.size() * 8 / G,
-                           ing.qual.size() / G, ing.r1.size() * 8 / G, ing.seq.size() / G, ing.aux.size() * 8 / G, out.readRecord.size() * 4 / G);
+                           (out.seqOff.size() + out.blobOff.size()) * 8 / G, (in.seq.size() + (in.pseq ? in.pseq->total : 0)) / G, in.off.size() * 8 / G, in.e10.aux.size() * 8 / G,
+                           ing.qual.size() / G, ing.r1.size() * 8 / G, (ing.seq ? ing.seq->total : 0) / G, ing.aux.size() * 8 / G, out.readRecord.size() * 4 / G);
     }
     time_t tGpu = time(nullptr);
     if (ok && tableMode) {   // per table sequence -> per read, in file order
