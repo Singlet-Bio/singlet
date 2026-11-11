@@ -28,8 +28,8 @@ wrong-species reads. STARsolo run at 10 (`run_starsolo.sbatch PROFILE=beta10`) r
 the same number of wrong molecules. The Beta aligner profile now uses Cell Ranger's 30. The third showed only on hgmm5k_v3,
 where Singlet counted fewer wrong-species molecules than STARsolo but 0.8% fewer molecules overall, which left its fraction just
 above. `intron_rule::kUmiGeneSpliced` (2048) closes it: a UMI seen in two genes of a cell keeps its winner only when the winner
-is spliced (`sim_rules.py` predicted the effect on a molecule dump before the change). The default rules are 2957 = 397 + 512 +
-2048. Dropping kUnique (908, or 1932) adds wrong intronic multimappers, so it stays on.
+is spliced (`sim_rules.py` predicted the effect on a molecule dump before the change). The default rules were 2957 = 397 + 512 +
+2048 at this commit; the release default is now 61837 (0xF18D) = 397 + 4096 + 8192 + 16384 + 32768, which dropped 512 and 2048. Dropping kUnique (908, or 1932) adds wrong intronic multimappers, so it stays on.
 
 | hgmm1k_v3 | rules 397, score 10 | 909, score 10 | 909, score 30 | STARsolo 2.7.11b |
 |---|---|---|---|---|
