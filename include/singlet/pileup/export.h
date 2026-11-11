@@ -955,6 +955,129 @@ inline ExportStats export_results(const PileupEngine& engine,
         }
     }
 
+    // ── Tail concurrency (wave 4) ──
+    // The donor demux, the TE tables and the RNA-editing outputs read only the matrices built above and the called cells. They used to start in
+    // Phase 3, after the ambient fit, the doublet scores, the cell-QC table and the chrM call, none of which they read; they now start as soon as
+    // the cells are called and run beside those phases. Each writes whole files from its own inputs, so the bytes do not depend on the overlap.
+    singlet::set_thread_name("sg-write");   // the parallel writers inherit it; the demux thread and the editing and TE writers name their own
+    // .1pz outputs whose write failed, named relative to out_prefix
+    // ("exon_counts.1pz", "donor/snp_ad.1pz"). Appended to from several writer
+    // threads, hence the mutex. Any entry marks the run fail_export_matrix in
+    // summary.json (pack_gse then excludes the sample from its bundle), and no
+    // 0x0 stub is written in its place further down: a silent stub is how
+    // samples with cells but no data reached bundles.
+    std::mutex failed_writes_mu;
+    std::vector<std::string> failed_writes;
+    auto record_failed_write = [&](const std::string& name) {
+        std::lock_guard<std::mutex> lock(failed_writes_mu);
+        failed_writes.push_back(name);
+        std::cerr << "[export] ERROR: failed to write "
+                  << out_prefix << "/" << name << "\n";
+    };
+
+    // Write helper — uses atomic write-to-tmp-then-rename for crash safety
+    auto write_matrix = [&](const std::string& prefix, auto& csc,
+                            const std::vector<std::string>& feature_names) {
+        if (use_1pz) {
+            if (!atomic_write_1pz(out_prefix + "/" + prefix + ".1pz",
+                    csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data,
+                    feature_names, barcodes, 3, 1024, 4, export_cfg.user_meta))
+                record_failed_write(prefix + ".1pz");
+        } else if (!use_h5ad) {
+            write_mtx(out_prefix + "/" + prefix + ".mtx.gz",
+                      csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data);
+            write_names(out_prefix + "/" + prefix + "_features.tsv.gz", feature_names);
+            write_names(out_prefix + "/" + prefix + "_barcodes.tsv.gz", barcodes);
+        }
+        // h5ad-only mode: sub-gene matrices not written (gene-level .h5ad written separately)
+    };
+
+    std::vector<std::thread> write_threads;
+
+    std::thread demux_thread;
+    DemuxResult demux_result;
+    if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
+        demux_thread = std::thread([&]() {
+            singlet::set_thread_name("sg-demux");
+            singlet::ExportTimer dmx_timer("export.h demux", __LINE__);
+            // B-G5-3: K=1 workaround — skip VB entirely; synthesize all-donor0 result.
+            // vireoSNP (and our VB) crash or are meaningless at K=1; the correct answer
+            // is trivially that every cell belongs to donor0.
+            if (export_cfg.n_donors == 1) {
+                demux_result = make_single_donor_result(
+                    snp_ad_csc.nrows, snp_ad_csc.ncols,
+                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
+                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data());
+            } else {
+                DonorDemuxConfig dcfg;
+                dcfg.n_donors = export_cfg.n_donors;
+                dcfg.threads = export_cfg.threads;
+                dcfg.seed = 42;
+                if (const char* e = std::getenv("SINGLET_DEMUX_SCREEN"))
+                    dcfg.screen_single_donor = std::atoi(e) != 0;
+                // run_demux, or one model per species on a barnyard (human + mouse) panel
+                demux_result = run_demux_by_species(
+                    snp_ad_csc.nrows, snp_ad_csc.ncols,
+                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
+                    snp_ad_csc.data.size(),
+                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data(),
+                    snp_dp_csc.data.size(), dcfg,
+                    cc_result.cell_indices, // filter VB to EmptyDrops-called cells only
+                    engine.snp_names());
+            }
+        });
+    }
+
+    // D-101: RNA editing at the REDIportal sites. Per-site allele counts are owner-only (private/editing/); the per-cell index and the
+    // summary are public (rna_editing.h). Its own thread, joined before the run's provenance below rather than with write_threads, so the
+    // donor VCFs and the mt outputs after the demux join do not wait for it; inside it the two matrices and the site table are written at once.
+    std::thread edit_thread;
+    if (have_editing) {
+        edit_thread = std::thread([&]() {
+            singlet::set_thread_name("sg-editing");
+            std::filesystem::create_directories(out_prefix + "/private/editing");
+            const auto er = editing::summarize(edit_alt_csc, edit_dp_csc, cc_result.cell_indices);
+            std::vector<std::string> cov_names(er.covered.size());
+            for (size_t j = 0; j < er.covered.size(); ++j) cov_names[j] = engine.edit_name(er.covered[j]);
+            std::thread t_alt([&]() {
+                auto alt_cov = editing::select_rows(edit_alt_csc, er.covered);
+                write_matrix("private/editing/editing_alt", alt_cov, cov_names);
+            });
+            std::thread t_dp([&]() {
+                auto dp_cov = editing::select_rows(edit_dp_csc, er.covered);
+                write_matrix("private/editing/editing_dp", dp_cov, cov_names);
+            });
+            if (!editing::write_sites(out_prefix + "/private/editing/editing_sites.tsv.gz", er, cov_names))
+                record_failed_write("private/editing/editing_sites.tsv.gz");
+            if (!editing::write_cells(out_prefix + "/editing_cells.tsv", er, cc_result.cell_indices, barcodes))
+                record_failed_write("editing_cells.tsv");
+            if (!editing::write_summary(out_prefix + "/editing_summary.json", pileup_cfg.edit_path, engine.n_edit_sites(), er,
+                                        cc_result.cell_indices.size()))
+                record_failed_write("editing_summary.json");
+            t_alt.join(); t_dp.join();
+            std::cerr << "[editing] " << er.covered.size() << " of " << engine.n_edit_sites() << " panel sites covered, "
+                      << er.n_sites_10 << " with >= 10 UMIs in called cells; editing index "
+                      << (er.dp_total ? double(er.alt_total) / double(er.dp_total) : 0.0) << "\n";
+        });
+    }
+
+    // TE molecules (te_counts.h): subfamilies x barcodes (unique and multi-mapped reads), loci x barcodes (unique reads, loci with a
+    // molecule), and the locus table. Built from the records in any order, so the CPU and GPU paths write the same bytes.
+    if (!pileup_cfg.exon_gtf_path.empty() && engine.has_te())
+        write_threads.emplace_back([&]() {
+            singlet::set_thread_name("sg-te");
+            auto t0 = std::chrono::high_resolution_clock::now();
+            auto te = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()), engine.tid_to_chrom());
+            write_matrix("te_counts", te.fam, te.fam.names);
+            write_matrix("te_locus_counts", te.locus, te.locus.names);
+            write_gz_text(out_prefix + "/te_loci.tsv.gz", te.loci_tsv);
+            std::cerr << "[te] " << te.n_records << " TE reads (" << te.n_unique_records << " unique) -> " << te.fam_molecules
+                      << " subfamily molecules, " << te.locus_molecules << " locus molecules in " << te.locus.nrows << " loci, time="
+                      << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count() << "s\n";
+        });
+
+    singlet::set_thread_name("sg-export");
+
     // -- Phase 1.75: Ambient RNA correction (N11, gene-level DecontX-style cluster EM) --
     // Runs whenever cell calling produced a non-empty cell set. The estimator works on GENE counts (exon, plus intron
     // counts when present): ambient profile from the empty droplets (1..lower_umi UMIs), quick deterministic clusters,
@@ -1305,74 +1428,6 @@ inline ExportStats export_results(const PileupEngine& engine,
     // ── Phase 3: Demux + parallel writes ──
     nvexp.next("export: Phase 3: Demux + parallel writes"); expclk.next("export: Phase 3: Demux + parallel writes");
     singlet::set_thread_name("sg-write");   // the parallel writers inherit it; the demux thread and the editing and TE writers name their own
-    std::thread demux_thread;
-    DemuxResult demux_result;
-    if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
-        demux_thread = std::thread([&]() {
-            singlet::set_thread_name("sg-demux");
-            singlet::ExportTimer dmx_timer("export.h demux", __LINE__);
-            // B-G5-3: K=1 workaround — skip VB entirely; synthesize all-donor0 result.
-            // vireoSNP (and our VB) crash or are meaningless at K=1; the correct answer
-            // is trivially that every cell belongs to donor0.
-            if (export_cfg.n_donors == 1) {
-                demux_result = make_single_donor_result(
-                    snp_ad_csc.nrows, snp_ad_csc.ncols,
-                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
-                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data());
-            } else {
-                DonorDemuxConfig dcfg;
-                dcfg.n_donors = export_cfg.n_donors;
-                dcfg.threads = export_cfg.threads;
-                dcfg.seed = 42;
-                if (const char* e = std::getenv("SINGLET_DEMUX_SCREEN"))
-                    dcfg.screen_single_donor = std::atoi(e) != 0;
-                // run_demux, or one model per species on a barnyard (human + mouse) panel
-                demux_result = run_demux_by_species(
-                    snp_ad_csc.nrows, snp_ad_csc.ncols,
-                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
-                    snp_ad_csc.data.size(),
-                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data(),
-                    snp_dp_csc.data.size(), dcfg,
-                    cc_result.cell_indices, // filter VB to EmptyDrops-called cells only
-                    engine.snp_names());
-            }
-        });
-    }
-
-    // .1pz outputs whose write failed, named relative to out_prefix
-    // ("exon_counts.1pz", "donor/snp_ad.1pz"). Appended to from several writer
-    // threads, hence the mutex. Any entry marks the run fail_export_matrix in
-    // summary.json (pack_gse then excludes the sample from its bundle), and no
-    // 0x0 stub is written in its place further down: a silent stub is how
-    // samples with cells but no data reached bundles.
-    std::mutex failed_writes_mu;
-    std::vector<std::string> failed_writes;
-    auto record_failed_write = [&](const std::string& name) {
-        std::lock_guard<std::mutex> lock(failed_writes_mu);
-        failed_writes.push_back(name);
-        std::cerr << "[export] ERROR: failed to write "
-                  << out_prefix << "/" << name << "\n";
-    };
-
-    // Write helper — uses atomic write-to-tmp-then-rename for crash safety
-    auto write_matrix = [&](const std::string& prefix, auto& csc,
-                            const std::vector<std::string>& feature_names) {
-        if (use_1pz) {
-            if (!atomic_write_1pz(out_prefix + "/" + prefix + ".1pz",
-                    csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data,
-                    feature_names, barcodes, 3, 1024, 4, export_cfg.user_meta))
-                record_failed_write(prefix + ".1pz");
-        } else if (!use_h5ad) {
-            write_mtx(out_prefix + "/" + prefix + ".mtx.gz",
-                      csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data);
-            write_names(out_prefix + "/" + prefix + "_features.tsv.gz", feature_names);
-            write_names(out_prefix + "/" + prefix + "_barcodes.tsv.gz", barcodes);
-        }
-        // h5ad-only mode: sub-gene matrices not written (gene-level .h5ad written separately)
-    };
-
-    std::vector<std::thread> write_threads;
-
     // SNP matrices: always written when --snps is provided.
     // In pipeline mode the same data also feeds donor demux, but the raw per-cell
     // matrices (snp_ad.1pz / snp_dp.1pz) are independently required by downstream
@@ -1397,39 +1452,6 @@ inline ExportStats export_results(const PileupEngine& engine,
                                                             cc_result.cell_indices, barcodes, engine.snp_names());
             if (n < 0) record_failed_write("private/genotype/cellsnp");
             else std::cerr << "[genotype] cellsnp layout: " << n << " callable sites x " << cc_result.cell_indices.size() << " cells\n";
-        });
-    }
-
-    // D-101: RNA editing at the REDIportal sites. Per-site allele counts are owner-only (private/editing/); the per-cell index and the
-    // summary are public (rna_editing.h). Its own thread, joined before the run's provenance below rather than with write_threads, so the
-    // donor VCFs and the mt outputs after the demux join do not wait for it; inside it the two matrices and the site table are written at once.
-    std::thread edit_thread;
-    if (have_editing) {
-        edit_thread = std::thread([&]() {
-            singlet::set_thread_name("sg-editing");
-            std::filesystem::create_directories(out_prefix + "/private/editing");
-            const auto er = editing::summarize(edit_alt_csc, edit_dp_csc, cc_result.cell_indices);
-            std::vector<std::string> cov_names(er.covered.size());
-            for (size_t j = 0; j < er.covered.size(); ++j) cov_names[j] = engine.edit_name(er.covered[j]);
-            std::thread t_alt([&]() {
-                auto alt_cov = editing::select_rows(edit_alt_csc, er.covered);
-                write_matrix("private/editing/editing_alt", alt_cov, cov_names);
-            });
-            std::thread t_dp([&]() {
-                auto dp_cov = editing::select_rows(edit_dp_csc, er.covered);
-                write_matrix("private/editing/editing_dp", dp_cov, cov_names);
-            });
-            if (!editing::write_sites(out_prefix + "/private/editing/editing_sites.tsv.gz", er, cov_names))
-                record_failed_write("private/editing/editing_sites.tsv.gz");
-            if (!editing::write_cells(out_prefix + "/editing_cells.tsv", er, cc_result.cell_indices, barcodes))
-                record_failed_write("editing_cells.tsv");
-            if (!editing::write_summary(out_prefix + "/editing_summary.json", pileup_cfg.edit_path, engine.n_edit_sites(), er,
-                                        cc_result.cell_indices.size()))
-                record_failed_write("editing_summary.json");
-            t_alt.join(); t_dp.join();
-            std::cerr << "[editing] " << er.covered.size() << " of " << engine.n_edit_sites() << " panel sites covered, "
-                      << er.n_sites_10 << " with >= 10 UMIs in called cells; editing index "
-                      << (er.dp_total ? double(er.alt_total) / double(er.dp_total) : 0.0) << "\n";
         });
     }
 
@@ -1730,20 +1752,6 @@ inline ExportStats export_results(const PileupEngine& engine,
                           << " time=" << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_pa0).count()
                           << "s\n";
             });
-        // TE molecules (te_counts.h): subfamilies x barcodes (unique and multi-mapped reads), loci x barcodes (unique reads, loci with a
-        // molecule), and the locus table. Built from the records in any order, so the CPU and GPU paths write the same bytes.
-        if (engine.has_te())
-            write_threads.emplace_back([&]() {
-                singlet::set_thread_name("sg-te");
-                auto t0 = std::chrono::high_resolution_clock::now();
-                auto te = build_te_tables(engine.te_records(), engine.te_model(), static_cast<uint32_t>(barcodes.size()), engine.tid_to_chrom());
-                write_matrix("te_counts", te.fam, te.fam.names);
-                write_matrix("te_locus_counts", te.locus, te.locus.names);
-                write_gz_text(out_prefix + "/te_loci.tsv.gz", te.loci_tsv);
-                std::cerr << "[te] " << te.n_records << " TE reads (" << te.n_unique_records << " unique) -> " << te.fam_molecules
-                          << " subfamily molecules, " << te.locus_molecules << " locus molecules in " << te.locus.nrows << " loci, time="
-                          << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count() << "s\n";
-            });
         // sj_features.tsv.gz: STAR motif / annotation / read support and STARsolo-comparable flag per junction
         // (sj_features.h). All junctions stay in sj_counts; filtering is the reader's choice.
         if (pileup_cfg.count_sj && !engine.sj_names().empty() && !sj_csc.data.empty())
@@ -1868,9 +1876,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         });
     }
 
-    for (auto& t : write_threads) t.join();
-    result.n_write_threads = static_cast<int>(write_threads.size());
-    result.failed_writes = failed_writes;  // writer threads have all joined
+    // The writers are joined after the donor outputs below (wave 4): those read the same SNP matrices and write other files, so the
+    // donor stage no longer waits for the slowest writer (the matrices are released only after both).
 
     // G6 stats declared here so they are visible to the summary block below
     mt::MtDonorOutputStats g6_stats;
@@ -1893,6 +1900,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         engine.finalize_allsite([&](allsite::Result& r) { r.prepare(keep); return true; });
         std::cerr << "[allsite] records prepared for the called cells in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - p0).count() << " s\n";
     };
+    std::vector<std::thread> post_threads;   // the donor outputs that run beside the all-site export
     if (!demux_thread.joinable()) build_allsite();
     if (demux_thread.joinable()) {
         demux_thread.join();
@@ -1905,36 +1913,46 @@ inline ExportStats export_results(const PileupEngine& engine,
                                 demux_result.assignments, barcodes);
         if (export_cfg.on_donor_assignments) export_cfg.on_donor_assignments();
 
+        // Wave 4: the per-donor VCFs, donors.vcf.gz, cells.vcf.gz and the chrM donor outputs each read the demux result and the SNP matrices
+        // and write their own files, so they run side by side (cells.vcf.gz, one gzip stream, is the longest) and beside the all-site export
+        // below. Every file is still written whole by one thread, so the bytes are those of the serial order.
+        if (demux_result.n_donors_k > 0) std::filesystem::create_directories(out_prefix + "/private/genotype");
         if (demux_result.n_donors_k > 0 && !demux_result.covered_to_original.empty()) {
-            auto depths = aggregate_donor_depths(
-                demux_result,
-                snp_ad_csc.nrows, snp_ad_csc.ncols,
-                snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
-                snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data());
-
-            // Per-donor genotype VCFs and SNP coverage: private.
             std::filesystem::create_directories(out_prefix + "/private/donor");
-            write_donor_vcfs(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
-            write_donor_coverages(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
+            post_threads.emplace_back([&]() {
+                singlet::set_thread_name("sg-geno");
+                auto depths = aggregate_donor_depths(
+                    demux_result,
+                    snp_ad_csc.nrows, snp_ad_csc.ncols,
+                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
+                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data());
+                // Per-donor genotype VCFs and SNP coverage: private.
+                write_donor_vcfs(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
+                write_donor_coverages(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
+            });
         }
         // D-52: one multi-sample VCF per sample (GT:GQ:AD:DP:PL per donor, called cells only), private.
         if (demux_result.n_donors_k > 0) {
-            const long long n = genotype::write_donors_vcf(out_prefix + "/private/genotype/donors.vcf.gz", demux_result,
-                                                           snp_ad_csc, snp_dp_csc, cc_result.cell_indices, engine.snp_names());
-            if (n < 0) { record_failed_write("private/genotype/donors.vcf.gz"); result.failed_writes = failed_writes; }
-            else std::cerr << "[genotype] donors.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
+            post_threads.emplace_back([&]() {
+                singlet::set_thread_name("sg-geno");
+                const long long n = genotype::write_donors_vcf(out_prefix + "/private/genotype/donors.vcf.gz", demux_result,
+                                                               snp_ad_csc, snp_dp_csc, cc_result.cell_indices, engine.snp_names());
+                if (n < 0) record_failed_write("private/genotype/donors.vcf.gz");
+                else std::cerr << "[genotype] donors.vcf.gz: " << n << " sites x " << demux_result.n_donors_k << " donors\n";
+            });
         }
         // The panel's per-cell VCF (the all-site member's donor genotypes and per-cell VCF are written with its store below).
-        if (demux_result.n_donors_k > 0) {
-            using CSC16 = SparseAccumulator<uint16_t>::CSCMatrix;
-            std::vector<genotype::SiteSet<CSC16>> sets;
-            if (snp_dp_csc.ncols > 0) sets.push_back({&snp_ad_csc, &snp_dp_csc, &engine.snp_names(), "panel"});
-            if (!sets.empty()) {
+        if (demux_result.n_donors_k > 0 && snp_dp_csc.ncols > 0) {
+            post_threads.emplace_back([&]() {
+                singlet::set_thread_name("sg-geno");
+                using CSC16 = SparseAccumulator<uint16_t>::CSCMatrix;
+                std::vector<genotype::SiteSet<CSC16>> sets;
+                sets.push_back({&snp_ad_csc, &snp_dp_csc, &engine.snp_names(), "panel"});
                 const long long n = genotype::write_cells_vcf(out_prefix + "/private/genotype/cells.vcf.gz", demux_result, sets,
                                                               cc_result.cell_indices, barcodes, engine.contig_names());
-                if (n < 0) { record_failed_write("private/genotype/cells.vcf.gz"); result.failed_writes = failed_writes; }
+                if (n < 0) record_failed_write("private/genotype/cells.vcf.gz");
                 else std::cerr << "[genotype] cells.vcf.gz: " << n << " variant sites (some donor 0/1 or 1/1)\n";
-            }
+            });
         }
 
         // ── G6: Donor-aware mitochondrial outputs ──
@@ -1944,24 +1962,23 @@ inline ExportStats export_results(const PileupEngine& engine,
         // Now passes CIGAR indel events (codes 5-7) and GTF path (codes 7/8).
         if (pileup_cfg.count_mt && mt_csc.data.size() > 0 &&
             demux_result.n_donors_k > 0) {
-            auto t_g6_0 = std::chrono::high_resolution_clock::now();
-            g6_stats = mt::write_mt_donor_outputs(
-                out_prefix, mt_csc, demux_result, barcodes,
-                export_cfg.user_meta,
-                engine.mt_indels(),
-                pileup_cfg.exon_gtf_path,
-                mt_ref_seq,
-                mt_rev_csc.data.empty() ? nullptr : &mt_rev_csc,
-                nullptr, &mt_het);
-            auto t_g6_1 = std::chrono::high_resolution_clock::now();
-            std::cerr << "[mt_event_caller] G6 time: "
-                      << std::chrono::duration<double>(t_g6_1 - t_g6_0).count()
-                      << "s\n";
+            post_threads.emplace_back([&]() {
+                singlet::set_thread_name("sg-geno");
+                auto t_g6_0 = std::chrono::high_resolution_clock::now();
+                g6_stats = mt::write_mt_donor_outputs(
+                    out_prefix, mt_csc, demux_result, barcodes,
+                    export_cfg.user_meta,
+                    engine.mt_indels(),
+                    pileup_cfg.exon_gtf_path,
+                    mt_ref_seq,
+                    mt_rev_csc.data.empty() ? nullptr : &mt_rev_csc,
+                    nullptr, &mt_het);
+                auto t_g6_1 = std::chrono::high_resolution_clock::now();
+                std::cerr << "[mt_event_caller] G6 time: "
+                          << std::chrono::duration<double>(t_g6_1 - t_g6_0).count()
+                          << "s\n";
+            });
         }
-
-        // Release SNP matrices — they were only needed for demux
-        { auto _unused1 = std::move(snp_ad_csc); }
-        { auto _unused2 = std::move(snp_dp_csc); }
     }
 
     // The all-site member (allsite_store.h): the donor genotypes at its sites and, per called cell, the entries informative against the
@@ -2028,8 +2045,17 @@ inline ExportStats export_results(const PileupEngine& engine,
                   << " sites; entries " << stats.entries << " of " << stats.full_entries << ", " << stats.bytes << " bytes, " << (stats.cells ? stats.bytes / stats.cells : 0)
                   << " bytes per cell; per-cell coverage blocks would add about " << stats.coverage_block_bytes_est << " bytes\n";
         engine.allsite().release();
-        result.failed_writes = failed_writes;
     }
+
+    // Join the donor outputs and the writers (wave 4: after the all-site export, which ran beside them), then release the SNP matrices they read.
+    for (auto& t : post_threads) t.join();
+    for (auto& t : write_threads) t.join();
+    result.n_write_threads = static_cast<int>(write_threads.size());
+    if (demux_thread_ran) {   // Release SNP matrices — they were only needed for demux
+        { auto _unused1 = std::move(snp_ad_csc); }
+        { auto _unused2 = std::move(snp_dp_csc); }
+    }
+    { std::lock_guard<std::mutex> lock(failed_writes_mu); result.failed_writes = failed_writes; }   // every writer has joined
 
     if (edit_thread.joinable()) {   // D-101: the editing outputs, before the provenance lists the run's files
         edit_thread.join();

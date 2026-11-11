@@ -3246,6 +3246,7 @@ static void usage(const char* prog) {
         << "  --txome-index PATH     Transcriptome FASTA for L1 resolve (tx.fa)\n"
         << "  --te-db PATH           TE sketch DB for L2 classify (te_sketch.bin)\n"
         << "  --n-donors N           Number of donors (-1=auto) [-1]\n"
+        << "  --tail-threads N       threads for the export phase (cell calling, ambient, doublets, donor demux) and the HLA donor stage once the mapping is done, when N is above --threads (default SINGLET_TAIL_THREADS, else --threads); results do not depend on it\n"
         << "  --umi-len N            UMI length [12]\n"
         << "  --star-extra 'ARGS'    Extra aligner arguments (quoted)\n"
         << "  --min-mapq N           Minimum MAPQ [20]\n"
@@ -3671,6 +3672,7 @@ static int singlet_main(int argc, char* argv[]) {
     int parallel_pileup = -1; // -1=auto, 0=off, 1=on
     int stream_unsorted = -1; // -1=auto (default: on for CB_UMI_Simple scRNA), 0=off (--sorted-bam), 1=on (--stream-unsorted). On: no sorted BAM; unsorted STAR output streamed into the serial pileup, CB from CR
     int n_donors = -1;
+    int tail_threads = 0;                // --tail-threads N / SINGLET_TAIL_THREADS: threads of the export phase and the HLA donor stage when above --threads (0 = --threads)
     int umi_len = 12;
     bool umi_len_explicit = false;  // S5-UMI-LEN: true when --umi-len given by user
     bool pipeline_mode = false;
@@ -3789,6 +3791,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--txome-index" && i+1 < argc) txome_index_path = argv[++i];
         else if (arg == "--te-db" && i+1 < argc) te_db_path = argv[++i];
         else if (arg == "--n-donors" && i+1 < argc) n_donors = std::atoi(argv[++i]);
+        else if (arg == "--tail-threads" && i+1 < argc) tail_threads = std::atoi(argv[++i]);
         else if (arg == "--genome-load" && i+1 < argc) genome_load = argv[++i];
         else if (arg == "--genome-shared") {
             // Optional value: auto (default), on, off
@@ -9991,6 +9994,14 @@ static int singlet_main(int argc, char* argv[]) {
     export_cfg.pipeline_mode = pipeline_mode;
     export_cfg.n_donors = n_donors;
     export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
+    // The export phase starts after the device phase is over (the mapping and the pileup are done), so it may use more threads than the mapping ran
+    // with: --tail-threads N or SINGLET_TAIL_THREADS=N, taken when above --threads. Every export stage is thread-count independent (fixed chunking,
+    // ordered reductions), so the outputs do not change.
+    if (tail_threads <= 0) if (const char* e = std::getenv("SINGLET_TAIL_THREADS")) tail_threads = std::atoi(e);
+    if (tail_threads > export_cfg.threads) {
+        std::cerr << "[singlet] tail threads: " << export_cfg.threads << " -> " << tail_threads << " for the export phase and the HLA donor stage" << "\n";
+        export_cfg.threads = tail_threads;
+    }
     export_cfg.genome_dir = genome_dir;
 
     // The counted strand decides 3' against 5' for the 10x pairs that share the barcode read and whitelist: the cDNA read aligns sense
@@ -10206,10 +10217,12 @@ static int singlet_main(int argc, char* argv[]) {
     if (hla_bg.on) {
         const char* early = std::getenv("SINGLET_HLA_EARLY_DONORS");
         if (!(early && std::string(early) == "0"))
-            export_cfg.on_donor_assignments = [&hla_bg]() {
+            export_cfg.on_donor_assignments = [&hla_bg, tail_n = export_cfg.threads]() {
                 if (hla_bg.donor_th.joinable()) return;
-                hla_bg.donor_th = std::thread([&hla_bg] {
+                hla_bg.donor_th = std::thread([&hla_bg, tail_n] {
                     if (hla_bg.th.joinable()) hla_bg.th.join();
+                    // the sample stage is over: the donors are typed with the tail's thread count (T1K's calls do not depend on it)
+                    if (tail_n > hla_bg.s.cfg.threads) { hla_bg.s.cfg.threads = tail_n; hla_bg.s.T = std::to_string(tail_n); }
                     singlet::hla::donor_stage(hla_bg.s);
                 });
                 std::cerr << "[hla] donor stage started after demux\n";
