@@ -24,7 +24,7 @@ echo "calls-sota doublets @ $(git -C "$SRC" rev-parse --short HEAD) NAME=$NAME h
   flock -w 900 8
 if [ ! -x "$OUT/dbl_run" ]; then
   CXX=$WORK/envs/pbench/bin/x86_64-conda-linux-gnu-g++
-  $CXX -O2 -std=c++17 -pthread -static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -I"$SRC/include/singlet/pileup" "$SRC/bench/modalities/doublet_fix/dbl_run.cpp" -o "$OUT/dbl_run"
+  $CXX -O2 -std=c++17 -pthread -Wl,-rpath,$WORK/envs/pbench/lib -I"$SRC/include/singlet/pileup" "$SRC/bench/modalities/doublet_fix/dbl_run.cpp" -o "$OUT/dbl_run"
   git -C "$SRC" rev-parse HEAD > "$OUT/dbl_run.commit"
 fi
 ) 8>"$WORK/state/calls-sota-dbl-build.lock"
