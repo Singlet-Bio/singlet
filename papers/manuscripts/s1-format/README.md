@@ -56,6 +56,17 @@ Useful options: `--datasets pbmc3k,hlca_core` or `--datasets tier:S,M`, `--force
 To use the in-tree package without installing it, set `PYTHONPATH=<repo>/python:<repo>/papers/manuscripts/s1-format/bench`
 after `python setup.py build_ext --inplace` at the repository root.
 
+## Ablation of the model
+
+`python -m s1bench ablate` (C++ `bench/cpp/ablate_bench`, built by `bench/cpp/build.sh`) measures what each part of the codec-1 count
+model contributes. Per matrix it prints the ideal static code length with one component added or removed (row order, cell-depth
+context, position context, value contexts; `kind` `model`) and runs the shipped encoder with one option changed (context
+configuration, class resolution, lane count, the generic zstd codec; `kind` `real`), with true payload bytes, the one-thread decode
+rate and an exact round-trip check. The full model's estimate is compared with the real payload (`model_over_real` in the table).
+`report` writes `generated/tab_ablation.tsv`; per-matrix results are in `results/ablate/`. Matrices above `ablate.max_nnz`
+non-zeros (default `kernels.max_nnz`) are left out; the encoder takes at most 2^32 non-zeros. On Clipper, `slurm/clipper/ablate.sbatch`
+runs one dataset per array task and `ablate_report.sbatch` summarizes.
+
 ## Building the PDF
 
 ```bash
