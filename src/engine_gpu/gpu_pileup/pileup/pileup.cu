@@ -1430,8 +1430,7 @@ static void post_run(Outputs* out) {
                     // (the merge replaces the vector only when it succeeded; on a tie the order of equal keys is unspecified for std::sort, so sort as before)
                     bool ties = false;
                     const bool ok = kway_merge_t3(*whole[w], wb[w], nth, &ties);
-                    if (!ok || ties) { if (ties) fprintf(stderr, "[pileup] post: equal keys in two runs of a whole matrix
-"); std::sort(whole[w]->begin(), whole[w]->end(), byCell); }
+                    if (!ok || ties) { if (ties) fprintf(stderr, "[pileup] post: equal keys in two runs of a whole matrix\n"); std::sort(whole[w]->begin(), whole[w]->end(), byCell); }
                 }
             }
             tm[s].merge = now_s() - a1;
