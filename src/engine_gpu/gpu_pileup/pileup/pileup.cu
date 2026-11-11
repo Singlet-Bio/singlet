@@ -30,6 +30,7 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <mutex>
 #include <atomic>
 #include <cstring>
 #include <tuple>
@@ -764,6 +765,8 @@ struct Outputs {
     // E24 "lockpost" (g_e24_post): per partition, the host half of each fetch step (rows from the arrays downloaded under the device lock),
     // one list per step; post_run runs them after the unlock, then the merge (post_merge)
     std::vector<std::array<std::vector<std::function<void()>>, 8>> post; bool post_merge = false;
+    // W4: with E24 each partition's rows of a matrix are built by its queued host half into its own run; post_run merges the runs k-way
+    std::map<std::vector<T3>*, std::vector<std::shared_ptr<std::vector<T3>>>> postruns;
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
 
@@ -999,42 +1002,41 @@ static void merge_parts(Outputs* out, std::vector<T3>* const outv[8], const std:
         for (auto* w : whole) std::sort(w->begin(), w->end(), byCell);
     }
 }
-// W4 (host half of the pileup, pileup2): the canonical merge as one k-way pass instead of K - 1 successive std::inplace_merge calls (each one
-// re-reads and re-writes everything merged so far: K / 2 passes over the matrix). v holds K runs, each sorted by (cell, row), run p starting at
-// bnd[p]; the result is the stable merge (equal keys keep the run order), the same rows in the same order as the successive stable merges.
-// The output is cut into chunks at splitter keys (lower_bound in every run) that threads merge independently into their own range of the result.
-// ties: a key present in two runs (the caller's fallback for matrices that were sorted with std::sort, whose order of equal keys is unspecified).
-// Returns false, leaving v untouched, if a run is not sorted by (cell, row).
-static bool kway_merge_t3(std::vector<T3>& v, const std::vector<size_t>& bnd, int nth, bool* ties) {
-    const size_t K = bnd.size(), n = v.size();
+// W4 (host half of the pileup, pileup2): the canonical merge as one k-way pass over the partitions' runs (each sorted by (cell, row)) instead of
+// K - 1 successive std::inplace_merge calls over one growing vector (each re-reads and re-writes everything merged so far: K / 2 passes).
+// The result is the stable merge (equal keys keep the run order), the same rows in the same order as the successive stable merges. The output is
+// cut into chunks at splitter keys (lower_bound in every run) that threads merge independently into their own range of the result.
+// ties: a key present in two runs. Returns false, leaving the runs untouched, if a run is not sorted by (cell, row); dest must be empty.
+static bool kway_merge_runs(const std::vector<std::shared_ptr<std::vector<T3>>>& runs, std::vector<T3>& dest, int nth, bool* ties) {
+    const size_t K = runs.size();
     if (ties) *ties = false;
-    if (K < 2 || n == 0) return true;
-    std::vector<size_t> pb(K + 1);
-    for (size_t p = 0; p < K; p++) pb[p] = bnd[p];
-    pb[K] = n;
+    std::vector<const T3*> base(K); std::vector<size_t> len(K); size_t n = 0;
+    for (size_t p = 0; p < K; p++) { base[p] = runs[p]->data(); len[p] = runs[p]->size(); n += len[p]; }
+    if (n == 0) return true;
     auto key = [](const T3& t) { return (uint64_t(t.cell) << 32) | t.row; };
     {   // every run sorted? (linear, on threads)
         std::atomic<bool> ok(true); std::vector<std::thread> th; std::atomic<size_t> nx(0);
-        for (int t = 0; t < std::max(1, nth); t++) th.emplace_back([&]() { for (size_t p; (p = nx++) < K;) for (size_t i = pb[p] + 1; i < pb[p + 1]; i++) if (key(v[i - 1]) > key(v[i])) { ok = false; return; } });
+        for (int t = 0; t < std::max(1, nth); t++) th.emplace_back([&]() { for (size_t p; (p = nx++) < K;) for (size_t i = 1; i < len[p]; i++) if (key(base[p][i - 1]) > key(base[p][i])) { ok = false; return; } });
         for (auto& t : th) t.join();
         if (!ok) return false;
     }
+    if (K == 1) { dest.swap(*runs[0]); return true; }
     const int M = n < (size_t(1) << 16) ? 1 : std::max(1, nth) * 4;
-    size_t q = 0; for (size_t p = 1; p < K; p++) if (pb[p + 1] - pb[p] > pb[q + 1] - pb[q]) q = p;
+    size_t q = 0; for (size_t p = 1; p < K; p++) if (len[p] > len[q]) q = p;
     std::vector<uint64_t> split;   // M - 1 splitter keys, from the largest run (cells are hashed across runs: its quantiles cut the others about evenly)
-    for (int c = 1; c < M; c++) split.push_back(key(v[pb[q] + (pb[q + 1] - pb[q]) * (size_t) c / (size_t) M]));
+    for (int c = 1; c < M; c++) split.push_back(key(base[q][len[q] * (size_t) c / (size_t) M]));
     std::vector<std::vector<size_t>> lo(M + 1, std::vector<size_t>(K));
-    for (size_t p = 0; p < K; p++) { lo[0][p] = pb[p]; lo[M][p] = pb[p + 1]; }
+    for (size_t p = 0; p < K; p++) { lo[0][p] = 0; lo[M][p] = len[p]; }
     for (int c = 1; c < M; c++) for (size_t p = 0; p < K; p++)
-        lo[c][p] = std::lower_bound(v.begin() + pb[p], v.begin() + pb[p + 1], split[c - 1], [&](const T3& t, uint64_t k) { return key(t) < k; }) - v.begin();
+        lo[c][p] = std::lower_bound(base[p], base[p] + len[p], split[c - 1], [&](const T3& t, uint64_t k) { return key(t) < k; }) - base[p];
     std::vector<size_t> off(M + 1, 0);
-    for (int c = 0; c <= M; c++) { size_t o = 0; for (size_t p = 0; p < K; p++) o += lo[c][p] - pb[p]; off[c] = o; }
+    for (int c = 0; c <= M; c++) { size_t o = 0; for (size_t p = 0; p < K; p++) o += lo[c][p]; off[c] = o; }
     std::vector<T3> res(n);
     std::atomic<int> nxc(0); std::atomic<bool> tie(false);
     auto work = [&]() {
         for (int c; (c = nxc++) < M;) {
             std::vector<size_t> cur(lo[c]), end(lo[c + 1]); std::vector<uint64_t> hk(K, ~0ull);
-            for (size_t p = 0; p < K; p++) if (cur[p] < end[p]) hk[p] = key(v[cur[p]]);
+            for (size_t p = 0; p < K; p++) if (cur[p] < end[p]) hk[p] = key(base[p][cur[p]]);
             T3* o = res.data() + off[c];
             for (;;) {
                 int b = -1, s = -1; uint64_t bk = ~0ull, sk = ~0ull;
@@ -1045,19 +1047,19 @@ static bool kway_merge_t3(std::vector<T3>& v, const std::vector<size_t>& bnd, in
                     else if (s < 0 || k < sk) { s = (int) p; sk = k; }
                 }
                 if (b < 0) break;
-                if (s < 0) { const size_t m = end[b] - cur[b]; std::memcpy(o, v.data() + cur[b], m * sizeof(T3)); o += m; cur[b] = end[b]; break; }
+                if (s < 0) { const size_t m = end[b] - cur[b]; std::memcpy(o, base[b] + cur[b], m * sizeof(T3)); o += m; cur[b] = end[b]; break; }
                 if (bk == sk) tie = true;
                 while (cur[b] < end[b]) {
-                    const uint64_t k = key(v[cur[b]]);
-                    if (k < sk || (k == sk && b < s)) { *o++ = v[cur[b]++]; } else break;
+                    const uint64_t k = key(base[b][cur[b]]);
+                    if (k < sk || (k == sk && b < s)) { *o++ = base[b][cur[b]++]; } else break;
                 }
-                if (cur[b] < end[b]) hk[b] = key(v[cur[b]]);
+                if (cur[b] < end[b]) hk[b] = key(base[b][cur[b]]);
             }
         }
     };
     { std::vector<std::thread> th; for (int t = 0; t < std::max(1, std::min(nth, M)); t++) th.emplace_back(work); for (auto& t : th) t.join(); }
     if (ties) *ties = tie.load();
-    v.swap(res);
+    dest.swap(res);
     return true;
 }
 static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
@@ -1249,12 +1251,17 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (!g_e24_post) for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
         std::array<std::vector<std::function<void()>>, 8>* pq = g_e24_post ? &out->post.emplace_back() : nullptr;
         auto defer = [pq](int step, std::function<void()> f) { if (pq) (*pq)[step].push_back(std::move(f)); else f(); };
+        // where a step's rows go: its own run for this partition (E24: merged in post_run), or the matrix itself when the host half runs at once
+        auto sink = [&](std::vector<T3>* dest) -> std::shared_ptr<std::vector<T3>> {
+            if (!pq) return std::shared_ptr<std::vector<T3>>(dest, [](std::vector<T3>*) {});
+            static std::mutex mu; std::lock_guard<std::mutex> lk(mu);   // the steps' threads (fetchpar) register their runs here
+            auto r = std::make_shared<std::vector<T3>>(); out->postruns[dest].push_back(r); return r; };
         const int ncl = in.ncells;
         // (E16: the steps as lambdas, called in this order, or with g_e16_fetchpar on threads: each fills its own outputs in the same order)
         auto add = [&](std::vector<T3>& v, const CsrDev& c, int step) {
-            auto h = std::make_shared<Csr>(fetch_csr(c, ncl)); std::vector<T3>* pv = &v;
-            defer(step, [h, pv, ncl]() { std::vector<T3> t = csr_to_t3(*h, ncl);
-                                         if (g_e16_fetchpar && pv->empty()) pv->swap(t); else pv->insert(pv->end(), t.begin(), t.end()); }); };
+            auto h = std::make_shared<Csr>(fetch_csr(c, ncl)); auto sk = sink(&v);
+            defer(step, [h, sk, ncl]() { std::vector<T3> t = csr_to_t3(*h, ncl);
+                                         if (sk->empty()) sk->swap(t); else sk->insert(sk->end(), t.begin(), t.end()); }); };
         auto fExtra = [&]() {   // campaign's extra outputs: the pre-USA exon / intron split and the reads-per-molecule sums
             if (ng <= 0) return;
             if (g_want_mixed) { add(out->mixed_exon, MX[0], 3); add(out->mixed_intron, MX[1], 3); }
@@ -1263,8 +1270,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                     auto ip = std::make_shared<std::vector<uint32_t>>(ncl + 1), ix = std::make_shared<std::vector<uint32_t>>(c.nnz), da = std::make_shared<std::vector<uint32_t>>(c.nnz);
                     CK(cudaMemcpy(ip->data(), c.indptr, 4 * (size_t)(ncl + 1), cudaMemcpyDeviceToHost));
                     if (c.nnz) { CK(cudaMemcpy(ix->data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da->data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
-                    std::vector<T3>* pv = &v;
-                    defer(3, [ip, ix, da, pv, ncl]() { for (int cell = 0; cell < ncl; cell++) for (uint32_t k = (*ip)[cell]; k < (*ip)[cell + 1]; k++) pv->push_back(T3{(uint32_t)cell, (*ix)[k], (*da)[k]}); });
+                    auto sk = sink(&v);
+                    defer(3, [ip, ix, da, sk, ncl]() { for (int cell = 0; cell < ncl; cell++) for (uint32_t k = (*ip)[cell]; k < (*ip)[cell + 1]; k++) sk->push_back(T3{(uint32_t)cell, (*ix)[k], (*da)[k]}); });
                 };
                 addr(out->exon_reads, RD[0]); addr(out->intron_reads, RD[1]);
             }
@@ -1274,28 +1281,29 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         auto hbuf32 = [](int n) { return std::shared_ptr<uint32_t>(new uint32_t[(size_t)n], std::default_delete<uint32_t[]>()); };
         auto fSj = [&]() {
         if (n_sju > 0) { auto k = hbuf64(n_sju); auto c = hbuf32(n_sju); CK(cudaMemcpy(k.get(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
-            const int n = n_sju, jbl = jb;
-            defer(4, [k, c, n, jbl, out]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
-                for (int i = 0; i < n; i++) out->sj_raw_sum += cc[i];
-                for (int i = 0; i < n; i++) out->sj.push_back(T3{(uint32_t)(kk[i] >> jbl), (uint32_t)(kk[i] & ((1ull << jbl) - 1)), std::min(cc[i], 65535u)}); }); }
+            const int n = n_sju, jbl = jb; auto sk = sink(&out->sj);
+            defer(4, [k, c, n, jbl, out, sk]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
+                unsigned long long sum = 0; for (int i = 0; i < n; i++) sum += cc[i];
+                __atomic_fetch_add(&out->sj_raw_sum, sum, __ATOMIC_RELAXED);
+                for (int i = 0; i < n; i++) sk->push_back(T3{(uint32_t)(kk[i] >> jbl), (uint32_t)(kk[i] & ((1ull << jbl) - 1)), std::min(cc[i], 65535u)}); }); }
         };
         auto fSn = [&]() {
         if (n_snu > 0) { auto k = hbuf64(n_snu), v = hbuf64(n_snu); CK(cudaMemcpy(k.get(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.get(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
-            const int n = n_snu, sbl = sb;
-            defer(5, [k, v, n, sbl, out]() { const uint64_t* kk = k.get(); const uint64_t* vv = v.get();
-                out->snp_dp.reserve(out->snp_dp.size() + (size_t)n);
+            const int n = n_snu, sbl = sb; auto skd = sink(&out->snp_dp), ska = sink(&out->snp_ad);
+            defer(5, [k, v, n, sbl, skd, ska]() { const uint64_t* kk = k.get(); const uint64_t* vv = v.get();
+                skd->reserve(skd->size() + (size_t)n);
                 for (int i = 0; i < n; i++) { T3 a{(uint32_t)(kk[i] >> sbl), (uint32_t)(kk[i] & ((1ull << sbl) - 1)), 0}; uint32_t dp = (uint32_t)(vv[i] & 0xFFFFFFFFu), ad = (uint32_t)(vv[i] >> 32);
-                    if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }); }
+                    if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); skd->push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); ska->push_back(a); } } }); }
         };
         auto fMt = [&]() {
         if (n_mtu > 0) { auto k = hbuf64(n_mtu); auto c = hbuf32(n_mtu); CK(cudaMemcpy(k.get(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
-            const int n = n_mtu;
-            defer(6, [k, c, n, out]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
+            const int n = n_mtu; auto skm = sink(&out->mt), skr = sink(&out->mt_rev);
+            defer(6, [k, c, n, skm, skr]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
             for (int i = 0; i < n;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
                 uint64_t bk = kk[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
                 while (j < n && (kk[j] >> 1) == bk) { tot += cc[j]; if (kk[j] & 1) rv += cc[j]; j++; }
                 uint32_t cell = (uint32_t)(bk >> 17), feat = (uint32_t)(bk & ((1u << 17) - 1));
-                out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }); }
+                skm->push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) skr->push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }); }
         };
         auto fInd = [&]() {
         if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
@@ -1378,69 +1386,53 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
 // E24 "lockpost": after the device is unlocked, the queued host halves partition by partition (each partition's rows start where the
 // previous partition's end: the bounds the merge takes), then the merge. The same rows in the same order as run_pipeline without the queue.
 static void post_run(Outputs* out) {
-    std::vector<T3>* outv[8] = {&out->exon, &out->intron, &out->amb, &out->sj, &out->snp_ad, &out->snp_dp, &out->mt, &out->mt_rev};
-    std::vector<size_t> bnd[8];
+    // W4: (1) every queued (partition, step) host half on a pool of threads, each into its own run; (2) one thread per matrix merges its runs k-way
+    // into the matrix. The runs are independent, so any order of (1) gives the same runs; (2) is the stable merge in partition order.
     const double t0 = now_s();
-    const char* pm = getenv("SINGLET_PILEUP_POST");
-    if (pm != nullptr && strcmp(pm, "legacy") == 0) {   // the E24 order: partition by partition (its steps on threads), then the successive merges
-        auto run = [](std::vector<std::function<void()>>* l) { for (auto& f : *l) f(); l->clear(); };   // clear: the downloaded arrays go
-        for (auto& steps : out->post) {
-            for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
-            if (g_e16_fetchpar) { std::vector<std::thread> th; for (auto& l : steps) if (!l.empty()) th.emplace_back(run, &l); for (auto& t : th) t.join(); }
-            else for (auto& l : steps) run(&l);
-        }
-        out->post.clear();
-        const double t1 = now_s();
-        if (out->post_merge) { merge_parts(out, outv, bnd, true); out->post_merge = false; }
-        fprintf(stderr, "[pileup] post (legacy): lists %.2f s, merge %.2f s\n", t1 - t0, now_s() - t1);
-        return;
-    }
-    // W4: one thread per step. A step's lists run over all partitions in order (the steps write disjoint vectors), then its matrices are merged
-    // k-way on the spot; no barrier between partitions or between steps.
     const unsigned hw = std::max(4u, std::thread::hardware_concurrency());
-    const int nth = (int) std::max(2u, hw / 2);
-    std::vector<T3>* whole[4] = {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron};   // step 3's, sorted whole in the E24 order
-    std::vector<size_t> wb[4];
-    const int own[8][2] = {{0, -1}, {1, -1}, {2, -1}, {-1, -1}, {3, -1}, {4, 5}, {6, 7}, {-1, -1}};
-    struct Tm { double lists = 0, merge = 0; } tm[8];
+    const int nth = (int) hw;
+    {
+        std::vector<std::function<void()>*> tasks;
+        for (auto& steps : out->post) for (auto& l : steps) for (auto& f : l) tasks.push_back(&f);
+        std::atomic<size_t> nx(0); std::vector<std::thread> th;
+        for (int t = 0; t < nth; t++) th.emplace_back([&]() { for (size_t i; (i = nx++) < tasks.size();) { (*tasks[i])(); *tasks[i] = nullptr; } });   // nullptr: the downloaded arrays go
+        for (auto& t : th) t.join();
+        out->post.clear();
+    }
+    const double t1 = now_s();
+    std::vector<T3>* outv[8] = {&out->exon, &out->intron, &out->amb, &out->sj, &out->snp_ad, &out->snp_dp, &out->mt, &out->mt_rev};
+    std::vector<T3>* whole[4] = {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron};   // sorted whole (std::sort) before W4
     const auto byCell = [](const T3& a, const T3& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
+    std::atomic<int> nfall(0), nties(0);
     std::vector<std::thread> th;
-    for (int s = 0; s < 8; s++) {
-        th.emplace_back([&, s]() {
-            const double a0 = now_s();
-            for (auto& steps : out->post) {
-                for (int k = 0; k < 2; k++) if (own[s][k] >= 0) bnd[own[s][k]].push_back(outv[own[s][k]]->size());
-                if (s == 3) for (int w = 0; w < 4; w++) wb[w].push_back(whole[w]->size());
-                for (auto& f : steps[s]) f();
-                steps[s].clear();
-            }
-            const double a1 = now_s();
-            tm[s].lists = a1 - a0;
-            if (out->post_merge) {
-                for (int k = 0; k < 2; k++) if (own[s][k] >= 0) {
-                    const int v = own[s][k];
-                    if (!kway_merge_t3(*outv[v], bnd[v], nth, nullptr)) {   // a run is not sorted: the successive stable merges, as before
-                        for (size_t p = 2; p <= bnd[v].size(); p++) {
-                            const size_t mid = bnd[v][p - 1], end = p < bnd[v].size() ? bnd[v][p] : outv[v]->size();
-                            std::inplace_merge(outv[v]->begin(), outv[v]->begin() + mid, outv[v]->begin() + end, byCell);
-                        }
-                    }
-                }
-                if (s == 3) for (int w = 0; w < 4; w++) {   // sorted whole in the E24 order; the k-way merge gives the same rows when every run is sorted and no key is in two runs
-                    // (the merge replaces the vector only when it succeeded; on a tie the order of equal keys is unspecified for std::sort, so sort as before)
-                    bool ties = false;
-                    const bool ok = kway_merge_t3(*whole[w], wb[w], nth, &ties);
-                    if (!ok || ties) { if (ties) fprintf(stderr, "[pileup] post: equal keys in two runs of a whole matrix\n"); std::sort(whole[w]->begin(), whole[w]->end(), byCell); }
+    for (int d = 0; d < 12; d++) {
+        th.emplace_back([&, d]() {
+            std::vector<T3>* dest = d < 8 ? outv[d] : whole[d - 8];
+            auto it = out->postruns.find(dest);
+            if (it == out->postruns.end() || !out->post_merge) return;
+            auto& runs = it->second;
+            std::vector<size_t> len; for (auto& r : runs) len.push_back(r->size());
+            bool ties = false;
+            const bool ok = kway_merge_runs(runs, *dest, std::max(2, nth / 4), &ties);
+            if (ok && !(d >= 8 && ties)) { runs.clear(); return; }
+            // a run is not sorted, or a whole matrix has a key in two runs (std::sort's order of equal keys is unspecified): the old route
+            if (ok) dest->clear();
+            nfall++; if (ties) nties++;
+            for (auto& r : runs) { dest->insert(dest->end(), r->begin(), r->end()); r.reset(); }
+            if (d >= 8) std::sort(dest->begin(), dest->end(), byCell);
+            else {
+                size_t start = 0, mid = 0;
+                for (size_t p = 0; p < len.size(); p++) {
+                    if (p >= 1) std::inplace_merge(dest->begin(), dest->begin() + mid, dest->begin() + start + len[p], byCell);
+                    start += len[p]; mid = start;
                 }
             }
-            tm[s].merge = now_s() - a1;
+            runs.clear();
         });
     }
     for (auto& t : th) t.join();
-    out->post.clear(); out->post_merge = false;
-    std::string st; char b[96];
-    for (int s = 0; s < 8; s++) if (tm[s].lists > 0 || tm[s].merge > 0) { snprintf(b, sizeof b, " s%d %.1f+%.1f", s, tm[s].lists, tm[s].merge); st += b; }
-    fprintf(stderr, "[pileup] post (W4 k-way, %d merge threads): %.2f s; step lists+merge s:%s\n", nth, now_s() - t0, st.c_str());
+    out->postruns.clear(); out->post_merge = false;
+    fprintf(stderr, "[pileup] post (W4 runs + k-way, %d threads): lists %.2f s, merge %.2f s%s\n", nth, t1 - t0, now_s() - t1, nfall ? " (fallback to the old merge)" : "");
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
