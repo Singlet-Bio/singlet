@@ -177,28 +177,20 @@ static int pre_gate(const std::string& sra_path,
         "10x-arc-gex", "10x-visium", "cite-seq-gex",
     };
 
-    // ── Definitively non-10x tags that warrant REJECT at MEDIUM+ confidence ──
-    // Deliberately conservative: we only reject when the protocol is
-    // UNAMBIGUOUSLY one of these distinct chemistries.
-    static const std::unordered_set<std::string> non10x_reject_tags = {
-        "celseq2",       // R1=12bp CB+UMI — geometrically incompatible with 10x
-        "marsseq2",      // R1=15bp — distinct geometry
-        "indrop",        // R1=~46bp with W1 linker — distinctive linker
-        "dropseq",       // R1=20bp no whitelist — low R1 length
-        "seqwell",       // R1=20bp (same as Drop-seq)
-        "bd-rhapsody",   // R1=60bp with ACTGGCCTGCGA linker — distinctive
-        "sci-rna-seq3",  // R1=34bp with CAGAGC linker — distinctive
-        "splitseq",      // barcode in R2 — unusual layout
-        "dnbelab-c4",    // R1=56bp with ATCCACGTGC linker — distinctive
-        "ddseq",         // R1=68bp
-        "quartzseq2",    // R1=23bp
-        "microwell-seq", // R1=54bp with linker
-        "surecell",      // R1=68bp with linker
-        "strtseq",       // 5' cap protocol
-        "celseq2-u6b8",  // forced only
-        "scrbseq",       // forced only
-        "icell8",        // forced only
+    // ── Tags the gate still rejects (D-150: all single-cell omics are in Beta scope) ──
+    // The gate used to reject every non-10x droplet chemistry the encoder can write (Drop-seq, BD Rhapsody, inDrop, ...).
+    // Those now pass through to the encoder, whose whitelist validation and the post-run quality verdict decide.
+    // What stays rejected are plate chemistries: one well is one cell, there is no droplet barcode space to call cells in.
+    // Setting env SINGLET_STRICT_10X_GATE restores the pre-D-150 list for A/B comparison.
+    static const std::unordered_set<std::string> plate_reject_tags = {
+        "celseq2", "marsseq2", "quartzseq2", "strtseq", "celseq2-u6b8", "scrbseq", "icell8",
     };
+    static const std::unordered_set<std::string> legacy_non10x_reject_tags = {
+        "celseq2", "marsseq2", "indrop", "dropseq", "seqwell", "bd-rhapsody", "sci-rna-seq3", "splitseq", "dnbelab-c4", "ddseq",
+        "quartzseq2", "microwell-seq", "surecell", "strtseq", "celseq2-u6b8", "scrbseq", "icell8",
+    };
+    const bool strict_gate = (std::getenv("SINGLET_STRICT_10X_GATE") != nullptr);
+    const auto& non10x_reject_tags = strict_gate ? legacy_non10x_reject_tags : plate_reject_tags;
 
     using Clock = std::chrono::steady_clock;
     auto gate_start = Clock::now();
