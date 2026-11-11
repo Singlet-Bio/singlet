@@ -2,8 +2,8 @@
 
 | file | use | CDR3 start |
 |---|---|---|
-| `vdj_human.tsv.gz` | human; matches Cell Ranger 3.x / 4.x calls | second of two adjacent Cys codons |
-| `vdj_human_imgtcys.tsv.gz` | human; matches Cell Ranger >= 5 calls | first of two adjacent Cys codons |
+| `vdj_human.tsv.gz` | human; matches Cell Ranger 3.0 tables (`load("human", cdr3_start="second")`) | second of two adjacent Cys codons |
+| `vdj_human_imgtcys.tsv.gz` | human; the default of `load("human")`; matches Cell Ranger 3.1.0, 4.0.0, 5.x and 6.x calls | first of two adjacent Cys codons |
 | `vdj_mouse.tsv.gz` | mouse | |
 
 The first line of each file (`# ...`) records its provenance.

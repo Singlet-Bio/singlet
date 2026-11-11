@@ -18,6 +18,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <vector>
 #include <zlib.h>
@@ -140,7 +141,7 @@ public:
                 g.strand = strand;
                 g.gene_name = gene_name;
             } else if (is_exon) {
-                raw_exons.push_back({chrom, start, end, gene_id, gene_name});
+                raw_exons.push_back({chrom, start, end, gene_id, gene_name, extract_attr(attrs, "transcript_id")});
             }
         }
 
@@ -310,6 +311,12 @@ public:
     const std::vector<uint32_t>& exon_to_gene_view() const { return exon_to_gene_; }
     const std::vector<uint32_t>& intron_to_gene_view() const { return intron_to_gene_; }
     const std::vector<char>& gene_strands_view() const { return gene_strands_; }
+    // intron_rule::kTxCompat: gene g's transcripts tx_gene_off[g] .. tx_gene_off[g + 1], transcript t's exons tx_exon_off[t] .. tx_exon_off[t + 1]
+    // of tx_exon_start / tx_exon_end (0-based, half-open, sorted by start). Empty for a BED model (no transcripts: the rule decides nothing).
+    const std::vector<uint32_t>& tx_gene_off_view() const { return tx_gene_off_; }
+    const std::vector<uint32_t>& tx_exon_off_view() const { return tx_exon_off_; }
+    const std::vector<int32_t>& tx_exon_start_view() const { return tx_exon_start_; }
+    const std::vector<int32_t>& tx_exon_end_view() const { return tx_exon_end_; }
 
     // Get gene strand ('+', '-', or '.')
     char gene_strand(uint32_t gene_idx) const {
@@ -386,6 +393,8 @@ private:
 
     // Gene strands (indexed by gene_idx)
     std::vector<char> gene_strands_;
+    std::vector<uint32_t> tx_gene_off_, tx_exon_off_;   // intron_rule::kTxCompat (tx_gene_off_view)
+    std::vector<int32_t> tx_exon_start_, tx_exon_end_;
 
     // Intron features
     uint32_t n_introns_ = 0;
@@ -447,15 +456,20 @@ private:
         int32_t end = 0;
         std::string gene_id;
         std::string gene_name;
+        std::string transcript_id;   // intron_rule::kTxCompat's transcript models (empty: the gene's exons form one model)
     };
 
     void build_model(const std::unordered_map<std::string, RawGene>& gene_map,
                      const std::vector<RawExon>& raw_exons) {
         // Group exons by gene_id
         std::unordered_map<std::string, std::vector<std::pair<int32_t, int32_t>>> exons_per_gene;
+        // and by transcript within the gene (intron_rule::kTxCompat), transcripts in transcript_id order
+        std::unordered_map<std::string, std::map<std::string, std::vector<std::pair<int32_t, int32_t>>>> tx_per_gene;
         for (const auto& ex : raw_exons) {
             exons_per_gene[ex.gene_id].push_back({ex.start, ex.end});
+            tx_per_gene[ex.gene_id][ex.transcript_id].push_back({ex.start, ex.end});
         }
+        tx_gene_off_.assign(1, 0); tx_exon_off_.assign(1, 0); tx_exon_start_.clear(); tx_exon_end_.clear();
 
         // Build genes in deterministic order (sorted by gene_id)
         std::vector<std::string> sorted_gene_ids;
@@ -513,6 +527,13 @@ private:
                 Interval iv{istart, iend, iidx};
                 chrom_intron_intervals_[ginfo.chrom].push_back(iv);
             }
+
+            for (auto& [tid, txe] : tx_per_gene[gid]) {
+                std::sort(txe.begin(), txe.end());
+                for (const auto& [xs, xe] : txe) { tx_exon_start_.push_back(xs); tx_exon_end_.push_back(xe); }
+                tx_exon_off_.push_back(static_cast<uint32_t>(tx_exon_start_.size()));
+            }
+            tx_gene_off_.push_back(static_cast<uint32_t>(tx_exon_off_.size() - 1));
 
             genes_.push_back(std::move(gene));
             gene_names_.push_back(ginfo.gene_name.empty() ? gid : ginfo.gene_name);

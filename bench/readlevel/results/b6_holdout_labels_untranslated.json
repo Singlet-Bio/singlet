@@ -1,0 +1,26 @@
+{
+ "feature_reads": 35671486,
+ "with_hashtag": 30920004,
+ "fraction": 0.8668,
+ "cells_labelled": 10725,
+ "per_hashtag": {
+  "B0253": {
+   "line": "HMC1.2",
+   "cells": 309,
+   "cells_with_bcr_abl_long_read": 0
+  },
+  "B0254": {
+   "line": "Ku812",
+   "cells": 10416,
+   "cells_with_bcr_abl_long_read": 1
+  }
+ },
+ "pacbio_bcr_abl_barcodes": 934,
+ "pacbio_layout": {
+  "layout": "wide",
+  "barcode_col": "Cell_barcode",
+  "bcr_abl_cols": [
+   "BCR_ABL1"
+  ]
+ }
+}

@@ -376,7 +376,7 @@ class TestLoadSample:
             load_sample("GSM999")
 
     def test_no_catalog_dir_raises(self, tmp_path, monkeypatch):
-        """Raises RuntimeError if no catalog dir set."""
+        """Without a catalog dir load_sample calls load (issue 73)."""
         import singlet._catalog as cat_mod
         from singlet._loader import load_sample
 
@@ -399,8 +399,9 @@ class TestLoadSample:
         cat_mod._CATALOG_DIR = None
         monkeypatch.delenv("SINGLET_CATALOG_DIR", raising=False)
 
-        with pytest.raises(RuntimeError, match="load_sample requires a local catalog"):
-            load_sample("GSM001")
+        with patch("singlet._loader.load", return_value="adata") as load:
+            assert load_sample("GSM001") == "adata"
+        load.assert_called_once_with("GSM001", genes=None)
 
     def test_load_gse_download_fallback(self, tmp_path, monkeypatch):
         """Falls back to R2 bundle download when GSE not in local catalog."""

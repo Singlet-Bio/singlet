@@ -192,7 +192,7 @@ read_cohort <- function(paths, matrix_name = "spliced", show_progress = FALSE) {
 }
 
 
-#' @export
+#' @exportS3Method print singlet_dir
 print.singlet_dir <- function(x, ...) {
     gsm <- attr(x, "user_kv")
     gsm_id <- if (!is.null(gsm) && "gsm_id" %in% names(gsm)) gsm[["gsm_id"]] else "?"

@@ -5,6 +5,7 @@
 #include "streamFuns.h"
 #include "SharedMemory.h"
 #include "genomeScanFastaFiles.h"
+#include "GenomePreload.h"
 #ifdef GENOME_PACKED
 #include <sys/mman.h>
 #endif
@@ -41,6 +42,7 @@ void Genome::genomeLoad(){//allocate and load Genome
     uint64 shmSize=0;//, shmStartG=0; shmStartSA=0;
 
     uint L=200,K=6;
+    bool genomePreloaded=false; //singlet E14: G1, SA and SAi came from GenomePreload.cpp (bytes and padding already in place)
 
     Parameters P1;
 
@@ -197,6 +199,7 @@ void Genome::genomeLoad(){//allocate and load Genome
 
         bool unloadLast = pGe.gLoad=="LoadAndRemove";
         try {
+            star_genome_preload_release();   //singlet E14: a shared-memory genome does not use singlet's private preload
             sharedMemory = new SharedMemory(shmKey, unloadLast);
             sharedMemory->SetErrorStream(P.inOut->logStdOut);
 
@@ -266,6 +269,8 @@ void Genome::genomeLoad(){//allocate and load Genome
         };
 
         try {
+            if (P.sjdbInsert.pass1 || P.sjdbInsert.pass2 || genomeInsertL>0)
+                star_genome_preload_release();   //singlet E14: insertions need STAR's own larger arrays
             if (P.sjdbInsert.pass1 || P.sjdbInsert.pass2) {
                 //reserve extra memory for insertion at the 1st and/or 2nd step
                 nGenomeInsert=nGenome+genomeInsertL;
@@ -299,8 +304,21 @@ void Genome::genomeLoad(){//allocate and load Genome
                 SA.pointArray(SAinsert.charArray+SAinsert.lengthByte-SA.lengthByte);
             } else {//no sjdb insertions
                 if (genomeInsertL==0) {// no sequence insertion, simple allocation
-                    G1=new char[nGenome+L+L];
-                    SA.allocateArray();
+                    // singlet E14: the arrays read once by singlet's preload (GenomePreload.cpp), shared copy-on-write with
+                    // the processes forked after it, when the directory and the sizes match; else STAR's own load below
+                    char *pG1=NULL, *pSA=NULL, *pSAi=NULL;
+                    std::string preLog;
+                    if (star_genome_preload_take(pGe.gDir, nGenome, nSAbyte, SA.lengthByte, SAiInBytes, SAi.lengthByte, pG1, pSA, pSAi, preLog)) {
+                        G1=pG1;
+                        SA.adoptArray(pSA);
+                        SAi.adoptArray(pSAi);
+                        genomePreloaded=true;
+                    } else {
+                        G1=new char[nGenome+L+L];
+                        SA.allocateArray();
+                    };
+                    if (!preLog.empty())
+                        P.inOut->logMain << "Genome preload: " << preLog << "\n" << flush;
                 } else {
                     G1=new char[nGenome+L+L+genomeInsertL];
                     SAinsert.defineBits(GstrandBit+1,nSA+2*genomeInsertL);//TODO: re-define GstrandBit if necessary
@@ -308,6 +326,7 @@ void Genome::genomeLoad(){//allocate and load Genome
                     SA.pointArray(SAinsert.charArray+SAinsert.lengthByte-SA.lengthByte);
                 };
             };
+            if (!genomePreloaded) {
             SAi.allocateArray();
 #ifdef SA_HUGEPAGES
             adviseHugepages(G1, nGenome+L+L);
@@ -315,6 +334,7 @@ void Genome::genomeLoad(){//allocate and load Genome
             adviseHugepages(SAi.charArray, SAi.lengthByte);
             P.inOut->logMain << "SA_HUGEPAGES: MADV_HUGEPAGE on G, SA, SAi before loading\n" << flush;
 #endif
+            };
             P.inOut->logMain <<"Shared memory is not used for genomes. Allocated a private copy of the genome.\n"<<flush;
         } catch (exception & exc) {
             ostringstream errOut;
@@ -329,7 +349,7 @@ void Genome::genomeLoad(){//allocate and load Genome
 
     bool isAllocatorProcess = sharedMemory != NULL && sharedMemory->IsAllocator();
 
-    if (pGe.gLoad=="NoSharedMemory" || isAllocatorProcess) {//load genome and SAs from files
+    if ((pGe.gLoad=="NoSharedMemory" && !genomePreloaded) || isAllocatorProcess) {//load genome and SAs from files
         //load genome
         P.inOut->logMain <<"Genome file size: "<<nGenome <<" bytes; state: good=" <<GenomeIn.good()\
                 <<" eof="<<GenomeIn.eof()<<" fail="<<GenomeIn.fail()<<" bad="<<GenomeIn.bad()<<"\n"<<flush;

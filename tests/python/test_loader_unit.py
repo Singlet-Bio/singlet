@@ -242,15 +242,15 @@ class TestLoadSample:
         with pytest.raises((FileNotFoundError, ValueError, RuntimeError, KeyError)):
             load_sample("GSM0000000")
 
-    def test_no_catalog_raises_before_touching_the_codec(self):
-        """Without a local catalog the error is explicit, never an ImportError."""
+    def test_no_catalog_loads_the_public_sample(self):
+        """Without a local catalog load_sample calls load(), never touching the codec (issue 73)."""
         from singlet._loader import load_sample
 
-        with patch("singlet._loader._read_pz_record") as reader:
-            with pytest.raises(RuntimeError, match="SINGLET_CATALOG_DIR") as exc:
-                load_sample("GSM4120733")
+        with patch("singlet._loader._read_pz_record") as reader, patch("singlet._loader.load") as load:
+            load.return_value = "adata"
+            assert load_sample("GSM4120733", genes=["A"]) == "adata"
         reader.assert_not_called()
-        assert "singlet.load('GSM4120733')" in str(exc.value)
+        load.assert_called_once_with("GSM4120733", genes=["A"])
 
     def test_not_in_public_api(self):
         import singlet

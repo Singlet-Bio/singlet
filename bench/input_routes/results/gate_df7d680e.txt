@@ -1,0 +1,190 @@
+node=g052.clipper.gvsu.edu job=803279 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/bin/df7d680e commit=df7d680e11b617f89949ca87fd5fd77f2e7c18dd scripts=df7d680e T=18 samples=pbmc1k_v3 neuron1k_v3 modes=cpu gpu refs=/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/ref/df7d680e/T18 2026-11-06T17:40:43-05:00
+NVIDIA H100 NVL, 610.43.02, 95830 MiB
+######## pbmc1k_v3 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq, 1838043689 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc1k_v3 cpu: env 
+pbmc1k_v3 cpu: wall 415.374 s, core-s 2496.47, start 1794004843.678364778 end 1794005259.052957990, maxRSS 29.9 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+FALLBACK LINES: 0
+1794004844 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq
+1794004844 [singlet] .1fq: 66601887 reads, 134 blocks, protocol_id=1, confidence=3, codec=0
+1794004850 [singlet] .1fq decoded to temp files
+1794004850 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1794005200 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1794005217 [cell_qc] STAR CellReads.stats: 323542 rows; no-passlist reads 1784866
+1794005217 [cell_qc] Wrote: /tmp/debruinz-gdg-803279/pbmc1k_v3/cpu/out//cell_qc_metrics.tsv (163720 cells)
+  CellReads.stats kept: 323543 lines
+stage                                           wall s   core-s  core-s/M gpu util %
+decode .1fq -> FASTQ + R11 | E13 head scan           6     55.3      0.83        0.0
+probe/ref load                                       7      9.6      0.14        0.0
+STAR prefill+map (GPU seed/stitch, host map)        16    136.4      2.05        0.0
+GPU pileup + collapse                              301   2050.0     30.78        0.0
+non-host                                            25     45.0      0.68        0.0
+export, QC, callers                                 19     41.3      0.62        0.0
+demux/ancestry/writers                              41    158.7      2.38        0.0
+TOTAL                                              415   2496.3     37.48        0.0  gpu busy-s 0
+  reference kept: /mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/ref/df7d680e/T18/pbmc1k_v3
+pbmc1k_v3 gpu: env SINGLET_GPU_PILEUP=on 
+pbmc1k_v3 gpu: wall 125.402 s, core-s 561.675, start 1794005268.425155224 end 1794005393.827952746, maxRSS 46.2 GB, device peak 90.1 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: on
+LEVEL 5 of 5; INGEST yes
+FALLBACK LINES: 1
+1794005277 [1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): 63169750 reads over a 3686400-barcode whitelist, 5.2s
+1794005268 [singlet] --engine gpu: level 5 (default), ingest (default), E16's tail; each falls back on its own with a line on stderr
+1794005268 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq
+1794005269 [singlet] .1fq: 66601887 reads, 134 blocks, protocol_id=1, confidence=3, codec=0
+1794005269 [1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)
+1794005269 [singlet] GPU probe: a usable device (0.80 s; waited 0.00 s)
+1794005271 [1fq-ingest] Scanned 134 blocks: 66601887 reads (66601887 stored), 6009271705 cDNA bases, longest 91; 12194 reads in the 5' probe sample (2.6s, 18T); STAR's prefill decodes the reads (no FASTQ files)
+1794005271 [singlet] .1fq scanned: STAR's prefill decodes the reads (E13, no temp files)
+1794005271 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1794005271 [gpu_pileup] E8: records built on the device (shared memory object for STAR's prefill)
+1794005277 [1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): 63169750 reads over a 3686400-barcode whitelist, 5.2s
+1794005283 [1fq-ingest] 66601887 reads decoded into the packed buffers in 4.229717 s (18 threads, done 4.229796 s after the head scan); STAR's process takes them; waited 1.6e-05 s for it at the STAR fork
+1794005309 [engine_gpu] level 5 (requested 5), reads from the .1fq (E13 ingest), Solo on the device (E11)
+1794005311 [gpu_pileup] stream drained
+1794005311 [gpu_pileup] hand-off pass: 63143563 reads without BAM records (E8: on the device; 61346820 kept, 926859 to the rRNA detector on a thread (E16); upload 786 ms (pinned), distinct CRs 14 ms (897422), CR table 287 ms, eval 22 ms, scatter 7 ms, download 735 ms, total 2021 ms; e16: context 0.167 s, register 0.420 s, unregister 0.000 s, free + reset 0.005 s (region and kept reads stay page-lo
+1794005311 [gpu_pileup] hand-off: 61346820 reads take their alignments from the GPU prefill, 0 primary alignments differ from the stream's
+1794005311 [gpu_pileup] 61443593 reads, 96773 signatures (0 incomplete groups)
+1794005316 [gpu_pileup] hand-off pass: rRNA detector (E16: on a thread beside the pileup): 66 reads in 0.43 s
+1794005316 [gpu_pileup] device lock: waited 0.34 s, held 2.4 s (E20: pileupRun 2.4 s; the device reset 0.37 s on a thread beside the puts and the host pass, after the unlock unless SINGLET_GPU_PILEUP_UNLOCK=reset)
+1794005316 [gpu_pileup] apply: build input 0.1 s, pileupRun 2.4 s, host pass 1.7 s
+1794005316 [gpu_pileup] on: GPU 2.3e+02 ms, total 2.3e+03 ms, peak 28 GB; molecules 15335599, junctions 106514, R1 molecules 4723640; digest skipped (E16); partition select 58.2 ms (in the GPU time), host fetch between partitions 841.7 ms; arena 88.1 GB (E17 budget 91.1 GB), peak 26.3 GB; cell partitions: 1; part 0/1: 61443593 reads, tuples gene 52242079 sj 8851754 snp 9061302 mt 357313199 ind 587
+1794005335 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1794005351 [cell_qc] STAR CellReads.stats: 323542 rows; no-passlist reads 1784866
+1794005351 [cell_qc] Wrote: /tmp/debruinz-gdg-803279/pbmc1k_v3/gpu/out//cell_qc_metrics.tsv (163720 cells)
+  CellReads.stats kept: 323543 lines
+stage                                           wall s   core-s  core-s/M gpu util %
+startup                                              1      3.5      0.05        0.0
+decode .1fq -> FASTQ + R11 | E13 head scan           2     16.9      0.25        0.0
+probe/ref load                                      13     90.1      1.35        0.0
+STAR prefill+map (GPU seed/stitch, host map)         7     42.7      0.64        0.0
+STAR stream into pileup                             20    127.4      1.91       61.9
+GPU-pileup hand-off                                  5     38.1      0.57       22.6
+non-host                                            18     42.6      0.64       17.2
+export, QC, callers                                 18     39.9      0.60        0.0
+demux/ancestry/writers                              41    160.0      2.40        0.0
+TOTAL                                              125    561.2      8.43       13.1  gpu busy-s 16
+=== pbmc1k_v3 cpu vs gpu (/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/ref/df7d680e/T18/pbmc1k_v3/out vs /tmp/debruinz-gdg-803279/pbmc1k_v3/gpu/cmp)
+  DIFF pileup_stats.json: /provenance/clip5p/probe/n_reads: 12000 != 12194; /provenance/outputs/bytes_public: 1278064455 != 1278071203
+  DIFF read_stats.tsv (140 vs 174 bytes)
+    2 of 3/4 lines differ
+    a: align	73402628	73402628		0	0	0.00
+    b: encode	66601887	66601887		0	0	2.58
+    a: pileup	73402628	73402628		0	0	317.66
+    b: align	66601887	73402628		0	0	0.00
+  DIFF star_Log.std.out (1283 vs 1194 bytes)
+  DIFF summary.json: /memory_tier: Medium != Large
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (126996 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: c115c73474e99993 428468)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 766e191fcc6181a5 3355559)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 31fc9ef1d3d55a89 3355559)
+  Gene/CellReads.stats: same rows (sorted; 323542 rows; byte-identical in file order: no)
+VERDICT pbmc1k_v3 cpu:gpu IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## neuron1k_v3 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/neuron1k_v3/neuron1k_v3.1fq, 2434477654 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCm39-2024-A)
+neuron1k_v3 cpu: env 
+neuron1k_v3 cpu: wall 477.695 s, core-s 2096.00, start 1794005405.271135735 end 1794005882.966459092, maxRSS 35.4 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+FALLBACK LINES: 0
+1794005405 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/neuron1k_v3/neuron1k_v3.1fq
+1794005406 [singlet] .1fq: 92902231 reads, 186 blocks, protocol_id=1, confidence=3, codec=0
+1794005413 [singlet] .1fq decoded to temp files
+1794005413 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1794005843 [cell_qc] Gene flags: 37 MT genes, 430 ribosomal genes out of 78298 total
+1794005870 [cell_qc] STAR CellReads.stats: 600534 rows; no-passlist reads 2630732
+1794005871 [cell_qc] Wrote: /tmp/debruinz-gdg-803279/neuron1k_v3/cpu/out//cell_qc_metrics.tsv (208318 cells)
+  CellReads.stats kept: 600535 lines
+stage                                           wall s   core-s  core-s/M gpu util %
+decode .1fq -> FASTQ + R11 | E13 head scan           8     78.6      0.85        0.0
+probe/ref load                                       6      7.5      0.08        0.0
+STAR prefill+map (GPU seed/stitch, host map)        13     74.9      0.81        0.0
+GPU pileup + collapse                              385   1772.2     19.08        0.0
+non-host                                            25     43.5      0.47        0.0
+export, QC, callers                                 29     65.5      0.71        0.0
+demux/ancestry/writers                              11     53.3      0.57        0.0
+TOTAL                                              477   2095.4     22.56        0.0  gpu busy-s 0
+  reference kept: /mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/ref/df7d680e/T18/neuron1k_v3
+neuron1k_v3 gpu: env SINGLET_GPU_PILEUP=on 
+neuron1k_v3 gpu: wall 107.135 s, core-s 509.597, start 1794005892.893324448 end 1794006000.029289812, maxRSS 60.9 GB, device peak 89.3 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: on
+LEVEL 5 of 5; INGEST yes
+FALLBACK LINES: 1
+1794005903 [1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): 89319948 reads over a 3686400-barcode whitelist, 6.4s
+1794005892 [singlet] --engine gpu: level 5 (default), ingest (default), E16's tail; each falls back on its own with a line on stderr
+1794005893 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/neuron1k_v3/neuron1k_v3.1fq
+1794005893 [singlet] .1fq: 92902231 reads, 186 blocks, protocol_id=1, confidence=3, codec=0
+1794005893 [1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)
+1794005893 [singlet] GPU probe: a usable device (0.81 s; waited 0.00 s)
+1794005896 [1fq-ingest] Scanned 186 blocks: 92902231 reads (92902231 stored), 8360989346 cDNA bases, longest 91; 12276 reads in the 5' probe sample (3.1s, 18T); STAR's prefill decodes the reads (no FASTQ files)
+1794005896 [singlet] .1fq scanned: STAR's prefill decodes the reads (E13, no temp files)
+1794005896 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1794005896 [gpu_pileup] E8: records built on the device (shared memory object for STAR's prefill)
+1794005903 [1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): 89319948 reads over a 3686400-barcode whitelist, 6.4s
+1794005908 [1fq-ingest] 92902231 reads decoded into the packed buffers in 5.657891 s (18 threads, done 5.657958 s after the head scan); STAR's process takes them; waited 2e-05 s for it at the STAR fork
+1794005934 [engine_gpu] level 5 (requested 5), reads from the .1fq (E13 ingest), Solo on the device (E11)
+1794005936 [gpu_pileup] stream drained
+1794005936 [gpu_pileup] hand-off pass: 88762289 reads without BAM records (E8: on the device; 85975860 kept, 1315988 to the rRNA detector on a thread (E16); upload 978 ms (pinned), distinct CRs 21 ms (1326144), CR table 401 ms, eval 31 ms, scatter 9 ms, download 1342 ms, total 2968 ms; e16: context 0.180 s, register 0.504 s, unregister 0.000 s, free + reset 0.006 s (region and kept reads stay page
+1794005936 [gpu_pileup] hand-off: 85975860 reads take their alignments from the GPU prefill, 0 primary alignments differ from the stream's
+1794005936 [gpu_pileup] 86433269 reads, 457409 signatures (0 incomplete groups)
+1794005941 [gpu_pileup] hand-off pass: rRNA detector (E16: on a thread beside the pileup): 102 reads in 0.61 s
+1794005941 [gpu_pileup] device lock: waited 0.56 s, held 2.4 s (E20: pileupRun 2.4 s; the device reset 0.41 s on a thread beside the puts and the host pass, after the unlock unless SINGLET_GPU_PILEUP_UNLOCK=reset)
+1794005941 [gpu_pileup] apply: build input 0.072 s, pileupRun 2.4 s, host pass 2.3 s
+1794005941 [gpu_pileup] on: GPU 2.8e+02 ms, total 2.3e+03 ms, peak 27 GB; molecules 24316581, junctions 103696, R1 molecules 3353480; digest skipped (E16); partition select 82.3 ms (in the GPU time), host fetch between partitions 726.3 ms; arena 88.1 GB (E17 budget 91.1 GB), peak 24.8 GB; cell partitions: 1; part 0/1: 86433269 reads, tuples gene 69545582 sj 9525429 snp 5873036 mt 141286941 ind 748
+1794005961 [cell_qc] Gene flags: 37 MT genes, 430 ribosomal genes out of 78298 total
+1794005987 [cell_qc] STAR CellReads.stats: 600534 rows; no-passlist reads 2630732
+1794005987 [cell_qc] Wrote: /tmp/debruinz-gdg-803279/neuron1k_v3/gpu/out//cell_qc_metrics.tsv (208318 cells)
+  CellReads.stats kept: 600535 lines
+stage                                           wall s   core-s  core-s/M gpu util %
+startup                                              0      0.5      0.01        0.0
+decode .1fq -> FASTQ + R11 | E13 head scan           3     29.7      0.32        0.0
+probe/ref load                                      13    114.2      1.23        0.0
+STAR prefill+map (GPU seed/stitch, host map)         6     26.3      0.28        0.0
+STAR stream into pileup                             21    134.4      1.45       51.6
+GPU-pileup hand-off                                  5     40.3      0.43       30.0
+GPU pileup + collapse                                1      7.1      0.08        0.0
+non-host                                            19     41.6      0.45       16.6
+export, QC, callers                                 27     60.8      0.65        0.0
+demux/ancestry/writers                              12     54.2      0.58        0.0
+TOTAL                                              107    509.0      5.48       14.3  gpu busy-s 15
+=== neuron1k_v3 cpu vs gpu (/mnt/projects/debruinz_project/debruinz/singlet/jobs/input-routes/ref/df7d680e/T18/neuron1k_v3/out vs /tmp/debruinz-gdg-803279/neuron1k_v3/gpu/cmp)
+  DIFF pileup_stats.json: /provenance/clip5p/probe/n_reads: 12000 != 12276; /provenance/outputs/bytes_public: 1453483484 != 1453490742
+  DIFF read_stats.tsv (144 vs 177 bytes)
+    2 of 3/4 lines differ
+    a: align	111408994	111408994		0	0	0.00
+    b: encode	92902231	92902231		0	0	3.13
+    a: pileup	111408994	111408994		0	0	397.85
+    b: align	92902231	111408994		0	0	0.00
+  DIFF star_Log.std.out (1285 vs 1196 bytes)
+  DIFF summary.json: /memory_tier: Medium != Large
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (117254 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: b4ddddd14b523255 490605)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 37b1365ae014d9ff 3667707)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 7340516c7041abe0 3667707)
+  Gene/CellReads.stats: same rows (sorted; 600534 rows; byte-identical in file order: no)
+VERDICT neuron1k_v3 cpu:gpu IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## runs
+sample       mode  exit  wall_s   core_s   maxrss_gb  dev_peak_gb  lanes_peak_gb  level   ingest  fallback_lines  node
+pbmc1k_v3    cpu   0     415.374  2496.47  29.9       0.0          -              cpu     -       0               g052
+pbmc1k_v3    gpu   0     125.402  561.675  46.2       90.1         89.9           5 of 5  yes     1               g052
+neuron1k_v3  cpu   0     477.695  2096.00  35.4       0.0          -              cpu     -       0               g052
+neuron1k_v3  gpu   0     107.135  509.597  60.9       89.3         90.0           5 of 5  yes     1               g052
+######## verdicts
+pbmc1k_v3    cpu:gpu  IDENTICAL  65/5/4  
+neuron1k_v3  cpu:gpu  IDENTICAL  65/5/4  
+GATE RUN OK (identity verdicts above)
+done 2026-11-06T18:00:12-05:00

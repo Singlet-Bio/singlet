@@ -23,8 +23,13 @@
 #include "../m6/m6.cu"
 #undef main
 #include "pileup_rec.h"
+#include "../../../../include/singlet/pileup/tx_compat.h"
 #include <fstream>
 #include <sstream>
+#include <array>
+#include <functional>
+#include <memory>
+#include <thread>
 #include <tuple>
 #include <cmath>
 #include <cstdio>
@@ -79,11 +84,15 @@ static std::vector<std::string> read_lines(const std::string& p) { std::vector<s
 // device structures
 struct DTree { const int32_t *s, *e, *me; const uint32_t *idx, *off, *n; int ntid; };
 struct DSnp { const int32_t* pos; const uint32_t* idx; const char* alt; const char* ref; const uint32_t *off, *n; int ntid; };
-struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 128, 256 are implemented
+struct DPar { int stranded, reverse, count_introns, count_sj, count_mt, min_mapq, chrm_tid, snp_skip_n; uint32_t rules; int use_q; int qw; };   // rules: intron_rule::k* bits (pileup_engine.h); 1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 are implemented; qw: mask words per read (P3-ENG-14)
 // the gene model for kFlank (refine_read's intronic-base count): per gene its body and its merged exons (GeneRecord::exon_indices, sorted)
 struct DGene { const int32_t *gs, *ge, *es, *ee; const uint32_t *eoff, *ex; uint32_t ng; };
+struct DTx { const uint32_t *gtoff, *xoff; const int32_t *es, *ee; uint32_t ng; };   // kTxCompat: transcript models (PileupInput::txGeneOff ..; ng = 0: not uploaded)
 // flank: an exon-touching intronic primary (flags 6) with <= 5 intronic bases (DirectionalUmiStore::kDiagFlank); applied by k_resolve under kFlank
-struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank; };   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
+// multi: bit 0 = multi-gene (as the engine's multi_gene / primary_multigene / gene_full_multi), bit 1 = the alignment has a same-strand exon
+// overlap (an exonic alignment, intron_rule::kExonPrecedence; the engine's GeneHit::exonic, or a primary's non-empty exon_overlaps),
+// bit 2 = intron_rule::kStarGene: exon overlaps, but no transcript of their genes is concordant with the alignment (the engine's tx_resolve)
+struct AA { uint32_t gene, exon, intron, aln_gene, flags, multi, stat, exg, hasn, pg_a, pg_b, flank, pmore, ba, bb; };   // multimap record only: ba / bb = a gene-ambiguous primary's gene-body set (the engine's record_set), pmore = it has more than two genes   // hasn: CIGAR N; pg_a / pg_b: a multigene primary's first two exon genes (the mm_buffer's first_gene / second_gene)   // stat: see k_annotate; exg: determine_exon_gene     // per alignment: classify_read result (primary) or exon hit (secondary)
 struct GRes { uint32_t gene, exon, intron, flags; };                    // per signature: what count_read receives (flags == 0: nothing is counted)
 struct SJL { int32_t tid, donor, acc; };
 struct IND { uint32_t pos, lenins; };
@@ -119,24 +128,49 @@ __device__ __forceinline__ bool wrong_strand(const StrandPar& S, uint32_t g) {
 struct ExonCb {
     const StrandPar* S; const uint32_t* e2g; uint32_t ne; bool any, same; uint32_t first_idx, first_gene;
     bool sense = false, anti = false; uint32_t blk_raw = 0, blk_ok = 0, second_gene = MAXU;   // second_gene: the first accepted gene other than first_gene   // engine's strand_vote (unfiltered overlaps) and block counts
+    bool more = false;   // multimap record: a third distinct accepted gene (the engine's third_exon_gene)
+    bool nog = false;    // multimap record: an accepted overlap of an exon without a gene (record_set: more)
     __device__ void operator()(uint32_t idx) {
         uint32_t g = idx < ne ? e2g[idx] : MAXU;
         { char gs = g < S->ng ? S->gstr[g] : '.'; if (gs != '.') { if (S->read_rev == (gs == '-')) sense = true; else anti = true; } }
         blk_raw++;
         if (wrong_strand(*S, g)) return;
         blk_ok++;
-        if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) { same = false; if (second_gene == MAXU && g != MAXU) second_gene = g; } } };
+        if (g == MAXU) nog = true;
+        if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) { same = false; if (second_gene == MAXU && g != MAXU) second_gene = g; else if (g != MAXU && g != second_gene) more = true; } } };
 struct IntronCb {
     const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t exon_gene; bool any, same; uint32_t first_idx, first_gene, match_idx;
     __device__ void operator()(uint32_t idx) {
         uint32_t g = idx < ni ? i2g[idx] : MAXU; if (wrong_strand(*S, g)) return;
         if (!any) { any = true; first_idx = idx; first_gene = g; same = true; } else if (g != first_gene) same = false;
         if (exon_gene != MAXU && g == exon_gene && match_idx == MAXU) match_idx = idx;
-        if (exon_gene != MAXU && g != exon_gene) other = true; }   // classify_read's other_gene_intron
-    bool other = false; };
+        if (exon_gene != MAXU && g != exon_gene) other = true;   // classify_read's other_gene_intron
+        if (g != MAXU) { if (g0b == MAXU) g0b = g; else if (g != g0b) bmulti = true; }   // gene_full_multi (kGeneFullSet), seeded with the exon gene
+        if (g != MAXU && g != ia && g != ib) { if (ia == MAXU) ia = g; else if (ib == MAXU) ib = g; else imore = true; } }   // multimap record: the intron genes
+    bool other = false; uint32_t g0b = MAXU; bool bmulti = false; uint32_t ia = MAXU, ib = MAXU; bool imore = false; };
+// kTxCompat (the engine's tx_resolve): the distinct accepted exon genes in query order (over: more than kMaxCandidates), and the first
+// accepted exon of the winning gene
+struct TxCandCb {
+    const StrandPar* S; const uint32_t* e2g; uint32_t ne; uint32_t c[singlet_tx::kMaxCandidates]; int n = 0; bool over = false;
+    __device__ void operator()(uint32_t idx) {
+        uint32_t g = idx < ne ? e2g[idx] : MAXU; if (wrong_strand(*S, g)) return;
+        if (g == MAXU) { over = true; return; }
+        for (int k = 0; k < n; k++) if (c[k] == g) return;
+        if (n == singlet_tx::kMaxCandidates) { over = true; return; }
+        c[n++] = g; } };
+struct TxFirstCb {
+    const StrandPar* S; const uint32_t* e2g; uint32_t ne; uint32_t w; uint32_t idx = MAXU;
+    __device__ void operator()(uint32_t i) {
+        if (idx != MAXU) return; uint32_t g = i < ne ? e2g[i] : MAXU; if (g == w && !wrong_strand(*S, g)) idx = i; } };
+// intron_rule::kGeneFullSet on a secondary (the engine's gene_full_extend): same-strand intron genes extend the exon hit to the gene-body set
+struct BodyCb {
+    const StrandPar* S; const uint32_t* i2g; uint32_t ni; uint32_t g0; bool multi;
+    __device__ void operator()(uint32_t idx) {
+        uint32_t g = idx < ni ? i2g[idx] : MAXU; if (g == MAXU || wrong_strand(*S, g)) return;
+        if (g0 == MAXU) g0 = g; else if (g != g0) multi = true; } };
 
 __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree EX, DTree IN, const uint32_t* e2g, uint32_t ne, const uint32_t* i2g, uint32_t ni, const char* gstr, uint32_t ng, DPar P, AA* out,
-                           DGene GM = DGene{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0}) {
+                           DGene GM = DGene{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0}, DTx TX = DTx{nullptr, nullptr, nullptr, nullptr, 0}) {
     int a = blockIdx.x * blockDim.x + threadIdx.x; if (a >= nA) return;
     AlnRec x = A[a]; bool prim = (x.flags & 2) != 0; StrandPar SP{P.stranded, P.reverse, gstr, ng, (x.flags & 1) != 0}; bool had_reject = false, hasn = false;
     ExonCb ec{&SP, e2g, ne, false, true, MAXU, MAXU};
@@ -150,11 +184,56 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         else if (op == 2 || op == 3) { rpos += len; if (op == 3) hasn = true; }
     }
-    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0};
+    bool nonconc = false;   // kStarGene
+    if ((P.rules & (16384 | 32768)) && TX.ng && ec.any && (!ec.same || (P.rules & 32768))) {
+        // kTxCompat (the engine's tx_resolve): the accepted exon genes in query order; exactly one with a concordant transcript keeps the read.
+        // kStarGene: none with a concordant transcript marks the alignment (multi bit 2)
+        TxCandCb tc{&SP, e2g, ne};
+        rpos = x.pos;
+        for (int i = 0; i < x.n_ops; i++) {
+            uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+            if (op == 0 || op == 7 || op == 8) { tree_query(EX, x.tid, rpos, rpos + len, tc); rpos += len; }
+            else if (op == 2 || op == 3) rpos += len;
+        }
+        if (!tc.over && tc.n >= ((P.rules & 32768) ? 1 : 2)) {
+            int32_t ss[singlet_tx::kMaxSegments], se[singlet_tx::kMaxSegments];
+            const int ns = singlet_tx::segments(x.n_ops, x.pos, [&](int i, int& op, int32_t& len) { op = (int)(o[i] & 15); len = (int32_t)(o[i] >> 4); }, ss, se);
+            uint32_t w = MAXU;
+            const int found = ns > 0 ? singlet_tx::pick(tc.c, tc.n, TX.gtoff, TX.xoff, TX.es, TX.ee, TX.ng, ss, se, ns, w) : -1;
+            if (found == 0 && (P.rules & 32768)) nonconc = true;
+            if (found == 1 && tc.n >= 2 && !ec.same && (P.rules & 16384)) {
+                TxFirstCb tf{&SP, e2g, ne, w};
+                rpos = x.pos;
+                for (int i = 0; i < x.n_ops; i++) {
+                    uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+                    if (op == 0 || op == 7 || op == 8) { tree_query(EX, x.tid, rpos, rpos + len, tf); rpos += len; }
+                    else if (op == 2 || op == 3) rpos += len;
+                }
+                ec.same = true; ec.first_gene = w; ec.first_idx = tf.idx; ec.second_gene = MAXU;
+            }
+        }
+    }
+    AA r{MAXU, MAXU, MAXU, MAXU, 0, 0, 0, MAXU, hasn ? 1u : 0u, MAXU, MAXU, 0, 0, MAXU, MAXU};
     r.exg = (ec.any && ec.same) ? ec.first_gene : MAXU;   // the engine's determine_exon_gene (single gene; multi-gene -> none)
-    if (!prim) { if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; } out[a] = r; return; }
+    if (!prim) {
+        if (ec.any) { if (ec.same) { r.gene = ec.first_gene; r.exon = ec.first_idx; } else r.multi = 1; }
+        if ((P.rules & 512) && P.count_introns && !r.multi) {   // kGeneFullSet: an intron of another gene makes the secondary multi-gene;
+            BodyCb bc{&SP, i2g, ni, r.gene, false};              // an exon-free one in one gene's introns notes that gene (aln_gene) but never assigns it
+            rpos = x.pos;
+            for (int i = 0; i < x.n_ops; i++) {
+                uint32_t c = o[i]; int op = c & 15; int32_t len = (int32_t)(c >> 4);
+                if (op == 0 || op == 7 || op == 8) { tree_query(IN, x.tid, rpos, rpos + len, bc); rpos += len; }
+                else if (op == 2 || op == 3) rpos += len;
+            }
+            if (bc.multi) { r.gene = MAXU; r.exon = MAXU; r.multi = 1; }
+            else if (r.gene == MAXU) r.aln_gene = bc.g0;
+        }
+        if (ec.any) r.multi |= 2u;   // an exonic alignment (kExonPrecedence)
+        if (nonconc) r.multi |= 4u;  // kStarGene
+        out[a] = r; return;
+    }
     bool unique_e = ec.any && ec.same && ec.first_gene != MAXU; uint32_t exon_gene = unique_e ? ec.first_gene : MAXU; bool pm = ec.any && !unique_e;
-    IntronCb ic{&SP, i2g, ni, exon_gene, false, true, MAXU, MAXU, MAXU};
+    IntronCb ic{&SP, i2g, ni, exon_gene, false, true, MAXU, MAXU, MAXU}; ic.g0b = exon_gene;
     if (P.count_introns) {
         rpos = x.pos;
         for (int i = 0; i < x.n_ops; i++) {
@@ -164,7 +243,8 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
     }
     uint32_t intron_gene = (ic.any && ic.same && ic.first_gene != MAXU) ? ic.first_gene : MAXU;
-    if (pm) { }
+    const bool bm = (P.rules & 512) && !pm && ic.bmulti;   // kGeneFullSet: more than one gene in the primary's body set -> gene-ambiguous
+    if (pm || ((P.rules & (16 | 512)) && exon_gene != MAXU && ic.other)) { }   // kNoExonPriority / kGeneFullSet: classify_read drops the read
     else if (exon_gene != MAXU) { r.gene = exon_gene; r.exon = ec.first_idx; r.intron = ic.match_idx; r.flags = ic.match_idx == MAXU ? 5 : 6; }
     else if (intron_gene != MAXU) { r.gene = intron_gene; r.intron = ic.first_idx; r.flags = 2; }
     if ((P.rules & 8) && r.flags == 6 && r.gene < GM.ng) {
@@ -186,8 +266,15 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
         }
         r.flank = (in_body - in_exon <= 5) ? 1u : 0u;
     }
-    r.multi = pm; r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
+    r.multi = (pm || bm ? 1u : 0u) | (ec.any ? 2u : 0u) | (nonconc ? 4u : 0u); r.aln_gene = exon_gene != MAXU ? exon_gene : intron_gene;
     if (pm) { r.pg_a = ec.first_gene; r.pg_b = ec.second_gene; }
+    if (pm || bm) {   // multimap record: the primary's gene-body set (exon genes; with kGeneFullSet also intron genes), as the engine's record_set
+        uint32_t a = MAXU, b = MAXU; bool more = ec.more || ec.nog;
+        auto add = [&](uint32_t g) { if (g == MAXU || g == a || g == b) return; if (a == MAXU) a = g; else if (b == MAXU) b = g; else more = true; };
+        if (ec.any) { add(ec.first_gene); add(ec.second_gene); }
+        if ((P.rules & 512) && P.count_introns) { add(ic.ia); add(ic.ib); if (ic.imore) more = true; }
+        r.ba = a; r.bb = b; r.pmore = more ? 1u : 0u;
+    }
     // stat (primary alignments; the engine's serial loop counters): 1 strand vote sense, 2 strand vote antisense, 4 wrong_strand
     // (no accepted exon overlap although a block had only wrong-strand exons), 8 cross_gene_intron (classify_read), 16 multigene
     r.stat = (ec.sense ? 1u : 0u) | (ec.anti ? 2u : 0u) | ((!ec.any && had_reject) ? 4u : 0u)
@@ -202,14 +289,20 @@ __global__ void k_annotate(const AlnRec* A, int nA, const uint32_t* ops, DTree E
 // After the drops: kFlank (8) makes an exon-touching intronic primary with <= 5 intronic bases exonic (flags 5, no intron), and the
 // counted primary's CIGAR N goes into flags bit 8 (refine_read's kDiagSpliced, which the molecule label reads). A gene a secondary
 // assigned (R7) or a chrM secondary carries no diag, as the mm_buffer's (read_diag / mt_diag stay 0).
+// kExonPrecedence (4096): the same state is kept over the exonic alignments (AA.multi bit 1) only: xs = some exonic alignment, xfg / xsec /
+// xamb / xnuc as fg / sec / amb / nuc (the engine's ex_first / ex_second / ex_ambiguous / ex_has_nuc), xg.. = R7 over the exonic alignments
+// (xa_*: the primary's when it is exonic and kept, else the smallest secondary exon), mexo = the chrM alignment is exonic (mt_ex). With an
+// exonic alignment the read is judged on those (mm_verdict), else as before.
 __device__ __forceinline__ void refine_primary(AA& x, const DPar& P) {
     if (x.gene == MAXU) return;
     if ((P.rules & 8) && x.flags == 6 && x.flank) { x.flags = 5; x.intron = MAXU; }
     if (x.hasn) x.flags |= 8u;
 }
-__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, DPar P, GRes* out) {
+// amb (multimap record, include/singlet/pileup/multimap_record.h): per signature the two genes of a read the engine collects as ambiguous
+// (em_rescue::AmbigRead: resolve_mm's gene-ambiguous multimapper, note_unique_multigene's unique two-gene primary), else MAXU
+__global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, const uint8_t* gmt, uint32_t ngmt, const uint8_t* tsp, uint32_t ntsp, DPar P, GRes* out, uint2* ambo) {
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
-    SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0};
+    SigRec sg = S[s]; GRes r{MAXU, MAXU, MAXU, 0}; uint2 ab = make_uint2(MAXU, MAXU);
     auto is_mt = [&](uint32_t g) { return g < ngmt && gmt[g] != 0; };
     if (sg.n_aln > 0) {
         if (sg.nh == 1) {
@@ -217,47 +310,104 @@ __global__ void k_resolve(const SigRec* S, int nS, const AlnRec* A, AA* aa, cons
                 AA x = aa[sg.aln_off + k];
                 if (x.gene != MAXU && (x.flags & 2) && (P.rules & 4) && x.hasn) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }
                 refine_primary(x, P);
-                if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; } break; }
+                if (x.gene != MAXU) { r.gene = x.gene; r.exon = x.exon; r.intron = x.intron; r.flags = x.flags ? x.flags : 5; }
+                else if ((x.multi & 1u) && !x.pmore && x.bb != MAXU) ab = make_uint2(min(x.ba, x.bb), max(x.ba, x.bb));
+                break; }
         } else {
-            bool amb = false, pa = false, nuc = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
-            // the genes the alignments touch, order-free (the engine's note_gene): fg/sec = the two smallest distinct genes, nuc = some non-chrM gene was touched
-            auto note = [&](uint32_t g) {
+            bool amb = false, pa = false, nuc = false, part = false; uint32_t fg = MAXU, sec = MAXU, gi = MAXU, ex = MAXU, in = MAXU, fl = 0;   // pa: the primary assigned the gene
+            bool xs = false, xamb = false, xnuc = false, xpa = false, mexo = false, xpart = false, pexo = false; uint32_t xfg = MAXU, xsec = MAXU, xg = MAXU, xex = MAXU, xin = MAXU, xfl = 0;   // kExonPrecedence
+            // the genes the alignments touch, order-free (the engine's note_gene_set): first / second = the two smallest distinct genes, nuc = some non-chrM gene was touched
+            // pt (multimap record): a third distinct gene, so {first, second} is not the read's gene set (MultiHitEntry::partial / ex_partial)
+            auto note_set = [&](uint32_t g, uint32_t& first, uint32_t& second, bool& am, bool& nu, bool& pt) {
                 if (g == MAXU) return;
-                if (!is_mt(g)) nuc = true;
-                if (g == fg || g == sec) return;
-                if (fg == MAXU) { fg = g; return; }
-                amb = true;
-                if (g < fg) { sec = fg; fg = g; } else if (sec == MAXU || g < sec) sec = g;
+                if (!is_mt(g)) nu = true;
+                if (g == first || g == second) return;
+                if (first == MAXU) { first = g; return; }
+                am = true;
+                if (second != MAXU) pt = true;
+                if (g < first) { second = first; first = g; } else if (second == MAXU || g < second) second = g;
             };
+            auto note = [&](uint32_t g) { note_set(g, fg, sec, amb, nuc, part); };
+            auto notex = [&](uint32_t g) { note_set(g, xfg, xsec, xamb, xnuc, xpart); };
+            uint32_t ra = MAXU, rb = MAXU; bool rmore = false;   // multimap record only: the primary's body set (MultiHitEntry::body_*); pexo = body_ex
+            auto rnote = [&](uint32_t g) { if (g == MAXU || g == ra || g == rb) return; if (ra == MAXU) ra = g; else if (rb == MAXU) rb = g; else rmore = true; };
             uint32_t mg = MAXU, mex = MAXU, min_ = MAXU, mfl = 0;                                                    // the chrM gene's alignment (kMtPrefer)
+            uint32_t spm = 0;                                                                                        // genomes of the alignments (joint reference)
+            bool mta = false;                                                                                        // some alignment on chrM (kChrMPrecedence)
             for (int k = 0; k < sg.n_aln; k++) {
                 AA x = aa[sg.aln_off + k];
+                { const int32_t t = A[sg.aln_off + k].tid; if (t >= 0 && (uint32_t)t < ntsp) spm |= tsp[t]; if (P.chrm_tid >= 0 && t == P.chrm_tid) mta = true; }
+                if ((P.rules & 32768) && (x.multi & 4u)) {   // kStarGene: the alignment gives no gene (the engine's star_skip / empty GeneHit)
+                    if ((A[sg.aln_off + k].flags & 2) && x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) aa[sg.aln_off + k].gene = MAXU;
+                    continue;
+                }
+                const bool multi = (x.multi & 1u) != 0, exo = (x.multi & 2u) != 0;
                 if (A[sg.aln_off + k].flags & 2) {
                     if (x.gene != MAXU && (x.flags & 2) && (((P.rules & 1)) || ((P.rules & 4) && x.hasn))) { aa[sg.aln_off + k].gene = MAXU; x.gene = MAXU; }   // NH > 1 here
                     refine_primary(x, P);
                     if (x.gene != MAXU) {
                         gi = x.gene; ex = x.exon; in = x.intron; fl = x.flags; pa = true;
-                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = x.intron; mfl = x.flags; }
+                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = x.intron; mfl = x.flags; mexo = x.exg != MAXU; }
                     }
-                    if (x.multi) {
+                    if (multi) {
                         amb = true;
+                        if (x.pmore) { part = true; rmore = true; }   // rmore: MultiHitEntry::body_more
+                        rnote(x.ba); rnote(x.bb);
                         if (x.pg_a != MAXU) { note(x.pg_a); if (x.pg_b != MAXU) note(x.pg_b); }
                     }
                     note(x.aln_gene);
+                    if (exo) {   // note_primary_exonic: exg == MAXU here means exons of several genes (pm)
+                        xs = true; pexo = true;
+                        if (x.exg == MAXU) { xamb = true; if (x.pg_a != MAXU) { notex(x.pg_a); if (x.pg_b != MAXU) notex(x.pg_b); } }
+                        else {
+                            if (multi) xamb = true;   // kGeneFullSet: the exon of one gene inside another gene's intron
+                            notex(x.exg);
+                            if (x.gene != MAXU) { xpa = true; xg = x.gene; xex = x.exon; xin = x.intron; xfl = x.flags; }
+                        }
+                    }
                 } else {
-                    if (x.multi) amb = true;
+                    if (multi) { amb = true; part = true; }   // a multi-gene secondary: its genes are not noted (MultiHitEntry::partial)
+                    else if ((P.rules & 512) && x.gene == MAXU && x.aln_gene != MAXU) note(x.aln_gene);   // kGeneFullSet: an intron-only secondary
                     else if (x.gene != MAXU) {
                         note(x.gene);
                         if (!pa && (gi == MAXU || x.exon < ex)) { gi = x.gene; ex = x.exon; fl = 5; }   // R7: else the smallest secondary exon
-                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = MAXU; mfl = 5; }
+                        if ((P.rules & 256) && is_mt(x.gene)) { mg = x.gene; mex = x.exon; min_ = MAXU; mfl = 5; mexo = true; }
+                    }
+                    if (exo) {   // note_secondary_exonic
+                        xs = true;
+                        if (multi) { xamb = true; xpart = true; }   // ex_partial: its genes are not noted
+                        else {
+                            notex(x.gene);
+                            if (x.gene != MAXU && !xpa && (xg == MAXU || x.exon < xex)) { xg = x.gene; xex = x.exon; xin = MAXU; xfl = 5; }
+                        }
                     }
                 }
             }
-            if (amb && mg != MAXU && nuc) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
-            else if (!amb && fg != MAXU && gi != MAXU) { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
+            const bool X = (P.rules & 4096) && xs && (spm & (spm - 1)) == 0;   // mm_verdict: judged on the exonic alignments, within one genome
+            const bool am = X ? xamb : amb;
+            if (am && mg != MAXU && (X ? (xnuc && mexo) : nuc)) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; }   // 256: counted for the chrM gene (mt_numt_rescued)
+            else if (X ? (!xamb && xfg != MAXU && xg != MAXU) : (!amb && fg != MAXU && gi != MAXU)) {
+                if (X) { r.gene = xg; r.exon = xex; r.intron = xin; r.flags = xfl ? xfl : 5; }
+                else { r.gene = gi; r.exon = ex; r.intron = in; r.flags = fl ? fl : 5; }
+            }
+            else if (X ? (xamb && !xpart && !(pexo && rmore)) : (amb && !part && !rmore)) {
+                // the record pair (the engine's record_mm / rec_pair): an uncounted gene-ambiguous read whose gene set is exactly two genes, the
+                // noted genes and the primary's body set; under kExonPrecedence the exonic alignments' genes and, for an exonic primary, its body set
+                uint32_t a = MAXU, b = MAXU; bool more = false;
+                const uint32_t g4[4] = {X ? xfg : fg, X ? xsec : sec, (!X || pexo) ? ra : MAXU, (!X || pexo) ? rb : MAXU};
+                for (int i = 0; i < 4; i++) { const uint32_t g = g4[i]; if (g == MAXU || g == a || g == b) continue; if (a == MAXU) a = g; else if (b == MAXU) b = g; else more = true; }
+                if (!more && b != MAXU) ab = make_uint2(min(a, b), max(a, b));
+            }
+            // kChrMPrecedence (mm_verdict): with an alignment on chrM, keep a chrM gene, else count the chrM gene it touches, else nothing
+            // (a counted chrM verdict is never a record pair, as record_mm; a dropped one stays a record read)
+            if ((P.rules & 8192) && mta && !(r.flags & 256u) && !(r.gene != MAXU && is_mt(r.gene))) {
+                if (mg != MAXU) { r.gene = mg; r.exon = mex; r.intron = min_; r.flags = (mfl ? mfl : 5) | 256u; ab = make_uint2(MAXU, MAXU); }
+                else r = GRes{MAXU, MAXU, MAXU, 0};
+            }
         }
     }
     out[s] = r;
+    ambo[s] = ab;
 }
 
 __device__ __forceinline__ uint8_t comp16(uint8_t c) { return ((c & 1) << 3) | ((c & 2) << 1) | ((c & 4) >> 1) | ((c & 8) >> 3); }
@@ -270,7 +420,8 @@ __device__ __forceinline__ int base_to_idx(uint8_t c) { return c == 1 ? 0 : c ==
 // per signature lists from the primary alignment: junctions (CIGAR N), SNP overlaps, chrM bases, chrM indels. Pass 1 counts, pass 2 fills.
 template <bool FILL>
 __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t* ops, const uint8_t* seq, DSnp SN, DPar P,
-                        uint32_t* c_sj, uint32_t* c_snp, uint32_t* c_mt, uint32_t* c_ind, SJL* o_sj, uint32_t* o_snp, uint32_t* o_mt, IND* o_ind) {
+                        uint32_t* c_sj, uint32_t* c_snp, uint32_t* c_mt, uint32_t* c_ind, SJL* o_sj, uint32_t* o_snp, uint32_t* o_mt, IND* o_ind,
+                        uint16_t* q_snp = nullptr, uint16_t* q_mt = nullptr) {   // q_snp / q_mt (use_q, FILL): per list entry the base's index in the record
     int s = blockIdx.x * blockDim.x + threadIdx.x; if (s >= nS) return;
     SigRec sg = S[s]; int p = -1; for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) { p = k; break; }
     uint32_t nsj = 0, nsnp = 0, nmt = 0, nind = 0;
@@ -293,13 +444,13 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
                         // base class as SnpConsensus::base_class (order-free-rules R1): ALT if base == alt, REF if base == ref, else OTHER
                         const char bc = nt16_char(code);
                         const uint32_t cls = bc == SN.alt[SN.off[a.tid] + k] ? 1u : (bc == SN.ref[SN.off[a.tid] + k] ? 0u : 2u);
-                        if (FILL) o_snp[wsnp + nsnp] = (SN.idx[SN.off[a.tid] + k] << 2) | cls | (P.use_q ? ((uint32_t)(rev ? sg.rlen - 1 - qp : qp) << 25) : 0u);   // use_q: bits 25-31 = the base's index in the record (original orientation)
+                        if (FILL) { o_snp[wsnp + nsnp] = (SN.idx[SN.off[a.tid] + k] << 2) | cls; if (q_snp) q_snp[wsnp + nsnp] = (uint16_t)(rev ? sg.rlen - 1 - qp : qp); }   // q_snp: the base's index in the record (original orientation)
                         nsnp++; }
                 }
                 if (mt_ok) for (int j = 0; j < len; j++) {
                     uint32_t rp = (uint32_t)(rpos + j); if (rp >= MT_LEN) continue;
                     int bi = base_to_idx(aligned_base(seq, sg.seq_off, sg.rlen, qpos + j, rev)); if (bi < 0) continue;
-                    if (FILL) o_mt[wmt + nmt] = rp * 4 + (uint32_t)bi + (P.use_q ? ((uint32_t)(rev ? sg.rlen - 1 - (qpos + j) : qpos + j) << 17) : 0u); nmt++; }   // use_q: bits 17-23 = the base's index in the record
+                    if (FILL) { o_mt[wmt + nmt] = rp * 4 + (uint32_t)bi; if (q_mt) q_mt[wmt + nmt] = (uint16_t)(rev ? sg.rlen - 1 - (qpos + j) : qpos + j); } nmt++; }   // q_mt: the base's index in the record
                 rpos += len; qpos += len;
             } else if (op == 1) { if (mt_ok && (uint32_t)rpos < MT_LEN) { if (FILL) o_ind[wind + nind] = IND{(uint32_t)rpos, ((uint32_t)min(len, 0xFFFF) << 1) | 1u}; nind++; } qpos += len; }
             else if (op == 4) qpos += len;
@@ -313,12 +464,14 @@ __global__ void k_lists(const SigRec* S, int nS, const AlnRec* A, const uint32_t
 // ---- read level ----
 __device__ __forceinline__ uint32_t umi_b5(uint64_t u3, int len) { uint32_t v = 0, m = 1; for (int i = 0; i < len; i++) { v += (uint32_t)((u3 >> (3 * i)) & 7) * m; m *= 5; } return v; }
 __device__ __forceinline__ uint64_t umi_b2(uint64_t u3, int len) { uint64_t v = 0; for (int i = 0; i < len; i++) { uint64_t c = (u3 >> (3 * i)) & 7; v |= (c > 3 ? 3ull : c) << (2 * i); } return v; }
-// per-base quality (dp.use_q): a list entry of a signature (SNP: bits 25-31, chrM base: bits 17-23) belongs to a read only if the base's quality passed
-__device__ __forceinline__ bool q_pass(const uint64_t* Q, int r, uint32_t pos) { return ((Q[2 * (size_t)r + (pos >> 6)] >> (pos & 63)) & 1ull) == 0ull; }
-__global__ void k_cnt_q(const ReadRec* R, int n, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, const uint64_t* Q, int qsh, uint32_t* cnt) {
+// per-base quality (dp.use_q): a list entry of a signature (its base index in the parallel uint16 array lq) belongs to a read only if the base's
+// quality passed. Q holds qw words per read (P3-ENG-14: 2 words up to 128 bases, as before)
+__device__ __forceinline__ bool q_pass(const uint64_t* Q, int qw, int r, uint32_t pos) { return ((Q[(size_t)qw * r + (pos >> 6)] >> (pos & 63)) & 1ull) == 0ull; }
+__global__ void k_cnt_q(const ReadRec* R, int n, const uint32_t* list_off, const uint32_t* list_cnt, const uint16_t* lq, const uint64_t* Q, int qw, uint32_t* cnt) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) { cnt[r] = 0; return; }
-    uint32_t c = list_cnt[x.sig], b = list_off[x.sig], m = 0; for (uint32_t k = 0; k < c; k++) m += q_pass(Q, r, (lists[b + k] >> qsh) & 127u); cnt[r] = m; }
-__global__ void k_gatherq(const uint64_t* Q, const uint32_t* ridx, int n, uint64_t* out) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) { out[2 * (size_t)i] = Q[2 * (size_t)ridx[i]]; out[2 * (size_t)i + 1] = Q[2 * (size_t)ridx[i] + 1]; } }
+    uint32_t c = list_cnt[x.sig], b = list_off[x.sig], m = 0; for (uint32_t k = 0; k < c; k++) m += q_pass(Q, qw, r, lq[b + k]); cnt[r] = m; }
+__global__ void k_gatherq(const uint64_t* Q, int qw, const uint32_t* ridx, int n, uint64_t* out) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) for (int w = 0; w < qw; w++) out[(size_t)qw * i + w] = Q[(size_t)qw * ridx[i] + w]; }
 __global__ void k_cnt(const ReadRec* R, int n, const uint32_t* sigcnt, uint32_t* cnt) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) cnt[r] = R[r].bc >= 0 ? sigcnt[R[r].sig] : 0u; }
 __global__ void k_gflag(const ReadRec* R, int n, const GRes* G, uint32_t* f) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n) f[r] = (R[r].bc >= 0 && G[R[r].sig].flags != 0) ? 1u : 0u; }
 __global__ void k_gfill(const ReadRec* R, int n, const GRes* G, const uint32_t* f, const uint32_t* off, int ulen, Rec* out) {
@@ -326,12 +479,13 @@ __global__ void k_gfill(const ReadRec* R, int n, const GRes* G, const uint32_t* 
     ReadRec x = R[r]; GRes g = G[x.sig]; Rec o; o.bc = (uint32_t)x.bc; o.gene = g.gene; o.exon = g.exon; o.intron = g.intron; o.umi = umi_b2(x.umi3, ulen);
     o.flags = (uint8_t)g.flags; o.umi_len = (uint8_t)ulen; o.hasN = 0; o.direct = 0; o.pad = 0; out[off[r]] = o; }
 __global__ void k_fill_hilo(const ReadRec* R, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, int is_snp, int hb, int ulen,
-                            uint64_t* hi, uint32_t* lo, uint8_t* alt, const SigRec* S = nullptr, const GRes* G = nullptr, uint32_t* tg = nullptr, const uint64_t* Q = nullptr) {
+                            uint64_t* hi, uint32_t* lo, uint8_t* alt, const SigRec* S = nullptr, const GRes* G = nullptr, uint32_t* tg = nullptr, const uint64_t* Q = nullptr,
+                            const uint16_t* lq = nullptr, int qw = 2) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r]; uint32_t u = umi_b5(x.umi3, ulen);
     // R9 per gene: the evidence gene is the unique read's gene (cur_read_gene_ is set for NH 1 only)
     const uint32_t gene = (tg && S[x.sig].nh == 1) ? G[x.sig].gene : MAXU;
-    uint32_t w = 0; for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; if (Q && !q_pass(Q, r, (e >> 25) & 127u)) continue; hi[o + w] = ((uint64_t)x.bc << hb) | (is_snp ? ((e >> 2) & (Q ? 0x7FFFFFu : 0xFFFFFFFFu)) : e); lo[o + w] = u; if (is_snp) alt[o + w] = (uint8_t)(e & 3); if (tg) tg[o + w] = gene; w++; }
+    uint32_t w = 0; for (uint32_t k = 0; k < c; k++) { uint32_t e = lists[b + k]; if (Q && !q_pass(Q, qw, r, lq[b + k])) continue; hi[o + w] = ((uint64_t)x.bc << hb) | (is_snp ? (e >> 2) : e); lo[o + w] = u; if (is_snp) alt[o + w] = (uint8_t)(e & 3); if (tg) tg[o + w] = gene; w++; }
 }
 // the gene reducer's molecule store, kept for the junction and SNP reducers (R9 per gene): the sorted unique (cell, gene, UMI) keys and the
 // component (root entry index) of each after the directional collapse
@@ -350,11 +504,12 @@ __global__ void k_gene_rid(const uint64_t* uh, const uint32_t* ul, const uint32_
 __global__ void k_mflag(const uint32_t* lab, int m, uint32_t* f) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) f[i] = lab[i] != (uint32_t)i; }
 __global__ void k_mgather(const uint64_t* uk, const uint32_t* lab, const uint32_t* idx, int n, uint64_t* a, uint64_t* b) {
     int j = blockIdx.x * blockDim.x + threadIdx.x; if (j < n) { a[j] = uk[idx[j]]; b[j] = uk[lab[idx[j]]]; } }
-__global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, uint64_t* key, const uint64_t* Q = nullptr) {
+__global__ void k_fill_mt(const ReadRec* R, const AlnRec* A, const SigRec* S, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const uint32_t* lists, uint64_t* key, const uint64_t* Q = nullptr,
+                          const uint16_t* lq = nullptr, int qw = 2) {
     int r = blockIdx.x * blockDim.x + threadIdx.x; if (r >= n) return; ReadRec x = R[r]; if (x.bc < 0) return;
     SigRec sg = S[x.sig]; uint32_t rev = 0; for (int k = 0; k < sg.n_aln; k++) if (A[sg.aln_off + k].flags & 2) { rev = A[sg.aln_off + k].flags & 1; break; }
     uint32_t c = list_cnt[x.sig], b = list_off[x.sig], o = off[r];
-    uint32_t w = 0; for (uint32_t k = 0; k < c; k++) { const uint32_t e = lists[b + k]; if (Q && !q_pass(Q, r, (e >> 17) & 127u)) continue; key[o + w++] = ((uint64_t)x.bc << 18) | ((uint64_t)(Q ? (e & 0x1FFFFu) : e) << 1) | rev; }
+    uint32_t w = 0; for (uint32_t k = 0; k < c; k++) { const uint32_t e = lists[b + k]; if (Q && !q_pass(Q, qw, r, lq[b + k])) continue; key[o + w++] = ((uint64_t)x.bc << 18) | ((uint64_t)e << 1) | rev; }
 }
 __global__ void k_fill_ind(const ReadRec* R, int n, const uint32_t* off, const uint32_t* list_off, const uint32_t* list_cnt, const IND* lists, uint32_t* o_bc, IND* o_ind,
                            const uint32_t* ridx, uint32_t* o_ri) {   // o_ri: the read's index in the full input (indels keep read order across partitions)
@@ -425,6 +580,100 @@ __global__ void k_r9(const uint32_t* gs, int ng, int m, const uint32_t* u, const
         atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull);
     }
 }
+// ---- E23: the R9 collapse without k_r9's pair loop. k_r9 tested every pair of a (cell, feature) group on the group's one thread: O(n^2)
+// per group, so the deepest group set the kernel's time (neuron1k_v3: a junction with 14,097 UMIs in one cell, 25.8 s of the pileup's 27 s).
+// r9_collapse computes the same roots in time linear in the entries:
+//   - the pairs: two UMIs one base apart agree on one half of their base-5 digits, so the candidates are the pairs of a bucket (group, half
+//     index, half value) over the free entries; each pair that passes k_r9's test (count rule, one mismatch) is unioned at once;
+//   - the union-find hooks the larger root under the smaller with atomicCAS, so every component's root is its smallest entry, which is the
+//     root k_r9's union (root[max] = min) leaves, whatever the order the pairs arrive in;
+//   - an entry with a gene component (rid) takes the first entry of its group with the same rid, from a stable sort by (group, rid);
+//   - the outputs (isroot, or the merged class counts, the R1 vote and its statistics) as k_r9 computes them, per entry instead of per group.
+// Scratch: five dead arrays of the caller (m entries each), so the reducer's peak memory does not grow.
+struct R9Scratch { uint64_t *k0, *k1; uint32_t *v0, *v1, *g; };
+static int bits_of(uint64_t v) { int b = 1; while (b < 64 && (1ull << b) <= v) b++; return b; }
+static bool g_e23 = true;   // SINGLET_GPU_PILEUP_E23=0: the per-group kernels k_r9 and k_cr_roots, as before E23 (the A/B switch of its gate)
+__global__ void k_r9_hkey(const uint32_t* gid, const uint32_t* u, const uint32_t* rid, int m, uint32_t p5, int h, uint64_t sentinel, uint64_t* key, uint32_t* idx) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    idx[i] = (uint32_t)i;
+    if (rid != nullptr && rid[i] != 0xFFFFFFFFu) { key[i] = sentinel; return; }   // not free: no pair of k_r9's loop
+    key[i] = ((uint64_t)(gid[i] - 1) << 20) | (h == 0 ? u[i] % p5 : u[i] / p5); }
+__device__ __forceinline__ void uf_union_min(uint32_t* p, uint32_t a, uint32_t b) {   // lock-free union, the smaller root wins
+    while (true) {
+        a = root_of(p, a); b = root_of(p, b);
+        if (a == b) return;
+        if (a > b) { const uint32_t t = a; a = b; b = t; }
+        if (atomicCAS(p + b, b, a) == b) return;   // else b was hooked meanwhile: find both roots again
+    } }
+__global__ void k_r9_pairs(const uint64_t* key, const uint32_t* idx, int m, uint64_t sentinel, const uint32_t* u, const uint32_t* w, int ulen, uint32_t* root) {
+    const int j = blockIdx.x * blockDim.x + threadIdx.x; if (j >= m || key[j] == sentinel) return;
+    const uint32_t a = idx[j];
+    for (int q = j + 1; q < m && key[q] == key[j]; q++) {
+        const uint32_t b = idx[q], hi = max(w[a], w[b]), lo = min(w[a], w[b]);
+        if (hi + 1 >= 2 * lo && umi5_one_mismatch(u[a], u[b], ulen)) uf_union_min(root, a, b); } }
+__global__ void k_r9_flatten(uint32_t* root, int m) { const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) root[i] = root_of(root, i); }
+__global__ void k_r9_rkey(const uint32_t* gid, const uint32_t* rid, int m, uint64_t sentinel, uint64_t* key, uint32_t* idx) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    idx[i] = (uint32_t)i; key[i] = rid[i] == 0xFFFFFFFFu ? sentinel : (((uint64_t)(gid[i] - 1) << 32) | rid[i]); }
+__global__ void k_r9_rroot(const uint64_t* key, const uint32_t* idx, int m, uint64_t sentinel, uint32_t* root) {   // a run's first entry: its smallest index
+    const int p = blockIdx.x * blockDim.x + threadIdx.x; if (p >= m || key[p] == sentinel || (p > 0 && key[p] == key[p - 1])) return;
+    for (int q = p; q < m && key[q] == key[p]; q++) root[idx[q]] = idx[p]; }
+__global__ void k_r9_isroot(const uint32_t* root, int m, uint32_t* isroot) { const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < m) isroot[i] = root[i] == (uint32_t)i; }
+__global__ void k_r9_msum(const uint32_t* root, const uint64_t* mv, int m, uint32_t* msum) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    for (int k = 0; k < 3; k++) { const uint32_t c = min((uint32_t)((mv[i] >> (16 * k)) & 0xFFFF), 255u); if (c) atomicAdd(&msum[3 * (size_t)root[i] + k], c); } }
+__global__ void k_r9_vote(const uint32_t* root, const uint32_t* msum, int m, uint64_t* val, unsigned long long* stat) {   // k_r9's vote per root
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m) return;
+    val[i] = 0; if (root[i] != (uint32_t)i) return;
+    const uint32_t* c = msum + 3 * (size_t)i; int best = 0; for (int k = 1; k < 3; k++) if (c[k] > c[best]) best = k;
+    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && c[k] == c[best]) tie = true;
+    if (tie) { atomicAdd(&stat[1], 1ull); return; }
+    if (best == 2) { atomicAdd(&stat[2], 1ull); return; }
+    atomicAdd(&stat[0], 1ull); val[i] = 1ull | (best == 1 ? (1ull << 32) : 0ull); }
+// the R9 collapse of the m entries (sorted by uh = cell | feature, then UMI; ngr groups): k_r9's outputs (root; isroot, or val / msum / stat)
+static void r9_collapse(Arena& A, const R9Scratch& S, const uint64_t* uh, int m, int ngr, const uint32_t* u, const uint32_t* w, const uint64_t* mv, int ulen,
+                        int directional, const uint32_t* rid, uint32_t* root, uint32_t* isroot, uint64_t* val, uint32_t* msum, unsigned long long* stat) {
+    const int TB = 256, G = (m + TB - 1) / TB;
+    k_gstart<<<G, TB>>>(uh, m, S.v0);   // group id + 1 of each entry
+    cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, S.v0, S.g, m); });
+    k_iota<<<G, TB>>>(root, m);
+    uint32_t p5 = 1; for (int k = 0; k < ulen / 2; k++) p5 *= 5;   // the low half: ulen / 2 digits (< 5^6), the high half the rest (< 5^7 < 2^20)
+    if (directional) {
+        const uint64_t sent = (uint64_t)ngr << 20; const int bits = bits_of((uint64_t)ngr) + 20;
+        for (int h = 0; h < 2; h++) {
+            k_r9_hkey<<<G, TB>>>(S.g, u, rid, m, p5, h, sent, S.k0, S.v0);
+            cub::DoubleBuffer<uint64_t> dk(S.k0, S.k1); cub::DoubleBuffer<uint32_t> dv(S.v0, S.v1);
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, bits); });
+            k_r9_pairs<<<G, TB>>>(dk.Current(), dv.Current(), m, sent, u, w, ulen, root);
+        }
+    }
+    k_r9_flatten<<<G, TB>>>(root, m);
+    if (rid != nullptr) {
+        const uint64_t sent = (uint64_t)ngr << 32; const int bits = bits_of((uint64_t)ngr) + 32;
+        k_r9_rkey<<<G, TB>>>(S.g, rid, m, sent, S.k0, S.v0);
+        cub::DoubleBuffer<uint64_t> dk(S.k0, S.k1); cub::DoubleBuffer<uint32_t> dv(S.v0, S.v1);
+        cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dk, dv, m, 0, bits); });   // stable: ascending index per key
+        k_r9_rroot<<<G, TB>>>(dk.Current(), dv.Current(), m, sent, root);
+    }
+    if (!val) { k_r9_isroot<<<G, TB>>>(root, m, isroot); return; }
+    CK(cudaMemsetAsync(msum, 0, 3 * (size_t)m * 4));
+    k_r9_msum<<<G, TB>>>(root, mv, m, msum);
+    k_r9_vote<<<G, TB>>>(root, msum, m, val, stat);
+}
+// E23 (SINGLET_GPU_PILEUP_PROF=1, profiling only): sizes of the groups a per-group serial kernel walks (one thread per group), from the group
+// starts on the device; appended to the run's log (g_parts_log). Downloads the starts: not for production runs.
+static bool g_prof = false;
+static std::vector<std::string> g_prof_log;
+static void prof_groups(const char* name, const uint32_t* d_starts, int ng, int m) {
+    if (!g_prof || ng <= 0) return;
+    std::vector<uint32_t> s(ng); CK(cudaMemcpy(s.data(), d_starts, (size_t)ng * 4, cudaMemcpyDeviceToHost));
+    std::vector<uint32_t> z(ng); double sq = 0; long long n1k = 0, n10k = 0;
+    for (int g = 0; g < ng; g++) { z[g] = (g + 1 < ng ? s[g + 1] : (uint32_t)m) - s[g]; sq += (double)z[g] * z[g]; n1k += z[g] >= 1000; n10k += z[g] >= 10000; }
+    std::vector<uint32_t> t = z; const size_t k = std::min<size_t>(5, t.size()); std::partial_sort(t.begin(), t.begin() + k, t.end(), std::greater<uint32_t>());
+    char b[320]; snprintf(b, sizeof b, "prof %s: %d groups, %d entries, max %u (top %u %u %u %u), sum n^2 %.3g, groups >= 1000: %lld, >= 10000: %lld",
+                          name, ng, m, t[0], k > 1 ? t[1] : 0, k > 2 ? t[2] : 0, k > 3 ? t[3] : 0, k > 4 ? t[4] : 0, sq, n1k, n10k);
+    g_prof_log.push_back(b);
+}
 // group starts of the m unique entries (sorted by uh): returns the number of groups, starts in *gs
 static int group_starts(Arena& A, const uint64_t* uh, int m, uint32_t** gs) {
     const int TB = 256; uint32_t* f = A.alloc<uint32_t>(m); k_gstart<<<(m + TB - 1) / TB, TB>>>(uh, m, f);
@@ -433,6 +682,22 @@ static int group_starts(Arena& A, const uint64_t* uh, int m, uint32_t** gs) {
     int ng = 0; CK(cudaMemcpy(&ng, dn, 4, cudaMemcpyDeviceToHost)); return ng; }
 static bool g_snp_first = false;   // --snp-first: the sorted path's first-read rule (prod/campaign), for the original gate
 static unsigned long long g_snp_stat[3] = {0, 0, 0};
+// D-101 (singlet): rows >= g_edit_start of the SNP table are RNA editing sites. red_snp counts their tuples (hits) and their molecules,
+// ties and other-majority votes into g_edit_stat {hits, molecules, ambiguous, other}; these are parts of n_snp_tuples and g_snp_stat.
+// Counting only: every output is the same with or without it.
+static uint32_t g_edit_start = 0xFFFFFFFFu;
+static unsigned long long g_edit_stat[4] = {0, 0, 0, 0};
+__global__ void k_edit_hits(const uint64_t* hi, int n, uint64_t mask, uint32_t start, unsigned long long* c) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    const bool e = i < n && (uint32_t)(hi[i] & mask) >= start;
+    const unsigned int b = __ballot_sync(0xffffffffu, e);
+    if ((threadIdx.x & 31) == 0 && b) atomicAdd(c, (unsigned long long)__popc(b)); }
+// the vote of k_r9 / k_r9_vote per root entry, counted for the roots of editing rows: c[1] molecules, c[2] ties, c[3] other
+__global__ void k_edit_vote(const uint32_t* root, const uint32_t* msum, const uint64_t* uh, int m, uint64_t mask, uint32_t start, unsigned long long* c) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= m || root[i] != (uint32_t)i || (uint32_t)(uh[i] & mask) < start) return;
+    const uint32_t* s = msum + 3 * (size_t)i; int best = 0; for (int k = 1; k < 3; k++) if (s[k] > s[best]) best = k;
+    bool tie = false; for (int k = 0; k < 3; k++) if (k != best && s[k] == s[best]) tie = true;
+    atomicAdd(&c[tie ? 2 : (best == 2 ? 3 : 1)], 1ull); }
 __global__ void k_mtres(const ReadRec* R, int n, const GRes* G, unsigned long long* c) { int r = blockIdx.x * blockDim.x + threadIdx.x; if (r < n && R[r].bc >= 0 && (G[R[r].sig].flags & 256u)) atomicAdd(&c[3], 1ull); }
 // count_read's counters over the gene tuples: [0] exon_hits, [1] intron_hits (kReadIntron), [2] reads recorded with a UMI (umi_duplicate)
 __global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
@@ -441,11 +706,19 @@ __global__ void k_hits(const Rec* r, int n, unsigned long long* c) {
 // reads recorded in the molecule store per cell (per_cell_molecule_stats' total_reads): gene tuples with a UMI
 __global__ void k_cellreads(const Rec* r, int n, uint32_t* out) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n && !r[i].direct) atomicAdd(&out[r[i].bc], 1u); }
+// E16 (singlet's level 5, set by the engine wrapper): the per-alignment results leave the device as the three arrays the host keeps (gene, stat,
+// exon gene: 9 bytes per alignment) instead of the 48-byte AA records split on the host
+static bool g_e16_aasplit = false;
+static bool g_e16_fetchpar = false;   // E16 "fetchpar" (singlet, level 5): a partition's outputs downloaded and converted on one thread each
+static bool g_e24_post = false;       // E24 "lockpost" (singlet, level 5): the fetch's host half and the merge after the device is unlocked (post_run)
+__global__ void k_e16_aa_split(const AA* __restrict__ aa, int n, uint32_t* __restrict__ gene, uint8_t* __restrict__ stat, uint32_t* __restrict__ exg) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) { gene[i] = aa[i].gene; stat[i] = (uint8_t) aa[i].stat; exg[i] = aa[i].exg; }
+}
 static bool g_cell_stats = false;   // set by the engine wrapper: per-cell reads and molecules for saturation / cell QC
 struct SumU64 { __host__ __device__ uint64_t operator()(const uint64_t& a, const uint64_t& b) const { return a + b; } };
 struct SumU32 { __host__ __device__ uint32_t operator()(const uint32_t& a, const uint32_t& b) const { return a + b; } };
 
-static int bits_of(uint64_t v) { int b = 1; while (b < 64 && (1ull << b) <= v) b++; return b; }
 static int total_of(Arena&, const uint32_t* cnt, const uint32_t* off, int n) {      // total from the last offset + count
     if (n == 0) return 0; uint32_t a = 0, b = 0; CK(cudaMemcpy(&a, cnt + n - 1, 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(&b, off + n - 1, 4, cudaMemcpyDeviceToHost)); return (int)(a + b); }
 static uint32_t* scan_u32(Arena& A, const uint32_t* cnt, int n) { uint32_t* off = A.alloc<uint32_t>(std::max(n, 1)); if (n) cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::ExclusiveSum(t, b, cnt, off, n); }); return off; }
@@ -464,15 +737,18 @@ static uint32_t* sort_hilo(Arena& A, const uint64_t* hi, const uint32_t* lo, int
 
 // ------------------------------------------------------------------------------------------------------------------------
 struct Inputs {
-    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0; Par par; DPar dp;
-    SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: 16-byte low-quality mask per read (dp.use_q)
+    int nS = 0, nA = 0, nR = 0, ncells = 0, ulen = 12, wantMerges = 0, wantUmiKeys = 0; Par par; DPar dp;
+    SigRec* S; AlnRec* Al; uint32_t* ops; uint8_t* seq; ReadRec* R; const uint64_t* Q = nullptr;   // Q: low-quality mask per read, dp.qw words (dp.use_q)
     DTree EX, IN; uint32_t *e2g, *i2g; char* gstr; DSnp SN; uint32_t ne2g = 0, ni2g = 0, ngstr = 0;
     uint8_t* gmt = nullptr; uint32_t ngmt = 0;   // per gene: lies on chrM (PileupInput::geneIsMt), for kMtPrefer
+    uint8_t* tsp = nullptr; uint32_t ntsp = 0;   // per tid: genome bit of a joint reference (PileupInput::tidSpecies); ntsp = 0: one genome
     DGene GM{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0};   // kFlank (ng = 0: not uploaded)
+    DTx TX{nullptr, nullptr, nullptr, nullptr, 0};                       // kTxCompat (ng = 0: not uploaded)
 };
 struct Outputs {
     struct Merge { uint32_t cell, gene; uint64_t umi, root; };
     std::vector<Merge> merges;   // gene store UMIs merged into another (Inputs::wantMerges)
+    std::vector<uint64_t> umi_keys;   // Inputs::wantUmiKeys: (cell << 32 | 2-bit UMI) of every gene store entry, sorted, distinct
     std::vector<T3> exon, intron, amb, sj, snp_ad, snp_dp, mt, mt_rev; std::vector<std::array<uint32_t, 4>> indels; std::vector<std::array<uint32_t, 3>> sjtab;   // sjtab: tid, donor, acc by id
     std::vector<T3> exon_reads, intron_reads;   // g_want_reads: reads per molecule summed per (cell, feature), same rows as exon / intron
     std::vector<T3> mixed_exon, mixed_intron;   // g_want_mixed: unspliced molecules with an exon-only read, per (cell, exon) / (cell, intron)
@@ -482,6 +758,10 @@ struct Outputs {
     unsigned long long hits[4] = {0, 0, 0, 0};      // exon_hits, intron_hits, UMI reads recorded, chrM/NUMT multimappers rescued (when g_cell_stats)
     std::vector<uint32_t> aa_gene, aa_exg; std::vector<uint8_t> aa_stat;   // per alignment (when g_cell_stats): classify_read gene, k_annotate stat
     unsigned long long sj_raw_sum = 0;   // distinct (cell, junction, UMI) before the 65535 clamp (the engine's stats.sj_hits)
+    std::vector<uint2> amb_sig;          // per signature: k_resolve's multimap record genes (MAXU: none)
+    // E24 "lockpost" (g_e24_post): per partition, the host half of each fetch step (rows from the arrays downloaded under the device lock),
+    // one list per step; post_run runs them after the unlock, then the merge (post_merge)
+    std::vector<std::array<std::vector<std::function<void()>>, 8>> post; bool post_merge = false;
 };
 static std::vector<T3> csr_to_t3(const Csr& c, int ncells) { std::vector<T3> v; v.reserve(c.indices.size()); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
 
@@ -529,7 +809,7 @@ static uint32_t* gene_components(Arena& A, const GeneStore* gst, const uint32_t*
 // MX (when g_want_mixed): the mixed molecules (unspliced with an exon-only read) per (cell, exon) and (cell, intron)
 static void red_gene(Arena& A, Timer& T, const Inputs& in, Rec* recs, int ng, CsrDev C[3], GeneStore* gst = nullptr, CsrDev32 RD[2] = nullptr,
                      CsrDev MX[2] = nullptr) {
-    Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup;
+    Layout L; L.ulen = in.ulen; L.cb = bits_of(std::max<uint64_t>(in.ncells, 1)); L.gb = bits_of(std::max<uint64_t>(in.par.n_genes, 1)); L.ub = 2 * in.ulen; L.directional = in.par.directional != 0; L.ncells = in.ncells; L.cr = (in.dp.rules & 128) != 0 && in.par.umi_dedup; L.velo = L.cr && (in.dp.rules & 1024) != 0; L.spl = L.cr && (in.dp.rules & 2048) != 0;
     long long ne = 0, na = 0; int it = 0;
     C[0] = C[1] = C[2] = CsrDev{nullptr, nullptr, nullptr, 0};
     if (RD) RD[0] = RD[1] = CsrDev32{nullptr, nullptr, nullptr, 0};
@@ -554,7 +834,9 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
         uint64_t* sj_hi = A.alloc<uint64_t>(n_sjt); uint32_t* sj_lo = A.alloc<uint32_t>(n_sjt);
         uint32_t* tg = gst ? A.alloc<uint32_t>(n_sjt) : nullptr;
         k_fill_hilo<<<GR, TB>>>(R, nR, r_sj, o_sj, c_sj, l_jid, 0, jb, in.ulen, sj_hi, sj_lo, nullptr, in.S, G, tg);
+        T.mark("5.sj.fill");
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sj_hi, sj_lo, n_sjt, cb + jb, ub5, &hs); const int G = (n_sjt + TB - 1) / TB;
+        T.mark("5.sj.sort");
         uint32_t* first = A.alloc<uint32_t>(n_sjt); k_runflag<<<G, TB>>>(hs, sj_lo, ord, n_sjt, first);
         uint32_t* seg = A.alloc<uint32_t>(n_sjt);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, first, seg, n_sjt); });
@@ -565,7 +847,11 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
         uint32_t* gs; int ngr = group_starts(A, uh, m, &gs);
         uint32_t *root = A.alloc<uint32_t>(m), *isroot = A.alloc<uint32_t>(m);
         uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_sjt, uh, ul, m, jb, in.ulen, dn);
-        k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
+        T.mark("5.sj.runs");
+        // E23: the dead arrays above as scratch (sj_hi: the sort took it; hs, first, sj_lo: the runs took them; seg: the reductions took it)
+        if (g_e23) r9_collapse(A, R9Scratch{sj_hi, hs, first, seg, sj_lo}, uh, m, ngr, ul, w, nullptr, in.ulen, in.par.directional, rid, root, isroot, nullptr, nullptr, nullptr);
+        else k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, ul, w, nullptr, in.ulen, in.par.directional, root, isroot, nullptr, nullptr, nullptr, rid);
+        T.mark("5.sj.r9"); if (g_prof) { prof_groups("sj r9 (cell, junction)", gs, ngr, m); T.mark("prof"); }
         *sj_u = A.alloc<uint64_t>(m); *sj_n = A.alloc<uint32_t>(m);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, uh, *sj_u, isroot, *sj_n, dn, SumU32(), m); });
         CK(cudaMemcpy(&n_sju, dn, 4, cudaMemcpyDeviceToHost));
@@ -575,14 +861,22 @@ static int red_junction(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, 
 }
 // SNP: (cell, SNP, UMI) sort, class counts per exact UMI, R9 collapse per (cell, SNP), R1 vote per molecule; rows (cell | SNP) -> DP | AD << 32
 static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR, const uint32_t* r_snp, const uint32_t* o_snp, const uint32_t* c_snp,
-                   const uint32_t* l_snp, int n_snpt, int sb, int cb, uint64_t** sn_u, uint64_t** sn_v, const GRes* G, const GeneStore* gst, const uint64_t* Qp = nullptr) {
+                   const uint32_t* l_snp, int n_snpt, int sb, int cb, uint64_t** sn_u, uint64_t** sn_v, const GRes* G, const GeneStore* gst, const uint64_t* Qp = nullptr,
+                   const uint16_t* lq_snp = nullptr) {
     const int TB = 256, GR = (nR + TB - 1) / TB, ub5 = (int)ceil(in.ulen * 2.3219280948873623) + 1;
     int n_snu = 0;
     if (n_snpt > 0) {
         uint64_t* sn_hi = A.alloc<uint64_t>(n_snpt); uint32_t* sn_lo = A.alloc<uint32_t>(n_snpt); uint8_t* sn_alt = A.alloc<uint8_t>(n_snpt);
         uint32_t* tg = (gst && !g_snp_first) ? A.alloc<uint32_t>(n_snpt) : nullptr;
-        k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg, Qp);
+        k_fill_hilo<<<GR, TB>>>(R, nR, r_snp, o_snp, c_snp, l_snp, 1, sb, in.ulen, sn_hi, sn_lo, sn_alt, in.S, G, tg, Qp, lq_snp, in.dp.qw);
+        unsigned long long* est = nullptr;   // D-101: the editing rows' counts (g_edit_stat)
+        if (g_edit_start != 0xFFFFFFFFu) {
+            est = A.alloc<unsigned long long>(4); CK(cudaMemset(est, 0, 32));
+            k_edit_hits<<<(n_snpt + TB - 1) / TB, TB>>>(sn_hi, n_snpt, (1ull << sb) - 1, g_edit_start, est);
+        }
+        T.mark("6.snp.fill");
         uint64_t* hs; uint32_t* ord = sort_hilo(A, sn_hi, sn_lo, n_snpt, cb + sb, ub5, &hs); const int G = (n_snpt + TB - 1) / TB;
+        T.mark("6.snp.sort");
         uint32_t* first = A.alloc<uint32_t>(n_snpt); k_runflag<<<G, TB>>>(hs, sn_lo, ord, n_snpt, first);
         *sn_u = A.alloc<uint64_t>(n_snpt); *sn_v = A.alloc<uint64_t>(n_snpt); int* dn = A.alloc<int>(4);
         uint64_t* v = A.alloc<uint64_t>(n_snpt);
@@ -603,45 +897,112 @@ static int red_snp(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int n
             uint32_t* gs; int ngr = group_starts(A, mk, m, &gs);
             uint32_t *root = A.alloc<uint32_t>(m), *msum = A.alloc<uint32_t>(3 * (size_t)m);
             uint32_t* rid = gene_components(A, gst, tg, ord, seg, n_snpt, mk, mu, m, sb, in.ulen, dn);
-            k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
+            T.mark("6.snp.runs");
+            // E23: the dead arrays above as scratch (sn_hi: the sort took it; hs, first, sn_lo: the runs took them; seg: the reductions took it)
+            if (g_e23) r9_collapse(A, R9Scratch{sn_hi, hs, first, seg, sn_lo}, mk, m, ngr, mu, w, mv, in.ulen, in.par.directional, rid, root, nullptr, val, msum, st);
+            else k_r9<<<(ngr + TB - 1) / TB, TB>>>(gs, ngr, m, mu, w, mv, in.ulen, in.par.directional, root, nullptr, val, msum, st, rid);
+            T.mark("6.snp.r9"); if (g_prof) { prof_groups("snp r9 (cell, SNP)", gs, ngr, m); T.mark("prof"); }
             unsigned long long s[3]; CK(cudaMemcpy(s, st, 24, cudaMemcpyDeviceToHost));
             for (int k = 0; k < 3; k++) g_snp_stat[k] += s[k];
+            if (est) k_edit_vote<<<(m + TB - 1) / TB, TB>>>(root, msum, mk, m, (1ull << sb) - 1, g_edit_start, est);
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceReduce::ReduceByKey(t, b, mk, *sn_u, val, *sn_v, dn, SumU64(), m); });
         }
         CK(cudaMemcpy(&n_snu, dn, 4, cudaMemcpyDeviceToHost));
+        if (est) { unsigned long long e[4]; CK(cudaMemcpy(e, est, 32, cudaMemcpyDeviceToHost)); for (int k = 0; k < 4; k++) g_edit_stat[k] += e[k]; }
     }
     T.mark("6.snp");
     return n_snu;
 }
 // chrM base: (cell, position, base, strand) sort and run-length encode
 static int red_mt(Arena& A, Timer& T, const Inputs& in, const ReadRec* R, int nR, const uint32_t* r_mt, const uint32_t* o_mt, const uint32_t* c_mt,
-                  const uint32_t* l_mt, int n_mtt, int cb, uint64_t** mt_u, uint32_t** mt_n, const uint64_t* Qp = nullptr) {
+                  const uint32_t* l_mt, int n_mtt, int cb, uint64_t** mt_u, uint32_t** mt_n, const uint64_t* Qp = nullptr, const uint16_t* lq_mt = nullptr) {
     const int TB = 256, GR = (nR + TB - 1) / TB;
     int n_mtu = 0;
     if (n_mtt > 0) {
-        uint64_t* mt_key = A.alloc<uint64_t>(n_mtt); k_fill_mt<<<GR, TB>>>(R, in.Al, in.S, nR, r_mt, o_mt, c_mt, l_mt, mt_key, Qp);
+        uint64_t* mt_key = A.alloc<uint64_t>(n_mtt); k_fill_mt<<<GR, TB>>>(R, in.Al, in.S, nR, r_mt, o_mt, c_mt, l_mt, mt_key, Qp, lq_mt, in.dp.qw);
+        T.mark("7.mt.fill");
         uint64_t* k1 = A.alloc<uint64_t>(n_mtt); cub::DoubleBuffer<uint64_t> dk(mt_key, k1);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortKeys(t, b, dk, n_mtt, 0, cb + 18); });
+        T.mark("7.mt.sort");
         *mt_u = A.alloc<uint64_t>(n_mtt); *mt_n = A.alloc<uint32_t>(n_mtt); int* dn = A.alloc<int>(4);
         cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRunLengthEncode::Encode(t, b, dk.Current(), *mt_u, *mt_n, dn, n_mtt); });
         CK(cudaMemcpy(&n_mtu, dn, 4, cudaMemcpyDeviceToHost));
+        T.mark("7.mt.rle");
+        if (g_prof) { char b[160]; snprintf(b, sizeof b, "prof mt: %d tuples, %d distinct (cell, position, base, strand), key bits %d", n_mtt, n_mtu, cb + 18); g_prof_log.push_back(b); }
     }
     return n_mtu;
 }
 
+// E23 (SINGLET_GPU_PILEUP_PROF=1): the gene store's (cell, gene) groups (stage_c's segments: k_cr_roots walks each on one thread) and the
+// directional collapse's candidate buckets (segment, half UMI: k_edge_count's runs), from the sorted unique keys downloaded to the host
+static void prof_gene_groups(const Inputs& in, const GeneStore& g) {
+    if (!g_prof || g.m <= 0) return;
+    std::vector<uint64_t> uk(g.m); CK(cudaMemcpy(uk.data(), g.uk, (size_t)g.m * 8, cudaMemcpyDeviceToHost));
+    std::vector<uint8_t> gmt(in.ngmt); if (in.ngmt) CK(cudaMemcpy(gmt.data(), in.gmt, in.ngmt, cudaMemcpyDeviceToHost));
+    const uint64_t gm = (1ull << g.gb) - 1;
+    struct Grp { uint32_t n; uint64_t key; }; std::vector<Grp> gr; long long mt_entries = 0, mt_groups = 0; double sq = 0, sqmt = 0;
+    for (int i = 0; i < g.m;) { int j = i; while (j < g.m && (uk[j] >> g.ub) == (uk[i] >> g.ub)) j++; gr.push_back(Grp{(uint32_t)(j - i), uk[i] >> g.ub});
+        const uint32_t gene = (uint32_t)((uk[i] >> g.ub) & gm); const bool mt = gene < gmt.size() && gmt[gene]; sq += (double)(j - i) * (j - i);
+        if (mt) { mt_entries += j - i; mt_groups++; sqmt += (double)(j - i) * (j - i); } i = j; }
+    std::vector<Grp> t = gr; const size_t k = std::min<size_t>(8, t.size());
+    std::partial_sort(t.begin(), t.begin() + k, t.end(), [](const Grp& a, const Grp& b) { return a.n > b.n; });
+    std::string top; for (size_t q = 0; q < k; q++) { const uint32_t gene = (uint32_t)(t[q].key & gm); char b[96];
+        snprintf(b, sizeof b, "%s%u (cell %llu gene %u%s)", q ? ", " : "", t[q].n, (unsigned long long)(t[q].key >> g.gb), gene, gene < gmt.size() && gmt[gene] ? " chrM" : ""); top += b; }
+    // the directional collapse's candidate buckets: (segment, low half) and (segment, high half) of the UMI; k_edge_count does b(b-1)/2 per bucket
+    const int lob = 2 * (in.ulen / 2); double bsq[2] = {0, 0}; uint32_t bmx[2] = {0, 0};
+    for (int h = 0; h < 2; h++) {
+        std::vector<uint64_t> kk(g.m); size_t seg = 0; for (int i = 0; i < g.m; i++) { if (i && (uk[i] >> g.ub) != (uk[i - 1] >> g.ub)) seg++;
+            const uint64_t u = uk[i] & ((1ull << g.ub) - 1); kk[i] = (seg << 32) | (h == 0 ? (u & ((1ull << lob) - 1)) : (u >> lob)); }
+        std::sort(kk.begin(), kk.end());
+        for (size_t i = 0; i < kk.size();) { size_t j = i; while (j < kk.size() && kk[j] == kk[i]) j++; bsq[h] += (double)(j - i) * (j - i - 1) / 2; bmx[h] = std::max(bmx[h], (uint32_t)(j - i)); i = j; } }
+    char b[700]; snprintf(b, sizeof b, "prof gene (cell, gene) groups: %zu groups, %d entries (UMIs), sum n^2 %.3g; chrM genes %lld groups, %lld entries, sum n^2 %.3g; "
+                          "largest %s; edge buckets (low/high half): max %u/%u, pairs %.3g/%.3g",
+                          gr.size(), g.m, sq, mt_groups, mt_entries, sqmt, top.c_str(), bmx[0], bmx[1], bsq[0], bsq[1]);
+    g_prof_log.push_back(b);
+}
+
+// ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row) (the K = 1 order). Each partition's rows
+// are sorted already: they are merged (K = 1: nothing to do); the reads-per-molecule and mixed matrices are sorted whole. par: one thread per
+// matrix (each touches only its own)
+static void merge_parts(Outputs* out, std::vector<T3>* const outv[8], const std::vector<size_t> bnd[8], bool par) {
+    auto byCell = [](const T3& a, const T3& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
+    auto one = [&](int v) {
+        for (size_t p = 2; p <= bnd[v].size(); p++) {
+            const size_t mid = bnd[v][p - 1], end = p < bnd[v].size() ? bnd[v][p] : outv[v]->size();
+            std::inplace_merge(outv[v]->begin(), outv[v]->begin() + mid, outv[v]->begin() + end, byCell);
+        }
+    };
+    std::vector<T3>* whole[4] = {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron};
+    if (par) {
+        std::vector<std::thread> th;
+        for (int v = 0; v < 8; v++) th.emplace_back(one, v);
+        for (auto* w : whole) th.emplace_back([w, byCell]() { std::sort(w->begin(), w->end(), byCell); });
+        for (auto& t : th) t.join();
+    } else {
+        for (int v = 0; v < 8; v++) one(v);
+        for (auto* w : whole) std::sort(w->begin(), w->end(), byCell);
+    }
+}
 static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int TB = 256; const int nS = in.nS, nA = in.nA, nR = in.nR;
+    { const char* pf = getenv("SINGLET_GPU_PILEUP_PROF"); g_prof = pf && *pf && *pf != '0'; g_prof_log.clear(); }
+    { const char* e = getenv("SINGLET_GPU_PILEUP_E23"); g_e23 = !(e && *e == '0'); g_cr_replay = g_e23; }
     // 1 annotate
     AA* aa = A.alloc<AA>(std::max(nA, 1));
-    k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM); T.mark("1.annotate");
+    k_annotate<<<(nA + TB - 1) / TB, TB>>>(in.Al, nA, in.ops, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM, in.TX); T.mark("1.annotate");
     // 2 signature level
-    GRes* gr = A.alloc<GRes>(nS); k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.dp, gr);
+    GRes* gr = A.alloc<GRes>(nS); uint2* ambs = A.alloc<uint2>(std::max(nS, 1));
+    k_resolve<<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, aa, in.gmt, in.ngmt, in.tsp, in.ntsp, in.dp, gr, ambs);
+    out->amb_sig.resize(nS);   // multimap record: the reads' side is built on the host (pileupRun)
+    if (nS) CK(cudaMemcpy(out->amb_sig.data(), ambs, (size_t) nS * sizeof(uint2), cudaMemcpyDeviceToHost));
     uint32_t *c_sj = A.alloc<uint32_t>(nS), *c_snp = A.alloc<uint32_t>(nS), *c_mt = A.alloc<uint32_t>(nS), *c_ind = A.alloc<uint32_t>(nS);
     k_lists<false><<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, in.ops, in.seq, in.SN, in.dp, c_sj, c_snp, c_mt, c_ind, nullptr, nullptr, nullptr, nullptr);
     uint32_t *o_sj = scan_u32(A, c_sj, nS), *o_snp = scan_u32(A, c_snp, nS), *o_mt = scan_u32(A, c_mt, nS), *o_ind = scan_u32(A, c_ind, nS);
     int n_sjl = total_of(A, c_sj, o_sj, nS), n_snpl = total_of(A, c_snp, o_snp, nS), n_mtl = total_of(A, c_mt, o_mt, nS), n_indl = total_of(A, c_ind, o_ind, nS);
     SJL* l_sj = A.alloc<SJL>(std::max(n_sjl, 1)); uint32_t* l_snp = A.alloc<uint32_t>(std::max(n_snpl, 1)); uint32_t* l_mt = A.alloc<uint32_t>(std::max(n_mtl, 1)); IND* l_ind = A.alloc<IND>(std::max(n_indl, 1));
-    k_lists<true><<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, in.ops, in.seq, in.SN, in.dp, o_sj, o_snp, o_mt, o_ind, l_sj, l_snp, l_mt, l_ind); T.mark("2.siglists");
+    uint16_t* lq_snp = in.dp.use_q ? A.alloc<uint16_t>(std::max(n_snpl, 1)) : nullptr;   // use_q: per list entry its base index in the record
+    uint16_t* lq_mt = in.dp.use_q ? A.alloc<uint16_t>(std::max(n_mtl, 1)) : nullptr;
+    k_lists<true><<<(nS + TB - 1) / TB, TB>>>(in.S, nS, in.Al, in.ops, in.seq, in.SN, in.dp, o_sj, o_snp, o_mt, o_ind, l_sj, l_snp, l_mt, l_ind, lq_snp, lq_mt); T.mark("2.siglists");
     // 3 junction ids
     uint32_t* l_jid = A.alloc<uint32_t>(std::max(n_sjl, 1)); uint64_t *t1 = nullptr; uint32_t* t2 = nullptr; int nj = 0;
     if (n_sjl > 0) {
@@ -674,6 +1035,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         CK(cudaMemcpyToSymbol(g_cell_hist, &cell_hist, sizeof(cell_hist)));
     }
     g_snp_stat[0] = g_snp_stat[1] = g_snp_stat[2] = 0;
+    g_edit_stat[0] = g_edit_stat[1] = g_edit_stat[2] = g_edit_stat[3] = 0;
     // ---- cell partitions (align-and-count design 4.4): every reducer's key starts with the cell, so the read-level stages run once
     // per partition of the cells (hash(cell) mod K) on that partition's reads; the signature-level tables above are shared. Sized up
     // front: the smallest K whose largest partition fits the arena (part_bytes: an upper bound per read from its tuple counts).
@@ -693,7 +1055,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             est.assign(K, 0); CK(cudaMemcpy(est.data(), bins, K * 8, cudaMemcpyDeviceToHost));
             const unsigned long long mx = *std::max_element(est.begin(), est.end());
             // K > 1 also holds the partition scratch for all reads (flags, compacted reads, their index: 24 B per read)
-            const size_t scratch = K > 1 ? (size_t)nR * (4 + sizeof(ReadRec) + 4 + (in.dp.use_q ? 16 : 0)) : 0;
+            const size_t scratch = K > 1 ? (size_t)nR * (4 + sizeof(ReadRec) + 4 + (in.dp.use_q ? 8 * (size_t)in.dp.qw : 0)) : 0;
             if (forced > 0 || mx + scratch <= budget) break;
         }
         if (K > kMaxParts) K = kMaxParts;   // nothing fits: the largest K, and the unified-memory retry catches the rest
@@ -702,7 +1064,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     g_parts_used = K; g_parts_log.clear();
     uint32_t* pf = nullptr; ReadRec* Rp = nullptr; uint32_t* ridx = nullptr; int* dnp = nullptr; uint64_t* Qg = nullptr;
     const size_t base2 = [&] {   // K > 1: partition scratch that outlives each partition (flags, compacted reads, their global index)
-        if (K > 1) { pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1); if (in.dp.use_q) Qg = A.alloc<uint64_t>(2 * (size_t)std::max(nR, 1)); }
+        if (K > 1) { pf = A.alloc<uint32_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(std::max(nR, 1)); ridx = A.alloc<uint32_t>(std::max(nR, 1)); dnp = A.alloc<int>(1); if (in.dp.use_q) Qg = A.alloc<uint64_t>((size_t)in.dp.qw * std::max(nR, 1)); }
         return A.mark(); }();
     std::vector<std::pair<uint32_t, std::array<uint32_t, 4>>> indels;   // (global read index, indel): read order, as for K = 1
     const int jb = bits_of(std::max(nj, 1)), sb = bits_of(std::max<uint64_t>(in.par.n_snps, 1)), cb = bits_of(std::max<uint64_t>(in.ncells, 1));
@@ -720,7 +1082,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, in.R, pf, Rp, dnp, nR); });
             cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::Flagged(t, b, cub::CountingInputIterator<uint32_t>(0), pf, ridx, dnp, nR); });
             CK(cudaMemcpy(&nRp, dnp, 4, cudaMemcpyDeviceToHost));
-            if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, ridx, nRp, Qg); Qp = Qg; }
+            if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, in.dp.qw, ridx, nRp, Qg); Qp = Qg; }
         }
         T.mark("part.select");
         const int GR = (nRp + TB - 1) / TB;
@@ -733,8 +1095,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         if (g_cell_stats && (in.dp.rules & 256)) k_mtres<<<GR, TB>>>(Rp, nRp, gr, hits);
         uint32_t* rc = A.alloc<uint32_t>(std::max(nRp, 1));
         k_cnt<<<GR, TB>>>(Rp, nRp, c_sj, rc); uint32_t* r_sj = scan_u32(A, rc, nRp); int n_sjt = total_of(A, rc, r_sj, nRp);
-        if (Qp) k_cnt_q<<<GR, TB>>>(Rp, nRp, o_snp, c_snp, l_snp, Qp, 25, rc); else k_cnt<<<GR, TB>>>(Rp, nRp, c_snp, rc); uint32_t* r_snp = scan_u32(A, rc, nRp); int n_snpt = total_of(A, rc, r_snp, nRp);
-        if (Qp) k_cnt_q<<<GR, TB>>>(Rp, nRp, o_mt, c_mt, l_mt, Qp, 17, rc); else k_cnt<<<GR, TB>>>(Rp, nRp, c_mt, rc); uint32_t* r_mt = scan_u32(A, rc, nRp); int n_mtt = total_of(A, rc, r_mt, nRp);
+        if (Qp) k_cnt_q<<<GR, TB>>>(Rp, nRp, o_snp, c_snp, lq_snp, Qp, in.dp.qw, rc); else k_cnt<<<GR, TB>>>(Rp, nRp, c_snp, rc); uint32_t* r_snp = scan_u32(A, rc, nRp); int n_snpt = total_of(A, rc, r_snp, nRp);
+        if (Qp) k_cnt_q<<<GR, TB>>>(Rp, nRp, o_mt, c_mt, lq_mt, Qp, in.dp.qw, rc); else k_cnt<<<GR, TB>>>(Rp, nRp, c_mt, rc); uint32_t* r_mt = scan_u32(A, rc, nRp); int n_mtt = total_of(A, rc, r_mt, nRp);
         k_cnt<<<GR, TB>>>(Rp, nRp, c_ind, rc); uint32_t* r_ind = scan_u32(A, rc, nRp); int n_indt = total_of(A, rc, r_ind, nRp);
         const size_t s4 = A.mark();
         T.mark("4.expand");
@@ -742,6 +1104,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         CsrDev C[3]; CsrDev32 RD[2]; CsrDev MX[2]; GeneStore gst{nullptr, nullptr, 0, 0, 0};
         red_gene(A, T, in, recs, ng, C, &gst, g_want_reads ? RD : nullptr, g_want_mixed ? MX : nullptr);
         const GeneStore* gsp = (in.par.umi_dedup && gst.m > 0) ? &gst : nullptr;   // R9 per gene: the junction and SNP molecules take their roots from it
+        if (g_prof) { T.mark("gene"); prof_gene_groups(in, gst); T.mark("prof"); }
         if (out && in.wantMerges && gst.m > 0) {   // the host V(D)J reducer needs the same roots: the entries the collapse merged into another
             const int Gm = (gst.m + TB - 1) / TB; uint32_t* mf = A.alloc<uint32_t>(gst.m); k_mflag<<<Gm, TB>>>(gst.lab, gst.m, mf);
             uint32_t* midx = A.alloc<uint32_t>(gst.m); int* mn = A.alloc<int>(1);
@@ -754,12 +1117,23 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 for (int i = 0; i < nm; i++) out->merges.push_back({(uint32_t)(ha[i] >> (gst.gb + gst.ub)), (uint32_t)((ha[i] >> gst.ub) & gm), ha[i] & um, hb2[i] & um});
             }
         }
+        if (out && in.wantUmiKeys && gst.m > 0) {   // the multimap record's counted-UMI keys (multimap::build; PileupEngine::counted_umis)
+            std::vector<uint64_t> hk(gst.m); CK(cudaMemcpy(hk.data(), gst.uk, (size_t)gst.m * 8, cudaMemcpyDeviceToHost));
+            const int sh = gst.gb + gst.ub; const uint64_t um = ((1ull << gst.ub) - 1) & 0xffffffffull;
+            auto& K = out->umi_keys; const size_t base = K.size(); K.reserve(base + (size_t)gst.m);
+            for (int i = 0; i < gst.m;) {   // the store is in (cell, gene, UMI) order: per cell, its UMIs over every gene, sorted and distinct
+                const uint64_t cell = hk[i] >> sh; const size_t s = K.size(); int j = i;
+                for (; j < gst.m && (hk[j] >> sh) == cell; j++) K.push_back((cell << 32) | (hk[j] & um));
+                std::sort(K.begin() + s, K.end()); K.erase(std::unique(K.begin() + s, K.end()), K.end()); i = j;
+            }
+            if (base > 0) std::inplace_merge(K.begin(), K.begin() + base, K.end());   // the partitions hold disjoint cells
+        }
         const size_t s5 = A.mark();
         uint64_t* sj_u = nullptr; uint32_t* sj_n = nullptr; int n_sju = red_junction(A, T, in, Rp, nRp, r_sj, o_sj, c_sj, l_jid, n_sjt, jb, cb, &sj_u, &sj_n, gr, gsp);
         const size_t s6 = A.mark();
-        uint64_t* sn_u = nullptr; uint64_t* sn_v = nullptr; int n_snu = red_snp(A, T, in, Rp, nRp, r_snp, o_snp, c_snp, l_snp, n_snpt, sb, cb, &sn_u, &sn_v, gr, gsp, Qp);
+        uint64_t* sn_u = nullptr; uint64_t* sn_v = nullptr; int n_snu = red_snp(A, T, in, Rp, nRp, r_snp, o_snp, c_snp, l_snp, n_snpt, sb, cb, &sn_u, &sn_v, gr, gsp, Qp, lq_snp);
         const size_t s7 = A.mark();
-        uint64_t* mt_u = nullptr; uint32_t* mt_n = nullptr; int n_mtu = red_mt(A, T, in, Rp, nRp, r_mt, o_mt, c_mt, l_mt, n_mtt, cb, &mt_u, &mt_n, Qp);
+        uint64_t* mt_u = nullptr; uint32_t* mt_n = nullptr; int n_mtu = red_mt(A, T, in, Rp, nRp, r_mt, o_mt, c_mt, l_mt, n_mtt, cb, &mt_u, &mt_n, Qp, lq_mt);
         uint32_t* in_bc = A.alloc<uint32_t>(std::max(n_indt, 1)); IND* in_ind = A.alloc<IND>(std::max(n_indt, 1)); uint32_t* in_ri = A.alloc<uint32_t>(std::max(n_indt, 1));
         k_fill_ind<<<GR, TB>>>(Rp, nRp, r_ind, o_ind, c_ind, l_ind, in_bc, in_ind, ridx, in_ri);
         T.mark("7.mt");
@@ -774,40 +1148,85 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         ng_all += ng; n_sjt_all += n_sjt; n_snpt_all += n_snpt; n_mtt_all += n_mtt; n_indt_all += n_indt;
         if (!out) continue;
         // ---------------- fetch this partition's cells (host; its span is marked "fetch" and left out of the GPU time) ----------------
-        for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
-        if (ng > 0) {
-            auto add = [&](std::vector<T3>& v, const CsrDev& c) { std::vector<T3> t = csr_to_t3(fetch_csr(c, in.ncells), in.ncells); v.insert(v.end(), t.begin(), t.end()); };
-            add(out->exon, C[0]); add(out->intron, C[1]); add(out->amb, C[2]);
-            if (g_want_mixed) { add(out->mixed_exon, MX[0]); add(out->mixed_intron, MX[1]); }
+        // E24 (g_e24_post): each step downloads here and queues its host half (the rows from the downloaded arrays) in its own list of
+        // out->post.back(); post_run runs the lists after the device is unlocked. Without it the host half runs at once, as before.
+        if (!g_e24_post) for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
+        std::array<std::vector<std::function<void()>>, 8>* pq = g_e24_post ? &out->post.emplace_back() : nullptr;
+        auto defer = [pq](int step, std::function<void()> f) { if (pq) (*pq)[step].push_back(std::move(f)); else f(); };
+        const int ncl = in.ncells;
+        // (E16: the steps as lambdas, called in this order, or with g_e16_fetchpar on threads: each fills its own outputs in the same order)
+        auto add = [&](std::vector<T3>& v, const CsrDev& c, int step) {
+            auto h = std::make_shared<Csr>(fetch_csr(c, ncl)); std::vector<T3>* pv = &v;
+            defer(step, [h, pv, ncl]() { std::vector<T3> t = csr_to_t3(*h, ncl);
+                                         if (g_e16_fetchpar && pv->empty()) pv->swap(t); else pv->insert(pv->end(), t.begin(), t.end()); }); };
+        auto fExtra = [&]() {   // campaign's extra outputs: the pre-USA exon / intron split and the reads-per-molecule sums
+            if (ng <= 0) return;
+            if (g_want_mixed) { add(out->mixed_exon, MX[0], 3); add(out->mixed_intron, MX[1], 3); }
             if (g_want_reads) {
                 auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
-                    std::vector<uint32_t> ip(in.ncells + 1), ix(c.nnz), da(c.nnz);
-                    CK(cudaMemcpy(ip.data(), c.indptr, 4 * (size_t)(in.ncells + 1), cudaMemcpyDeviceToHost));
-                    if (c.nnz) { CK(cudaMemcpy(ix.data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da.data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
-                    for (int cell = 0; cell < in.ncells; cell++) for (uint32_t k = ip[cell]; k < ip[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, ix[k], da[k]});
+                    auto ip = std::make_shared<std::vector<uint32_t>>(ncl + 1), ix = std::make_shared<std::vector<uint32_t>>(c.nnz), da = std::make_shared<std::vector<uint32_t>>(c.nnz);
+                    CK(cudaMemcpy(ip->data(), c.indptr, 4 * (size_t)(ncl + 1), cudaMemcpyDeviceToHost));
+                    if (c.nnz) { CK(cudaMemcpy(ix->data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da->data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
+                    std::vector<T3>* pv = &v;
+                    defer(3, [ip, ix, da, pv, ncl]() { for (int cell = 0; cell < ncl; cell++) for (uint32_t k = (*ip)[cell]; k < (*ip)[cell + 1]; k++) pv->push_back(T3{(uint32_t)cell, (*ix)[k], (*da)[k]}); });
                 };
                 addr(out->exon_reads, RD[0]); addr(out->intron_reads, RD[1]);
             }
-        }
-        if (n_sju > 0) { std::vector<uint64_t> k(n_sju); std::vector<uint32_t> c(n_sju); CK(cudaMemcpy(k.data(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
-            for (int i = 0; i < n_sju; i++) out->sj_raw_sum += c[i];
-            for (int i = 0; i < n_sju; i++) out->sj.push_back(T3{(uint32_t)(k[i] >> jb), (uint32_t)(k[i] & ((1ull << jb) - 1)), std::min(c[i], 65535u)}); }
-        if (n_snu > 0) { std::vector<uint64_t> k(n_snu), v(n_snu); CK(cudaMemcpy(k.data(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.data(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
-            for (int i = 0; i < n_snu; i++) { T3 a{(uint32_t)(k[i] >> sb), (uint32_t)(k[i] & ((1ull << sb) - 1)), 0}; uint32_t dp = (uint32_t)(v[i] & 0xFFFFFFFFu), ad = (uint32_t)(v[i] >> 32);
-                if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }
-        if (n_mtu > 0) { std::vector<uint64_t> k(n_mtu); std::vector<uint32_t> c(n_mtu); CK(cudaMemcpy(k.data(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.data(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
-            for (int i = 0; i < n_mtu;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
-                uint64_t bk = k[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
-                while (j < n_mtu && (k[j] >> 1) == bk) { tot += c[j]; if (k[j] & 1) rv += c[j]; j++; }
+        };
+        // the downloads land in uninitialised buffers (the host half reads each word once)
+        auto hbuf64 = [](int n) { return std::shared_ptr<uint64_t>(new uint64_t[(size_t)n], std::default_delete<uint64_t[]>()); };
+        auto hbuf32 = [](int n) { return std::shared_ptr<uint32_t>(new uint32_t[(size_t)n], std::default_delete<uint32_t[]>()); };
+        auto fSj = [&]() {
+        if (n_sju > 0) { auto k = hbuf64(n_sju); auto c = hbuf32(n_sju); CK(cudaMemcpy(k.get(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
+            const int n = n_sju, jbl = jb;
+            defer(4, [k, c, n, jbl, out]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
+                for (int i = 0; i < n; i++) out->sj_raw_sum += cc[i];
+                for (int i = 0; i < n; i++) out->sj.push_back(T3{(uint32_t)(kk[i] >> jbl), (uint32_t)(kk[i] & ((1ull << jbl) - 1)), std::min(cc[i], 65535u)}); }); }
+        };
+        auto fSn = [&]() {
+        if (n_snu > 0) { auto k = hbuf64(n_snu), v = hbuf64(n_snu); CK(cudaMemcpy(k.get(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.get(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
+            const int n = n_snu, sbl = sb;
+            defer(5, [k, v, n, sbl, out]() { const uint64_t* kk = k.get(); const uint64_t* vv = v.get();
+                out->snp_dp.reserve(out->snp_dp.size() + (size_t)n);
+                for (int i = 0; i < n; i++) { T3 a{(uint32_t)(kk[i] >> sbl), (uint32_t)(kk[i] & ((1ull << sbl) - 1)), 0}; uint32_t dp = (uint32_t)(vv[i] & 0xFFFFFFFFu), ad = (uint32_t)(vv[i] >> 32);
+                    if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); out->snp_dp.push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); out->snp_ad.push_back(a); } } }); }
+        };
+        auto fMt = [&]() {
+        if (n_mtu > 0) { auto k = hbuf64(n_mtu); auto c = hbuf32(n_mtu); CK(cudaMemcpy(k.get(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
+            const int n = n_mtu;
+            defer(6, [k, c, n, out]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
+            for (int i = 0; i < n;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
+                uint64_t bk = kk[i] >> 1; uint64_t tot = 0, rv = 0; int j = i;
+                while (j < n && (kk[j] >> 1) == bk) { tot += cc[j]; if (kk[j] & 1) rv += cc[j]; j++; }
                 uint32_t cell = (uint32_t)(bk >> 17), feat = (uint32_t)(bk & ((1u << 17) - 1));
-                out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }
+                out->mt.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) out->mt_rev.push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }); }
+        };
+        auto fInd = [&]() {
         if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             CK(cudaMemcpy(d.data(), in_ind, (size_t)n_indt * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(ri.data(), in_ri, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
             for (int i = 0; i < n_indt; i++) indels.push_back({ri[i], {b[i], d[i].pos, d[i].lenins >> 1, d[i].lenins & 1}}); }
+        };
+        if (g_e16_fetchpar) {
+            int dev = 0; cudaGetDevice(&dev);
+            std::vector<std::thread> fth;
+            auto run = [&](std::function<void()> f) { fth.emplace_back([dev, f]() { cudaSetDevice(dev); f(); }); };
+            if (ng > 0) { run([&]() { add(out->exon, C[0], 0); }); run([&]() { add(out->intron, C[1], 1); }); run([&]() { add(out->amb, C[2], 2); }); }
+            run(fExtra); run(fSj); run(fSn); run(fMt); run(fInd);
+            for (auto& t : fth) t.join();
+        } else {
+            if (ng > 0) { add(out->exon, C[0], 0); add(out->intron, C[1], 1); add(out->amb, C[2], 2); }
+            fExtra(); fSj(); fSn(); fMt(); fInd();
+        }
         T.mark("fetch");
     }
     A.reset(base2); A.peak = peak_all;
     T.finish();
+    {   // E23: the GPU time per stage (ms, every partition summed; "fetch" is the host)
+        std::string st = "stages (ms):"; char b[64];
+        for (const auto& kv : T.acc) { snprintf(b, sizeof b, " %s %.1f", kv.first.c_str(), kv.second); st += b; }
+        g_parts_log.push_back(st);
+        for (auto& l : g_prof_log) g_parts_log.push_back(l);
+    }
     if (g_cell_stats) { uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_mol, &z, sizeof(z))); CK(cudaMemcpyToSymbol(g_cell_mixed, &z, sizeof(z))); }
     if (g_want_reads) {
         uint32_t* z = nullptr; CK(cudaMemcpyToSymbol(g_cell_hist, &z, sizeof(z)));
@@ -822,33 +1241,56 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             }
         }
     }
+
     if (!out) return;
-    // ---- canonical merge: cells are disjoint across partitions; each matrix is sorted by (cell, row), indels by read (the K = 1 order)
-    // each partition's rows are sorted already: merge them (K = 1: nothing to do)
-    auto byCell = [](const T3& a, const T3& b) { return a.cell != b.cell ? a.cell < b.cell : a.row < b.row; };
-    for (int v = 0; v < 8; v++)
-        for (size_t p = 2; p <= bnd[v].size(); p++) {
-            const size_t mid = bnd[v][p - 1], end = p < bnd[v].size() ? bnd[v][p] : outv[v]->size();
-            std::inplace_merge(outv[v]->begin(), outv[v]->begin() + mid, outv[v]->begin() + end, byCell);
-        }
+    // ---- canonical merge (merge_parts; E24: post_run, after the unlock); indels by read (the K = 1 order)
+    if (g_e24_post) out->post_merge = true; else merge_parts(out, outv, bnd, false);
     if (K > 1) std::stable_sort(indels.begin(), indels.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (auto& e : indels) out->indels.push_back(e.second);
-    for (auto* v : {&out->exon_reads, &out->intron_reads, &out->mixed_exon, &out->mixed_intron}) std::sort(v->begin(), v->end(), byCell);
+    const double e16m0 = now_s();   // E16: the host side of the final downloads (per-alignment results, junction table)
     if (g_cell_stats) {
         out->cell_reads.resize(std::max(in.ncells, 1)); out->cell_mol.resize(std::max(in.ncells, 1)); out->cell_mixed.resize(std::max(in.ncells, 1));
         CK(cudaMemcpy(out->cell_reads.data(), cell_reads, out->cell_reads.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mol.data(), cell_mol, out->cell_mol.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->cell_mixed.data(), cell_mixed, out->cell_mixed.size() * 4, cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(out->hits, hits, 32, cudaMemcpyDeviceToHost));
+        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
+        uint8_t* dsplit = nullptr;   // E16: outside the arena (its 3 GB margin), so the arena's layout is unchanged; without it, the host split
+        if (g_e16_aasplit && nA > 0 && cudaMalloc(&dsplit, (size_t) nA * 9) != cudaSuccess) { cudaGetLastError(); dsplit = nullptr; }
+        if (dsplit != nullptr) {
+            uint32_t* dg = (uint32_t*) dsplit; uint32_t* de = dg + nA; uint8_t* ds = (uint8_t*) (de + nA);
+            k_e16_aa_split<<<(nA + 255) / 256, 256>>>(aa, nA, dg, ds, de);
+            CK(cudaGetLastError());
+            CK(cudaMemcpy(out->aa_gene.data(), dg, (size_t) nA * 4, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(out->aa_exg.data(), de, (size_t) nA * 4, cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(out->aa_stat.data(), ds, (size_t) nA, cudaMemcpyDeviceToHost));
+            CK(cudaFree(dsplit));
+        } else {
         std::vector<AA> h(nA);
         if (nA) CK(cudaMemcpy(h.data(), aa, (size_t)nA * sizeof(AA), cudaMemcpyDeviceToHost));
-        out->aa_gene.resize(nA); out->aa_stat.resize(nA); out->aa_exg.resize(nA);
         for (int k = 0; k < nA; k++) { out->aa_gene[k] = h[k].gene; out->aa_stat[k] = (uint8_t)h[k].stat; out->aa_exg[k] = h[k].exg; }
+        }
     }
+    { char b[96]; snprintf(b, sizeof b, "e16: merge + per-alignment D2H %.3f s", now_s() - e16m0); g_parts_log.push_back(b); }
     out->n_gene_tuples = ng_all; out->n_sjl = n_sjl; out->n_sj_tuples = n_sjt_all; out->n_snp_tuples = n_snpt_all; out->n_mt_tuples = n_mtt_all; out->n_ind_tuples = n_indt_all; out->n_junctions = nj;
     if (nj > 0) { std::vector<uint64_t> h1(nj); std::vector<uint32_t> h2(nj); CK(cudaMemcpy(h1.data(), t1, (size_t)nj * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(h2.data(), t2, (size_t)nj * 4, cudaMemcpyDeviceToHost));
         for (int i = 0; i < nj; i++) out->sjtab.push_back({(uint32_t)(h1[i] >> 32), (uint32_t)(h1[i] & 0xFFFFFFFFu), h2[i]}); }
 
+}
+
+// E24 "lockpost": after the device is unlocked, the queued host halves partition by partition (each partition's rows start where the
+// previous partition's end: the bounds the merge takes), then the merge. The same rows in the same order as run_pipeline without the queue.
+static void post_run(Outputs* out) {
+    std::vector<T3>* outv[8] = {&out->exon, &out->intron, &out->amb, &out->sj, &out->snp_ad, &out->snp_dp, &out->mt, &out->mt_rev};
+    std::vector<size_t> bnd[8];
+    auto run = [](std::vector<std::function<void()>>* l) { for (auto& f : *l) f(); l->clear(); };   // clear: the downloaded arrays go
+    for (auto& steps : out->post) {
+        for (int v = 0; v < 8; v++) bnd[v].push_back(outv[v]->size());
+        if (g_e16_fetchpar) { std::vector<std::thread> th; for (auto& l : steps) if (!l.empty()) th.emplace_back(run, &l); for (auto& t : th) t.join(); }
+        else for (auto& l : steps) run(&l);
+    }
+    out->post.clear();
+    if (out->post_merge) { merge_parts(out, outv, bnd, true); out->post_merge = false; }
 }
 
 // ------------------------------------------------------------------------------------------------------------------------

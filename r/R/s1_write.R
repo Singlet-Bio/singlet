@@ -33,7 +33,10 @@
 #' @param sample_id ASCII id stored in the object header, at most 16 bytes.
 #' @param assay Assay (SCE) or layer (Seurat) holding the counts.
 #' @param member Name of the matrix member.
-#' @param gene_pack \code{NULL} to store gene ids inline, or the 16-hex-character id of a vocabulary pack that holds them.
+#' @param gene_pack \code{NULL} to store gene ids inline, or the id of a vocabulary pack (at least 16 hex characters)
+#'   that holds them, stored as a reference instead. The row names must be the pack's gene table in order (a gene-level
+#'   matrix) or its rows in order (an exon-level matrix); anything else is an error. The pack is read from the cache, or
+#'   downloaded from data.singlet.bio and checked against its sha256.
 #' @param threads Encoder threads (the output does not depend on it).
 #' @return \code{path}, invisibly.
 #' @examples
@@ -53,9 +56,11 @@ write_s1 <- function(x, path, sample_id = "sample", assay = "counts", member = "
     if (length(m@x) && (any(m@x < 0) || any(m@x != floor(m@x)))) {
         stop("write_s1: values must be non-negative integers (counts, not normalised data)")
     }
-    pack <- if (is.null(gene_pack)) "" else tolower(as.character(gene_pack))
-    raw <- s1_write_(m@p, m@i, m@x, nrow(m), ncol(m), as.character(rownames(m)), as.character(colnames(m)),
-                     as.character(sample_id), as.character(member), pack, as.integer(threads))
+    rows <- if (is.null(gene_pack)) list(pack = "", member = "", sha256 = "") else .s1_pack_rows(gene_pack, rownames(m))
+    raw <- tryCatch(
+        s1_write_(m@p, m@i, m@x, nrow(m), ncol(m), as.character(rownames(m)), as.character(colnames(m)),
+                  as.character(sample_id), as.character(member), rows$pack, rows$member, rows$sha256, as.integer(threads)),
+        error = function(e) stop("write_s1: ", conditionMessage(e), call. = FALSE))
     path <- path.expand(path)
     tmp <- paste0(path, ".part")
     writeBin(raw, tmp)
@@ -64,6 +69,41 @@ write_s1 <- function(x, path, sample_id = "sample", assay = "counts", member = "
         stop("write_s1: could not write ", path)
     }
     invisible(path)
+}
+
+# names.rows of a gene_pack reference, as pack_rows() in python/singlet/s1/write.py: list(pack = full 32-hex id, member =
+# "genes" or the pack's member, sha256 = the sha256 s1_write_ checks the NUL-terminated row names against, "" when the ids were
+# compared here). A reference replaces the ids, so ids the pack does not hold are refused rather than lost.
+.s1_pack_rows <- function(gene_pack, genes) {
+    id <- tolower(as.character(gene_pack))
+    if (length(id) != 1L || !grepl("^[0-9a-f]{16,32}$", id)) {
+        stop("write_s1: gene_pack must be a vocabulary pack id (16 to 32 hex characters)", call. = FALSE)
+    }
+    src <- list(transport = .s1_transport(), root = .s1_root())
+    raw <- tryCatch(.s1_pack(src, id), error = function(e) {
+        stop(sprintf("write_s1: gene_pack %s: the vocabulary pack is not cached and could not be downloaded (%s); store the gene ids inline with gene_pack = NULL",
+                     id, conditionMessage(e)), call. = FALSE)
+    })
+    full <- substr(pz2_sha256_(raw), 1L, 32L)
+    info <- pz2_pack_info_(raw)
+    if (!info$kind %in% c(1L, 3L)) stop(sprintf("write_s1: gene_pack %s is not a vocabulary pack", full), call. = FALSE)
+    hdr <- .s1_json(info$header)
+    v <- .s1_vocab(src, full)
+    genes <- as.character(genes)
+    if (identical(genes, as.character(v$gene_id))) return(list(pack = full, member = "genes", sha256 = ""))
+    if (length(genes) == hdr$n && !is.null(hdr$sha256_names)) {
+        return(list(pack = full, member = hdr$member, sha256 = hdr$sha256_names))  # s1_write_ checks the ids
+    }
+    msg <- sprintf("write_s1: gene_pack %s holds %d genes and %d %s rows; the %d gene ids given are neither, in that order",
+                   full, length(v$gene_id), as.integer(hdr$n), hdr$member, length(genes))
+    if (length(genes) == hdr$n) {  # an intron pack lists no sha256 of its rows, and R does not expand intron names
+        msg <- sprintf("write_s1: gene_pack %s is an %s pack; R writes references to its gene table or to an exon pack's rows only",
+                       full, hdr$member)
+    } else if (length(genes) == length(v$gene_id)) {
+        k <- which(genes != v$gene_id)[[1L]]
+        msg <- sprintf("%s (gene id %d is '%s', the pack's is '%s')", msg, k, genes[[k]], v$gene_id[[k]])
+    }
+    stop(msg, ". Store them inline with gene_pack = NULL", call. = FALSE)
 }
 
 .s1_read_head <- function(path) {
@@ -98,26 +138,54 @@ write_s1 <- function(x, path, sample_id = "sample", assay = "counts", member = "
 #' @noRd
 .s1_is_user_object <- function(path) !is.null(.s1_user_member(path))
 
+# The header and member table of a .s1 object at an http(s) URL (two range requests), and the object's size.
+.s1_read_head_url <- function(tr, key) {
+    r <- .s1_get(tr, key, c(0, 63))
+    if (is.na(r$total)) stop(sprintf("read_s1: %s/%s did not report the object size", tr$base, key))
+    head <- r$body
+    table_end <- 64 + sum(as.numeric(head[25:32]) * 256^(0:7))
+    if (table_end > 64) head <- c(head, .s1_get(tr, key, c(64, table_end - 1), expect_total = r$total)$body)
+    list(head = head, total = r$total)
+}
+
 #' Read a .s1 object written by write_s1
 #'
-#' @param path A \code{.s1} file written by \code{\link{write_s1}} (or by \code{singlet.write_s1()} in Python).
+#' @param path A \code{.s1} file written by \code{\link{write_s1}} (or by \code{singlet.write_s1()} in Python), or the
+#'   \code{http(s)} URL of one on a server that answers byte ranges.
 #' @param as \code{"matrix"} (a \code{dgCMatrix}, genes x cells), \code{"sce"} or \code{"seurat"}.
 #' @param member Name of the matrix member.
 #' @param genes Gene ids, for an object written with \code{gene_pack} (the pack is not read here).
 #' @param threads Decoder threads.
+#' @param io_threads For a URL, range requests in flight at once: \code{"auto"} (8 for a URL, 1 for a local file) or a whole
+#'   number; 1 sends them one at a time. A large member is fetched in pieces of at least 8 MiB.
 #' @return The counts as \code{as} asks, with gene ids as row names and barcodes as column names.
 #' @export
-read_s1 <- function(path, as = c("matrix", "sce", "seurat"), member = "counts", genes = NULL, threads = 4L) {
+read_s1 <- function(path, as = c("matrix", "sce", "seurat"), member = "counts", genes = NULL, threads = 4L, io_threads = "auto") {
     as <- match.arg(as)
-    path <- path.expand(path)
-    info <- s1_members_(.s1_read_head(path))
+    remote <- grepl("^https?://", path)
+    if (remote) {
+        tr <- list(kind = "http", base = sub("/[^/]*$", "", path))
+        key <- sub("^.*/", "", path)
+        io_threads <- .s1_io_threads(io_threads, tr)
+        h <- .s1_read_head_url(tr, key)
+        info <- s1_members_(h$head)
+    } else {
+        .s1_io_threads(io_threads)  # checked; a local file is read in one piece
+        path <- path.expand(path)
+        info <- s1_members_(.s1_read_head(path))
+    }
     k <- match(member, info$name)
     if (is.na(k)) stop(sprintf("read_s1: %s has no member '%s' (members: %s)", path, member, paste(info$name, collapse = ", ")))
     if (info$kind[[k]] != 1L) stop(sprintf("read_s1: member '%s' is not a matrix", member))
-    con <- file(path, "rb")
-    on.exit(close(con))
-    seek(con, info$off[[k]])
-    body <- readBin(con, "raw", n = info$len[[k]])
+    if (remote) {
+        req <- list(key = key, range = c(info$off[[k]], info$off[[k]] + info$len[[k]] - 1), expect_total = h$total)
+        body <- .s1_get_many(tr, list(req), io_threads)[[1L]]$body
+    } else {
+        con <- file(path, "rb")
+        on.exit(close(con))
+        seek(con, info$off[[k]])
+        body <- readBin(con, "raw", n = info$len[[k]])
+    }
     h <- pz2_header_(body)
     d <- pz2_decode_(body, numeric(), list(), 0, h$n, "canonical", NULL, NULL, 0L, as.integer(threads), "auto")
     rn <- pz2_names_(body, TRUE)

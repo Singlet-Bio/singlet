@@ -376,6 +376,33 @@ static void test_classify_boundary() {
     check("classify_below_threshold_low", classify_outcome(s2) == "align_low_map");
 }
 
+// ── Test 21: schema 1.2 — memory_tier moves to private/run_metadata.json ──────
+static void test_run_metadata_split() {
+    const std::string path = "/tmp/test_summary_21.json";
+    const std::string meta = "/tmp/test_summary_21_run_metadata.json";
+    auto s = make_full_summary();
+    s.memory_tier = "Medium";
+    s.peak_rss_gb = 12.5;
+    write_summary_json(s, path);
+    std::string json = read_file(path);
+    check("schema_1_2",               contains(json, "\"schema_version\": \"1.2\""));
+    check("summary_no_memory_tier",   !contains(json, "memory_tier"));
+    check("summary_keeps_peak_rss",   contains(json, "\"peak_rss_gb\""));
+    check("summary_keeps_wall",       contains(json, "\"wall_seconds\""));
+
+    bool ok = write_run_metadata_json(s, meta);
+    check("run_metadata_written", ok);
+    std::string m = read_file(meta);
+    check("run_metadata_memory_tier", contains(m, "\"memory_tier\": \"Medium\""));
+    check("run_metadata_note",        contains(m, "\"note\""));
+    check("run_metadata_peak_rss",    contains(m, "\"peak_rss_gb\""));
+    int depth = 0;
+    for (char c : m) { if (c == '{') ++depth; else if (c == '}') --depth; }
+    check("run_metadata_balanced", depth == 0);
+    std::remove(path.c_str());
+    std::remove(meta.c_str());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -399,6 +426,7 @@ int main() {
     test_exit_code_field();
     test_write_bad_path();
     test_classify_boundary();
+    test_run_metadata_split();
 
     std::cerr << "\n=== Summary: " << s_passed << " passed, " << s_failed << " failed ===\n";
     return (s_failed > 0) ? 1 : 0;

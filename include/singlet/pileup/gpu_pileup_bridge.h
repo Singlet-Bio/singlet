@@ -8,6 +8,7 @@
 #pragma once
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
+#include "singlet/qmask_words.h"   // P3-ENG-14: mask width
 #include "gpu_pileup/pileup/pileup_rec.h"   // src/engine_gpu is on the include path of GPU builds
 #include <htslib/sam.h>
 #include <fcntl.h>
@@ -16,6 +17,11 @@
 #include <unistd.h>
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -60,13 +66,14 @@ struct LineReader {
 // lowest), and the cDNA read's base-quality counters; flags bit 0 set when STAR wrote it
 struct ReadEntry { uint64_t cr3, ur3; uint16_t low_qual, qual_neq_n; uint32_t flags; };
 static_assert(sizeof(ReadEntry) == 24, "ReadEntry layout is STAR's HandoffReadEntry");
-// per-base quality of a read, for the SNP and chrM base filters: bit i = base i of the record sequence (original read orientation, 5' clip removed) has quality < min_baseq
-struct QM { uint64_t m[2]; };
+// per-base quality of a read, for the SNP and chrM base filters: bit i = base i of the record sequence (original read orientation, 5' clip removed) has quality < min_baseq.
+// One read's mask; arrays of masks are flat uint64 vectors with singlet_qmask::words() words per read (P3-ENG-14; 2 words up to 128 bases, as before)
+struct QM { uint64_t m[singlet_qmask::kMaxWords]; };
 struct Handoff {
     const uint8_t* map = nullptr; size_t size = 0;
     uint64_t n_reads = 0, n_rec = 0; const uint32_t* read_rec = nullptr; const uint64_t* rec_off = nullptr; const uint8_t* data = nullptr;
     uint32_t cbS = 0, cbL = 0, umiS = 0, umiL = 0, cbumiL = 0, simple = 0;   // STAR's barcode layout (v2)
-    const QM* qmask = nullptr; size_t q_size = 0; std::string q_path;   // "on": <path>.reads.q, 16 bytes per read, written by STAR's mapping threads
+    const uint64_t* qmask = nullptr; size_t q_size = 0; std::string q_path;   // "on": <path>.reads.q, singlet_qmask::words() words per read, written by STAR's mapping threads
     const ReadEntry* reads = nullptr; size_t reads_size = 0; std::string reads_path;   // "on": <path>.reads, written by STAR's mapping threads
     // the per-read entries, once STAR has exited ("on" only); false if there are none
     bool load_reads() {
@@ -84,11 +91,11 @@ struct Handoff {
         if (qmask) return true;
         if (q_path.empty()) return false;
         int fd = open(q_path.c_str(), O_RDONLY); if (fd < 0) return false;
-        struct stat st; if (fstat(fd, &st) != 0 || (uint64_t) st.st_size != n_reads * sizeof(QM) || n_reads == 0) { close(fd); return false; }
+        struct stat st; if (fstat(fd, &st) != 0 || (uint64_t) st.st_size != n_reads * 8 * singlet_qmask::words() || n_reads == 0) { close(fd); return false; }
         void* m = mmap(nullptr, (size_t) st.st_size, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
         if (m == MAP_FAILED) return false;
         madvise(m, (size_t) st.st_size, MADV_SEQUENTIAL);
-        qmask = (const QM*) m; q_size = (size_t) st.st_size;
+        qmask = (const uint64_t*) m; q_size = (size_t) st.st_size;
         return true;
     }
     bool load(const char* path) {
@@ -123,13 +130,21 @@ public:
         if (const char* q = std::getenv("SINGLET_GPU_PILEUP_QUAL")) force_q_ = std::strcmp(q, "force") == 0;
         pend_.reserve(1 << 20);
         if (const char* hp = std::getenv("SINGLET_ENGINE_GPU_HANDOFF")) handoff_path_ = hp;
+        qw_ = singlet_qmask::words();   // set by singlet before the collector exists
     }
+    uint32_t q_words() const { return qw_; }
 
     // one record of the stream; bc = the engine's barcode column for it (-1: no CB or not in the barcode set)
     void add(const bam1_t* b, int32_t bc) {
         if (b->core.flag & (BAM_FUNMAP | BAM_FSUPPLEMENTARY)) return;
         if (bc < 0) return;
         const bool sec = (b->core.flag & BAM_FSECONDARY) != 0;
+        if (e2e() != nullptr) {   // E8: a read with a device-built record never comes through the stream ("on": STAR writes none); counted, the pass fails
+            const char* qn = bam_get_qname(b); const singlet_engine_gpu::E2EHeader& H = *e2e_->hdr();
+            uint64_t idx = 0; bool num = qn[0] == 'r' && qn[1] != 0;
+            for (const char* q = qn + 1; num && *q; ++q) { if (*q < '0' || *q > '9') num = false; else idx = idx * 10 + (uint64_t) (*q - '0'); }
+            if (num && idx < H.nReads && e2e_->at<uint32_t>(H.oReadRecord)[idx] != 0xFFFFFFFFu) { e2e_stream_++; return; }
+        }
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
         if (ho_ok_) {   // reads with a GPU record: the alignments come from the hand-off; the stream gives barcode, UMI, qualities
             const char* qn = bam_get_qname(b);
@@ -139,7 +154,7 @@ public:
                 if (sec) return;
                 int nh = 1; const char* ub = nullptr; const char* ur = nullptr;
                 scan_aux(b, nh, ub, ur);
-                const char* us = ub ? ub : ur;
+                const char* us = prefer_ur_ ? (ur ? ur : ub) : (ub ? ub : ur);
                 uint64_t u3 = 0;
                 if (us) {
                     const int ul = (int) std::strlen(us);
@@ -149,7 +164,7 @@ public:
                 qual_check(b);
                 const uint32_t rec = ho_.read_rec[idx];
                 check_primary(b, rec);
-                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0); ho_q_.push_back(bam_mask(b));
+                ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(0); push_q(ho_q_, bam_mask(b).m);
                 ho_idx_.push_back(idx);
                 return;
             }
@@ -168,7 +183,7 @@ public:
         g.alns.push_back(std::move(a)); g.seen++;
         if (!sec) {
             g.primary = (int) g.alns.size() - 1; g.bc = bc;
-            const char* us = ub ? ub : ur;
+            const char* us = prefer_ur_ ? (ur ? ur : ub) : (ub ? ub : ur);
             if (us) {
                 const int ul = (int) std::strlen(us);
                 if (umi_len_ < 0) umi_len_ = ul;
@@ -191,29 +206,70 @@ public:
     }
 
     // flushes incomplete multimapper groups (resolved anyway, as the engine does) and moves the records into `in`
-    void finish(singlet_engine_gpu::PileupInput& in) {
+    // zc (E16, level 5): a second mapping of the shared region (base, cap; it becomes the input's: unmapped when the input goes) whose records
+    // the input reads in place, with the kept reads take_e2e_reads took (PileupInput::Pre); null: the records are copied into the input
+    void finish(singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::E2ERegion* zc = nullptr) {
         for (auto& kv : pend_) { incomplete_++; finalize(kv.second); }
         pend_.clear();
+        singlet_tail::mark("collector: pending groups flushed");
         if (ho_ok_) prepend_handoff();
+        if (e2e_ != nullptr && zc != nullptr && zc_) prepend_e2e_zc(in, *zc); else
+        if (e2e_ != nullptr) prepend_e2e(in); else {   // E8: the device-built records go into `in` directly
+        e2e_unmap();   // E8 requested but not used (the hand-off file path ran): the memory object is released
         in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
         in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
         in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
-        in.ops.swap(ops_); in.seq.swap(seq_);
+        in.ops.swap(ops_); in.seq.swap(seq_); }
         in.snpSkipN = (lowqual_bases_ == 0 ? 0 : (qual_neq_n_ == 0 ? 1 : -1));
         if (no_umi_ > 0) in.snpSkipN = -1;   // reads without a UMI: not reproducible from the packed UMI (never seen in the campaign data)
         if (umi_len_ > 0) in.umiLen = umi_len_;
         if ((in.snpSkipN < 0 || force_q_) && no_umi_ == 0) {   // per-base quality: the SNP and chrM filters read each base's own quality
-            if (q_ok_ && reads_q_.size() == reads_.size() && in.nSnps <= 0x7FFFFFu) {
+            if (q_ok_ && reads_q_.size() == reads_.size() * qw_ && zc_q_n_ == zc_n_) {
                 in.useQual = 1; in.snpSkipN = 0;
                 in.lowq.assign((const uint8_t*) reads_q_.data(), (const uint8_t*) (reads_q_.data() + reads_q_.size()));
-                std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_q_.size() << " reads" << (force_q_ ? " (forced)" : "") << "\n";
-            } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read over 128 bases or no STAR masks") << ")\n";
+                if (zc_keep_) in.preLowq = {zc_keep_->q.data(), zc_keep_->q.size()};   // E16: the kept reads' masks in front, in place
+                singlet_tail::mark("collector: low-quality masks copied into the input (%zu reads)", reads_.size());
+                std::cerr << "[gpu_pileup] per-base quality: low-quality masks for " << reads_.size() << " reads, " << qw_ << " words each" << (force_q_ ? " (forced)" : "") << "\n";
+            } else std::cerr << "[gpu_pileup] per-base quality needed but unavailable (masks " << (q_ok_ ? "missing for some reads" : "not representable: read longer than the mask or no STAR masks") << ")\n";
         }
     }
-    size_t n_reads() const { return reads_.size() + ho_reads_.size(); }
-    size_t n_handoff_reads() const { return ho_reads_.size(); }
+    size_t n_reads() const { return reads_.size() + ho_reads_.size() + zc_n_; }
+    size_t n_handoff_reads() const { return ho_reads_.size() + zc_n_; }
     uint64_t handoff_mismatches() const { return ho_mismatch_; }
-    bool handoff_used() const { return ho_ok_; }
+    bool handoff_used() const { return ho_ok_ || e2e_ != nullptr; }
+    // E8 (SINGLET_ENGINE_GPU_E2E=1): the shared region with the device-built records, once the prefill completed it; null otherwise
+    const singlet_engine_gpu::E2ERegion* e2e() {
+        if (!e2e_tried_) { e2e_tried_ = true; singlet_engine_gpu::E2ERegion& r = singlet_engine_gpu::e2eRegion(); if (r.mapUsed()) e2e_ = &r; }
+        return e2e_;
+    }
+    uint64_t e2e_stream_reads() const { return e2e_stream_; }
+    // E8: the device pass's kept reads (ReadRec bytes, read order), their clip flags and low-quality masks (16 bytes each; maskAll: every
+    // read had one), as add_handoff_read_u3 would have appended them one by one
+    void add_e2e_reads(const std::vector<uint8_t>& reads, const std::vector<uint32_t>& clip, const std::vector<uint8_t>& lowq, bool mask_all, int umi_len) {
+        const size_t n = clip.size(), r0 = ho_reads_.size();
+        if (n && umi_len_ < 0) umi_len_ = umi_len;
+        ho_reads_.resize(r0 + n); if (n) std::memcpy((void*) (ho_reads_.data() + r0), reads.data(), n * sizeof(ReadRec));
+        ho_clip_.insert(ho_clip_.end(), clip.begin(), clip.end());
+        const size_t q0 = ho_q_.size(); ho_q_.resize(q0 + n * qw_); if (n) std::memcpy((void*) (ho_q_.data() + q0), lowq.data(), n * 8 * qw_);
+        if (!mask_all) q_ok_ = false;
+        for (uint32_t c : clip) if (c) n_clipped_++;
+    }
+    // E16 (level 5): as add_e2e_reads, but the pass's vectors are taken, not copied (the reads and masks stay where the pass downloaded them,
+    // page-locked for pileupRun; finish(in, zc) puts them in front of the stream's reads). Only when no hand-off read came before.
+    bool take_e2e_reads(std::vector<uint8_t>&& reads, std::vector<uint32_t>&& clip, std::vector<uint8_t>&& lowq, bool mask_all, int umi_len) {
+        if (!ho_reads_.empty() || !ho_clip_.empty() || zc_) return false;
+        const size_t n = clip.size();
+        if (n && umi_len_ < 0) umi_len_ = umi_len;
+        zc_ = true; zc_n_ = n; zc_q_n_ = lowq.size() / (8 * qw_);
+        zc_keep_ = std::make_shared<ZcKeep>();
+        zc_keep_->reads = std::move(reads); zc_keep_->q = std::move(lowq);
+        ho_clip_ = std::move(clip);
+        if (!mask_all) q_ok_ = false;
+        for (uint32_t c : ho_clip_) if (c) n_clipped_++;
+        return true;
+    }
+    // the clip flags, moved out (E16: the collector goes right after)
+    std::vector<uint32_t> take_clips() { return std::move(ho_clip_); }
     // the hand-off (loaded on first use); null if there is none
     const Handoff* handoff() {
         if (!ho_tried_) { ho_tried_ = true; if (!handoff_path_.empty() && ho_.load(handoff_path_.c_str())) ho_ok_ = true; }
@@ -222,7 +278,7 @@ public:
     // "on", after STAR has exited: map STAR's per-read entries (handoff()->reads); false if there are none
     bool load_handoff_reads() { return handoff() != nullptr && ho_.load_reads(); }
     // STAR's per-read low-quality masks (the hand-off's .reads.q); null if there are none
-    const QM* handoff_qmask() { return handoff() != nullptr && ho_.load_q() ? ho_.qmask : nullptr; }
+    const uint64_t* handoff_qmask() { return handoff() != nullptr && ho_.load_q() ? ho_.qmask : nullptr; }   // q_words() words per read
     // a hand-off read that STAR wrote no BAM record for ("on"): its record, barcode column and UMI (A0 C1 G2 T3 N4, 3 bits each)
     // clip: the read's entry flags when it was clipped (STAR's HandoffReadEntry: clip lengths and the 3' tail), else 0
     void add_handoff_read(uint32_t rec, int32_t bc, const char* umi, int umi_len, uint32_t clip = 0) {
@@ -233,10 +289,10 @@ public:
         if (clip) n_clipped_++;
     }
     // the same with the UMI already packed (the parallel hand-off pass packs it in its workers)
-    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0, const QM* qm = nullptr) {
+    void add_handoff_read_u3(uint32_t rec, int32_t bc, uint64_t u3, int umi_len, uint32_t clip = 0, const uint64_t* qm = nullptr) {   // qm: q_words() words
         if (umi_len_ < 0) umi_len_ = umi_len;
         ho_reads_.push_back(ReadRec{rec, bc, u3}); ho_clip_.push_back(clip);
-        if (qm) ho_q_.push_back(*qm); else { ho_q_.push_back(QM{{0, 0}}); q_ok_ = false; }
+        push_q(ho_q_, qm); if (!qm) q_ok_ = false;
         if (clip) n_clipped_++;
     }
     // per read of the final input (hand-off reads first): its clip flags, 0 when not clipped
@@ -245,9 +301,9 @@ public:
     uint64_t n_clipped() const { return n_clipped_; }
     // the low-quality mask of a BAM record, in the read's original orientation (the signature stores the read that way); qualities missing: nothing is low
     QM bam_mask(const bam1_t* b) {
-        QM q{{0, 0}}; const int L = b->core.l_qseq; const uint8_t* ql = bam_get_qual(b);
+        QM q{}; const int L = b->core.l_qseq; const uint8_t* ql = bam_get_qual(b);
         if (L <= 0 || ql[0] == 0xff) return q;
-        if (L > 128) { q_ok_ = false; return q; }
+        if (L > (int) (64 * qw_)) { q_ok_ = false; return q; }
         const bool rev = (b->core.flag & BAM_FREVERSE) != 0;
         for (int i = 0; i < L; i++) if (ql[rev ? L - 1 - i : i] < min_baseq_) q.m[i >> 6] |= 1ull << (i & 63);
         return q;
@@ -266,6 +322,9 @@ public:
     size_t n_sigs() const { return sigs_.size(); }
     uint64_t incomplete() const { return incomplete_; }
     uint64_t no_umi() const { return no_umi_; }
+    // the raw UMI (UR) before the corrected one (UB): the stream hand-off counts raw UMIs, so a BAM re-read that must match it
+    // (the all-site pass on the region-parallel path) reads UR first
+    void prefer_raw_umi(bool v) { prefer_ur_ = v; }
 
 private:
     // the SNP pileup's base-quality rule (see snpSkipN): every base of every primary
@@ -341,9 +400,71 @@ private:
         ho_.unmap();
         unlink(handoff_path_.c_str());
     }
+    // E8: the device-built records (shared region) become signatures 0..nRec-1, as prepend_handoff makes them from the file (E6: the same
+    // arrays); the stream's own follow, shifted. Written into `in` directly; the region is released afterwards.
+    void prepend_e2e(singlet_engine_gpu::PileupInput& in) {
+        const singlet_engine_gpu::E2EHeader& H = *e2e_->hdr();
+        const uint64_t nR = H.nRec, nA = H.nAln, nO = H.nOps, nQ = H.nSeq;
+        for (auto& s : sigs_) { s.aln_off += (uint32_t) nA; s.seq_off += nQ; }
+        for (auto& a : alns_) a.ops_off += (uint32_t) nO;
+        for (auto& r : reads_) r.sig += (uint32_t) nR;
+        auto cat = [](auto& dst, const void* a, size_t na, const void* b, size_t nb) {
+            dst.resize((na + nb) / sizeof(dst[0]));
+            if (na) std::memcpy((void*) dst.data(), a, na);
+            if (nb) std::memcpy((uint8_t*) dst.data() + na, b, nb);
+        };
+        singlet_tail::mark("collector: e2e: stream offsets shifted");
+        cat(in.sigs, e2e_->base + H.oSigs, nR * sizeof(SigRec), sigs_.data(), sigs_.size() * sizeof(SigRec));
+        cat(in.alns, e2e_->base + H.oAlns, nA * sizeof(AlnRec), alns_.data(), alns_.size() * sizeof(AlnRec));
+        singlet_tail::mark("collector: e2e: signatures and alignments copied");
+        cat(in.ops, e2e_->base + H.oOps, nO * 4, ops_.data(), ops_.size() * 4);
+        cat(in.seq, e2e_->base + H.oSeq, nQ, seq_.data(), seq_.size());
+        singlet_tail::mark("collector: e2e: CIGAR ops and sequences copied");
+        ho_reads_.insert(ho_reads_.end(), reads_.begin(), reads_.end());
+        reads_.swap(ho_reads_);
+        in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        singlet_tail::mark("collector: e2e: reads copied into the input");
+        ho_q_.insert(ho_q_.end(), reads_q_.begin(), reads_q_.end()); reads_q_.swap(ho_q_);
+        std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_); std::vector<uint32_t>().swap(ops_); std::vector<uint8_t>().swap(seq_);
+        singlet_tail::mark("collector: e2e: masks appended, stream vectors freed");
+        e2e_unmap();
+        singlet_tail::mark("collector: e2e: region unmapped and closed");
+    }
+    // E16: prepend_e2e without the copies: the region's records (through the second mapping zc, which the input then owns) and the kept reads
+    // (take_e2e_reads) are the input's leading parts, in place; the vectors get the stream's part, shifted as prepend_e2e shifts it
+    void prepend_e2e_zc(singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::E2ERegion& zc) {
+        const singlet_engine_gpu::E2EHeader& H = *zc.hdr();
+        const uint64_t nR = H.nRec, nA = H.nAln, nO = H.nOps, nQ = H.nSeq;
+        for (auto& s : sigs_) { s.aln_off += (uint32_t) nA; s.seq_off += nQ; }
+        for (auto& a : alns_) a.ops_off += (uint32_t) nO;
+        for (auto& r : reads_) r.sig += (uint32_t) nR;
+        in.preSigs = {zc.base + H.oSigs, nR * sizeof(SigRec)}; in.preAlns = {zc.base + H.oAlns, nA * sizeof(AlnRec)};
+        in.preOps = {zc.base + H.oOps, nO * 4}; in.preSeq = {zc.base + H.oSeq, nQ};
+        in.sigs.assign((const uint8_t*) sigs_.data(), (const uint8_t*) (sigs_.data() + sigs_.size()));
+        in.alns.assign((const uint8_t*) alns_.data(), (const uint8_t*) (alns_.data() + alns_.size()));
+        in.ops.swap(ops_); in.seq.swap(seq_);
+        in.preReads = {zc_keep_->reads.data(), zc_keep_->reads.size()};
+        in.reads.assign((const uint8_t*) reads_.data(), (const uint8_t*) (reads_.data() + reads_.size()));
+        zc_keep_->base = zc.base; zc_keep_->cap = zc.cap;   // the second mapping goes with the input
+        in.keep = zc_keep_;
+        std::vector<SigRec>().swap(sigs_); std::vector<AlnRec>().swap(alns_);
+        singlet_tail::mark("collector: e2e (E16): the region's records and the kept reads in place, the stream's part copied");
+        e2e_unmap();   // the collector's own mapping and the memfd; the second mapping keeps the pages
+    }
+    struct ZcKeep {   // E16: what the input's leading parts point into
+        std::vector<uint8_t> reads, q; uint8_t* base = nullptr; uint64_t cap = 0;
+        ~ZcKeep() { if (base != nullptr) munmap(base, cap); }
+    };
+    std::shared_ptr<ZcKeep> zc_keep_; bool zc_ = false; size_t zc_n_ = 0, zc_q_n_ = 0;
+    static void e2e_unmap() {
+        singlet_engine_gpu::e2eRegion().release();   // unmapped and the memfd closed: its pages go
+    }
+    const singlet_engine_gpu::E2ERegion* e2e_ = nullptr; bool e2e_tried_ = false; uint64_t e2e_stream_ = 0;
     std::string handoff_path_; Handoff ho_; bool ho_tried_ = false, ho_ok_ = false; uint64_t ho_mismatch_ = 0;
     std::vector<ReadRec> ho_reads_;
-    std::vector<QM> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks, parallel to reads_ and ho_reads_
+    std::vector<uint64_t> reads_q_, ho_q_; bool q_ok_ = true, force_q_ = false;   // per-read low-quality masks (qw_ words each), parallel to reads_ and ho_reads_
+    uint32_t qw_ = 2;
+    void push_q(std::vector<uint64_t>& v, const uint64_t* m) { if (m) v.insert(v.end(), m, m + qw_); else v.resize(v.size() + qw_, 0); }
     std::vector<uint32_t> ho_clip_; uint64_t n_clipped_ = 0;
     std::vector<uint64_t> ho_idx_;
 public:
@@ -379,7 +500,7 @@ private:
         }
     }
     struct Aln { int32_t tid, pos; uint8_t flags, mapq; std::vector<uint32_t> ops; };
-    struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; QM qm{{0, 0}}; };
+    struct Group { std::vector<Aln> alns; int seen = 0, nh = 0, primary = -1; int32_t bc = -1; uint64_t umi3 = 0; std::vector<uint8_t> seq; QM qm{}; };
     // FNV-1a over the qname: groups a multimapper's alignments (64-bit, as the engine's mm_buffer)
     static uint64_t qname_hash(const char* q) { uint64_t h = 14695981039346656037ULL; for (; *q; ++q) { h ^= (uint8_t) *q; h *= 1099511628211ULL; } return h; }
     struct H128 { uint64_t a, b; bool operator==(const H128& o) const { return a == o.a && b == o.b; } };
@@ -406,14 +527,66 @@ private:
             for (uint32_t i = 0; i < rlen; i += 2) seq_.push_back((uint8_t) (g.seq[i] | ((i + 1 < rlen ? g.seq[i + 1] : 0) << 4)));
             sigs_.push_back(s);
         }
-        reads_.push_back(ReadRec{sid, g.bc, g.umi3}); reads_q_.push_back(g.qm);
+        reads_.push_back(ReadRec{sid, g.bc, g.umi3}); push_q(reads_q_, g.qm.m);
     }
 
-    int min_baseq_; int umi_len_ = -1;
+    int min_baseq_; int umi_len_ = -1; bool prefer_ur_ = false;
     uint64_t lowqual_bases_ = 0, qual_neq_n_ = 0, incomplete_ = 0, no_umi_ = 0;
     std::unordered_map<uint64_t, Group> pend_;   // keyed like the engine's mm_buffer (64-bit qname hash)
     std::unordered_map<H128, uint32_t, H128Hash> sigmap_;
     std::vector<SigRec> sigs_; std::vector<AlnRec> alns_; std::vector<ReadRec> reads_; std::vector<uint32_t> ops_; std::vector<uint8_t> seq_;
+};
+
+// ---- the stream's records for a collector, copied in batches and added by one worker thread, so the stream thread only copies bytes.
+// Used on the CPU route, where the collector feeds the all-site pass alone: records reach Collector::add in stream order with the barcode
+// the stream gave them, so the collector's records are the same. drain() returns once every record is added.
+class AsyncFeed {
+public:
+    explicit AsyncFeed(Collector& c) : c_(c) { th_ = std::thread([this] { run(); }); }
+    ~AsyncFeed() { drain(); }
+    void add(const bam1_t* b, int32_t bc) {   // per record: int32 barcode, uint32 l_data, the core, the data; padded to 8 bytes
+        const size_t n = (8 + sizeof(bam1_core_t) + static_cast<size_t>(b->l_data) + 7) & ~static_cast<size_t>(7);
+        if (cur_.n + n > cur_.cap) { if (cur_.n) push(); if (n > cur_.cap) cur_.grow(std::max(n, kChunk)); }
+        char* p = cur_.p.get() + cur_.n; const uint32_t l = static_cast<uint32_t>(b->l_data);
+        std::memcpy(p, &bc, 4); std::memcpy(p + 4, &l, 4); std::memcpy(p + 8, &b->core, sizeof(bam1_core_t)); std::memcpy(p + 8 + sizeof(bam1_core_t), b->data, l);
+        cur_.n += n;
+    }
+    void drain() {
+        if (done_) return;
+        if (cur_.n) push();
+        { std::lock_guard<std::mutex> g(mu_); stop_ = true; }
+        cv_.notify_all(); th_.join(); done_ = true;
+    }
+private:
+    static constexpr size_t kChunk = size_t(8) << 20, kMaxQ = 16;
+    struct Buf { std::unique_ptr<char[]> p; size_t n = 0, cap = 0; void grow(size_t c) { p.reset(new char[c]); cap = c; n = 0; } };
+    void push() {
+        std::unique_lock<std::mutex> g(mu_);
+        cv_room_.wait(g, [&] { return q_.size() < kMaxQ; });
+        q_.push_back(std::move(cur_));
+        if (!spare_.empty()) { cur_ = std::move(spare_.back()); spare_.pop_back(); } else cur_ = Buf();
+        g.unlock(); cv_.notify_one();
+        if (!cur_.cap) cur_.grow(kChunk);
+        cur_.n = 0;
+    }
+    void run() {
+        bam1_t b; std::memset(&b, 0, sizeof(b));
+        for (;;) {
+            Buf v;
+            { std::unique_lock<std::mutex> g(mu_); cv_.wait(g, [&] { return !q_.empty() || stop_; }); if (q_.empty()) return; v = std::move(q_.front()); q_.pop_front(); }
+            cv_room_.notify_one();
+            for (size_t o = 0; o < v.n;) {
+                const char* p = v.p.get() + o; int32_t bc; uint32_t l;
+                std::memcpy(&bc, p, 4); std::memcpy(&l, p + 4, 4); std::memcpy(&b.core, p + 8, sizeof(bam1_core_t));
+                b.data = reinterpret_cast<uint8_t*>(const_cast<char*>(p + 8 + sizeof(bam1_core_t))); b.l_data = static_cast<int>(l); b.m_data = l;
+                c_.add(&b, bc);
+                o += (8 + sizeof(bam1_core_t) + l + 7) & ~static_cast<size_t>(7);
+            }
+            std::lock_guard<std::mutex> g(mu_); if (spare_.size() < 4) spare_.push_back(std::move(v));
+        }
+    }
+    Collector& c_; Buf cur_; std::deque<Buf> q_; std::vector<Buf> spare_;
+    std::mutex mu_; std::condition_variable cv_, cv_room_; bool stop_ = false, done_ = false; std::thread th_;
 };
 
 // ---- compare: CPU accumulator (after to_csc: sums and clamps) vs GPU triplets, entry by entry

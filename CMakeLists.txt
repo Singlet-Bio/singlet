@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(singlet VERSION 1.0.0 LANGUAGES CXX C)
+project(singlet VERSION 1.3.5 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -123,7 +123,10 @@ if(SINGLET_BUILD_PIPELINE)
 
     add_subdirectory(src/star)
     if(SINGLET_ENGINE_GPU_ENABLED)
-        add_library(singlet_engine_gpu STATIC src/engine_gpu/engine_gpu.cu src/engine_gpu/nonhost_gpu.cu src/engine_gpu/pileup_gpu.cu)
+        add_library(singlet_engine_gpu STATIC src/engine_gpu/engine_gpu.cu src/engine_gpu/nonhost_gpu.cu src/engine_gpu/pileup_gpu.cu src/engine_gpu/records_gpu.cu src/engine_gpu/hostloop_gpu.cu
+                    src/engine_gpu/solo_gpu.cu src/engine_gpu/allsite_gpu.cu)
+        # E11 (docs/gpu-engine/fable/E11-solowire.md): E9's Solo library runs its rules through __host__ __device__ lambdas, on the host with OpenMP
+        set_source_files_properties(src/engine_gpu/solo_gpu.cu PROPERTIES COMPILE_OPTIONS "--extended-lambda;-Xcompiler=-fopenmp")
         set_target_properties(singlet_engine_gpu PROPERTIES
             CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "52")
@@ -133,7 +136,7 @@ if(SINGLET_BUILD_PIPELINE)
         target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false>)
         target_include_directories(singlet_engine_gpu PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
-        target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads)
+        target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads ${CMAKE_DL_LIBS} PRIVATE OpenMP::OpenMP_CXX)
         # NVTX ranges on the host side (include/singlet/nvtx.h): header-only, compiled in when the toolkit has them, active only with SINGLET_NVTX=1
         find_path(SINGLET_NVTX_INCLUDE nvtx3/nvToolsExt.h HINTS ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
         if(SINGLET_NVTX_INCLUDE)
@@ -145,6 +148,10 @@ if(SINGLET_BUILD_PIPELINE)
         target_compile_definitions(singlet_star PRIVATE SINGLET_HAVE_ENGINE_GPU)
         target_include_directories(singlet_star PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
+        # E13 (src/star/SeqCacheGpuIngest.cpp): STAR's prefill decodes the .1fq itself (read_source.h: zstd)
+        if(ZSTD_INCLUDE_DIR)
+            target_include_directories(singlet_star PRIVATE ${ZSTD_INCLUDE_DIR})
+        endif()
     endif()
     add_subdirectory(src/pipeline)
 endif()

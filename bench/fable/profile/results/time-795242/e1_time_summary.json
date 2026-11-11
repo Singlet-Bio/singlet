@@ -1,0 +1,5121 @@
+{
+ "job_dir": "/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/profile/results/time-795242",
+ "variants": {
+  "base": {
+   "label": "base",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 860.675,
+    "gpu_ms_runs": [
+     859.82,
+     860.949,
+     862.8
+    ],
+    "gpu_distinct_reads_per_s": 2314378,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.139,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 268.594,
+    "lane_m_ms": 337.365,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 254.716,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     105.696,
+     16.836,
+     145.95
+    ],
+    "lane_b_phase_ms": [
+     38.748,
+     6.801,
+     209.097
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.5
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 262144,
+      "work_B": 46104,
+      "work_GB": 12.09,
+      "mode": "staged",
+      "runs": [
+       270.6,
+       268.4,
+       268.6,
+       268.7
+      ],
+      "phases": [
+       [
+        106.6,
+        17.2,
+        146.7
+       ],
+       [
+        105.7,
+        16.8,
+        145.7
+       ],
+       [
+        105.7,
+        16.8,
+        146.1
+       ],
+       [
+        105.7,
+        16.9,
+        146.0
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 51.6,
+       "windows": 8.4,
+       "stitching": 39.1,
+       "select": 0.9
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.8,
+       "finalize": 10.7,
+       "recording": 2.2,
+       "copies": 1.1
+      },
+      "ms_median": 268.6,
+      "phase_ms_mean": [
+       105.7,
+       16.833,
+       145.933
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       347.2,
+       336.7,
+       337.4,
+       339.8
+      ],
+      "phases": [
+       [
+        84.1,
+        21.1,
+        242.0
+       ],
+       [
+        79.3,
+        17.9,
+        239.6
+       ],
+       [
+        79.0,
+        17.9,
+        240.4
+       ],
+       [
+        79.2,
+        17.9,
+        242.6
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 337.4,
+      "phase_ms_mean": [
+       79.167,
+       17.9,
+       240.867
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 65536,
+      "work_B": 635248,
+      "work_GB": 41.63,
+      "mode": "staged",
+      "runs": [
+       262.1,
+       254.7,
+       255.0,
+       254.3
+      ],
+      "phases": [
+       [
+        43.4,
+        7.3,
+        211.4
+       ],
+       [
+        38.6,
+        6.8,
+        209.3
+       ],
+       [
+        38.9,
+        6.8,
+        209.3
+       ],
+       [
+        38.8,
+        6.8,
+        208.7
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 7.0,
+       "windows": 15.1,
+       "stitching": 77.8,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 2.8,
+       "finalize": 13.8,
+       "recording": 2.2,
+       "copies": 1.1
+      },
+      "ms_median": 254.7,
+      "phase_ms_mean": [
+       38.767,
+       6.8,
+       209.1
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "mono_g_b0": {
+   "label": "mono_g_b0",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2943.519,
+    "gpu_ms_runs": [
+     2946.624,
+     2941.224,
+     2942.317
+    ],
+    "gpu_distinct_reads_per_s": 676716,
+    "heavy_reads": 3195,
+    "heavy_host_s": 0.079,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 252,
+     "keep": 321
+    },
+    "lane_a_ms": 964.263,
+    "lane_m_ms": 340.002,
+    "lane_m_reads": 524552,
+    "lane_b_ms": 1639.255,
+    "lane_b_reads": 90715,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.8
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 528,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "global",
+      "work_GB": 3.12,
+      "mode": "mono",
+      "runs": [
+       966.0,
+       966.0,
+       964.3,
+       963.5
+      ],
+      "cyc_share": {
+       "seeds": 40.6,
+       "windows": 11.0,
+       "stitching": 44.6,
+       "select": 3.8
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 964.3
+     },
+     "M": {
+      "reads": 524552,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       341.3,
+       341.4,
+       337.7,
+       340.0
+      ],
+      "phases": [
+       [
+        83.0,
+        18.1,
+        240.2
+       ],
+       [
+        79.6,
+        17.8,
+        243.8
+       ],
+       [
+        79.5,
+        17.8,
+        240.3
+       ],
+       [
+        79.3,
+        17.8,
+        242.9
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1932.5,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 340.0,
+      "phase_ms_mean": [
+       79.467,
+       17.8,
+       242.333
+      ]
+     },
+     "B": {
+      "reads": 90715,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1640.7,
+       1639.3,
+       1639.3,
+       1638.8
+      ],
+      "cyc_share": {
+       "seeds": 8.9,
+       "windows": 9.2,
+       "stitching": 81.4,
+       "select": 0.4
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1639.3
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 3195
+   }
+  },
+  "mono_g_b1024": {
+   "label": "mono_g_b1024",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2758.081,
+    "gpu_ms_runs": [
+     2758.093,
+     2757.474,
+     2758.003
+    ],
+    "gpu_distinct_reads_per_s": 722214,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.336,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 1002.648,
+    "lane_m_ms": 338.207,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1417.225,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.9
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 528,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "global",
+      "work_GB": 3.12,
+      "mode": "mono",
+      "runs": [
+       1002.3,
+       1002.6,
+       1002.4,
+       1002.7
+      ],
+      "cyc_share": {
+       "seeds": 40.6,
+       "windows": 11.0,
+       "stitching": 44.7,
+       "select": 3.8
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1002.6
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       340.5,
+       338.2,
+       337.8,
+       338.2
+      ],
+      "phases": [
+       [
+        83.0,
+        18.1,
+        239.4
+       ],
+       [
+        79.1,
+        17.8,
+        241.3
+       ],
+       [
+        79.1,
+        17.9,
+        240.7
+       ],
+       [
+        79.7,
+        17.9,
+        240.6
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 338.2,
+      "phase_ms_mean": [
+       79.3,
+       17.867,
+       240.867
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1418.4,
+       1417.2,
+       1417.3,
+       1417.1
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1417.2
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_g_b1024_bps1": {
+   "label": "mono_g_b1024_bps1",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 3254.172,
+    "gpu_ms_runs": [
+     3254.097,
+     3254.038,
+     3255.876
+    ],
+    "gpu_distinct_reads_per_s": 612115,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.341,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 1513.357,
+    "lane_m_ms": 336.846,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1403.969,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.0
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 132,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "global",
+      "work_GB": 0.78,
+      "mode": "mono",
+      "runs": [
+       1513.5,
+       1513.4,
+       1513.4,
+       1512.9
+      ],
+      "cyc_share": {
+       "seeds": 33.1,
+       "windows": 7.8,
+       "stitching": 53.5,
+       "select": 5.6
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1513.4
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       340.8,
+       336.8,
+       336.6,
+       339.0
+      ],
+      "phases": [
+       [
+        82.7,
+        18.2,
+        239.9
+       ],
+       [
+        79.3,
+        17.9,
+        239.6
+       ],
+       [
+        79.5,
+        17.9,
+        239.1
+       ],
+       [
+        79.3,
+        17.8,
+        241.8
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 336.8,
+      "phase_ms_mean": [
+       79.367,
+       17.867,
+       240.167
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1405.5,
+       1403.9,
+       1404.0,
+       1404.0
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1404.0
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_g_b1024_bps16": {
+   "label": "mono_g_b1024_bps16",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2468.697,
+    "gpu_ms_runs": [
+     2467.487,
+     2466.441,
+     2473.601
+    ],
+    "gpu_distinct_reads_per_s": 806874,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.341,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 733.047,
+    "lane_m_ms": 336.717,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1398.932,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.1
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 2112,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "global",
+      "work_GB": 12.46,
+      "mode": "mono",
+      "runs": [
+       730.1,
+       733.0,
+       726.5,
+       738.0
+      ],
+      "cyc_share": {
+       "seeds": 56.5,
+       "windows": 15.7,
+       "stitching": 25.8,
+       "select": 1.9
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 733.0
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       346.0,
+       335.6,
+       340.8,
+       336.7
+      ],
+      "phases": [
+       [
+        84.5,
+        21.1,
+        240.3
+       ],
+       [
+        79.4,
+        17.8,
+        238.4
+       ],
+       [
+        79.2,
+        17.9,
+        240.9
+       ],
+       [
+        79.4,
+        17.9,
+        239.4
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 336.7,
+      "phase_ms_mean": [
+       79.333,
+       17.867,
+       239.567
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1400.7,
+       1398.8,
+       1399.1,
+       1398.9
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1398.9
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_g_b1024_bps2": {
+   "label": "mono_g_b1024_bps2",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2873.724,
+    "gpu_ms_runs": [
+     2872.648,
+     2875.215,
+     2873.683
+    ],
+    "gpu_distinct_reads_per_s": 693152,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.34,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 1133.49,
+    "lane_m_ms": 338.697,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1401.537,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.0
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 264,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "global",
+      "work_GB": 1.56,
+      "mode": "mono",
+      "runs": [
+       1134.6,
+       1133.5,
+       1134.5,
+       1133.2
+      ],
+      "cyc_share": {
+       "seeds": 36.2,
+       "windows": 8.7,
+       "stitching": 50.5,
+       "select": 4.6
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1133.5
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       343.0,
+       337.7,
+       339.2,
+       338.7
+      ],
+      "phases": [
+       [
+        82.4,
+        18.1,
+        242.5
+       ],
+       [
+        79.2,
+        17.8,
+        240.6
+       ],
+       [
+        79.4,
+        17.8,
+        242.0
+       ],
+       [
+        79.5,
+        17.8,
+        241.3
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 338.7,
+      "phase_ms_mean": [
+       79.367,
+       17.8,
+       241.3
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1403.1,
+       1401.4,
+       1401.5,
+       1401.8
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1401.5
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_g_b1024_bps8": {
+   "label": "mono_g_b1024_bps8",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2634.325,
+    "gpu_ms_runs": [
+     2634.148,
+     2642.207,
+     2633.14
+    ],
+    "gpu_distinct_reads_per_s": 756143,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.343,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 879.149,
+    "lane_m_ms": 337.909,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1417.267,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.1
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 1056,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "global",
+      "work_GB": 6.23,
+      "mode": "mono",
+      "runs": [
+       879.0,
+       879.1,
+       886.6,
+       878.8
+      ],
+      "cyc_share": {
+       "seeds": 48.5,
+       "windows": 13.3,
+       "stitching": 35.5,
+       "select": 2.7
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 879.1
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       344.8,
+       337.9,
+       338.4,
+       336.8
+      ],
+      "phases": [
+       [
+        83.0,
+        19.6,
+        242.2
+       ],
+       [
+        79.6,
+        17.9,
+        240.4
+       ],
+       [
+        79.3,
+        17.9,
+        241.2
+       ],
+       [
+        79.3,
+        17.9,
+        239.6
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 337.9,
+      "phase_ms_mean": [
+       79.4,
+       17.9,
+       240.4
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1418.3,
+       1417.1,
+       1417.3,
+       1417.6
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1417.3
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_l_b0": {
+   "label": "mono_l_b0",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2609.897,
+    "gpu_ms_runs": [
+     2609.35,
+     2609.07,
+     2612.707
+    ],
+    "gpu_distinct_reads_per_s": 763220,
+    "heavy_reads": 3195,
+    "heavy_host_s": 0.084,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 252,
+     "keep": 321
+    },
+    "lane_a_ms": 626.746,
+    "lane_m_ms": 339.529,
+    "lane_m_reads": 524552,
+    "lane_b_ms": 1643.622,
+    "lane_b_reads": 90715,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": true,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.9
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 528,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "local",
+      "work_GB": 3.12,
+      "mode": "mono",
+      "runs": [
+       621.6,
+       626.7,
+       626.9,
+       626.6
+      ],
+      "cyc_share": {
+       "seeds": 71.7,
+       "windows": 18.3,
+       "stitching": 9.2,
+       "select": 0.8
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 626.7
+     },
+     "M": {
+      "reads": 524552,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       345.2,
+       339.5,
+       338.5,
+       342.5
+      ],
+      "phases": [
+       [
+        82.6,
+        20.1,
+        242.5
+       ],
+       [
+        79.8,
+        17.8,
+        241.8
+       ],
+       [
+        79.6,
+        17.9,
+        241.1
+       ],
+       [
+        79.4,
+        17.8,
+        245.2
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1932.5,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 339.5,
+      "phase_ms_mean": [
+       79.6,
+       17.833,
+       242.7
+      ]
+     },
+     "B": {
+      "reads": 90715,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1645.3,
+       1643.1,
+       1643.6,
+       1643.6
+      ],
+      "cyc_share": {
+       "seeds": 8.9,
+       "windows": 9.2,
+       "stitching": 81.4,
+       "select": 0.4
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1643.6
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 3195
+   }
+  },
+  "mono_l_b1024": {
+   "label": "mono_l_b1024",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2364.247,
+    "gpu_ms_runs": [
+     2363.734,
+     2363.523,
+     2365.448
+    ],
+    "gpu_distinct_reads_per_s": 842520,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.336,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 626.668,
+    "lane_m_ms": 338.386,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1399.194,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": true,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.7
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 528,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "local",
+      "work_GB": 3.12,
+      "mode": "mono",
+      "runs": [
+       621.7,
+       626.1,
+       626.7,
+       626.7
+      ],
+      "cyc_share": {
+       "seeds": 71.7,
+       "windows": 18.3,
+       "stitching": 9.2,
+       "select": 0.8
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 626.7
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       344.0,
+       338.4,
+       337.9,
+       339.5
+      ],
+      "phases": [
+       [
+        82.6,
+        18.1,
+        243.2
+       ],
+       [
+        79.4,
+        17.9,
+        241.1
+       ],
+       [
+        79.2,
+        17.8,
+        240.8
+       ],
+       [
+        79.2,
+        17.8,
+        242.4
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 338.4,
+      "phase_ms_mean": [
+       79.267,
+       17.833,
+       241.433
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1400.2,
+       1399.3,
+       1399.0,
+       1399.2
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1399.2
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_l_b1024_bps2": {
+   "label": "mono_l_b1024_bps2",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2398.298,
+    "gpu_ms_runs": [
+     2398.947,
+     2395.656,
+     2397.932
+    ],
+    "gpu_distinct_reads_per_s": 830558,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.34,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 654.406,
+    "lane_m_ms": 338.437,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1405.456,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": true,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.3
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 264,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "local",
+      "work_GB": 1.56,
+      "mode": "mono",
+      "runs": [
+       654.5,
+       654.8,
+       654.0,
+       654.4
+      ],
+      "cyc_share": {
+       "seeds": 75.7,
+       "windows": 15.8,
+       "stitching": 8.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 654.4
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       344.2,
+       338.7,
+       336.1,
+       338.4
+      ],
+      "phases": [
+       [
+        82.9,
+        18.0,
+        243.2
+       ],
+       [
+        79.2,
+        17.8,
+        241.6
+       ],
+       [
+        79.2,
+        17.9,
+        239.0
+       ],
+       [
+        79.1,
+        17.8,
+        241.5
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 338.4,
+      "phase_ms_mean": [
+       79.167,
+       17.833,
+       240.7
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1407.0,
+       1405.5,
+       1405.6,
+       1405.1
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1405.5
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "mono_l_b1024_bps8": {
+   "label": "mono_l_b1024_bps8",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2377.917,
+    "gpu_ms_runs": [
+     2380.03,
+     2377.917,
+     2377.143
+    ],
+    "gpu_distinct_reads_per_s": 837677,
+    "heavy_reads": 14162,
+    "heavy_host_s": 0.339,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 5,
+     "keep": 271,
+     "steps": 11264
+    },
+    "lane_a_ms": 620.841,
+    "lane_m_ms": 338.537,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1418.539,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_b_phase_ms": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "lane_a_local": true,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.5
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "blocks": 1056,
+      "threads": 128,
+      "work_B": 46104,
+      "mem": "local",
+      "work_GB": 6.23,
+      "mode": "mono",
+      "runs": [
+       623.2,
+       621.1,
+       620.8,
+       620.3
+      ],
+      "cyc_share": {
+       "seeds": 71.7,
+       "windows": 18.4,
+       "stitching": 9.1,
+       "select": 0.8
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 620.8
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       342.3,
+       340.3,
+       338.5,
+       338.3
+      ],
+      "phases": [
+       [
+        82.3,
+        18.1,
+        241.8
+       ],
+       [
+        79.4,
+        17.9,
+        243.0
+       ],
+       [
+        79.5,
+        17.9,
+        241.1
+       ],
+       [
+        79.5,
+        17.8,
+        241.0
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 338.5,
+      "phase_ms_mean": [
+       79.467,
+       17.867,
+       241.7
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "blocks": 132,
+      "threads": 64,
+      "work_B": 635248,
+      "mem": "global",
+      "work_GB": 5.37,
+      "mode": "mono",
+      "runs": [
+       1420.0,
+       1418.6,
+       1418.5,
+       1418.5
+      ],
+      "cyc_share": {
+       "seeds": 10.1,
+       "windows": 10.4,
+       "stitching": 79.0,
+       "select": 0.5
+      },
+      "sa_entries_per_read": null,
+      "ms_median": 1418.5
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 14162
+   }
+  },
+  "nb_a1048576_m524288_b131072": {
+   "label": "nb_a1048576_m524288_b131072",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 758.578,
+    "gpu_ms_runs": [
+     757.503,
+     762.01,
+     756.828
+    ],
+    "gpu_distinct_reads_per_s": 2625870,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.14,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 236.096,
+    "lane_m_ms": 324.895,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 197.586,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     96.004,
+     13.171,
+     126.768
+    ],
+    "lane_b_phase_ms": [
+     32.221,
+     5.76,
+     159.958
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.1
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 1048576,
+      "work_B": 46104,
+      "work_GB": 48.34,
+      "mode": "staged",
+      "runs": [
+       237.7,
+       236.1,
+       236.3,
+       235.6
+      ],
+      "phases": [
+       [
+        98.0,
+        13.5,
+        126.1
+       ],
+       [
+        96.1,
+        13.1,
+        126.9
+       ],
+       [
+        96.0,
+        13.2,
+        127.0
+       ],
+       [
+        95.9,
+        13.2,
+        126.5
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 50.2,
+       "windows": 8.9,
+       "stitching": 40.0,
+       "select": 0.9
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.9,
+       "finalize": 10.0,
+       "recording": 1.9,
+       "copies": 1.1
+      },
+      "ms_median": 236.1,
+      "phase_ms_mean": [
+       96.0,
+       13.167,
+       126.8
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 524288,
+      "work_B": 82552,
+      "work_GB": 43.28,
+      "mode": "staged",
+      "runs": [
+       334.5,
+       324.9,
+       326.0,
+       323.7
+      ],
+      "phases": [
+       [
+        78.3,
+        18.4,
+        237.7
+       ],
+       [
+        72.5,
+        16.9,
+        235.5
+       ],
+       [
+        72.2,
+        16.9,
+        236.9
+       ],
+       [
+        72.4,
+        16.9,
+        234.4
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 17.4,
+       "windows": 13.1,
+       "stitching": 69.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.6,
+       "finalize": 20.2,
+       "recording": 4.5,
+       "copies": 1.5
+      },
+      "ms_median": 324.9,
+      "phase_ms_mean": [
+       72.367,
+       16.9,
+       235.6
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 90740,
+      "work_B": 635248,
+      "work_GB": 57.64,
+      "mode": "staged",
+      "runs": [
+       202.4,
+       196.5,
+       199.8,
+       197.6
+      ],
+      "phases": [
+       [
+        36.4,
+        6.0,
+        159.9
+       ],
+       [
+        32.3,
+        5.8,
+        158.4
+       ],
+       [
+        32.1,
+        5.8,
+        161.8
+       ],
+       [
+        32.2,
+        5.7,
+        159.6
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 6.4,
+       "windows": 17.8,
+       "stitching": 75.8,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 2.8,
+       "finalize": 12.6,
+       "recording": 2.1,
+       "copies": 1.1
+      },
+      "ms_median": 197.6,
+      "phase_ms_mean": [
+       32.2,
+       5.767,
+       159.933
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "nb_a131072_m131072_b32768": {
+   "label": "nb_a131072_m131072_b32768",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 1019.556,
+    "gpu_ms_runs": [
+     1019.214,
+     1019.351,
+     1022.282
+    ],
+    "gpu_distinct_reads_per_s": 1953720,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.14,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 318.11,
+    "lane_m_ms": 373.461,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 327.984,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     120.466,
+     21.523,
+     176.106
+    ],
+    "lane_b_phase_ms": [
+     49.47,
+     7.607,
+     270.957
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.8
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 131072,
+      "work_B": 46104,
+      "work_GB": 6.04,
+      "mode": "staged",
+      "runs": [
+       320.4,
+       318.1,
+       317.5,
+       319.1
+      ],
+      "phases": [
+       [
+        121.7,
+        22.1,
+        176.4
+       ],
+       [
+        120.7,
+        21.5,
+        175.8
+       ],
+       [
+        120.4,
+        21.4,
+        175.5
+       ],
+       [
+        120.3,
+        21.7,
+        177.0
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 53.2,
+       "windows": 8.2,
+       "stitching": 37.8,
+       "select": 0.8
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.8,
+       "finalize": 11.6,
+       "recording": 2.5,
+       "copies": 1.1
+      },
+      "ms_median": 318.1,
+      "phase_ms_mean": [
+       120.467,
+       21.533,
+       176.1
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 131072,
+      "work_B": 82552,
+      "work_GB": 10.82,
+      "mode": "staged",
+      "runs": [
+       376.6,
+       373.3,
+       373.5,
+       375.2
+      ],
+      "phases": [
+       [
+        92.1,
+        21.1,
+        263.4
+       ],
+       [
+        90.4,
+        19.3,
+        263.6
+       ],
+       [
+        89.9,
+        19.3,
+        264.2
+       ],
+       [
+        90.7,
+        19.3,
+        265.2
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.3,
+       "windows": 15.0,
+       "stitching": 68.6,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.2,
+       "finalize": 22.4,
+       "recording": 5.4,
+       "copies": 1.6
+      },
+      "ms_median": 373.5,
+      "phase_ms_mean": [
+       90.333,
+       19.3,
+       264.333
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 32768,
+      "work_B": 635248,
+      "work_GB": 20.82,
+      "mode": "staged",
+      "runs": [
+       332.7,
+       327.8,
+       328.4,
+       328.0
+      ],
+      "phases": [
+       [
+        51.0,
+        10.5,
+        271.2
+       ],
+       [
+        49.6,
+        7.6,
+        270.6
+       ],
+       [
+        49.3,
+        7.6,
+        271.5
+       ],
+       [
+        49.5,
+        7.6,
+        270.8
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 8.0,
+       "windows": 12.9,
+       "stitching": 79.0,
+       "select": 0.0
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 2.9,
+       "finalize": 15.2,
+       "recording": 2.3,
+       "copies": 1.1
+      },
+      "ms_median": 328.0,
+      "phase_ms_mean": [
+       49.467,
+       7.6,
+       270.967
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "nb_a32768_m32768_b8192": {
+   "label": "nb_a32768_m32768_b8192",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 2298.099,
+    "gpu_ms_runs": [
+     2298.26,
+     2297.806,
+     2300.074
+    ],
+    "gpu_distinct_reads_per_s": 866771,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.14,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 649.352,
+    "lane_m_ms": 632.675,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 1016.072,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     230.282,
+     50.441,
+     368.86
+    ],
+    "lane_b_phase_ms": [
+     135.852,
+     15.601,
+     864.088
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.2
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 32768,
+      "work_B": 46104,
+      "work_GB": 1.51,
+      "mode": "staged",
+      "runs": [
+       650.5,
+       649.3,
+       649.4,
+       652.0
+      ],
+      "phases": [
+       [
+        230.6,
+        50.1,
+        369.2
+       ],
+       [
+        230.2,
+        49.6,
+        368.9
+       ],
+       [
+        230.3,
+        49.9,
+        368.2
+       ],
+       [
+        230.3,
+        51.8,
+        369.4
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 63.0,
+       "windows": 9.4,
+       "stitching": 27.2,
+       "select": 0.4
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.7,
+       "finalize": 13.6,
+       "recording": 2.5,
+       "copies": 1.0
+      },
+      "ms_median": 649.4,
+      "phase_ms_mean": [
+       230.267,
+       50.433,
+       368.833
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 32768,
+      "work_B": 82552,
+      "work_GB": 2.71,
+      "mode": "staged",
+      "runs": [
+       633.9,
+       632.7,
+       632.4,
+       633.4
+      ],
+      "phases": [
+       [
+        141.7,
+        29.7,
+        462.4
+       ],
+       [
+        141.3,
+        29.5,
+        461.7
+       ],
+       [
+        140.7,
+        29.5,
+        462.0
+       ],
+       [
+        141.0,
+        29.5,
+        462.8
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 22.2,
+       "windows": 15.6,
+       "stitching": 62.2,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.5,
+       "finalize": 23.2,
+       "recording": 4.5,
+       "copies": 1.3
+      },
+      "ms_median": 632.7,
+      "phase_ms_mean": [
+       141.0,
+       29.5,
+       462.167
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 8192,
+      "work_B": 635248,
+      "work_GB": 5.2,
+      "mode": "staged",
+      "runs": [
+       1020.8,
+       1016.3,
+       1016.1,
+       1014.6
+      ],
+      "phases": [
+       [
+        137.5,
+        16.6,
+        864.1
+       ],
+       [
+        135.8,
+        15.5,
+        864.8
+       ],
+       [
+        135.9,
+        15.6,
+        864.4
+       ],
+       [
+        135.8,
+        15.7,
+        863.0
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 8.3,
+       "windows": 12.3,
+       "stitching": 79.4,
+       "select": 0.0
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 3.3,
+       "finalize": 15.2,
+       "recording": 1.9,
+       "copies": 0.9
+      },
+      "ms_median": 1016.1,
+      "phase_ms_mean": [
+       135.833,
+       15.6,
+       864.067
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "nb_a524288_m524288_b131072": {
+   "label": "nb_a524288_m524288_b131072",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 767.226,
+    "gpu_ms_runs": [
+     767.603,
+     768.846,
+     760.993
+    ],
+    "gpu_distinct_reads_per_s": 2596271,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.137,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 245.353,
+    "lane_m_ms": 323.742,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 198.13,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     98.594,
+     14.287,
+     132.37
+    ],
+    "lane_b_phase_ms": [
+     32.191,
+     5.786,
+     158.692
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.9
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 524288,
+      "work_B": 46104,
+      "work_GB": 24.17,
+      "mode": "staged",
+      "runs": [
+       246.1,
+       245.4,
+       245.8,
+       244.7
+      ],
+      "phases": [
+       [
+        99.8,
+        14.6,
+        131.7
+       ],
+       [
+        98.5,
+        14.2,
+        132.5
+       ],
+       [
+        98.8,
+        14.4,
+        132.6
+       ],
+       [
+        98.5,
+        14.2,
+        131.9
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 50.6,
+       "windows": 8.7,
+       "stitching": 39.8,
+       "select": 0.9
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.9,
+       "finalize": 10.2,
+       "recording": 2.0,
+       "copies": 1.1
+      },
+      "ms_median": 245.4,
+      "phase_ms_mean": [
+       98.6,
+       14.267,
+       132.333
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 524288,
+      "work_B": 82552,
+      "work_GB": 43.28,
+      "mode": "staged",
+      "runs": [
+       341.8,
+       323.7,
+       324.9,
+       322.9
+      ],
+      "phases": [
+       [
+        81.8,
+        23.2,
+        236.8
+       ],
+       [
+        72.2,
+        16.9,
+        234.6
+       ],
+       [
+        72.4,
+        16.9,
+        235.6
+       ],
+       [
+        72.3,
+        16.9,
+        233.6
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 17.4,
+       "windows": 13.1,
+       "stitching": 69.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.6,
+       "finalize": 20.2,
+       "recording": 4.5,
+       "copies": 1.5
+      },
+      "ms_median": 323.7,
+      "phase_ms_mean": [
+       72.3,
+       16.9,
+       234.6
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 90740,
+      "work_B": 635248,
+      "work_GB": 57.64,
+      "mode": "staged",
+      "runs": [
+       203.0,
+       198.5,
+       198.1,
+       193.4
+      ],
+      "phases": [
+       [
+        37.2,
+        6.1,
+        159.8
+       ],
+       [
+        32.4,
+        5.8,
+        160.3
+       ],
+       [
+        32.2,
+        5.8,
+        160.1
+       ],
+       [
+        32.0,
+        5.8,
+        155.6
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 6.4,
+       "windows": 17.8,
+       "stitching": 75.8,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 2.8,
+       "finalize": 12.6,
+       "recording": 2.1,
+       "copies": 1.1
+      },
+      "ms_median": 198.1,
+      "phase_ms_mean": [
+       32.2,
+       5.8,
+       158.667
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "nb_a65536_m65536_b16384": {
+   "label": "nb_a65536_m65536_b16384",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 1409.898,
+    "gpu_ms_runs": [
+     1409.805,
+     1412.652,
+     1409.265
+    ],
+    "gpu_distinct_reads_per_s": 1412816,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.139,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 417.493,
+    "lane_m_ms": 433.808,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 558.597,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     142.299,
+     30.716,
+     244.15
+    ],
+    "lane_b_phase_ms": [
+     79.922,
+     10.348,
+     468.204
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 20.0
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 65536,
+      "work_B": 46104,
+      "work_GB": 3.02,
+      "mode": "staged",
+      "runs": [
+       417.8,
+       417.5,
+       419.4,
+       417.2
+      ],
+      "phases": [
+       [
+        142.5,
+        31.8,
+        243.2
+       ],
+       [
+        142.3,
+        30.7,
+        244.2
+       ],
+       [
+        142.1,
+        30.7,
+        244.5
+       ],
+       [
+        142.5,
+        30.7,
+        243.8
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 58.9,
+       "windows": 8.5,
+       "stitching": 32.0,
+       "select": 0.6
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.7,
+       "finalize": 12.2,
+       "recording": 2.5,
+       "copies": 1.1
+      },
+      "ms_median": 417.5,
+      "phase_ms_mean": [
+       142.3,
+       30.7,
+       244.167
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 65536,
+      "work_B": 82552,
+      "work_GB": 5.41,
+      "mode": "staged",
+      "runs": [
+       435.5,
+       433.7,
+       434.5,
+       433.8
+      ],
+      "phases": [
+       [
+        103.4,
+        22.8,
+        309.2
+       ],
+       [
+        101.9,
+        22.6,
+        309.1
+       ],
+       [
+        102.2,
+        22.5,
+        309.6
+       ],
+       [
+        101.9,
+        22.6,
+        309.3
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 19.5,
+       "windows": 16.6,
+       "stitching": 63.8,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.2,
+       "finalize": 22.4,
+       "recording": 4.8,
+       "copies": 1.4
+      },
+      "ms_median": 433.8,
+      "phase_ms_mean": [
+       102.0,
+       22.567,
+       309.333
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 16384,
+      "work_B": 635248,
+      "work_GB": 10.41,
+      "mode": "staged",
+      "runs": [
+       561.4,
+       558.6,
+       558.8,
+       558.2
+      ],
+      "phases": [
+       [
+        81.2,
+        11.9,
+        468.2
+       ],
+       [
+        79.9,
+        10.4,
+        468.2
+       ],
+       [
+        79.9,
+        10.3,
+        468.5
+       ],
+       [
+        80.0,
+        10.3,
+        467.9
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 8.3,
+       "windows": 12.3,
+       "stitching": 79.4,
+       "select": 0.0
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 3.2,
+       "finalize": 15.6,
+       "recording": 2.2,
+       "copies": 1.0
+      },
+      "ms_median": 558.6,
+      "phase_ms_mean": [
+       79.933,
+       10.333,
+       468.2
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "nsys": {
+   "label": "nsys",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 862.881,
+    "gpu_ms_runs": [
+     858.148,
+     863.215,
+     866.336
+    ],
+    "gpu_distinct_reads_per_s": 2308460,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.139,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 268.605,
+    "lane_m_ms": 337.147,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 257.129,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     105.746,
+     17.02,
+     145.812
+    ],
+    "lane_b_phase_ms": [
+     39.176,
+     6.837,
+     210.862
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.6
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 262144,
+      "work_B": 46104,
+      "work_GB": 12.09,
+      "mode": "staged",
+      "runs": [
+       271.1,
+       268.5,
+       268.9,
+       268.6
+      ],
+      "phases": [
+       [
+        106.7,
+        17.3,
+        146.9
+       ],
+       [
+        105.7,
+        17.0,
+        145.7
+       ],
+       [
+        105.8,
+        17.1,
+        145.9
+       ],
+       [
+        105.7,
+        17.0,
+        145.8
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 51.6,
+       "windows": 8.4,
+       "stitching": 39.1,
+       "select": 0.9
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.8,
+       "finalize": 10.7,
+       "recording": 2.2,
+       "copies": 1.1
+      },
+      "ms_median": 268.6,
+      "phase_ms_mean": [
+       105.733,
+       17.033,
+       145.8
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       348.8,
+       335.4,
+       337.1,
+       338.4
+      ],
+      "phases": [
+       [
+        84.8,
+        21.1,
+        243.0
+       ],
+       [
+        79.2,
+        17.9,
+        238.3
+       ],
+       [
+        79.4,
+        17.9,
+        239.9
+       ],
+       [
+        79.2,
+        17.9,
+        241.2
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.4,
+       "windows": 15.1,
+       "stitching": 68.3,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 21.1,
+       "recording": 4.9,
+       "copies": 1.5
+      },
+      "ms_median": 337.1,
+      "phase_ms_mean": [
+       79.267,
+       17.9,
+       239.8
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 65536,
+      "work_B": 635248,
+      "work_GB": 41.63,
+      "mode": "staged",
+      "runs": [
+       261.4,
+       254.2,
+       257.1,
+       259.4
+      ],
+      "phases": [
+       [
+        43.6,
+        7.3,
+        210.4
+       ],
+       [
+        39.1,
+        6.8,
+        208.3
+       ],
+       [
+        39.0,
+        6.9,
+        211.2
+       ],
+       [
+        39.4,
+        6.8,
+        213.1
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 7.0,
+       "windows": 15.2,
+       "stitching": 77.7,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 2.8,
+       "finalize": 13.9,
+       "recording": 2.2,
+       "copies": 1.1
+      },
+      "ms_median": 257.1,
+      "phase_ms_mean": [
+       39.167,
+       6.833,
+       210.867
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  },
+  "tail": {
+   "label": "tail",
+   "json": {
+    "device": "NVIDIA H100 NVL",
+    "distinct_reads": 1991926,
+    "reads": 4118999,
+    "identical_distinct": 1991926,
+    "identical_reads": 4118999,
+    "differ_distinct": 0,
+    "differ_reads": 0,
+    "star_unmapped": 151095,
+    "star_unmapped_identical": 151095,
+    "star_mapped": 1840831,
+    "star_mapped_identical": 1840831,
+    "gpu_ms_median": 865.71,
+    "gpu_ms_runs": [
+     862.594,
+     865.678,
+     1196.446
+    ],
+    "gpu_distinct_reads_per_s": 2300917,
+    "heavy_reads": 5304,
+    "heavy_host_s": 0.139,
+    "heavy_host_threads": 24,
+    "heavy_failures": 0,
+    "heavy_why": {
+     "win": 2622,
+     "wtr": 143,
+     "keep": 316,
+     "steps": 2223
+    },
+    "lane_a_ms": 269.172,
+    "lane_m_ms": 339.252,
+    "lane_m_reads": 524577,
+    "lane_b_ms": 257.285,
+    "lane_b_reads": 90740,
+    "lane_a_phase_ms": [
+     105.88,
+     16.882,
+     146.391
+    ],
+    "lane_b_phase_ms": [
+     38.929,
+     6.798,
+     209.446
+    ],
+    "lane_a_local": false,
+    "work_bytes": [
+     46104,
+     635248
+    ],
+    "index_load_s": 19.8
+   },
+   "log": {
+    "lanes": {
+     "A": {
+      "reads": 1991926,
+      "batch": 262144,
+      "work_B": 46104,
+      "work_GB": 12.09,
+      "mode": "staged",
+      "runs": [
+       269.6,
+       269.2,
+       269.1,
+       517.9
+      ],
+      "phases": [
+       [
+        106.2,
+        17.1,
+        146.2
+       ],
+       [
+        105.9,
+        16.8,
+        146.4
+       ],
+       [
+        105.7,
+        16.9,
+        146.4
+       ],
+       [
+        106.0,
+        16.9,
+        146.4
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 51.8,
+       "windows": 8.5,
+       "stitching": 38.9,
+       "select": 0.9
+      },
+      "sa_entries_per_read": 450.5,
+      "inside_stitch": {
+       "sat": 1.8,
+       "finalize": 10.7,
+       "recording": 2.2,
+       "copies": 1.1
+      },
+      "ms_median": 269.2,
+      "phase_ms_mean": [
+       105.867,
+       16.867,
+       146.4
+      ]
+     },
+     "M": {
+      "reads": 524577,
+      "batch": 262144,
+      "work_B": 82552,
+      "work_GB": 21.64,
+      "mode": "staged",
+      "runs": [
+       344.9,
+       339.3,
+       339.3,
+       409.5
+      ],
+      "phases": [
+       [
+        83.8,
+        21.4,
+        239.7
+       ],
+       [
+        79.3,
+        17.9,
+        242.0
+       ],
+       [
+        79.5,
+        17.9,
+        241.8
+       ],
+       [
+        79.9,
+        17.9,
+        239.0
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 16.5,
+       "windows": 15.2,
+       "stitching": 68.1,
+       "select": 0.2
+      },
+      "sa_entries_per_read": 1933.0,
+      "inside_stitch": {
+       "sat": 2.4,
+       "finalize": 20.9,
+       "recording": 4.8,
+       "copies": 1.5
+      },
+      "ms_median": 339.3,
+      "phase_ms_mean": [
+       79.567,
+       17.9,
+       240.933
+      ]
+     },
+     "B": {
+      "reads": 90740,
+      "batch": 65536,
+      "work_B": 635248,
+      "work_GB": 41.63,
+      "mode": "staged",
+      "runs": [
+       261.5,
+       254.2,
+       257.3,
+       269.1
+      ],
+      "phases": [
+       [
+        43.4,
+        7.3,
+        210.8
+       ],
+       [
+        39.1,
+        6.8,
+        208.2
+       ],
+       [
+        38.6,
+        6.8,
+        211.9
+       ],
+       [
+        39.1,
+        6.8,
+        208.2
+       ]
+      ],
+      "cyc_share": {
+       "seeds": 7.0,
+       "windows": 15.2,
+       "stitching": 77.7,
+       "select": 0.1
+      },
+      "sa_entries_per_read": 3116.9,
+      "inside_stitch": {
+       "sat": 2.8,
+       "finalize": 13.9,
+       "recording": 2.2,
+       "copies": 1.1
+      },
+      "ms_median": 257.3,
+      "phase_ms_mean": [
+       38.933,
+       6.8,
+       209.433
+      ]
+     }
+    },
+    "device": "NVIDIA H100 NVL",
+    "sms": 132,
+    "sizeof_work_A": 46104,
+    "sizeof_work_B": 635248,
+    "TAIL": [
+     {
+      "lane": "A",
+      "batch": "0",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "13.866",
+      "busy_thr": "0.7883",
+      "busy_warp": "0.7883",
+      "busy_blk": "0.8789",
+      "drain_ms": "3.121",
+      "drain_share": "0.2251",
+      "fin_p50": "0.5457",
+      "fin_p90": "0.8701",
+      "fin_p99": "0.9642",
+      "fin_p999": "0.9924",
+      "longest_share": "0.4504",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.994,0.884,0.719,0.889,0.982,0.992,0.906,0.827,0.891,0.920,0.961,0.960,0.852,0.563,0.291,0.114,0.021"
+     },
+     {
+      "lane": "A",
+      "batch": "0",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "16.170",
+      "busy_thr": "0.5287",
+      "busy_warp": "0.5287",
+      "busy_blk": "0.7560",
+      "drain_ms": "7.432",
+      "drain_share": "0.4596",
+      "fin_p50": "0.3849",
+      "fin_p90": "0.6804",
+      "fin_p99": "0.7672",
+      "fin_p999": "0.8357",
+      "longest_share": "0.8732",
+      "clk_ghz": "1.780",
+      "curve": "0.999,0.995,0.951,0.810,0.670,0.690,0.717,0.732,0.756,0.805,0.809,0.715,0.518,0.286,0.093,0.022,0.005,0.001,0.000,0.000"
+     },
+     {
+      "lane": "A",
+      "batch": "1",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "13.881",
+      "busy_thr": "0.7822",
+      "busy_warp": "0.7822",
+      "busy_blk": "0.8784",
+      "drain_ms": "2.948",
+      "drain_share": "0.2124",
+      "fin_p50": "0.5570",
+      "fin_p90": "0.8577",
+      "fin_p99": "0.9514",
+      "fin_p999": "0.9788",
+      "longest_share": "0.5253",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.995,0.904,0.741,0.871,0.974,0.988,0.944,0.814,0.816,0.915,0.973,0.956,0.870,0.561,0.228,0.083,0.009"
+     },
+     {
+      "lane": "A",
+      "batch": "1",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "18.134",
+      "busy_thr": "0.6305",
+      "busy_warp": "0.6305",
+      "busy_blk": "0.8745",
+      "drain_ms": "5.865",
+      "drain_share": "0.3234",
+      "fin_p50": "0.4933",
+      "fin_p90": "0.7980",
+      "fin_p99": "0.8742",
+      "fin_p999": "0.9365",
+      "longest_share": "0.9128",
+      "clk_ghz": "1.781",
+      "curve": "0.992,0.978,0.912,0.826,0.733,0.746,0.773,0.783,0.785,0.776,0.785,0.783,0.792,0.771,0.626,0.381,0.138,0.027,0.004,0.001"
+     },
+     {
+      "lane": "A",
+      "batch": "2",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "14.260",
+      "busy_thr": "0.7743",
+      "busy_warp": "0.7743",
+      "busy_blk": "0.8637",
+      "drain_ms": "3.351",
+      "drain_share": "0.2350",
+      "fin_p50": "0.5413",
+      "fin_p90": "0.8484",
+      "fin_p99": "0.9510",
+      "fin_p999": "0.9809",
+      "longest_share": "0.5673",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.991,0.899,0.754,0.895,0.960,0.989,0.924,0.793,0.870,0.943,0.962,0.922,0.802,0.465,0.215,0.095,0.008"
+     },
+     {
+      "lane": "A",
+      "batch": "2",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "20.327",
+      "busy_thr": "0.5727",
+      "busy_warp": "0.5727",
+      "busy_blk": "0.8177",
+      "drain_ms": "7.826",
+      "drain_share": "0.3850",
+      "fin_p50": "0.4519",
+      "fin_p90": "0.7322",
+      "fin_p99": "0.8162",
+      "fin_p999": "0.9031",
+      "longest_share": "0.8794",
+      "clk_ghz": "1.780",
+      "curve": "0.999,0.982,0.891,0.721,0.719,0.756,0.795,0.782,0.777,0.773,0.776,0.772,0.742,0.550,0.294,0.093,0.021,0.005,0.001,0.000"
+     },
+     {
+      "lane": "A",
+      "batch": "3",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "14.707",
+      "busy_thr": "0.7676",
+      "busy_warp": "0.7676",
+      "busy_blk": "0.8526",
+      "drain_ms": "3.785",
+      "drain_share": "0.2574",
+      "fin_p50": "0.5283",
+      "fin_p90": "0.8426",
+      "fin_p99": "0.9239",
+      "fin_p999": "0.9555",
+      "longest_share": "0.3954",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.989,0.848,0.785,0.937,0.996,0.977,0.862,0.810,0.866,0.966,0.974,0.912,0.790,0.458,0.148,0.033,0.001"
+     },
+     {
+      "lane": "A",
+      "batch": "3",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "21.276",
+      "busy_thr": "0.5725",
+      "busy_warp": "0.5725",
+      "busy_blk": "0.7994",
+      "drain_ms": "8.309",
+      "drain_share": "0.3905",
+      "fin_p50": "0.4478",
+      "fin_p90": "0.7217",
+      "fin_p99": "0.7976",
+      "fin_p999": "0.8725",
+      "longest_share": "0.8591",
+      "clk_ghz": "1.781",
+      "curve": "1.000,0.992,0.899,0.731,0.741,0.798,0.824,0.810,0.788,0.760,0.770,0.777,0.729,0.519,0.241,0.058,0.013,0.003,0.001,0.000"
+     },
+     {
+      "lane": "A",
+      "batch": "4",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "13.538",
+      "busy_thr": "0.7782",
+      "busy_warp": "0.7782",
+      "busy_blk": "0.8719",
+      "drain_ms": "3.024",
+      "drain_share": "0.2234",
+      "fin_p50": "0.5404",
+      "fin_p90": "0.8536",
+      "fin_p99": "0.9586",
+      "fin_p999": "0.9854",
+      "longest_share": "0.3984",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.993,0.893,0.739,0.882,0.988,0.985,0.897,0.793,0.855,0.923,0.977,0.939,0.836,0.521,0.227,0.101,0.014"
+     },
+     {
+      "lane": "A",
+      "batch": "4",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "19.250",
+      "busy_thr": "0.5961",
+      "busy_warp": "0.5961",
+      "busy_blk": "0.8385",
+      "drain_ms": "6.907",
+      "drain_share": "0.3588",
+      "fin_p50": "0.4625",
+      "fin_p90": "0.7571",
+      "fin_p99": "0.8386",
+      "fin_p999": "0.9100",
+      "longest_share": "0.8629",
+      "clk_ghz": "1.780",
+      "curve": "1.000,0.996,0.919,0.715,0.703,0.776,0.804,0.790,0.780,0.774,0.787,0.788,0.784,0.652,0.425,0.174,0.043,0.010,0.002,0.001"
+     },
+     {
+      "lane": "A",
+      "batch": "5",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "13.987",
+      "busy_thr": "0.7736",
+      "busy_warp": "0.7736",
+      "busy_blk": "0.8638",
+      "drain_ms": "3.067",
+      "drain_share": "0.2193",
+      "fin_p50": "0.5429",
+      "fin_p90": "0.8456",
+      "fin_p99": "0.9597",
+      "fin_p999": "0.9852",
+      "longest_share": "0.3868",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.997,0.899,0.746,0.887,0.989,0.993,0.924,0.786,0.844,0.946,0.986,0.947,0.796,0.449,0.176,0.092,0.015"
+     },
+     {
+      "lane": "A",
+      "batch": "5",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "21.523",
+      "busy_thr": "0.6052",
+      "busy_warp": "0.6052",
+      "busy_blk": "0.8414",
+      "drain_ms": "7.505",
+      "drain_share": "0.3487",
+      "fin_p50": "0.4895",
+      "fin_p90": "0.7633",
+      "fin_p99": "0.8441",
+      "fin_p999": "0.9177",
+      "longest_share": "0.8093",
+      "clk_ghz": "1.781",
+      "curve": "0.999,0.991,0.916,0.774,0.743,0.777,0.804,0.789,0.763,0.763,0.792,0.789,0.780,0.693,0.470,0.198,0.048,0.010,0.002,0.001"
+     },
+     {
+      "lane": "A",
+      "batch": "6",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "13.497",
+      "busy_thr": "0.7541",
+      "busy_warp": "0.7541",
+      "busy_blk": "0.8474",
+      "drain_ms": "3.249",
+      "drain_share": "0.2407",
+      "fin_p50": "0.5274",
+      "fin_p90": "0.8298",
+      "fin_p99": "0.9439",
+      "fin_p999": "0.9811",
+      "longest_share": "0.4893",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.992,0.881,0.752,0.891,0.978,0.982,0.869,0.777,0.877,0.951,0.967,0.900,0.691,0.342,0.158,0.068,0.006"
+     },
+     {
+      "lane": "A",
+      "batch": "6",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "18.826",
+      "busy_thr": "0.5796",
+      "busy_warp": "0.5796",
+      "busy_blk": "0.8090",
+      "drain_ms": "7.371",
+      "drain_share": "0.3915",
+      "fin_p50": "0.4532",
+      "fin_p90": "0.7324",
+      "fin_p99": "0.8191",
+      "fin_p999": "0.9092",
+      "longest_share": "0.8381",
+      "clk_ghz": "1.780",
+      "curve": "1.000,0.996,0.931,0.750,0.702,0.765,0.788,0.786,0.772,0.790,0.805,0.794,0.746,0.542,0.295,0.100,0.023,0.006,0.002,0.001"
+     },
+     {
+      "lane": "A",
+      "batch": "7",
+      "kernel": "k_p1",
+      "n": "156918",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "8.179",
+      "busy_thr": "0.7165",
+      "busy_warp": "0.7166",
+      "busy_blk": "0.8065",
+      "drain_ms": "3.918",
+      "drain_share": "0.4790",
+      "fin_p50": "0.5074",
+      "fin_p90": "0.8327",
+      "fin_p99": "0.9080",
+      "fin_p999": "0.9647",
+      "longest_share": "0.7473",
+      "clk_ghz": "1.779",
+      "curve": "1.000,1.000,1.000,1.000,0.999,0.990,0.949,0.805,0.723,0.820,0.886,0.865,0.858,0.839,0.756,0.537,0.234,0.056,0.012,0.001"
+     },
+     {
+      "lane": "A",
+      "batch": "7",
+      "kernel": "k_p3",
+      "n": "156918",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "10.785",
+      "busy_thr": "0.5329",
+      "busy_warp": "0.5329",
+      "busy_blk": "0.7231",
+      "drain_ms": "5.614",
+      "drain_share": "0.5205",
+      "fin_p50": "0.4870",
+      "fin_p90": "0.6999",
+      "fin_p99": "0.8090",
+      "fin_p999": "0.9503",
+      "longest_share": "0.9642",
+      "clk_ghz": "1.779",
+      "curve": "1.000,1.000,0.996,0.975,0.900,0.775,0.702,0.710,0.745,0.769,0.699,0.582,0.421,0.235,0.094,0.033,0.012,0.005,0.002,0.000"
+     },
+     {
+      "lane": "M",
+      "batch": "0",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "35.182",
+      "busy_thr": "0.8175",
+      "busy_warp": "0.8175",
+      "busy_blk": "0.8749",
+      "drain_ms": "8.477",
+      "drain_share": "0.2410",
+      "fin_p50": "0.5845",
+      "fin_p90": "0.8974",
+      "fin_p99": "0.9527",
+      "fin_p999": "0.9769",
+      "longest_share": "0.5107",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,0.997,0.969,0.892,0.869,0.933,0.929,0.964,0.942,0.945,0.897,0.941,0.931,0.956,0.877,0.710,0.443,0.147,0.010"
+     },
+     {
+      "lane": "M",
+      "batch": "0",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "110.317",
+      "busy_thr": "0.7509",
+      "busy_warp": "0.7509",
+      "busy_blk": "0.8849",
+      "drain_ms": "29.787",
+      "drain_share": "0.2700",
+      "fin_p50": "0.5804",
+      "fin_p90": "0.8847",
+      "fin_p99": "0.9469",
+      "fin_p999": "0.9864",
+      "longest_share": "0.7252",
+      "clk_ghz": "1.781",
+      "curve": "0.999,0.999,0.999,0.992,0.927,0.801,0.816,0.856,0.857,0.885,0.912,0.873,0.835,0.825,0.822,0.695,0.527,0.308,0.081,0.007"
+     },
+     {
+      "lane": "M",
+      "batch": "1",
+      "kernel": "k_p1",
+      "n": "262144",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "39.682",
+      "busy_thr": "0.8311",
+      "busy_warp": "0.8311",
+      "busy_blk": "0.8936",
+      "drain_ms": "7.988",
+      "drain_share": "0.2013",
+      "fin_p50": "0.5923",
+      "fin_p90": "0.8855",
+      "fin_p99": "0.9744",
+      "fin_p999": "0.9875",
+      "longest_share": "0.5311",
+      "clk_ghz": "1.780",
+      "curve": "1.000,1.000,1.000,0.968,0.912,0.831,0.904,0.998,0.994,0.960,0.897,0.824,0.944,1.000,0.982,0.930,0.855,0.479,0.106,0.036"
+     },
+     {
+      "lane": "M",
+      "batch": "1",
+      "kernel": "k_p3",
+      "n": "262144",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "113.077",
+      "busy_thr": "0.7362",
+      "busy_warp": "0.7362",
+      "busy_blk": "0.8884",
+      "drain_ms": "32.784",
+      "drain_share": "0.2899",
+      "fin_p50": "0.5926",
+      "fin_p90": "0.8803",
+      "fin_p99": "0.9311",
+      "fin_p999": "0.9569",
+      "longest_share": "0.6844",
+      "clk_ghz": "1.781",
+      "curve": "1.000,1.000,0.999,0.989,0.896,0.699,0.752,0.850,0.921,0.959,0.919,0.813,0.773,0.808,0.790,0.676,0.537,0.293,0.048,0.001"
+     },
+     {
+      "lane": "M",
+      "batch": "2",
+      "kernel": "k_p1",
+      "n": "289",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "5.019",
+      "busy_thr": "0.0032",
+      "busy_warp": "0.0032",
+      "busy_blk": "0.0042",
+      "drain_ms": "5.019",
+      "drain_share": "1.0000",
+      "fin_p50": "0.9573",
+      "fin_p90": "1.0000",
+      "fin_p99": "1.0000",
+      "fin_p999": "1.0000",
+      "longest_share": "1.0000",
+      "clk_ghz": "1.785",
+      "curve": "0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.002,0.001"
+     },
+     {
+      "lane": "M",
+      "batch": "2",
+      "kernel": "k_p3",
+      "n": "289",
+      "T": "128",
+      "bps": "6",
+      "slots": "101376",
+      "span_ms": "15.546",
+      "busy_thr": "0.0022",
+      "busy_warp": "0.0023",
+      "busy_blk": "0.0031",
+      "drain_ms": "15.546",
+      "drain_share": "1.0000",
+      "fin_p50": "0.7984",
+      "fin_p90": "1.0000",
+      "fin_p99": "1.0000",
+      "fin_p999": "1.0000",
+      "longest_share": "1.0000",
+      "clk_ghz": "1.785",
+      "curve": "0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.002,0.002,0.002,0.002,0.002,0.001,0.001,0.001,0.001"
+     },
+     {
+      "lane": "B",
+      "batch": "0",
+      "kernel": "k_p1",
+      "n": "65536",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "24.385",
+      "busy_thr": "0.5273",
+      "busy_warp": "0.5273",
+      "busy_blk": "0.5650",
+      "drain_ms": "24.385",
+      "drain_share": "1.0000",
+      "fin_p50": "0.7457",
+      "fin_p90": "0.7948",
+      "fin_p99": "0.8155",
+      "fin_p999": "0.9118",
+      "longest_share": "1.0000",
+      "clk_ghz": "1.781",
+      "curve": "0.776,0.776,0.774,0.766,0.755,0.741,0.730,0.717,0.698,0.679,0.659,0.636,0.610,0.560,0.459,0.201,0.010,0.001,0.001,0.001"
+     },
+     {
+      "lane": "B",
+      "batch": "0",
+      "kernel": "k_p3",
+      "n": "65536",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "122.161",
+      "busy_thr": "0.4461",
+      "busy_warp": "0.4461",
+      "busy_blk": "0.5123",
+      "drain_ms": "122.161",
+      "drain_share": "1.0000",
+      "fin_p50": "0.5868",
+      "fin_p90": "0.7271",
+      "fin_p99": "0.8677",
+      "fin_p999": "0.9545",
+      "longest_share": "1.0000",
+      "clk_ghz": "1.781",
+      "curve": "0.776,0.768,0.764,0.762,0.758,0.753,0.745,0.727,0.692,0.633,0.541,0.419,0.273,0.158,0.082,0.040,0.019,0.007,0.003,0.001"
+     },
+     {
+      "lane": "B",
+      "batch": "1",
+      "kernel": "k_p1",
+      "n": "25204",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "14.646",
+      "busy_thr": "0.2017",
+      "busy_warp": "0.2017",
+      "busy_blk": "0.2172",
+      "drain_ms": "14.645",
+      "drain_share": "1.0000",
+      "fin_p50": "0.6970",
+      "fin_p90": "0.7499",
+      "fin_p99": "0.7787",
+      "fin_p999": "1.0000",
+      "longest_share": "1.0000",
+      "clk_ghz": "1.781",
+      "curve": "0.298,0.298,0.298,0.298,0.298,0.298,0.298,0.298,0.298,0.296,0.284,0.262,0.231,0.181,0.085,0.008,0.001,0.000,0.000,0.000"
+     },
+     {
+      "lane": "B",
+      "batch": "1",
+      "kernel": "k_p3",
+      "n": "25204",
+      "T": "128",
+      "bps": "5",
+      "slots": "84480",
+      "span_ms": "86.071",
+      "busy_thr": "0.1752",
+      "busy_warp": "0.1753",
+      "busy_blk": "0.2086",
+      "drain_ms": "86.071",
+      "drain_share": "1.0000",
+      "fin_p50": "0.5811",
+      "fin_p90": "0.7383",
+      "fin_p99": "0.9025",
+      "fin_p999": "1.0000",
+      "longest_share": "1.0000",
+      "clk_ghz": "1.782",
+      "curve": "0.298,0.298,0.298,0.298,0.298,0.298,0.296,0.292,0.277,0.252,0.207,0.155,0.105,0.063,0.035,0.017,0.008,0.004,0.002,0.001"
+     }
+    ],
+    "TAILCLK": [
+     {
+      "lane": "A",
+      "batch": "0",
+      "n": "262144",
+      "seeds": "1359629401810",
+      "windows": "152601910256",
+      "stitching": "671281797404",
+      "select": "15050206199",
+      "sat": "11661841807",
+      "fin": "74249765638",
+      "copies": "7281552784",
+      "rec": "15321180301"
+     },
+     {
+      "lane": "A",
+      "batch": "1",
+      "n": "262144",
+      "seeds": "1313043668980",
+      "windows": "218072573471",
+      "stitching": "1019238368158",
+      "select": "22421934337",
+      "sat": "18768358556",
+      "fin": "105887772552",
+      "copies": "10705750649",
+      "rec": "21719498750"
+     },
+     {
+      "lane": "A",
+      "batch": "2",
+      "n": "262144",
+      "seeds": "1325020428976",
+      "windows": "218198989454",
+      "stitching": "957804520578",
+      "select": "21854718875",
+      "sat": "17691716435",
+      "fin": "102168002214",
+      "copies": "10234744019",
+      "rec": "19563286831"
+     },
+     {
+      "lane": "A",
+      "batch": "3",
+      "n": "262144",
+      "seeds": "1353902980672",
+      "windows": "221915692405",
+      "stitching": "993795516092",
+      "select": "22390385604",
+      "sat": "19742971734",
+      "fin": "114005017744",
+      "copies": "11242003446",
+      "rec": "22740401617"
+     },
+     {
+      "lane": "A",
+      "batch": "4",
+      "n": "262144",
+      "seeds": "1261447435811",
+      "windows": "224880923426",
+      "stitching": "1039108361844",
+      "select": "23279520072",
+      "sat": "17989438525",
+      "fin": "103763594887",
+      "copies": "10163250607",
+      "rec": "20272682067"
+     },
+     {
+      "lane": "A",
+      "batch": "5",
+      "n": "262144",
+      "seeds": "1290603150759",
+      "windows": "224483348839",
+      "stitching": "1098038036522",
+      "select": "23131143265",
+      "sat": "25834177974",
+      "fin": "120634758246",
+      "copies": "13081839068",
+      "rec": "23555802646"
+     },
+     {
+      "lane": "A",
+      "batch": "6",
+      "n": "262144",
+      "seeds": "1219743755814",
+      "windows": "220619215119",
+      "stitching": "1027667623795",
+      "select": "23496051572",
+      "sat": "15273347025",
+      "fin": "108642479049",
+      "copies": "9976175649",
+      "rec": "22867418865"
+     },
+     {
+      "lane": "A",
+      "batch": "7",
+      "n": "156918",
+      "seeds": "712081777611",
+      "windows": "124933969310",
+      "stitching": "579412036602",
+      "select": "12467837801",
+      "sat": "7603168123",
+      "fin": "61749227081",
+      "copies": "5469995014",
+      "rec": "13765817522"
+     },
+     {
+      "lane": "M",
+      "batch": "0",
+      "n": "262144",
+      "seeds": "2117354698703",
+      "windows": "1666865878156",
+      "stitching": "8615593987638",
+      "select": "23443550511",
+      "sat": "189717472836",
+      "fin": "1986860739636",
+      "copies": "147184264546",
+      "rec": "525926831278"
+     },
+     {
+      "lane": "M",
+      "batch": "1",
+      "n": "262144",
+      "seeds": "1980367915884",
+      "windows": "2110408044661",
+      "stitching": "8268470936113",
+      "select": "22082068683",
+      "sat": "219264198932",
+      "fin": "1548725632280",
+      "copies": "109046518165",
+      "rec": "289283062106"
+     },
+     {
+      "lane": "M",
+      "batch": "2",
+      "n": "289",
+      "seeds": "1294469601",
+      "windows": "824604784",
+      "stitching": "3377260974",
+      "select": "3663024",
+      "sat": "115207519",
+      "fin": "719869301",
+      "copies": "32630503",
+      "rec": "99259471"
+     },
+     {
+      "lane": "B",
+      "batch": "0",
+      "n": "65536",
+      "seeds": "525942802090",
+      "windows": "1213011858466",
+      "stitching": "5898031343269",
+      "select": "4279110490",
+      "sat": "163732786133",
+      "fin": "791987626980",
+      "copies": "66540071559",
+      "rec": "132620946774"
+     },
+     {
+      "lane": "B",
+      "batch": "1",
+      "n": "25204",
+      "seeds": "153568179996",
+      "windows": "253163792739",
+      "stitching": "1617060150845",
+      "select": "689148968",
+      "sat": "45517960195",
+      "fin": "249563978462",
+      "copies": "15200771240",
+      "rec": "36056814164"
+     }
+    ],
+    "TAILSUM": [
+     {
+      "lane": "A",
+      "kernel": "k_p1",
+      "span_ms": "105.917",
+      "busy_thr": "0.7696",
+      "busy_warp": "0.7696",
+      "busy_blk": "0.8606",
+      "drain_share": "0.2499",
+      "clk_ghz": "1.780"
+     },
+     {
+      "lane": "A",
+      "kernel": "k_p3",
+      "span_ms": "146.293",
+      "busy_thr": "0.5808",
+      "busy_warp": "0.5808",
+      "busy_blk": "0.8134",
+      "drain_share": "0.3885",
+      "clk_ghz": "1.780"
+     },
+     {
+      "lane": "M",
+      "kernel": "k_p1",
+      "span_ms": "79.884",
+      "busy_thr": "0.7731",
+      "busy_warp": "0.7731",
+      "busy_blk": "0.8295",
+      "drain_share": "0.2689",
+      "clk_ghz": "1.780"
+     },
+     {
+      "lane": "M",
+      "kernel": "k_p3",
+      "span_ms": "238.939",
+      "busy_thr": "0.6952",
+      "busy_warp": "0.6952",
+      "busy_blk": "0.8292",
+      "drain_share": "0.3269",
+      "clk_ghz": "1.781"
+     },
+     {
+      "lane": "B",
+      "kernel": "k_p1",
+      "span_ms": "39.031",
+      "busy_thr": "0.4051",
+      "busy_warp": "0.4052",
+      "busy_blk": "0.4345",
+      "drain_share": "1.0000",
+      "clk_ghz": "1.781"
+     },
+     {
+      "lane": "B",
+      "kernel": "k_p3",
+      "span_ms": "208.232",
+      "busy_thr": "0.3341",
+      "busy_warp": "0.3341",
+      "busy_blk": "0.3867",
+      "drain_share": "1.0000",
+      "clk_ghz": "1.781"
+     }
+    ],
+    "identical": "1991926/1991926",
+    "identical_pct": 100.0,
+    "identical_reads": "4118999/4118999",
+    "identical_reads_pct": 100.0,
+    "heavy_reads": 5304
+   }
+  }
+ },
+ "tail": {
+  "sum": [
+   {
+    "lane": "A",
+    "kernel": "k_p1",
+    "span_ms": "105.917",
+    "busy_thr": "0.7696",
+    "busy_warp": "0.7696",
+    "busy_blk": "0.8606",
+    "drain_share": "0.2499",
+    "clk_ghz": "1.780"
+   },
+   {
+    "lane": "A",
+    "kernel": "k_p3",
+    "span_ms": "146.293",
+    "busy_thr": "0.5808",
+    "busy_warp": "0.5808",
+    "busy_blk": "0.8134",
+    "drain_share": "0.3885",
+    "clk_ghz": "1.780"
+   },
+   {
+    "lane": "M",
+    "kernel": "k_p1",
+    "span_ms": "79.884",
+    "busy_thr": "0.7731",
+    "busy_warp": "0.7731",
+    "busy_blk": "0.8295",
+    "drain_share": "0.2689",
+    "clk_ghz": "1.780"
+   },
+   {
+    "lane": "M",
+    "kernel": "k_p3",
+    "span_ms": "238.939",
+    "busy_thr": "0.6952",
+    "busy_warp": "0.6952",
+    "busy_blk": "0.8292",
+    "drain_share": "0.3269",
+    "clk_ghz": "1.781"
+   },
+   {
+    "lane": "B",
+    "kernel": "k_p1",
+    "span_ms": "39.031",
+    "busy_thr": "0.4051",
+    "busy_warp": "0.4052",
+    "busy_blk": "0.4345",
+    "drain_share": "1.0000",
+    "clk_ghz": "1.781"
+   },
+   {
+    "lane": "B",
+    "kernel": "k_p3",
+    "span_ms": "208.232",
+    "busy_thr": "0.3341",
+    "busy_warp": "0.3341",
+    "busy_blk": "0.3867",
+    "drain_share": "1.0000",
+    "clk_ghz": "1.781"
+   }
+  ],
+  "batches": [
+   {
+    "lane": "A",
+    "batch": "0",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "13.866",
+    "busy_thr": "0.7883",
+    "busy_warp": "0.7883",
+    "busy_blk": "0.8789",
+    "drain_ms": "3.121",
+    "drain_share": "0.2251",
+    "fin_p50": "0.5457",
+    "fin_p90": "0.8701",
+    "fin_p99": "0.9642",
+    "fin_p999": "0.9924",
+    "longest_share": "0.4504",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.994,0.884,0.719,0.889,0.982,0.992,0.906,0.827,0.891,0.920,0.961,0.960,0.852,0.563,0.291,0.114,0.021"
+   },
+   {
+    "lane": "A",
+    "batch": "0",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "16.170",
+    "busy_thr": "0.5287",
+    "busy_warp": "0.5287",
+    "busy_blk": "0.7560",
+    "drain_ms": "7.432",
+    "drain_share": "0.4596",
+    "fin_p50": "0.3849",
+    "fin_p90": "0.6804",
+    "fin_p99": "0.7672",
+    "fin_p999": "0.8357",
+    "longest_share": "0.8732",
+    "clk_ghz": "1.780",
+    "curve": "0.999,0.995,0.951,0.810,0.670,0.690,0.717,0.732,0.756,0.805,0.809,0.715,0.518,0.286,0.093,0.022,0.005,0.001,0.000,0.000"
+   },
+   {
+    "lane": "A",
+    "batch": "1",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "13.881",
+    "busy_thr": "0.7822",
+    "busy_warp": "0.7822",
+    "busy_blk": "0.8784",
+    "drain_ms": "2.948",
+    "drain_share": "0.2124",
+    "fin_p50": "0.5570",
+    "fin_p90": "0.8577",
+    "fin_p99": "0.9514",
+    "fin_p999": "0.9788",
+    "longest_share": "0.5253",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.995,0.904,0.741,0.871,0.974,0.988,0.944,0.814,0.816,0.915,0.973,0.956,0.870,0.561,0.228,0.083,0.009"
+   },
+   {
+    "lane": "A",
+    "batch": "1",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "18.134",
+    "busy_thr": "0.6305",
+    "busy_warp": "0.6305",
+    "busy_blk": "0.8745",
+    "drain_ms": "5.865",
+    "drain_share": "0.3234",
+    "fin_p50": "0.4933",
+    "fin_p90": "0.7980",
+    "fin_p99": "0.8742",
+    "fin_p999": "0.9365",
+    "longest_share": "0.9128",
+    "clk_ghz": "1.781",
+    "curve": "0.992,0.978,0.912,0.826,0.733,0.746,0.773,0.783,0.785,0.776,0.785,0.783,0.792,0.771,0.626,0.381,0.138,0.027,0.004,0.001"
+   },
+   {
+    "lane": "A",
+    "batch": "2",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "14.260",
+    "busy_thr": "0.7743",
+    "busy_warp": "0.7743",
+    "busy_blk": "0.8637",
+    "drain_ms": "3.351",
+    "drain_share": "0.2350",
+    "fin_p50": "0.5413",
+    "fin_p90": "0.8484",
+    "fin_p99": "0.9510",
+    "fin_p999": "0.9809",
+    "longest_share": "0.5673",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.991,0.899,0.754,0.895,0.960,0.989,0.924,0.793,0.870,0.943,0.962,0.922,0.802,0.465,0.215,0.095,0.008"
+   },
+   {
+    "lane": "A",
+    "batch": "2",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "20.327",
+    "busy_thr": "0.5727",
+    "busy_warp": "0.5727",
+    "busy_blk": "0.8177",
+    "drain_ms": "7.826",
+    "drain_share": "0.3850",
+    "fin_p50": "0.4519",
+    "fin_p90": "0.7322",
+    "fin_p99": "0.8162",
+    "fin_p999": "0.9031",
+    "longest_share": "0.8794",
+    "clk_ghz": "1.780",
+    "curve": "0.999,0.982,0.891,0.721,0.719,0.756,0.795,0.782,0.777,0.773,0.776,0.772,0.742,0.550,0.294,0.093,0.021,0.005,0.001,0.000"
+   },
+   {
+    "lane": "A",
+    "batch": "3",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "14.707",
+    "busy_thr": "0.7676",
+    "busy_warp": "0.7676",
+    "busy_blk": "0.8526",
+    "drain_ms": "3.785",
+    "drain_share": "0.2574",
+    "fin_p50": "0.5283",
+    "fin_p90": "0.8426",
+    "fin_p99": "0.9239",
+    "fin_p999": "0.9555",
+    "longest_share": "0.3954",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.989,0.848,0.785,0.937,0.996,0.977,0.862,0.810,0.866,0.966,0.974,0.912,0.790,0.458,0.148,0.033,0.001"
+   },
+   {
+    "lane": "A",
+    "batch": "3",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "21.276",
+    "busy_thr": "0.5725",
+    "busy_warp": "0.5725",
+    "busy_blk": "0.7994",
+    "drain_ms": "8.309",
+    "drain_share": "0.3905",
+    "fin_p50": "0.4478",
+    "fin_p90": "0.7217",
+    "fin_p99": "0.7976",
+    "fin_p999": "0.8725",
+    "longest_share": "0.8591",
+    "clk_ghz": "1.781",
+    "curve": "1.000,0.992,0.899,0.731,0.741,0.798,0.824,0.810,0.788,0.760,0.770,0.777,0.729,0.519,0.241,0.058,0.013,0.003,0.001,0.000"
+   },
+   {
+    "lane": "A",
+    "batch": "4",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "13.538",
+    "busy_thr": "0.7782",
+    "busy_warp": "0.7782",
+    "busy_blk": "0.8719",
+    "drain_ms": "3.024",
+    "drain_share": "0.2234",
+    "fin_p50": "0.5404",
+    "fin_p90": "0.8536",
+    "fin_p99": "0.9586",
+    "fin_p999": "0.9854",
+    "longest_share": "0.3984",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.993,0.893,0.739,0.882,0.988,0.985,0.897,0.793,0.855,0.923,0.977,0.939,0.836,0.521,0.227,0.101,0.014"
+   },
+   {
+    "lane": "A",
+    "batch": "4",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "19.250",
+    "busy_thr": "0.5961",
+    "busy_warp": "0.5961",
+    "busy_blk": "0.8385",
+    "drain_ms": "6.907",
+    "drain_share": "0.3588",
+    "fin_p50": "0.4625",
+    "fin_p90": "0.7571",
+    "fin_p99": "0.8386",
+    "fin_p999": "0.9100",
+    "longest_share": "0.8629",
+    "clk_ghz": "1.780",
+    "curve": "1.000,0.996,0.919,0.715,0.703,0.776,0.804,0.790,0.780,0.774,0.787,0.788,0.784,0.652,0.425,0.174,0.043,0.010,0.002,0.001"
+   },
+   {
+    "lane": "A",
+    "batch": "5",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "13.987",
+    "busy_thr": "0.7736",
+    "busy_warp": "0.7736",
+    "busy_blk": "0.8638",
+    "drain_ms": "3.067",
+    "drain_share": "0.2193",
+    "fin_p50": "0.5429",
+    "fin_p90": "0.8456",
+    "fin_p99": "0.9597",
+    "fin_p999": "0.9852",
+    "longest_share": "0.3868",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.997,0.899,0.746,0.887,0.989,0.993,0.924,0.786,0.844,0.946,0.986,0.947,0.796,0.449,0.176,0.092,0.015"
+   },
+   {
+    "lane": "A",
+    "batch": "5",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "21.523",
+    "busy_thr": "0.6052",
+    "busy_warp": "0.6052",
+    "busy_blk": "0.8414",
+    "drain_ms": "7.505",
+    "drain_share": "0.3487",
+    "fin_p50": "0.4895",
+    "fin_p90": "0.7633",
+    "fin_p99": "0.8441",
+    "fin_p999": "0.9177",
+    "longest_share": "0.8093",
+    "clk_ghz": "1.781",
+    "curve": "0.999,0.991,0.916,0.774,0.743,0.777,0.804,0.789,0.763,0.763,0.792,0.789,0.780,0.693,0.470,0.198,0.048,0.010,0.002,0.001"
+   },
+   {
+    "lane": "A",
+    "batch": "6",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "13.497",
+    "busy_thr": "0.7541",
+    "busy_warp": "0.7541",
+    "busy_blk": "0.8474",
+    "drain_ms": "3.249",
+    "drain_share": "0.2407",
+    "fin_p50": "0.5274",
+    "fin_p90": "0.8298",
+    "fin_p99": "0.9439",
+    "fin_p999": "0.9811",
+    "longest_share": "0.4893",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.992,0.881,0.752,0.891,0.978,0.982,0.869,0.777,0.877,0.951,0.967,0.900,0.691,0.342,0.158,0.068,0.006"
+   },
+   {
+    "lane": "A",
+    "batch": "6",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "18.826",
+    "busy_thr": "0.5796",
+    "busy_warp": "0.5796",
+    "busy_blk": "0.8090",
+    "drain_ms": "7.371",
+    "drain_share": "0.3915",
+    "fin_p50": "0.4532",
+    "fin_p90": "0.7324",
+    "fin_p99": "0.8191",
+    "fin_p999": "0.9092",
+    "longest_share": "0.8381",
+    "clk_ghz": "1.780",
+    "curve": "1.000,0.996,0.931,0.750,0.702,0.765,0.788,0.786,0.772,0.790,0.805,0.794,0.746,0.542,0.295,0.100,0.023,0.006,0.002,0.001"
+   },
+   {
+    "lane": "A",
+    "batch": "7",
+    "kernel": "k_p1",
+    "n": "156918",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "8.179",
+    "busy_thr": "0.7165",
+    "busy_warp": "0.7166",
+    "busy_blk": "0.8065",
+    "drain_ms": "3.918",
+    "drain_share": "0.4790",
+    "fin_p50": "0.5074",
+    "fin_p90": "0.8327",
+    "fin_p99": "0.9080",
+    "fin_p999": "0.9647",
+    "longest_share": "0.7473",
+    "clk_ghz": "1.779",
+    "curve": "1.000,1.000,1.000,1.000,0.999,0.990,0.949,0.805,0.723,0.820,0.886,0.865,0.858,0.839,0.756,0.537,0.234,0.056,0.012,0.001"
+   },
+   {
+    "lane": "A",
+    "batch": "7",
+    "kernel": "k_p3",
+    "n": "156918",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "10.785",
+    "busy_thr": "0.5329",
+    "busy_warp": "0.5329",
+    "busy_blk": "0.7231",
+    "drain_ms": "5.614",
+    "drain_share": "0.5205",
+    "fin_p50": "0.4870",
+    "fin_p90": "0.6999",
+    "fin_p99": "0.8090",
+    "fin_p999": "0.9503",
+    "longest_share": "0.9642",
+    "clk_ghz": "1.779",
+    "curve": "1.000,1.000,0.996,0.975,0.900,0.775,0.702,0.710,0.745,0.769,0.699,0.582,0.421,0.235,0.094,0.033,0.012,0.005,0.002,0.000"
+   },
+   {
+    "lane": "M",
+    "batch": "0",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "35.182",
+    "busy_thr": "0.8175",
+    "busy_warp": "0.8175",
+    "busy_blk": "0.8749",
+    "drain_ms": "8.477",
+    "drain_share": "0.2410",
+    "fin_p50": "0.5845",
+    "fin_p90": "0.8974",
+    "fin_p99": "0.9527",
+    "fin_p999": "0.9769",
+    "longest_share": "0.5107",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,0.997,0.969,0.892,0.869,0.933,0.929,0.964,0.942,0.945,0.897,0.941,0.931,0.956,0.877,0.710,0.443,0.147,0.010"
+   },
+   {
+    "lane": "M",
+    "batch": "0",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "110.317",
+    "busy_thr": "0.7509",
+    "busy_warp": "0.7509",
+    "busy_blk": "0.8849",
+    "drain_ms": "29.787",
+    "drain_share": "0.2700",
+    "fin_p50": "0.5804",
+    "fin_p90": "0.8847",
+    "fin_p99": "0.9469",
+    "fin_p999": "0.9864",
+    "longest_share": "0.7252",
+    "clk_ghz": "1.781",
+    "curve": "0.999,0.999,0.999,0.992,0.927,0.801,0.816,0.856,0.857,0.885,0.912,0.873,0.835,0.825,0.822,0.695,0.527,0.308,0.081,0.007"
+   },
+   {
+    "lane": "M",
+    "batch": "1",
+    "kernel": "k_p1",
+    "n": "262144",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "39.682",
+    "busy_thr": "0.8311",
+    "busy_warp": "0.8311",
+    "busy_blk": "0.8936",
+    "drain_ms": "7.988",
+    "drain_share": "0.2013",
+    "fin_p50": "0.5923",
+    "fin_p90": "0.8855",
+    "fin_p99": "0.9744",
+    "fin_p999": "0.9875",
+    "longest_share": "0.5311",
+    "clk_ghz": "1.780",
+    "curve": "1.000,1.000,1.000,0.968,0.912,0.831,0.904,0.998,0.994,0.960,0.897,0.824,0.944,1.000,0.982,0.930,0.855,0.479,0.106,0.036"
+   },
+   {
+    "lane": "M",
+    "batch": "1",
+    "kernel": "k_p3",
+    "n": "262144",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "113.077",
+    "busy_thr": "0.7362",
+    "busy_warp": "0.7362",
+    "busy_blk": "0.8884",
+    "drain_ms": "32.784",
+    "drain_share": "0.2899",
+    "fin_p50": "0.5926",
+    "fin_p90": "0.8803",
+    "fin_p99": "0.9311",
+    "fin_p999": "0.9569",
+    "longest_share": "0.6844",
+    "clk_ghz": "1.781",
+    "curve": "1.000,1.000,0.999,0.989,0.896,0.699,0.752,0.850,0.921,0.959,0.919,0.813,0.773,0.808,0.790,0.676,0.537,0.293,0.048,0.001"
+   },
+   {
+    "lane": "M",
+    "batch": "2",
+    "kernel": "k_p1",
+    "n": "289",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "5.019",
+    "busy_thr": "0.0032",
+    "busy_warp": "0.0032",
+    "busy_blk": "0.0042",
+    "drain_ms": "5.019",
+    "drain_share": "1.0000",
+    "fin_p50": "0.9573",
+    "fin_p90": "1.0000",
+    "fin_p99": "1.0000",
+    "fin_p999": "1.0000",
+    "longest_share": "1.0000",
+    "clk_ghz": "1.785",
+    "curve": "0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.002,0.001"
+   },
+   {
+    "lane": "M",
+    "batch": "2",
+    "kernel": "k_p3",
+    "n": "289",
+    "T": "128",
+    "bps": "6",
+    "slots": "101376",
+    "span_ms": "15.546",
+    "busy_thr": "0.0022",
+    "busy_warp": "0.0023",
+    "busy_blk": "0.0031",
+    "drain_ms": "15.546",
+    "drain_share": "1.0000",
+    "fin_p50": "0.7984",
+    "fin_p90": "1.0000",
+    "fin_p99": "1.0000",
+    "fin_p999": "1.0000",
+    "longest_share": "1.0000",
+    "clk_ghz": "1.785",
+    "curve": "0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.003,0.002,0.002,0.002,0.002,0.002,0.001,0.001,0.001,0.001"
+   },
+   {
+    "lane": "B",
+    "batch": "0",
+    "kernel": "k_p1",
+    "n": "65536",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "24.385",
+    "busy_thr": "0.5273",
+    "busy_warp": "0.5273",
+    "busy_blk": "0.5650",
+    "drain_ms": "24.385",
+    "drain_share": "1.0000",
+    "fin_p50": "0.7457",
+    "fin_p90": "0.7948",
+    "fin_p99": "0.8155",
+    "fin_p999": "0.9118",
+    "longest_share": "1.0000",
+    "clk_ghz": "1.781",
+    "curve": "0.776,0.776,0.774,0.766,0.755,0.741,0.730,0.717,0.698,0.679,0.659,0.636,0.610,0.560,0.459,0.201,0.010,0.001,0.001,0.001"
+   },
+   {
+    "lane": "B",
+    "batch": "0",
+    "kernel": "k_p3",
+    "n": "65536",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "122.161",
+    "busy_thr": "0.4461",
+    "busy_warp": "0.4461",
+    "busy_blk": "0.5123",
+    "drain_ms": "122.161",
+    "drain_share": "1.0000",
+    "fin_p50": "0.5868",
+    "fin_p90": "0.7271",
+    "fin_p99": "0.8677",
+    "fin_p999": "0.9545",
+    "longest_share": "1.0000",
+    "clk_ghz": "1.781",
+    "curve": "0.776,0.768,0.764,0.762,0.758,0.753,0.745,0.727,0.692,0.633,0.541,0.419,0.273,0.158,0.082,0.040,0.019,0.007,0.003,0.001"
+   },
+   {
+    "lane": "B",
+    "batch": "1",
+    "kernel": "k_p1",
+    "n": "25204",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "14.646",
+    "busy_thr": "0.2017",
+    "busy_warp": "0.2017",
+    "busy_blk": "0.2172",
+    "drain_ms": "14.645",
+    "drain_share": "1.0000",
+    "fin_p50": "0.6970",
+    "fin_p90": "0.7499",
+    "fin_p99": "0.7787",
+    "fin_p999": "1.0000",
+    "longest_share": "1.0000",
+    "clk_ghz": "1.781",
+    "curve": "0.298,0.298,0.298,0.298,0.298,0.298,0.298,0.298,0.298,0.296,0.284,0.262,0.231,0.181,0.085,0.008,0.001,0.000,0.000,0.000"
+   },
+   {
+    "lane": "B",
+    "batch": "1",
+    "kernel": "k_p3",
+    "n": "25204",
+    "T": "128",
+    "bps": "5",
+    "slots": "84480",
+    "span_ms": "86.071",
+    "busy_thr": "0.1752",
+    "busy_warp": "0.1753",
+    "busy_blk": "0.2086",
+    "drain_ms": "86.071",
+    "drain_share": "1.0000",
+    "fin_p50": "0.5811",
+    "fin_p90": "0.7383",
+    "fin_p99": "0.9025",
+    "fin_p999": "1.0000",
+    "longest_share": "1.0000",
+    "clk_ghz": "1.782",
+    "curve": "0.298,0.298,0.298,0.298,0.298,0.298,0.296,0.292,0.277,0.252,0.207,0.155,0.105,0.063,0.035,0.017,0.008,0.004,0.002,0.001"
+   }
+  ],
+  "clk": [
+   {
+    "lane": "A",
+    "batch": "0",
+    "n": "262144",
+    "seeds": "1359629401810",
+    "windows": "152601910256",
+    "stitching": "671281797404",
+    "select": "15050206199",
+    "sat": "11661841807",
+    "fin": "74249765638",
+    "copies": "7281552784",
+    "rec": "15321180301"
+   },
+   {
+    "lane": "A",
+    "batch": "1",
+    "n": "262144",
+    "seeds": "1313043668980",
+    "windows": "218072573471",
+    "stitching": "1019238368158",
+    "select": "22421934337",
+    "sat": "18768358556",
+    "fin": "105887772552",
+    "copies": "10705750649",
+    "rec": "21719498750"
+   },
+   {
+    "lane": "A",
+    "batch": "2",
+    "n": "262144",
+    "seeds": "1325020428976",
+    "windows": "218198989454",
+    "stitching": "957804520578",
+    "select": "21854718875",
+    "sat": "17691716435",
+    "fin": "102168002214",
+    "copies": "10234744019",
+    "rec": "19563286831"
+   },
+   {
+    "lane": "A",
+    "batch": "3",
+    "n": "262144",
+    "seeds": "1353902980672",
+    "windows": "221915692405",
+    "stitching": "993795516092",
+    "select": "22390385604",
+    "sat": "19742971734",
+    "fin": "114005017744",
+    "copies": "11242003446",
+    "rec": "22740401617"
+   },
+   {
+    "lane": "A",
+    "batch": "4",
+    "n": "262144",
+    "seeds": "1261447435811",
+    "windows": "224880923426",
+    "stitching": "1039108361844",
+    "select": "23279520072",
+    "sat": "17989438525",
+    "fin": "103763594887",
+    "copies": "10163250607",
+    "rec": "20272682067"
+   },
+   {
+    "lane": "A",
+    "batch": "5",
+    "n": "262144",
+    "seeds": "1290603150759",
+    "windows": "224483348839",
+    "stitching": "1098038036522",
+    "select": "23131143265",
+    "sat": "25834177974",
+    "fin": "120634758246",
+    "copies": "13081839068",
+    "rec": "23555802646"
+   },
+   {
+    "lane": "A",
+    "batch": "6",
+    "n": "262144",
+    "seeds": "1219743755814",
+    "windows": "220619215119",
+    "stitching": "1027667623795",
+    "select": "23496051572",
+    "sat": "15273347025",
+    "fin": "108642479049",
+    "copies": "9976175649",
+    "rec": "22867418865"
+   },
+   {
+    "lane": "A",
+    "batch": "7",
+    "n": "156918",
+    "seeds": "712081777611",
+    "windows": "124933969310",
+    "stitching": "579412036602",
+    "select": "12467837801",
+    "sat": "7603168123",
+    "fin": "61749227081",
+    "copies": "5469995014",
+    "rec": "13765817522"
+   },
+   {
+    "lane": "M",
+    "batch": "0",
+    "n": "262144",
+    "seeds": "2117354698703",
+    "windows": "1666865878156",
+    "stitching": "8615593987638",
+    "select": "23443550511",
+    "sat": "189717472836",
+    "fin": "1986860739636",
+    "copies": "147184264546",
+    "rec": "525926831278"
+   },
+   {
+    "lane": "M",
+    "batch": "1",
+    "n": "262144",
+    "seeds": "1980367915884",
+    "windows": "2110408044661",
+    "stitching": "8268470936113",
+    "select": "22082068683",
+    "sat": "219264198932",
+    "fin": "1548725632280",
+    "copies": "109046518165",
+    "rec": "289283062106"
+   },
+   {
+    "lane": "M",
+    "batch": "2",
+    "n": "289",
+    "seeds": "1294469601",
+    "windows": "824604784",
+    "stitching": "3377260974",
+    "select": "3663024",
+    "sat": "115207519",
+    "fin": "719869301",
+    "copies": "32630503",
+    "rec": "99259471"
+   },
+   {
+    "lane": "B",
+    "batch": "0",
+    "n": "65536",
+    "seeds": "525942802090",
+    "windows": "1213011858466",
+    "stitching": "5898031343269",
+    "select": "4279110490",
+    "sat": "163732786133",
+    "fin": "791987626980",
+    "copies": "66540071559",
+    "rec": "132620946774"
+   },
+   {
+    "lane": "B",
+    "batch": "1",
+    "n": "25204",
+    "seeds": "153568179996",
+    "windows": "253163792739",
+    "stitching": "1617060150845",
+    "select": "689148968",
+    "sat": "45517960195",
+    "fin": "249563978462",
+    "copies": "15200771240",
+    "rec": "36056814164"
+   }
+  ]
+ }
+}

@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -304,6 +305,84 @@ static void test6_order_independent() {
     PASS(name);
 }
 
+// ── Test 7: the kingdom of an id that both indices use does not depend on read order ──
+static void test7_kingdom_order_independent() {
+    const char* name = "test7_kingdom_order_independent";
+    const std::unordered_set<uint32_t> fungal = {7};
+    std::vector<MH> a = {make_microbial(7, 0.9f), make_viral(7, 0.8f), make_microbial(9, 0.9f)};
+    std::vector<MH> b = {make_viral(7, 0.8f), make_microbial(9, 0.9f), make_microbial(7, 0.9f)};
+    auto ka = build_kingdom_map(a, fungal), kb = build_kingdom_map(b, fungal);
+    if (ka.at(7) != NonHostCategory::VIRAL || kb.at(7) != NonHostCategory::VIRAL) { FAIL(name, "shared id not VIRAL in both orders"); return; }
+    if (ka.at(9) != NonHostCategory::BACTERIAL || kb.at(9) != NonHostCategory::BACTERIAL) { FAIL(name, "microbial-only id not BACTERIAL"); return; }
+    std::vector<MH> c = {make_microbial(7, 0.9f)};
+    if (build_kingdom_map(c, fungal).at(7) != NonHostCategory::FUNGAL) { FAIL(name, "fungal-only id not FUNGAL"); return; }
+    PASS(name);
+}
+
+// ── Test 8: one fit, any thread count, any number of reports ──
+// em_fit on 8 threads is bit-identical to 1 thread on an input large enough to run threaded (>= 20000 patterns), and
+// em_deconvolve equals em_report of the shared fit.
+static void test8_fit_threads_and_reports() {
+    const char* name = "test8_fit_threads_and_reports";
+    std::mt19937 rnd(12345);
+    std::vector<MH> reads;
+    for (int i = 0; i < 60000; ++i) {
+        MH mh;
+        const int nv = 1 + static_cast<int>(rnd() % 4), nm = static_cast<int>(rnd() % 3);
+        for (int j = 0; j < nv; ++j) mh.viral_hits.push_back({static_cast<uint32_t>(rnd() % 400), 0.05f + (rnd() % 950) / 1000.0f});
+        for (int j = 0; j < nm; ++j) mh.microbial_hits.push_back({1000u + static_cast<uint32_t>(rnd() % 300), 0.05f + (rnd() % 950) / 1000.0f});
+        reads.push_back(std::move(mh));
+    }
+    const auto kmap = build_kingdom_map(reads);
+    const EmFit f1 = em_fit(reads, 500, 1e-6f, 0.05f, 1), f8 = em_fit(reads, 500, 1e-6f, 0.05f, 8);
+    bool same = f1.iterations == f8.iterations && f1.theta == f8.theta && f1.hit_rate_sum == f8.hit_rate_sum &&
+                f1.weight_sum == f8.weight_sum && f1.idx_to_species == f8.idx_to_species && f1.N == f8.N;
+    if (!same) { FAIL(name, "8 threads differ from 1 thread"); return; }
+    int it = 0;
+    const auto a = em_deconvolve(reads, kmap, 500, 1e-6f, 1e-4f, 0.05f, 0.30f, &it, 0);
+    const auto b = em_report(f8, kmap, 1e-4f, 0.30f, 0);
+    same = it == f8.iterations && a.size() == b.size();
+    for (size_t i = 0; same && i < a.size(); ++i)
+        same = a[i].species_id == b[i].species_id && a[i].relative_abundance == b[i].relative_abundance &&
+               a[i].n_reads_assigned == b[i].n_reads_assigned && a[i].mean_hit_rate == b[i].mean_hit_rate &&
+               a[i].kingdom == b[i].kingdom;
+    if (!same) { FAIL(name, "em_deconvolve differs from em_report of the shared fit"); return; }
+    if (em_report(f8, kmap, 0.0f, 0.0f, 0u).size() < b.size()) { FAIL(name, "the report without thresholds lists fewer species"); return; }
+    PASS(name);
+}
+
+// ── Test 9: a virus and a microbe that share an id are two EM species once keyed (D-100) ──
+static void test9_shared_id_two_species() {
+    const char* name = "test9_shared_id_two_species";
+    const std::unordered_set<uint32_t> fungal = {5};
+    std::vector<MH> hits;
+    for (int i = 0; i < 300; ++i) hits.push_back(make_viral(5, 0.9f));       // virus 5
+    for (int i = 0; i < 100; ++i) hits.push_back(make_microbial(5, 0.9f));   // fungus 5 in the microbial index
+    for (int i = 0; i < 100; ++i) hits.push_back(make_microbial(8, 0.9f));   // bacterium 8
+    if (!tag_microbial_keys(hits)) { FAIL(name, "tagging refused valid ids"); return; }
+    auto kmap   = build_kingdom_map(hits, fungal);
+    auto result = em_deconvolve(hits, kmap, 500, 1e-6f, 1e-4f, 0.0f, 0.0f);
+    if (result.size() != 3) { FAIL(name, "expected three species"); return; }
+    int seen = 0;
+    for (const auto& sa : result) {
+        const uint32_t raw = raw_species_id(sa.species_id);
+        if (!is_microbial_key(sa.species_id) && raw == 5) {
+            if (sa.kingdom != NonHostCategory::VIRAL || std::abs(sa.relative_abundance - 0.6f) > 0.02f) { FAIL(name, "virus 5 wrong"); return; }
+            ++seen;
+        } else if (is_microbial_key(sa.species_id) && raw == 5) {
+            if (sa.kingdom != NonHostCategory::FUNGAL || std::abs(sa.relative_abundance - 0.2f) > 0.02f) { FAIL(name, "fungus 5 wrong"); return; }
+            ++seen;
+        } else if (is_microbial_key(sa.species_id) && raw == 8) {
+            if (sa.kingdom != NonHostCategory::BACTERIAL) { FAIL(name, "bacterium 8 wrong"); return; }
+            ++seen;
+        }
+    }
+    if (seen != 3) { FAIL(name, "species keys not recovered"); return; }
+    std::vector<MH> bad = {make_microbial(kMicrobialKeyBit | 3u, 0.9f)};
+    if (tag_microbial_keys(bad) || bad[0].microbial_hits[0].first != (kMicrobialKeyBit | 3u)) { FAIL(name, "bit-31 id not refused"); return; }
+    PASS(name);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -313,6 +392,9 @@ int main() {
     test4_convergence();
     test5_min_abundance_filter();
     test6_order_independent();
+    test7_kingdom_order_independent();
+    test8_fit_threads_and_reports();
+    test9_shared_id_two_species();
 
     std::cerr << "\n--- " << g_passed << "/" << (g_passed + g_failed) << " tests passed ---\n";
     return (g_failed == 0) ? 0 : 1;

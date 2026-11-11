@@ -18,6 +18,7 @@ class PackedArray {
     void allocateArray();
     void deallocateArray();
     void pointArray(char* pointerCharIn);
+    void adoptArray(char* newArray) {charArray=newArray; arrayAllocated=true;} // singlet E14: a new[] array this object now owns (GenomePreload.cpp)
 //     PackedArray(uint N);
 };
 

@@ -21,6 +21,7 @@ std::atomic<uint64> g_handoffClipBad(0);
 const uint8 *g_handoffRecAln = nullptr;
 HandoffReadEntry *g_handoffReads = nullptr;
 uint64 *g_handoffQMask = nullptr;
+uint32 g_handoffQWords = 2;
 int g_handoffMinQ = 0;
 uint32 (*g_handoffReadHook)(uint64, const char *, uint64) = nullptr;
 const uint8 *g_handoffSum = nullptr;
@@ -31,6 +32,7 @@ std::atomic<unsigned long long> g_profOutcome[6][2];
 std::atomic<unsigned long long> g_profClass[7][2];
 std::atomic<unsigned long long> g_profClassDetail[7][5];
 std::atomic<unsigned long long> g_profOutcomeDetail[6][12];
+std::atomic<unsigned long long> g_profPath[3];
 #endif
 
 namespace {

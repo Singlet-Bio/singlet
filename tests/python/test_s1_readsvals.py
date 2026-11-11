@@ -105,5 +105,7 @@ def test_modalities_registered():
     from singlet import bundle
 
     names = list(bundle.MODALITIES)
-    assert names.index("exon_reads") == names.index("intron_counts") + 1
+    # multimap_counts (the multi-mapping record) sits between the counts and the reads layers
+    assert names.index("exon_reads") == names.index("multimap_counts") + 1
+    assert names.index("multimap_counts") == names.index("intron_counts") + 1
     assert bundle.MODALITIES["intron_reads"].members == ("intron_reads_delta.bin",)

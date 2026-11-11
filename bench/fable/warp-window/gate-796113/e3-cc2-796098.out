@@ -1,0 +1,167 @@
+commit 73d245ee9807eba5201620be87a1e7d06e0bdd84
+== default
+uniq: write error: Broken pipe
+     35     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     12720 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     13808 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     16 bytes stack frame, 16 bytes spill stores, 16 bytes spill loads
+      2     1712 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1744 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     1760 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     1776 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1776 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     1776 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+      2     1776 bytes stack frame, 76 bytes spill stores, 168 bytes spill loads
+      2     1776 bytes stack frame, 80 bytes spill stores, 172 bytes spill loads
+      1     32144 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     368 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     37200 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     400 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     416 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     432 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     432 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+[default ok]
+== tail
+     32     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     12720 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     13808 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     1712 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1744 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     1760 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     1776 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1776 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     1776 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+      2     1776 bytes stack frame, 76 bytes spill stores, 168 bytes spill loads
+      2     1776 bytes stack frame, 84 bytes spill stores, 176 bytes spill loads
+      1     32144 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     368 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     37200 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     400 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     416 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     432 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     432 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+      2     432 bytes stack frame, 76 bytes spill stores, 168 bytes spill loads
+[tail ok]
+== census
+     32     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     12752 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     13840 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     1712 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1760 bytes stack frame, 56 bytes spill stores, 96 bytes spill loads
+      1     1760 bytes stack frame, 60 bytes spill stores, 100 bytes spill loads
+      1     1776 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1776 bytes stack frame, 64 bytes spill stores, 112 bytes spill loads
+      1     1776 bytes stack frame, 72 bytes spill stores, 108 bytes spill loads
+      2     1776 bytes stack frame, 76 bytes spill stores, 260 bytes spill loads
+      2     1792 bytes stack frame, 112 bytes spill stores, 164 bytes spill loads
+      1     32176 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     368 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     37472 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     416 bytes stack frame, 56 bytes spill stores, 96 bytes spill loads
+      1     416 bytes stack frame, 60 bytes spill stores, 100 bytes spill loads
+      1     432 bytes stack frame, 64 bytes spill stores, 112 bytes spill loads
+      2     432 bytes stack frame, 68 bytes spill stores, 232 bytes spill loads
+      1     432 bytes stack frame, 88 bytes spill stores, 116 bytes spill loads
+[census ok]
+== baseline
+     32     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     14320 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     1664 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1712 bytes stack frame, 52 bytes spill stores, 80 bytes spill loads
+      1     1712 bytes stack frame, 76 bytes spill stores, 100 bytes spill loads
+      1     1728 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1728 bytes stack frame, 104 bytes spill stores, 130 bytes spill loads
+      1     1728 bytes stack frame, 88 bytes spill stores, 126 bytes spill loads
+      2     1744 bytes stack frame, 152 bytes spill stores, 244 bytes spill loads
+      2     1744 bytes stack frame, 164 bytes spill stores, 312 bytes spill loads
+      3     20400 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     21488 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     320 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     368 bytes stack frame, 52 bytes spill stores, 80 bytes spill loads
+      1     368 bytes stack frame, 80 bytes spill stores, 100 bytes spill loads
+      1     368 bytes stack frame, 92 bytes spill stores, 114 bytes spill loads
+      2     384 bytes stack frame, 132 bytes spill stores, 156 bytes spill loads
+      1     384 bytes stack frame, 92 bytes spill stores, 126 bytes spill loads
+      2     400 bytes stack frame, 152 bytes spill stores, 220 bytes spill loads
+[baseline ok]
+== e3stats
+     35     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     12720 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     13808 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     16 bytes stack frame, 16 bytes spill stores, 16 bytes spill loads
+      2     1712 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1744 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     1760 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     1776 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1776 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     1776 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+      2     1776 bytes stack frame, 76 bytes spill stores, 168 bytes spill loads
+      2     1776 bytes stack frame, 80 bytes spill stores, 172 bytes spill loads
+      1     32144 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     368 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     37200 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     400 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     416 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     432 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     432 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+[e3stats ok]
+== keepix
+     35     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     12720 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     13808 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     16 bytes stack frame, 16 bytes spill stores, 16 bytes spill loads
+      2     1712 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1744 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     1760 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     1776 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1776 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     1776 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+      2     1776 bytes stack frame, 76 bytes spill stores, 168 bytes spill loads
+      2     1776 bytes stack frame, 84 bytes spill stores, 176 bytes spill loads
+      1     32144 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     368 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     37248 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     400 bytes stack frame, 36 bytes spill stores, 56 bytes spill loads
+      1     416 bytes stack frame, 52 bytes spill stores, 68 bytes spill loads
+      1     432 bytes stack frame, 64 bytes spill stores, 88 bytes spill loads
+      1     432 bytes stack frame, 72 bytes spill stores, 140 bytes spill loads
+[keepix ok]
+== noclk
+     37     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     12720 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      3     128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     13808 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     1712 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1744 bytes stack frame, 40 bytes spill stores, 48 bytes spill loads
+      2     1760 bytes stack frame, 60 bytes spill stores, 68 bytes spill loads
+      1     1760 bytes stack frame, 72 bytes spill stores, 68 bytes spill loads
+      1     1776 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     1776 bytes stack frame, 76 bytes spill stores, 112 bytes spill loads
+      2     1776 bytes stack frame, 80 bytes spill stores, 152 bytes spill loads
+      1     1776 bytes stack frame, 88 bytes spill stores, 124 bytes spill loads
+      1     32144 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      2     368 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     37200 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      1     400 bytes stack frame, 48 bytes spill stores, 60 bytes spill loads
+      2     416 bytes stack frame, 68 bytes spill stores, 92 bytes spill loads
+      1     416 bytes stack frame, 80 bytes spill stores, 80 bytes spill loads
+      1     432 bytes stack frame, 80 bytes spill stores, 116 bytes spill loads
+      2     432 bytes stack frame, 84 bytes spill stores, 156 bytes spill loads
+total 54420
+drwxr-sr-x 2 debruinz debruinz_project     132 Nov  1 01:35 .
+drwxr-sr-x 3 debruinz debruinz_project      25 Nov  1 01:00 ..
+-rw-r--r-- 1 debruinz debruinz_project      41 Nov  1 01:17 commit
+-rwxr-xr-x 1 debruinz debruinz_project 7695016 Nov  1 01:21 m5
+-rwxr-xr-x 1 debruinz debruinz_project 8758856 Nov  1 01:35 m5b
+-rwxr-xr-x 1 debruinz debruinz_project 8554952 Nov  1 01:29 m5c
+-rwxr-xr-x 1 debruinz debruinz_project 7371376 Nov  1 01:21 m5k
+-rwxr-xr-x 1 debruinz debruinz_project 7686824 Nov  1 01:21 m5n
+-rwxr-xr-x 1 debruinz debruinz_project 7817896 Nov  1 01:21 m5s
+-rwxr-xr-x 1 debruinz debruinz_project 7826312 Nov  1 01:25 m5t
+== done Sun Nov  1 01:35:19 EST 2026

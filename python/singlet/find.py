@@ -69,7 +69,7 @@ def set_api_key(key: str | None) -> None:
 
     Keys are created at https://singlet.bio/account. ``None`` clears the key.
     The ``$SINGLET_API_KEY`` environment variable is used when no key has been
-    set explicitly.
+    set explicitly, then the first line of ``~/.singlet/api_key``.
     """
     global _API_KEY
     _API_KEY = key.strip() if isinstance(key, str) and key.strip() else None
@@ -79,7 +79,15 @@ def _api_key() -> str | None:
     if _API_KEY:
         return _API_KEY
     env = os.environ.get("SINGLET_API_KEY", "").strip()
-    return env or None
+    if env:
+        return env
+    try:
+        with open(
+            os.path.join(os.path.expanduser("~"), ".singlet", "api_key"), encoding="utf-8"
+        ) as f:
+            return f.readline().strip() or None
+    except OSError:
+        return None
 
 
 def _request_headers() -> dict[str, str]:

@@ -101,6 +101,23 @@ class Params:
     # > 0: a barcode whose only kept productive contig has <= this many UMIs is not a cell (a lone receptor molecule:
     # ambient mRNA or a stray molecule in a droplet of another lineage); no pair is lost, a pair needs two chains
     orphan_max_umis: int = 0
+    # > 0: an IG junction removed by the cross filter comes back when it is the strongest high-confidence contig of its
+    # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
+    ig_top_min_umis: int = 2
+    ig_top_paired: bool = True  # ig_top_min_umis gives back a chain only where the barcode holds the partner chain too
+    ig_top_light_only: bool = True  # ig_top_min_umis gives back light chains only (not an ambient plasma-cell IGH)
+    # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
+    ig_lone_spread: int = 5
+    # True: a Phe/Trp118 codon mutated to another non-stop codon still ends the junction when the J motif continues (_codon_at)
+    asm_fw_relax: bool = True
+    # True: a junction ending at the J anchor codon in place of Phe/Trp (a somatic substitution of the germline Phe/Trp118
+    # codon, which asm_fw_relax assembles) is productive when the rest of the productivity checks hold
+    fw_mut_productive: bool = True
+    # > 0: a barcode is a B cell only with >= this many UMIs over its IG contigs, productive or not (the documented V(D)J
+    # cell rule of Cell Ranger: a T cell or other droplet holds a few ambient IG molecules, a B cell tens to thousands)
+    ig_cell_min_umis: int = 3
+    # > 0: a barcode whose only kept productive IG contig has fewer junction UMIs than this is not a B cell
+    ig_lone_min_junction_umis: int = 2
     threads: int = 8
 
 
@@ -142,8 +159,8 @@ class Reference:
                 self.seg_class[i] = first.setdefault(lab, i)
 
     @classmethod
-    def load(cls, species_or_path: str = "human"):
-        return cls(R.load(species_or_path))
+    def load(cls, species_or_path: str = "human", cdr3_start: str = "first"):
+        return cls(R.load(species_or_path, cdr3_start))
 
 
 # ----------------------------------------------------------------------------------------------------------- reads
@@ -472,6 +489,7 @@ def run_library(
             params.branch_frac,
             MAX_PATHS,
             MAX_JUNCTION,
+            params.asm_fw_relax,
         )
         return k, rows, res
 
@@ -753,7 +771,13 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
                 c = int(np.flatnonzero(ref.names == cn)[0]) if (ref.names == cn).any() else c
             aa = R.translate(junc)
             inframe = len(junc) % 3 == 0
-            prod = inframe and "*" not in aa and aa[:1] == "C" and aa[-1:] in ("F", "W")
+            end_ok = aa[-1:] in ("F", "W")
+            if not end_ok and params.fw_mut_productive and j >= 0 and ref.segs[j].anchor >= 0:
+                # a somatic substitution of Phe/Trp118 (Val, Leu, ...): the junction ends at the J anchor codon, whose
+                # germline codon is Phe/Trp; Cell Ranger and IMGT call such a chain productive
+                js = ref.segs[j]
+                end_ok = R.translate(js.seq[js.anchor : js.anchor + 3], 0) in ("F", "W")
+            prod = inframe and "*" not in aa and aa[:1] == "C" and end_ok
             if prod and j >= 0:
                 js = ref.segs[j]
                 # J frame continues the junction frame: the F/W codon of the junction is the J anchor codon
@@ -832,6 +856,57 @@ def filter_contigs(df, params: Params):
     df.loc[amb, "kept"] = False
     if params.ambient_rescue in ("cell", "pair", "clone") and cand.any():
         df.loc[_ambient_rescue(df, cand.to_numpy(), params.ambient_rescue), "kept"] = True
+    if params.ig_top_min_umis > 0 and cand.any():
+        # IG mRNA per cell spans > 100x (plasma cells vs B cells), so a B cell of an expanded clone that contains plasma
+        # cells holds the clone's junction at < 10% of the plasma cell's UMIs: the strongest contig of its own barcode
+        # and chain is that cell's receptor, unless it is a few stray molecules (ambient IG in other droplets: 1-2 UMIs)
+        # a B cell has one heavy and one light chain: the strongest of its class (heavy, or light: IGK and IGL together),
+        # and none where one of the class is kept already (a second light chain at ambient level is another cell's)
+        cls = (df["chain"] == "IGH").map({True: "H", False: "L"})
+        hc = df["high_confidence"].astype(bool)
+        top_hc = df["umis"].where(hc).groupby([df["bcix"], cls]).transform("max")
+        has = df["kept"].groupby([df["bcix"], cls]).transform("any")
+        give = (
+            cand
+            & df["chain"].isin(("IGH", "IGK", "IGL"))
+            & (df["umis"] == top_hc)
+            & (df["umis"] >= params.ig_top_min_umis)
+            & ~has
+        )
+        if params.ig_top_light_only:
+            give &= df["chain"].isin(("IGK", "IGL"))
+        if params.ig_top_paired:
+            # only in a droplet that holds a B cell: the partner chain (heavy for a light chain, light for a heavy one)
+            # is kept or given back too
+            ok = df["kept"] | give
+            h = (ok & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+            l_ = (ok & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+            give &= ((df["chain"] == "IGH") & l_) | (df["chain"].isin(("IGK", "IGL")) & h)
+        df.loc[give, "kept"] = True
+    if params.ig_lone_spread > 0:
+        # ambient IG spread: a junction present in many droplets (a plasma clone's light chain in thousands of barcodes at
+        # 1-9 UMIs) is a real chain where its barcode also holds the partner chain; alone (heavy without light or light
+        # without heavy) it is ambient, the same molecule in another cell's droplet
+        ig = df["chain"].isin(("IGH", "IGK", "IGL"))
+        n_bc = df[ig].groupby(["chain", "cdr3_nt"])["bcix"].transform("nunique").reindex(df.index).fillna(0)
+        kp = df["kept"] & df["productive"].astype(bool)
+        heavy = (kp & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
+        light = (kp & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
+        lone = ig & ((df["chain"] == "IGH") & ~light | df["chain"].isin(("IGK", "IGL")) & ~heavy)
+        drop = df["kept"] & lone & (n_bc >= params.ig_lone_spread)
+        df["ig_lone"] = drop
+        df.loc[drop, "kept"] = False
+    if params.ig_cell_min_umis > 0 or params.ig_lone_min_junction_umis > 0:
+        ig = df["chain"].isin(("IGH", "IGK", "IGL"))
+        drop = np.zeros(len(df), bool)
+        if params.ig_cell_min_umis > 0:
+            tot = df["umis"].where(ig, 0).groupby(df["bcix"]).transform("sum")
+            drop |= (ig & (tot < params.ig_cell_min_umis)).to_numpy()
+        if params.ig_lone_min_junction_umis > 0:
+            kp = df["kept"] & df["productive"].astype(bool) & ig
+            n_kp = kp.groupby(df["bcix"]).transform("sum")
+            drop |= (kp & (n_kp == 1) & (df["junction_umis"] < params.ig_lone_min_junction_umis)).to_numpy()
+        df.loc[drop, "kept"] = False
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)
         n_kp = kp.groupby(df["bcix"]).transform("sum")

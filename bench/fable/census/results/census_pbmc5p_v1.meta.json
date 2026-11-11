@@ -1,0 +1,23 @@
+{
+  "distinct_reads": 1850654,
+  "reads": 6118914,
+  "identical_distinct": 1850645,
+  "identical_reads": 6118905,
+  "read_records": 2444980,
+  "window_records": 22267686,
+  "window_records_dropped": [0, 0, 0],
+  "lane_reads": [1850654, 470063, 114516, 9747],
+  "lane_ms": [347.734, 303.858, 305.705],
+  "heavy_host_s": 0.271,
+  "budget": [1024, 2048, 2048],
+  "batch": [262144, 262144, 65536],
+  "winAnchorMultimapNmax": 50,
+  "seedMultimapNmax": 10000,
+  "seedPerWindowNmax": 50,
+  "alignTranscriptsPerWindowNmax": 100,
+  "caps": {"fields": ["LREAD", "NSPLIT", "NP", "NW", "NWA", "NWB", "NEX", "NWTR", "NKEEP", "NBLOB"],
+    "A": [160, 4, 32, 16, 16, 256, 8, 8, 8, 640], "M": [160, 4, 32, 64, 8, 1024, 8, 8, 32, 2048],
+    "B": [160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096], "host": [650, 50, 1000, 10000, 50, 1048576, 20, 100, 4096, 1048576]},
+  "work_bytes": [46376, 83304, 636640, 45483008],
+  "clock_khz": 1785000
+}

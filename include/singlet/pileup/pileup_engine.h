@@ -25,6 +25,8 @@
 #include <map>
 #include <tuple>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
@@ -36,6 +38,8 @@
 #include <string>
 #include <thread>
 #include <sched.h>
+#include <sys/stat.h>
+#include <cstdlib>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -44,6 +48,7 @@
 #include "ancestry.h"
 #include "crispr_guide.h"
 #include "gene_model.h"
+#include "tx_compat.h"
 #include "interval_tree.h"
 #include "mt_heteroplasmy.h"
 #include "em_rescue.h"
@@ -53,8 +58,12 @@
 #include "vdj_counter.h"
 #include "rrna_detect.h"
 #include "polya_sites.h"
+#include "te_counts.h"
+#include "../tail_trace.h"      // E16: marks of the level-5 tail (stderr; nothing at other levels)
 #include "gpu_pileup_dump.h"   // W11: SINGLET_PILEUP_DUMP / SINGLET_STREAM_TEE debug hooks (no effect unless set)
 #include "gpu_pileup_bridge.h" // W11: SINGLET_GPU_PILEUP=compare (GPU builds only; no effect unless set)
+#include "allsite.h"           // D-101: per-cell allele counts at every site with alternate-allele evidence
+#include "allsite_replay.h"    // SINGLET_ALLSITE_DUMP_DIR: the pass's input for `singlet allsite-replay`
 
 namespace singlet {
 // Timing and memory milestones of the end-of-stream finalize (stderr only, no effect on any output).
@@ -112,13 +121,29 @@ struct PileupConfig {
     // whose strand probe handles any chemistry; the stats come back with strand_contradiction set. Serial run() only.
     bool strand_early_abort = false;
     std::string snp_path;           // VCF/TSV of SNP positions
+    // D-101 all-site allele counts (allsite.h): STAR genome dir for the reference bases; empty = off. GPU builds only (the member is
+    // computed from the alignment records the GPU pileup reads; a CPU-only build writes no all-site member).
+    std::string allsite_genome_dir;
+    int allsite_min_alt_molecules = 2;   // a site's alternate base: >= this many distinct (barcode, UMI) molecules ...
+    int allsite_min_alt_cells = 2;       // ... in >= this many distinct barcodes
+    // D-101: known RNA editing sites (REDIportal A-to-I), TSV(.gz) CHROM POS(1-based) REF ALT on the genome strand (A>G for a
+    // + strand site, T>C for a - strand site). The sites join the SNP pileup after the AIM block (same molecule consensus, same
+    // CPU and GPU kernels); export splits those rows off before any SNP consumer, so the SNP matrices are unchanged.
+    std::string edit_path;
     std::string exon_gtf_path;      // GTF/BED for exon intervals (used for GeneModel)
     std::string barcode_path;       // Filtered barcode list
     std::string out_chrm_bam;       // Output: chrM BAM
     int threads = 4;
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
+    // R11 stream (cb_from_cr with a cb_corrector): a reader thread decodes the records and resolves their CB and barcode index ahead of
+    // the serial loop (PileupEngine::LookAhead). The loop sees the same records in the same order with the same CBs.
+    bool stream_lookahead = false;
     int min_mapq = 20;              // Minimum mapping quality
-    int min_baseq = 10;             // Minimum base quality for the SNP pileup (there is no editing pileup)
+    int min_baseq = 10;             // Minimum base quality for the SNP pileup (and the D-101 editing sites in it)
+    // D-101/D-109: minimum base quality at the editing sites only (REDItools2's -bq rule; -1 = min_baseq). The SNP panel keeps
+    // min_baseq. A value other than min_baseq turns the W11 GPU pileup off: its quality mask carries one threshold.
+    int editing_min_baseq = -1;
+    int edit_baseq() const { return editing_min_baseq < 0 ? min_baseq : editing_min_baseq; }
     bool count_introns = true;      // Count intronic reads
     bool count_sj = true;           // Extract splice junctions
     // Junction molecules come from uniquely mapped alignments only (NH == 1), as STARsolo's SJ feature does. The primary alignment of a
@@ -134,6 +159,7 @@ struct PileupConfig {
     bool auto_strand = true;        // Probe orientation on nuclear exonic reads; may set or clear reverse_strand
     bool count_mt = false;          // Inline chrM allele pileup for heteroplasmy
     bool count_polya = false;       // Record poly(A)-tailed read 3' ends (polya_sites.h); 3' protocols only
+    std::string te_gtf_path;        // TE annotation (TEtranscripts-style rmsk GTF); empty = no TE counts (te_counts.h)
     bool aim_ancestry = true;          // N13: inject built-in AIM panel for ancestry classification
     std::string guide_ref_path;         // N18: CRISPR guide CSV (name,sequence); empty = disabled
     bool count_vdj = true;              // N17: V(D)J gene usage counting; requires exon_gtf_path
@@ -142,13 +168,26 @@ struct PileupConfig {
     uint32_t wl_ambient_ceil = 50;      // UMI ceiling: WL barcodes with ≤ this count define the ambient pool
     // Intron-assignment rules (intron_rule::k* bits). SINGLET_INTRON_RULES overrides it
     // (decimal or 0x hex) for experiments; see docs/pipeline-validation.md §4.4.
-    // Default 397 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer) + 8 (kFlank). 389 (without kFlank) was chosen on real
+    // Default 2957 (below). 397 = 133 (kUnique | kNoSplicedIntron | kUmiGeneCR) + 256 (kMtPrefer) + 8 (kFlank). 389 (without kFlank) was chosen on real
     // truth (sweep2: matches or beats every other combination on pbmc v3/v2, nuclei, hgmm, CITE against STARsolo Velocyto and alevin-fry USA)
     // under the old molecule labels. With the alevin-fry USA labels (any intron-touching read = unspliced) a read that touches an intron by
     // <= 5 bp of an exon-touching read must not count as intron evidence: on PBMC-E long-read truth kFlank lifts the molecule precision of the
     // unspliced call from 0.62 to 0.86 at unchanged recall (0.976 -> 0.974), (cell, gene) unspliced r from 0.81 to 0.90
     // (docs/research-beta/sota-expression.md). The GPU pileup implements kFlank and the labels too (k_annotate / k_resolve / m6 k_emit).
-    uint32_t intron_rules = 397;
+    // 909 = 397 + kGeneFullSet (512): a read counts only when the same-strand gene bodies under all its alignments form one gene, as
+    // STARsolo GeneFull decides. On the hgmm1k_v3 barnyard it cut non-PAR chrY UMIs in female cells from 8.2 to 2.2 per million and wrong-
+    // species exon UMIs from 0.387% to 0.361% (bench/count_parity; with the Beta aligner profile's score 30, below STARsolo on every axis).
+    // kUnique stays on: without it (908) intronic multimappers add wrong-species UMIs that STARsolo does not count.
+    // 2957 = 909 + kUmiGeneSpliced (2048): a UMI in two genes of a cell keeps its winner only when the winner is spliced. hgmm5k_v3 had
+    // fewer wrong-species molecules than STARsolo but a 0.8% smaller denominator, so its X fraction sat just above; this closes it.
+    // 7053 = 2957 + kExonPrecedence (4096): a multimapper with an exonic alignment is judged on its exonic alignments only, as STARsolo
+    // Gene, Space Ranger and Cell Ranger count it. Highly expressed genes with unannotated retrocopies in other genes' introns (Eef1a1,
+    // Gapdh, Rps10, Rpl24, Bc1) lost most of their reads to gene ambiguity (docs/research-beta/spatial-exon-multimapper.md).
+    // 61837 = 7053 - kGeneFullSet (512) - kUmiGeneSpliced (2048) + kChrMPrecedence (8192) + kTxCompat (16384) + kStarGene (32768):
+    // chrM precedence, transcript compatibility and STARsolo Gene's gene set for multimappers on; the GeneFull body rule and the spliced-winner
+    // UMI rule off. On the 91-row dev table 61837 passes 77 rows (7053: 62, 63885: 73) with none lost against 63885; the PBMC-E long reads
+    // show 2048 drops molecules whose gene is the long-read gene in 72% of the 21,000 with truth. Env SINGLET_INTRON_RULES overrides.
+    uint32_t intron_rules = 61837;
 };
 
 namespace intron_rule {
@@ -159,10 +198,54 @@ constexpr uint32_t kNoSplicedIntron = 4;    ///< a spliced read (CIGAR N) gives 
 constexpr uint32_t kFlank           = 8;    ///< <= 5 intronic bases of an exon-touching read are exonic (velocyto MIN_FLANK)
 constexpr uint32_t kMtPrefer        = 256;  ///< multimapper split between a chrM gene and a nuclear gene (NUMT): count the chrM gene
 constexpr uint32_t kNoExonPriority  = 16;   ///< an exonic read of gene A inside an intron of gene B is not counted
+// STARsolo GeneFull's gene set (Transcriptome::geneFullAlignOverlap + SoloReadFeature::record): the genes of a read are the same-strand
+// genes whose body (exons or introns) overlaps an aligned block of ANY of its alignments, primary or secondary. A read with more than one
+// such gene is not counted. It implies kNoExonPriority on the primary, makes an intron-only secondary in another gene, or a primary in the
+// introns of two genes, mark a multimapper gene-ambiguous, and otherwise leaves the assignment (gene, exon / intron, labels) unchanged.
+constexpr uint32_t kGeneFullSet     = 512;
+// Exonic alignments take precedence over intronic-only ones (STARsolo Gene, Space Ranger, Cell Ranger with introns). A multimapper (NH > 1)
+// with at least one alignment that overlaps an exon is judged on those alignments alone: alignments without an exon overlap (intron or
+// gene-body hits only) neither make it gene-ambiguous nor give it their gene. It is ambiguous only when its exonic alignments name more than
+// one gene, or one exonic alignment is itself multi-gene (exons of two genes; under kGeneFullSet also an exon of one gene in another gene's
+// intron). The counted features follow R7 over the exonic alignments (the primary's when it is exonic and kept, else the smallest secondary
+// exon), the EM pair is the two smallest exonic genes, and kMtPrefer's tie is decided on the exonic genes and an exonic chrM alignment.
+// A multimapper without any exonic alignment is judged as before. On a joint reference (contigs <genome>___<contig>) the rule decides only
+// when all alignments lie in one genome; across genomes the read is judged on all of them (hgmm1k_v3: a human rRNA read whose only exonic
+// alignment is the mouse 18S pseudogene Rn18s-rs5 stays ambiguous). A single-genome reference is unaffected.
+constexpr uint32_t kExonPrecedence  = 4096;
+// A multimapper with any alignment on the mitochondrial contig (chrM or MT) is never counted for a nuclear gene. Mitochondrial
+// transcripts outnumber any nuclear copy of their sequence (NUMT) by orders of magnitude, so such a read comes from chrM. It is counted
+// for the chrM gene it touches (under kMtPrefer, which records that alignment) and otherwise dropped, even when its chrM alignment lies
+// outside every annotated chrM gene. Cell Ranger's 2024-A references leave out the mitochondrial rRNA and tRNA genes, so 12S and 16S
+// rRNA reads would otherwise land on any annotated NUMT: under kExonPrecedence PBMC-E gave the 115 bp lncRNA ENSG00000289474 (chr2,
+// 115 of 116 bases identical to chrM:627-742) 146,507 molecules with no long-read support. Joint references (<genome>___chrM) have no
+// plain chrM contig, and the rule leaves them unchanged.
+constexpr uint32_t kChrMPrecedence  = 8192;
+// An alignment whose exon overlaps name two or more same-strand genes goes to the one gene with a transcript model concordant with it, as
+// STARsolo Gene decides (Transcriptome::classifyAlign / alignToTranscript, singlet_tx in tx_compat.h): the transcript contains the alignment,
+// every aligned segment lies inside one exon, and every junction joins consecutive exons of that transcript exactly. The read keeps only that
+// gene's exon overlaps and is then judged as any other read; with no such gene, or more than one, it stays gene-ambiguous. Readthrough and
+// overlapping lncRNA models made Visium's Rpl24 (under Gm28037) and Nme2 (under Nme1nme2) near zero: their unique sense reads were dropped.
+constexpr uint32_t kTxCompat        = 16384;
+// STARsolo Gene's gene set for multimappers, ported from STAR 2.7.11b (MIT; NOTICE): Transcriptome::classifyAlign adds a gene to the read's
+// set (annotFeatures[Gene].fSet) only for an alignment concordant with one of its transcripts (alignToTranscript == Concordant), and
+// SoloReadFeature::record counts the read when that set, over all its alignments, holds one gene. An alignment of a multimapper (NH > 1)
+// that overlaps exons on the read's strand but is concordant with no transcript of those genes therefore gives no gene: it neither makes the
+// read gene-ambiguous nor assigns it (Rps6, Rpl27a, Ppia: a partial alignment over a processed pseudogene's exon). It still marks the read
+// as touching chrM (kChrMPrecedence) and its genome. Unique reads keep their exon / intron labels (STARsolo Gene drops a non-concordant
+// unique read; Singlet counts it in the ambiguous layer). The GPU pileup marks such an alignment (AA.multi bit 2) and k_resolve skips it.
+constexpr uint32_t kStarGene        = 32768;
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
 constexpr uint32_t kUmiGeneAll      = 64;   ///< UMI in >1 gene of a cell: drop all its molecules (velocyto)
 constexpr uint32_t kUmiGeneCR       = 128;  ///< UMI in >1 gene of a cell: keep the gene with most reads (ties: none)
+/// With kUmiGeneCR: a UMI in >1 gene of a cell also loses its unspliced molecule, as STARsolo Velocyto drops a UMI whose reads
+/// share no transcript (SoloFeature_countVelocyto). The spliced / ambiguous winner stays (Gene and GeneFull keep it).
+constexpr uint32_t kUmiGeneVelo     = 1024;
+/// With kUmiGeneCR: a UMI in >1 gene of a cell keeps its winner only when the winner is spliced (has a junction read); unspliced and
+/// ambiguous winners go too (implies kUmiGeneVelo). A UMI seen in two genes is weak evidence for either, and without a junction
+/// nothing ties the winner to its gene's mRNA. On hgmm5k_v3 this removes the wrong-species excess over STARsolo GeneFull.
+constexpr uint32_t kUmiGeneSpliced  = 2048;
 constexpr uint32_t kMoleculeRules   = kUmiGene | kUmiGeneAll | kUmiGeneCR;
 }  // namespace intron_rule
 
@@ -225,6 +308,13 @@ struct PileupStats {
     uint64_t snp_molecules = 0;            ///< molecules with a REF or ALT majority (in DP)
     uint64_t snp_molecules_ambiguous = 0;  ///< tie between the two largest base classes: in neither AD nor DP
     uint64_t snp_molecules_other = 0;      ///< majority base is neither REF nor ALT: in neither AD nor DP
+    // D-101: the same counts at the RNA editing sites, which ride on the SNP rows after the SNP and AIM blocks; the snp_* counters
+    // above count SNP and AIM sites only, as without a panel. Written to pileup_stats.json when a panel was loaded (edit_panel).
+    bool edit_panel = false;
+    uint64_t edit_hits = 0;
+    uint64_t edit_molecules = 0;
+    uint64_t edit_molecules_ambiguous = 0;
+    uint64_t edit_molecules_other = 0;
     // Molecule labels (each UMI-deduplicated (barcode, gene, UMI) counted once)
     uint64_t molecules_spliced = 0;
     uint64_t molecules_unspliced = 0;
@@ -304,6 +394,11 @@ struct ProfileCounters {
     uint64_t t_mt_pileup = 0;        // chrM base pileup
     uint64_t t_mm_buffer = 0;        // multi-mapper buffer management
     uint64_t t_chrm_buf = 0;         // chrM bam_dup1 buffering
+    uint64_t t_rrna = 0;             // the 1/64 rRNA sample
+    uint64_t t_ei_query = 0;         // within exon/intron: CIGAR blocks, exon and intron queries, strand filter, gene uniqueness
+    uint64_t t_ei_classify = 0;      // within exon/intron: classify_read + refine_read
+    uint64_t t_ei_count = 0;         // within exon/intron: count_read (unique) or the multimapper buffer (NH > 1)
+    uint64_t t_loop = 0;             // the stream loop, first record to the end of the stream
     uint64_t n_samples = 0;          // number of reads where timing was active
 
     static inline uint64_t rdtsc() {
@@ -331,10 +426,15 @@ struct ProfileCounters {
                   << "  mt base pileup:       " << sec(t_mt_pileup) << "s (" << pct(t_mt_pileup) << "%)\n"
                   << "  Multi-mapper buffer:  " << sec(t_mm_buffer) << "s (" << pct(t_mm_buffer) << "%)\n"
                   << "  chrM buffering:       " << sec(t_chrm_buf) << "s (" << pct(t_chrm_buf) << "%)\n"
+                  << "  rRNA sample:          " << sec(t_rrna) << "s (" << pct(t_rrna) << "%)\n"
+                  << "    exon/intron: queries " << sec(t_ei_query) << "s, classify " << sec(t_ei_classify) << "s, count/mm "
+                  << sec(t_ei_count) << "s\n"
+                  << "  Stream loop (first record to end): " << sec(t_loop) << "s\n"
                   << "  Samples: " << n_samples << " reads\n";
         double accounted = sec(t_bam_io + t_secondary + t_barcode + t_nh_mapq_umi +
                                t_exon_intron + t_sj + t_variant + t_mt_pileup +
-                               t_mm_buffer + t_chrm_buf);
+                               t_mm_buffer + t_chrm_buf + t_rrna);
+        std::cerr << "  Stream loop not in a section: " << (sec(t_loop) - accounted) << "s\n";
         std::cerr << "  Accounted: " << accounted << "s (" << (accounted / total_wall_s * 100.0)
                   << "%), Unaccounted: " << (total_wall_s - accounted)
                   << "s (" << ((total_wall_s - accounted) / total_wall_s * 100.0) << "%)\n\n";
@@ -424,6 +524,7 @@ static inline const char* inline_scan_cb_from_cr(const bam1_t* b, bool reject_n 
 class PileupEngine {
 public:
     explicit PileupEngine(const PileupConfig& config) : config_(config) {
+        edit_baseq_ = config_.edit_baseq();
         if (const char* r = std::getenv("SINGLET_INTRON_RULES"))
             config_.intron_rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
         if (const char* d = std::getenv("SINGLET_MOLECULE_DUMP")) molecule_dump_ = d;
@@ -463,11 +564,15 @@ public:
         std::thread snp_thread;
         std::thread gtf_thread;
 
-        if (need_snps) {
+        // Pool-resident references (take_pool_snps / take_pool_gtf below): the structures `singlet gpu-pool` parsed from the same files
+        const bool snp_pooled = need_snps && take_pool_snps();
+        const bool gtf_pooled = need_exons && take_pool_gtf(gtf_ok);
+
+        if (need_snps && !snp_pooled) {
             snp_thread = std::thread([&]() { snp_ok = load_snps(); });
         }
 
-        if (need_exons) {
+        if (need_exons && !gtf_pooled) {
             gtf_thread = std::thread([&]() {
                 const auto& path = config_.exon_gtf_path;
                 bool is_bed = (path.find(".bed") != std::string::npos);
@@ -481,8 +586,23 @@ public:
             });
         }
 
+        // D-101: the editing panel parses alongside (its indices are assigned after the AIM block below)
+        bool edit_ok = true;
+        std::thread edit_thread;
+        if (!config_.edit_path.empty() && !take_pool_edit()) edit_thread = std::thread([&]() { edit_ok = parse_edit_panel(); });
+        // TE loci (te_counts.h): loaded beside the gene model; exonic reads stay with the genes, so a gene model is required
+        std::thread te_thread;
+        if (need_exons && !config_.te_gtf_path.empty())
+            te_thread = std::thread([&]() { has_te_ = te_model_.load_gtf(config_.te_gtf_path) && !te_model_.empty(); });
+
         if (snp_thread.joinable()) snp_thread.join();
         if (gtf_thread.joinable()) gtf_thread.join();
+        if (edit_thread.joinable()) edit_thread.join();
+        if (te_thread.joinable()) te_thread.join();
+        if (!config_.te_gtf_path.empty())
+            std::cerr << "[te] " << (has_te_ ? "loaded " + std::to_string(te_model_.n_loci()) + " loci in " +
+                                                   std::to_string(te_model_.n_families()) + " subfamilies from "
+                                             : std::string("NOT loaded (no gene model or unreadable): ")) << config_.te_gtf_path << "\n";
 
         if (!snp_ok || !gtf_ok) return false;
         if (need_exons) has_gene_model_ = true;
@@ -490,6 +610,12 @@ public:
         // N13: inject built-in AIM panel (always, unless disabled)
         if (config_.aim_ancestry) {
             load_aim_panel();
+        }
+        // D-101: the editing panel goes last, so every SNP and AIM index is the same as without it
+        if (!config_.edit_path.empty()) {
+            if (!edit_ok) return false;
+            edit_snp_start_ = n_snps_loaded_;
+            n_snps_loaded_ += static_cast<uint32_t>(edit_sites_.size());
         }
 
         // N18: load CRISPR guide reference if provided
@@ -536,10 +662,12 @@ public:
             hts_close(fp);
             return stats;
         }
+        singlet_tail::mark("parent: BAM header read");   // E16 (level 5 only)
 
         // Map chromosome names and resolve pending references
         build_chrom_map(hdr);
         resolve_references();
+        singlet_tail::mark("parent: references resolved");
 
         // Open chrM BAM output if requested
         // Deferred chrM BAM output: buffer reads during main loop, write after.
@@ -643,9 +771,22 @@ public:
             uint32_t first_gene  = UINT32_MAX;   // the smallest gene any alignment touched (note_gene: not the first one met)
             uint32_t second_gene = UINT32_MAX;   // the second smallest distinct gene, for EM rescue
             bool has_nuc = false;                // some alignment touched a non-chrM gene (intron_rule::kMtPrefer)
+            bool partial = false;                // multimap record: the read's gene set is not {first_gene, second_gene} (multimap_record.h)
+            uint32_t body_a = UINT32_MAX, body_b = UINT32_MAX;   // multimap record only: a gene-ambiguous primary's gene-body set (record_set)
+            bool body_more = false;              // ... with more than two genes (never read by the counting)
+            bool ex_partial = false, body_ex = false;   // multimap record under kExonPrecedence: the exonic gene set is not {ex_first, ex_second};
+                                                 // the primary is exonic, so its body set joins the exonic set
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
+            bool mt_ex = false;                  // that alignment overlaps an exon (intron_rule::kExonPrecedence)
+            // intron_rule::kExonPrecedence: the same state over the exonic alignments only (note_ex_gene, note_*_exonic)
+            bool ex_seen = false, ex_ambiguous = false, ex_has_nuc = false, xa_primary = false;
+            uint32_t ex_first = UINT32_MAX, ex_second = UINT32_MAX;
+            uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
+            uint8_t xa_flags = 0, xa_diag = 0;
+            uint8_t sp_mask = 0;                 // species of the alignments' contigs (species_bit; joint references only)
+            bool mt_aln = false;                 // some alignment lies on the chrM contig (intron_rule::kChrMPrecedence)
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
         mm_buffer.reserve(500000);
@@ -653,31 +794,20 @@ public:
         // Lambda to resolve a completed multi-hit entry
         auto resolve_mm = [&](MultiHitEntry& e, PileupStats& st) {
             if (e.bc_idx < 0) return;
-            if (mt_numt_tie(e)) {   // chrM gene vs. its nuclear copy: count the chrM gene (see mt_numt_tie)
+            const MmVerdict v = mm_verdict(e);   // shared with resolve_mm_parallel and the cross-worker merge
+            if (v.kind == MmVerdict::kMt) {      // chrM gene vs. its nuclear copy: count the chrM gene
                 count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
-                           mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                           v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
                 st.mt_numt_rescued++;
-                return;
-            }
-            if (e.gene_ambiguous) {
+            } else if (v.kind == MmVerdict::kAmbig) {
                 // G-EM: collect for post-pileup EM rescue
-                if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
-                    em_rescue::AmbigRead ar;
-                    ar.bc_idx  = e.bc_idx;
-                    ar.umi_len = e.umi_len;
-                    std::memcpy(ar.umi, e.umi, e.umi_len);
-                    ar.gene_a  = e.first_gene;
-                    ar.gene_b  = e.second_gene;
-                    ambig_reads_.push_back(ar);
-                }
-                return;
+                record_mm(e, v, ambig_reads_);   // multimap record: the verdict decides (no double count with kCount)
+            } else if (v.kind == MmVerdict::kCount) {
+                count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
+                           v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+            } else {
+                record_mm(e, v, ambig_reads_);   // gene-ambiguous without a G-EM pair (kNone): uncounted, the record may hold it
             }
-            // Gene-unique: first_gene is the only gene (or all intergenic)
-            if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-            ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
-                            static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
-            count_read(mol_store_, exon_acc_, intron_acc_, st, static_cast<uint32_t>(e.bc_idx),
-                       rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
         };
 
         // ── Strand probe ──
@@ -697,19 +827,54 @@ public:
         double tsc_ghz = calibrate_tsc_ghz();
         std::cerr << "[PROFILE] TSC frequency: " << tsc_ghz << " GHz\n";
         uint64_t _bam_io_start = ProfileCounters::rdtsc();
+        uint64_t _loop_start = 0;
 #endif
 
         gpudump::StreamTee tee(hdr);   // W11 debug: SINGLET_STREAM_TEE=<file> keeps a copy of the record stream
 #ifdef SINGLET_HAVE_ENGINE_GPU
-        if (gpupileup::enabled()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end
+        if (gpupileup::enabled() && config_.edit_baseq() != config_.min_baseq && edit_snp_start_ != UINT32_MAX)
+            std::cerr << "[gpu_pileup] off: editing_min_baseq " << config_.edit_baseq() << " differs from min_baseq " << config_.min_baseq << "\n";
+        else if (gpupileup::enabled() || allsite_on()) gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));   // W11: GPU pileup alongside, compared at the end; D-101: the all-site member reads the same records
+        // CPU route (the collector feeds the all-site member alone): the stream thread only copies each record; one worker adds them in order
+        if (gpu_col_ && !gpupileup::enabled() && !std::getenv("SINGLET_ENGINE_GPU_HANDOFF") && !std::getenv("SINGLET_ENGINE_GPU_E2E")) {
+            const char* af = std::getenv("SINGLET_COLLECTOR_ASYNC");
+            if (!(af && std::string(af) == "0")) gpu_feed_.reset(new gpupileup::AsyncFeed(*gpu_col_));
+        }
         gpu_covers_ = gpu_col_ && gpupileup::mode() == 2;   // W11 "on": the GPU replaces the covered steps below
+        e16_early_start();   // E16 (level 5): the hand-off pass's device part as soon as STAR's prefill completed the shared region
 #endif
-        while (sam_read1(fp, hdr, b) >= 0) {
+        singlet_tail::mark("parent: stream loop starts");
+        bool e16_first = singlet_tail::on();
+        bam1_t* const b_own = b;
+        std::unique_ptr<LookAhead> look;
+        if (config_.stream_lookahead && config_.cb_from_cr && config_.cb_corrector) {
+            ei_ahead_ = has_gene_model_ && !gpu_covers_;
+            post_ahead_ = !gpu_covers_;
+            look.reset(new LookAhead(*this, fp, hdr));
+            std::cerr << "[singlet-pileup] stream look-ahead: records decoded and CBs resolved on a reader thread"
+                      << (ei_ahead_ ? ", exon and intron overlaps taken there too" : "") << "\n";
+        }
+        auto next_record = [&]() -> bool {
+            if (!look) return sam_read1(fp, hdr, b) >= 0;
+            if (look->next(b, look_cur_, look_ei_, post_cur_)) return true;
+            look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
+            return false;
+        };
+        mol_store_.set_staging(true);   // the loop's molecules go to the store's staging table (DirectionalUmiStore::seal())
+        while (next_record()) {
+            if (e16_first) { e16_first = false; singlet_tail::mark("parent: first BAM record"); }
+#ifdef SINGLET_PROFILE
+            if (!_loop_start) {
+                _loop_start = ProfileCounters::rdtsc();
+                _bam_io_start = _loop_start;   // the wait for STAR's first record is not BAM I/O
+            }
+#endif
             tee.write(hdr, b);
 #ifdef SINGLET_HAVE_ENGINE_GPU
             if (gpu_col_) {
                 const char* gcb = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);   // R11: the collector sees the same corrected CB as the serial loop
-                gpu_col_->add(b, (gcb && gcb[0] != '-') ? bc_index_.lookup(gcb) : -1);
+                const int32_t gbc = (gcb && gcb[0] != '-') ? bc_index_.lookup(gcb) : -1;
+                if (gpu_feed_) gpu_feed_->add(b, gbc); else gpu_col_->add(b, gbc);
             }
 #endif
             // Prefetch aux data region into L2 cache while doing flag checks.
@@ -742,6 +907,7 @@ public:
             // (order-free-rules R4)
             if (b->core.l_qseq >= 21 && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))
                 && (hash_qname(bam_get_qname(b)) & 63) == 0) {
+                PROF_START(rrna);
                 ++stats.rrna_reads_sampled;
                 const uint8_t* qseq = bam_get_seq(b);
                 if (qseq) {
@@ -750,6 +916,7 @@ public:
                         _rrna_seq[static_cast<size_t>(_qi)] = seq_nt16_str[bam_seqi(qseq, _qi)];
                     if (rrna_detector_.detect(_rrna_seq)) ++stats.rrna_reads;
                 }
+                PROF_END(prof, rrna);
             }
 
             // Always skip supplementary alignments
@@ -769,7 +936,7 @@ public:
                     // Inline CB scanner — same as primary path, avoids htslib call overhead
                     const char* cb_sec_str = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
                     if (cb_sec_str && cb_sec_str[0] != '-') {
-                        int32_t bc_check = bc_index_.lookup(cb_sec_str);
+                        int32_t bc_check = look_cur_ ? look_cur_->bc : bc_index_.lookup(cb_sec_str);
 
                         // All alignments of the same read share the same barcode.
                         // If barcode is invalid, no entry exists in mm_buffer.
@@ -784,10 +951,13 @@ public:
                                 auto it = mm_buffer.find(qh);
                                 if (it != mm_buffer.end()) {
                                     // Entry exists — update gene tracking
-                                    auto hit = determine_exon_gene(b, tid);
+                                    auto hit = determine_exon_gene(b, tid, true);
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                        it->second.partial = true;   // this alignment's genes are not noted
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(it->second, hit.gene_idx);
                                         // Without a primary assignment, the smallest exon over the
@@ -799,27 +969,32 @@ public:
                                             it->second.exon_idx = hit.exon_idx;
                                             it->second.read_flags = kExonicReadFlags;
                                         }
-                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(it->second, hit, tid);
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm(it->second, stats);
                                         mm_buffer.erase(it);
                                     }
                                 } else {
                                     // Not in buffer yet — create entry
-                                    auto hit = determine_exon_gene(b, tid);
+                                    auto hit = determine_exon_gene(b, tid, true);
                                     auto& entry = mm_buffer[qh];
                                     entry.seen++;
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                        entry.partial = true;   // this alignment's genes are not noted
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(entry, hit.gene_idx);
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(entry, hit, tid);
                                 }
                             }
                         }
@@ -849,8 +1024,7 @@ public:
                 PROF_BAM_IO_RESTART;
                 continue;
             }
-            if (test_drop_read(b)) continue;
-            int32_t bc_idx = bc_index_.lookup(cb_str);
+            int32_t bc_idx = look_cur_ ? look_cur_->bc : bc_index_.lookup(cb_str);
             cur_read_gene_ = UINT32_MAX;
             if (bc_idx < 0) {
                 // N22: WL ambient profiling — accumulate gene hits from WL-only barcodes
@@ -936,10 +1110,28 @@ public:
             if (has_gene_model_) {
                 PROF_START(exon_intron);
                 if (!gpu_covers_) {   // W11 "on": classification and everything that uses it comes from the GPU (gpu_pileup_apply)
-                // Extract aligned blocks from CIGAR
+                PROF_START(ei_query);
+                // Extract aligned blocks from CIGAR (or take the reader's walk and queries, LookRec::ei)
+                const LookRec* const ahead = (look_cur_ && look_cur_->ei) ? look_cur_ : nullptr;
                 aligned_blocks_.clear();
                 bool read_has_n = false;
-                {
+                if (ahead) {
+                    const auto* bb = look_ei_->blocks.data() + ahead->blk_off;
+                    aligned_blocks_.assign(bb, bb + ahead->blk_n);
+                    read_has_n = ahead->has_n != 0;
+                }
+                // Block k's exon (intron) overlaps, before the strand filter: the reader's, or the gene model's
+                auto block_exons = [&](size_t k, int32_t bs, int32_t be) {
+                    if (!ahead) { gene_model_.query_exons(tid, bs, be, block_overlaps_); return; }
+                    const BlockOvl& o = look_ei_->bov[ahead->blk_off + k];
+                    block_overlaps_.assign(look_ei_->ovl.data() + o.e_off, look_ei_->ovl.data() + o.e_off + o.e_n);
+                };
+                auto block_introns = [&](size_t k, int32_t bs, int32_t be) {
+                    if (!ahead) { gene_model_.query_introns(tid, bs, be, block_overlaps_); return; }
+                    const BlockOvl& o = look_ei_->bov[ahead->blk_off + k];
+                    block_overlaps_.assign(look_ei_->ovl.data() + o.i_off, look_ei_->ovl.data() + o.i_off + o.i_n);
+                };
+                if (!ahead) {
                     const uint32_t* cigar = bam_get_cigar(b);
                     int32_t rpos = b->core.pos;
                     for (int ci = 0; ci < b->core.n_cigar; ++ci) {
@@ -974,8 +1166,8 @@ public:
                 bool had_strand_reject = false;
 
                 bool vote_sense = false, vote_anti = false;
-                for (const auto& [bstart, bend] : aligned_blocks_) {
-                    gene_model_.query_exons(tid, bstart, bend, block_overlaps_);
+                for (size_t bk = 0; bk < aligned_blocks_.size(); ++bk) {
+                    block_exons(bk, aligned_blocks_[bk].first, aligned_blocks_[bk].second);
                     strand_vote(block_overlaps_, read_reverse, vote_sense, vote_anti);
                     size_t n_before = exon_overlaps.size();
                     for (uint32_t idx : block_overlaps_) {
@@ -1014,6 +1206,8 @@ public:
                                        "first nuclear exonic reads");
                 }
 
+                const bool star_skip = tx_resolve(b, exon_overlaps) && nh > 1;   // intron_rule::kTxCompat; kStarGene (the buffer below)
+
                 // Determine exon gene (any-overlap, single-gene requirement)
                 uint32_t exon_gene = UINT32_MAX;
                 uint32_t first_exon_idx = UINT32_MAX;
@@ -1039,8 +1233,8 @@ public:
                 uint32_t first_intron_idx = UINT32_MAX;
                 if (config_.count_introns) {
                     intron_overlaps.clear();
-                    for (const auto& [bstart, bend] : aligned_blocks_) {
-                        gene_model_.query_introns(tid, bstart, bend, block_overlaps_);
+                    for (size_t bk = 0; bk < aligned_blocks_.size(); ++bk) {
+                        block_introns(bk, aligned_blocks_[bk].first, aligned_blocks_[bk].second);
                         for (uint32_t idx : block_overlaps_) {
                             if (config_.stranded) {
                                 uint32_t g = gene_model_.intron_to_gene(idx);
@@ -1070,10 +1264,14 @@ public:
                     }
                 }
 
+                PROF_END(prof, ei_query);
+                PROF_START(ei_classify);
                 ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                                 intron_overlaps, intron_gene, first_intron_idx,
                                                 stats);
                 refine_read(rf, aligned_blocks_, read_has_n, nh, tid, read_reverse, block_overlaps_);
+                PROF_END(prof, ei_classify);
+                PROF_START(ei_count);
                 if (nh == 1) cur_read_gene_ = rf.gene;   // R9: evidence UMIs are corrected within (cell, gene)
                 if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
                     uint64_t pk;
@@ -1085,6 +1283,8 @@ public:
                     // ── Unique read: count (molecules are labelled at finalize) ──
                     count_read(mol_store_, exon_acc_, intron_acc_, stats,
                                static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
+                    if (primary_multigene || gene_full_multi(exon_gene, primary_multigene, intron_overlaps))
+                        note_unique_multigene(ambig_reads_, exon_overlaps, intron_overlaps, bc_idx, umi_str, umi_len);
                 } else {
                     // ── Multi-mapped primary: buffer for cross-alignment resolution ──
                     uint64_t qh = hash_qname(bam_get_qname(b));
@@ -1092,6 +1292,18 @@ public:
                     entry.nh = static_cast<uint8_t>(std::min(nh, 255));
                     entry.seen++;
                     entry.bc_idx = bc_idx;
+                    if (star_skip) {
+                        // intron_rule::kStarGene: concordant with no transcript of the genes it touches, the primary gives no gene
+                        // (STAR classifyAlign); it still marks the read's genome and chrM
+                        entry.sp_mask |= species_bit(tid);
+                        if (is_chrm(tid)) entry.mt_aln = true;
+                        if (umi_str && umi_len > 0) {
+                            int clen = std::min(umi_len, 15);
+                            std::memcpy(entry.umi, umi_str, clen);
+                            entry.umi[clen] = 0;
+                            entry.umi_len = static_cast<uint8_t>(umi_len);
+                        }
+                    } else {
                     // The primary's assignment wins over one a secondary provided
                     if (rf.gene != UINT32_MAX) {
                         entry.primary_assigned = true;
@@ -1100,7 +1312,7 @@ public:
                         entry.intron_idx = rf.intron_idx;
                         entry.read_flags = rf.flags;
                         entry.read_diag = rf.diag;
-                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
+                        note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag, exon_gene != UINT32_MAX);
                     }
                     if (umi_str && umi_len > 0) {
                         int clen = std::min(umi_len, 15);
@@ -1108,28 +1320,34 @@ public:
                         entry.umi[clen] = '\0';
                         entry.umi_len = static_cast<uint8_t>(umi_len);
                     }
+                    const bool gf_multi = gene_full_multi(exon_gene, primary_multigene, intron_overlaps);
+                    note_primary_exonic(entry, exon_overlaps, exon_gene, primary_multigene, gf_multi, rf, tid);
 
                     // If primary position overlaps multiple genes, mark as ambiguous
                     if (primary_multigene) {
                         entry.gene_ambiguous = true;
                         // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from exon_overlaps
                         if (!exon_overlaps.empty()) {
-                            uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+                            uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]), gb = UINT32_MAX;
                             if (ga != UINT32_MAX) {
                                 note_gene(entry, ga);
-                                for (size_t _i = 1; _i < exon_overlaps.size(); ++_i) {
-                                    uint32_t gb = gene_model_.exon_to_gene(exon_overlaps[_i]);
-                                    if (gb != UINT32_MAX && gb != ga) {
-                                        note_gene(entry, gb); break;
-                                    }
-                                }
+                                gb = second_exon_gene(exon_overlaps, ga);
+                                if (gb != UINT32_MAX) note_gene(entry, gb);
                             }
+                            if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(exon_overlaps, ga, gb)) entry.partial = true;
                         }
                     }
 
+                    if (gf_multi) entry.gene_ambiguous = true;
+                    if (primary_multigene || gf_multi) {   // multimap record: the primary's gene-body set
+                        const RecSet bs = record_set(exon_overlaps, intron_overlaps);
+                        note_body(entry, bs.a); note_body(entry, bs.b);
+                        if (bs.more) entry.body_more = true;
+                    }
                     // Track gene across alignments (use exon gene preferentially)
                     uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                     note_gene(entry, aln_gene);
+                    }   // !star_skip
 
                     // Check if all alignments seen
                     if (entry.seen >= entry.nh && entry.nh > 0) {
@@ -1138,6 +1356,7 @@ public:
                     }
                 }
 
+                PROF_END(prof, ei_count);
                 // N17: VDJ gene usage counting
                 if (has_vdj_ && !aligned_blocks_.empty()) {
                     vdj_overlaps_.clear();
@@ -1154,6 +1373,12 @@ public:
                         }
                     }
                 }
+                // TE molecules (te_counts.h)
+                if (has_te_ && !aligned_blocks_.empty()) {
+                    TeRecord tr;
+                    if (te_record(tid, aligned_blocks_, nh, static_cast<uint32_t>(bc_idx), umi_str, umi_len, te_scratch_, te_exon_scratch_, tr))
+                        te_recs_.push_back(tr);
+                }
 
                 }   // !gpu_covers_
                 PROF_END(prof, exon_intron);
@@ -1161,7 +1386,10 @@ public:
                 // Splice junction extraction (always for primary alignments)
                 if (config_.count_sj) {
                     PROF_START(sj);
-                    if (!gpu_covers_) extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats);
+                    if (!gpu_covers_) {
+                        if (post_cur_) post_set(kPostSj, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);
+                        else extract_splice_junctions(b, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len, stats, cur_read_gene_);
+                    }
                     PROF_END(prof, sj);
                 }
             }
@@ -1170,10 +1398,14 @@ public:
             // Only use high-MAPQ reads for variant calling accuracy
             if (high_mapq) {
                 PROF_START(variant);
-                int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
-                if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
-                    pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
-                                         umi_str, umi_len, stats);
+                if (post_cur_ && !gpu_covers_) {
+                    post_set(kPostVariant, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);   // the overlap search too
+                } else {
+                    int32_t end_pos_v = gpu_covers_ ? 0 : bam_endpos(b);   // W11 "on": the GPU does the SNP pileup; skip the search too
+                    if (!gpu_covers_ && has_variant_overlap(tid, b->core.pos, end_pos_v)) {
+                        pileup_aligned_bases(b, tid, static_cast<uint32_t>(bc_idx),
+                                             umi_str, umi_len, stats, cur_read_gene_);
+                    }
                 }
                 PROF_END(prof, variant);
             }
@@ -1182,14 +1414,32 @@ public:
             // MAPQ gate: multimapped reads (NH>1, low MAPQ; e.g. NUMT-derived) reach this point, so require high_mapq here.
             if (config_.count_mt && high_mapq && is_chrm(tid)) {
                 PROF_START(mt_pileup);
-                if (!gpu_covers_) pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                if (!gpu_covers_) {
+                    if (post_cur_) post_set(kPostMt, tid, static_cast<uint32_t>(bc_idx), umi_str, umi_len);
+                    else pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
+                }
                 PROF_END(prof, mt_pileup);
             }
             PROF_BAM_IO_RESTART;
         }
         PROF_BAM_IO_ACCUM;  // account for last failed sam_read1
+#ifdef SINGLET_PROFILE
+        if (_loop_start) prof.t_loop = ProfileCounters::rdtsc() - _loop_start;
+#endif
+        look_cur_ = nullptr; look_ei_ = nullptr; post_cur_ = nullptr;
+        if (look) {   // the post stage's steps are complete once finish() returns
+            look->finish();
+            stats.sj_hits += post_stats_.sj_hits;
+            stats.snp_hits += post_stats_.snp_hits;
+            stats.edit_hits += post_stats_.edit_hits;
+            stats.mt_pileup_bases += post_stats_.mt_pileup_bases;
+            post_stats_ = PileupStats{};
+        }
+        b = b_own;
+        look.reset();   // stops and joins the reader (after a strand abort it may hold up to one more batch, unread)
 
         if (gpu_covers_) std::cerr << "[gpu_pileup] stream drained\n";   // S8: log timestamps place the post-stream steps
+        singlet_tail::mark("parent: stream drained (%llu records)", (unsigned long long) stats.total_reads);
         // ── Flush remaining multi-mapper buffer entries ──
         // These are reads where not all NH alignments appeared in the BAM
         uint64_t mm_flushed = 0;
@@ -1202,20 +1452,28 @@ public:
             std::cerr << "[singlet-pileup] Flushed " << mm_flushed
                       << " incomplete multi-mapped entries\n";
         }
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        if (gpu_feed_) { gpu_feed_->drain(); gpu_feed_.reset(); }   // every streamed record is in the collector before anything reads it
+#endif
+        mol_store_.set_staging(false);   // seals: the groups as record_read() would have built them, before anything reads them
 
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (gpu_covers_ && !gpu_handoff_pass(stats)) {
             std::cerr << "[gpu_pileup] ERROR: the hand-off pass failed (see above); rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
         }
+        singlet_tail::mark("parent: hand-off pass done");
         if (gpu_covers_ && !gpu_pileup_apply(stats)) {   // W11 "on": covered accumulators and counters from the GPU
             std::cerr << "[gpu_pileup] ERROR: the GPU pileup failed after the CPU skipped its steps; rerun with SINGLET_GPU_PILEUP unset\n";
             std::exit(9);
         }
 #endif
+        singlet_tail::mark("parent: GPU pileup applied");
         // ── Order-free finalize (docs/research-beta/order-free-rules.md) ──
         fin_mark("stream done, finalize starts");
+        snp_cons_.set_edit_start(edit_snp_start_);   // D-101: editing rows count into the edit_* counters
         snp_cons_.finalize(snp_ad_, snp_dp_, stats, config_.umi_dedup_directional, gene_roots(mol_store_));  // R1 over R9
+        stats.edit_panel = edit_snp_start_ != UINT32_MAX;
         fin_mark("SNP consensus finalize");
         snp_cons_.clear();
         fin_mark("SNP consensus freed");
@@ -1260,6 +1518,7 @@ public:
         bam_destroy1(b);
         sam_hdr_destroy(hdr);
         hts_close(fp);
+        singlet_tail::mark("parent: finalize done");
 
         auto t1 = std::chrono::high_resolution_clock::now();
         stats.wall_time_s = std::chrono::duration<double>(t1 - t0).count();
@@ -1308,6 +1567,7 @@ public:
         gpudump_write(static_cast<uint32_t>(tid_to_chrom_.size()));   // W11 debug (SINGLET_PILEUP_DUMP); hdr is already freed here
 #ifdef SINGLET_HAVE_ENGINE_GPU
         gpu_pileup_compare();   // W11 (SINGLET_GPU_PILEUP=compare)
+        allsite_cpu_mode();     // D-101 with SINGLET_GPU_PILEUP unset: the records were collected for the all-site member only
 #endif
         return stats;
     }
@@ -1374,9 +1634,21 @@ public:
             uint32_t first_gene  = UINT32_MAX;
             uint32_t second_gene = UINT32_MAX;  // the second smallest distinct gene, for EM rescue (note_gene)
             bool has_nuc = false;
+            bool partial = false;               // multimap record: the gene set is not {first_gene, second_gene}
+            uint32_t body_a = UINT32_MAX, body_b = UINT32_MAX;   // multimap record only (record_set)
+            bool body_more = false;
+            bool ex_partial = false, body_ex = false;   // multimap record under kExonPrecedence
             // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
             uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
             uint8_t mt_flags = 0, mt_diag = 0;
+            bool mt_ex = false;                  // that alignment overlaps an exon (intron_rule::kExonPrecedence)
+            // intron_rule::kExonPrecedence: the same state over the exonic alignments only (note_ex_gene, note_*_exonic)
+            bool ex_seen = false, ex_ambiguous = false, ex_has_nuc = false, xa_primary = false;
+            uint32_t ex_first = UINT32_MAX, ex_second = UINT32_MAX;
+            uint32_t xa_gene = UINT32_MAX, xa_exon = UINT32_MAX, xa_intron = UINT32_MAX;   // R7 over the exonic alignments
+            uint8_t xa_flags = 0, xa_diag = 0;
+            uint8_t sp_mask = 0;                 // species of the alignments' contigs (species_bit; joint references only)
+            bool mt_aln = false;                 // some alignment lies on the chrM contig (intron_rule::kChrMPrecedence)
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
 
@@ -1397,6 +1669,8 @@ public:
         std::vector<uint32_t> cell_reads;
         std::vector<CellAlignQC> cell_qc;  // per-cell alignment QC (multimappers, nM mismatches)
         std::vector<PolyARecord> polya;    // poly(A)-tailed read ends (count_polya)
+        std::vector<TeRecord> te;          // TE records (te_counts.h)
+        std::vector<uint32_t> te_scratch, te_exon_scratch;
         // G-RRNA: per-worker rRNA detector
         singlet::RrnaDetector rrna_detector;
         // N22: per-worker WL ambient gene profile (populated when whitelist_path is set)
@@ -1585,6 +1859,9 @@ public:
         }
 
         for (auto& t : threads) t.join();
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        allsite_parallel_pass(bam_path, n_workers);   // D-101: the region workers keep no records, so one more pass over the BAM collects them
+#endif
 
         auto proc_t1 = std::chrono::high_resolution_clock::now();
         double proc_s = std::chrono::duration<double>(proc_t1 - proc_t0).count();
@@ -1608,8 +1885,9 @@ public:
                     if (m.bc_idx < 0 && wentry.bc_idx >= 0) m.bc_idx = wentry.bc_idx;
                     if (wentry.mt_gene != UINT32_MAX) {
                         m.mt_gene = wentry.mt_gene; m.mt_exon = wentry.mt_exon; m.mt_intron = wentry.mt_intron;
-                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag;
+                        m.mt_flags = wentry.mt_flags; m.mt_diag = wentry.mt_diag; m.mt_ex = wentry.mt_ex;
                     }
+                    merge_exonic(m, wentry);   // intron_rule::kExonPrecedence: the exonic genes and R7 over the exonic alignments
                     if (m.umi_len == 0 && wentry.umi_len > 0) {
                         m.umi_len = wentry.umi_len;
                         std::memcpy(m.umi, wentry.umi, wentry.umi_len);
@@ -1618,6 +1896,9 @@ public:
                     note_gene(m, wentry.first_gene);
                     note_gene(m, wentry.second_gene);
                     if (wentry.has_nuc) m.has_nuc = true;
+                    if (wentry.partial) m.partial = true;
+                    note_body(m, wentry.body_a); note_body(m, wentry.body_b);
+                    if (wentry.body_more) m.body_more = true;
                     if (wentry.gene_ambiguous) {
                         m.gene_ambiguous = true;
                     } else {
@@ -1648,46 +1929,24 @@ public:
 
             PileupStats xw_stats;
             for (auto& [qh, m] : global_mm) {
-                // intron_rule::kMtPrefer (see resolve_mm_parallel): chrM gene vs. its nuclear copy
-                if (m.bc_idx >= 0 && mt_numt_tie(m)) {
-                    const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
-                    int target = 0;
-                    for (int w = 0; w < n_workers; ++w)
-                        if (workers[w].mol_store.has_group(bc, m.mt_gene)) { target = w; break; }
-                    auto& tw = workers[target];
-                    ReadFeatures rf{m.mt_gene, m.mt_exon, m.mt_intron, m.mt_flags,
-                                    static_cast<uint8_t>(m.mt_diag | DirectionalUmiStore::kDiagMulti)};
-                    count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
-                               m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
-                    xw_mt++;
-                    continue;
-                }
-                if (m.gene_ambiguous || m.bc_idx < 0) {
+                if (m.bc_idx < 0) continue;
+                // the same verdict as resolve_mm_parallel: intron_rule::kMtPrefer's chrM tie, gene ambiguity (G-EM pair) or the counted features
+                const MmVerdict v = mm_verdict(m);
+                if (v.kind == MmVerdict::kAmbig) {
                     // G-EM: collect cross-worker ambiguous reads for rescue
-                    if (m.gene_ambiguous && m.bc_idx >= 0 &&
-                        m.first_gene != UINT32_MAX && m.second_gene != UINT32_MAX) {
-                        em_rescue::AmbigRead ar;
-                        ar.bc_idx  = m.bc_idx;
-                        ar.umi_len = m.umi_len;
-                        std::memcpy(ar.umi, m.umi, m.umi_len);
-                        ar.gene_a  = m.first_gene;
-                        ar.gene_b  = m.second_gene;
-                        ambig_reads_.push_back(ar);
-                    }
+                    record_mm(m, v, ambig_reads_);   // multimap record: the verdict decides
                     continue;
                 }
-                if (m.first_gene == UINT32_MAX || m.gene_idx == UINT32_MAX) continue;
+                if (v.kind == MmVerdict::kNone) { record_mm(m, v, ambig_reads_); continue; }
 
                 const uint32_t bc = static_cast<uint32_t>(m.bc_idx);
                 int target = 0;  // no store has this (bc, gene) yet: any store is the only one
                 for (int w = 0; w < n_workers; ++w)
-                    if (workers[w].mol_store.has_group(bc, m.gene_idx)) { target = w; break; }
+                    if (workers[w].mol_store.has_group(bc, v.rf.gene)) { target = w; break; }
                 auto& tw = workers[target];
-                ReadFeatures rf{m.gene_idx, m.exon_idx, m.intron_idx, m.read_flags,
-                                static_cast<uint8_t>(m.read_diag | DirectionalUmiStore::kDiagMulti)};
-                count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, rf,
+                count_read(tw.mol_store, tw.exon, tw.intron, xw_stats, bc, v.rf,
                            m.umi_len > 0 ? m.umi : nullptr, m.umi_len);
-                xw_exon++;
+                (v.kind == MmVerdict::kMt ? xw_mt : xw_exon)++;
             }
             workers[0].stats.exon_hits += xw_stats.exon_hits;
             workers[0].stats.mt_numt_rescued += xw_mt;
@@ -1716,6 +1975,7 @@ public:
             stats.mapped_reads += ws.mapped_reads;
             stats.barcoded_reads += ws.barcoded_reads;
             stats.snp_hits += ws.snp_hits;
+            stats.edit_hits += ws.edit_hits;
             stats.exon_hits += ws.exon_hits;
             stats.intron_hits += ws.intron_hits;
             stats.sj_hits += ws.sj_hits;
@@ -1772,6 +2032,10 @@ public:
                 polya_recs_.insert(polya_recs_.end(), workers[w].polya.begin(), workers[w].polya.end());
                 std::vector<PolyARecord>().swap(workers[w].polya);
             }
+            for (int w = 0; w < n_workers; ++w) {
+                te_recs_.insert(te_recs_.end(), workers[w].te.begin(), workers[w].te.end());
+                std::vector<TeRecord>().swap(workers[w].te);
+            }
         }
         per_cell_qc_.assign(n_barcodes, CellAlignQC{});
         for (int w = 0; w < n_workers; ++w) {
@@ -1780,6 +2044,7 @@ public:
         }
         // SNP AD/DP: consensus per molecule in its worker (order-free-rules R1), then merge
         for (auto& wc : workers) {
+            wc.snp_cons.set_edit_start(edit_snp_start_);   // D-101: editing rows count into the edit_* counters
             wc.snp_cons.finalize(wc.snp_ad, wc.snp_dp, stats, config_.umi_dedup_directional,
                                  gene_roots(wc.mol_store));  // R1 over R9 molecules
             wc.snp_cons.clear();
@@ -1788,6 +2053,7 @@ public:
             finalize_umi_features(wc.vdj_umi, wc.vdj, stats.vdj_hits, wc.mol_store);
             wc.mol_store.clear_molecules();
         }
+        stats.edit_panel = edit_snp_start_ != UINT32_MAX;
         merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_ad; });
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.snp_dp; });
         if (config_.count_mt) {
@@ -1926,10 +2192,81 @@ public:
     // W11: runs the GPU pileup on the records collected from this pass and compares each covered output with this engine's accumulators
     // (exon, intron, ambiguous, junctions by contig/donor/acceptor, SNP AD/DP, chrM total/reverse, chrM indels, R1 molecule counters).
     std::unique_ptr<gpupileup::Collector> gpu_col_;
+    std::unique_ptr<gpupileup::AsyncFeed> gpu_feed_;   // CPU route: the stream's records for gpu_col_, added by a worker (declared after it, so it goes first)
+    bool allsite_done_ = false;
     PileupStats* gpu_stats_ = nullptr;
+    // E16 (docs/gpu-engine/fable/E16-tail.md; level 5, SINGLET_E16=0 turns it off): the hand-off pass's device part (e2ePass + rRNA detector) on a
+    // thread that waits for STAR's prefill to complete the shared region (its magic), so it runs while STAR maps the reads without a record and
+    // the stream fills the collector; gpu_handoff_pass joins it and merges its results after the stream, where the serial pass made them
+    struct E16Early {
+        std::thread th; std::atomic<bool> stop{false}; bool started = false, ran = false, ok = false;
+        singlet_engine_gpu::E2ERegion reg;   // its own mapping of the region (the collector maps the region for the stream separately)
+        singlet_engine_gpu::E2EPassOut o; uint64_t nRrna = 0; double sR = 0, done = 0, lead = 0;
+        // zc ("zerocopy"): the pass leaves the region (this mapping) and its kept reads page-locked in a live context, and the pileup's input
+        // reads them in place (Collector::finish with this mapping, which the input then owns)
+        bool zc = false;
+        // rbg ("rrnabg"): the rRNA detector (on the reads the pass sends to the host) runs on rth after e2ePass, beside the merge, the input's
+        // build and pileupRun; gpu_pileup_apply joins it (e16_rrna_join) and adds its count. rrnaPending: the merge took this pass's results
+        std::thread rth; bool rbg = false, rrnaPending = false;
+        ~E16Early() { stop = true; if (th.joinable()) th.join(); if (rth.joinable()) rth.join(); if (reg.base != nullptr) munmap(reg.base, reg.cap); }
+    } e16_;
+    void e16_rrna_join(PileupStats& stats) {
+        if (e16_.rth.joinable()) e16_.rth.join();
+        if (!e16_.rrnaPending) return;
+        e16_.rrnaPending = false;
+        stats.rrna_reads += e16_.nRrna;
+        std::cerr << "[gpu_pileup] hand-off pass: rRNA detector (E16: on a thread beside the pileup): " << e16_.nRrna << " reads in " << e16_.sR << " s\n";
+        singlet_tail::mark("parent: rRNA detector joined");
+    }
+    void e16_early_start() {
+        if (!gpu_covers_ || !singlet_tail::cut("early") || singlet_engine_gpu::e2eRegion().fd < 0) return;
+        e16_.started = true;
+        e16_.th = std::thread([this] {
+            const int fd = singlet_engine_gpu::e2eRegion().fd;
+            singlet_engine_gpu::E2EHeader h;
+            while (!e16_.stop.load(std::memory_order_relaxed)) {
+                if (pread(fd, &h, sizeof h, 0) == (ssize_t) sizeof h && std::memcmp(h.magic, "SGE2E001", 8) == 0) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            if (e16_.stop.load()) return;
+            e16_.reg.fd = fd;
+            if (!e16_.reg.mapUsed()) { e16_.reg.base = nullptr; return; }
+            if (!e16_.reg.hdr()->simple) return;
+            singlet_tail::mark("parent: E16 early hand-off pass: region complete and mapped");
+            e16_.ran = true;
+            e16_.zc = singlet_tail::cut("zerocopy");
+            e16_.rbg = singlet_tail::cut("rrnabg");
+            e16_.ok = gpu_handoff_device_pass(e16_.reg, e16_.o, e16_.nRrna, e16_.sR, e16_.zc, e16_.rbg);
+            if (!e16_.ok) { e16_.zc = false; e16_.rbg = false; }
+            e16_.done = singlet_tail::now();
+            if (e16_.rbg) {   // the region's arrays stay mapped until the join (e16_early_join without zc; zc: the input's mapping, gpu_pileup_apply)
+                const SigRec* S = e16_.reg.at<SigRec>(e16_.reg.hdr()->oSigs); const uint8_t* Q = e16_.reg.at<uint8_t>(e16_.reg.hdr()->oSeq);
+                e16_.rth = std::thread([this, S, Q] {
+                    const double a = singlet_tail::now();
+                    e16_.nRrna = gpu_rrna_detect(S, Q, e16_.o.rrnaHost);
+                    e16_.sR = singlet_tail::now() - a;
+                    singlet_tail::mark("parent (bg): rRNA detector done in %.3f s", e16_.sR);
+                });
+            }
+        });
+    }
+    void e16_early_join() {
+        if (!e16_.started) return;
+        e16_.stop = true;
+        if (e16_.th.joinable()) e16_.th.join();
+        e16_.started = false;
+        e16_.lead = e16_.done > 0 ? singlet_tail::now() - e16_.done : 0;
+        e16_.reg.fd = -1;   // the memfd stays the collector's
+        if (!e16_.zc) {     // its own mapping only (zc: the pileup's input takes it over, gpu_build_input)
+            if (e16_.rth.joinable()) e16_.rth.join();   // rrnabg: it reads this mapping
+            if (e16_.reg.base != nullptr) munmap(e16_.reg.base, e16_.reg.cap);
+            e16_.reg.base = nullptr; e16_.reg.cap = 0;
+        }
+    }
     // this pass's records plus this engine's annotation and parameters, as the GPU pileup takes them; false if not reproducible
     bool gpu_build_input(singlet_engine_gpu::PileupInput& in) {
         using namespace singlet_engine_gpu;
+        singlet_tail::mark("parent: build input starts");
         const auto& et = gene_model_.exon_trees_view(); const auto& it = gene_model_.intron_trees_view();
         const uint32_t n_tid = static_cast<uint32_t>(tid_to_chrom_.size());
         in.exonTrees.resize(n_tid); in.intronTrees.resize(n_tid);
@@ -1947,6 +2284,11 @@ public:
         in.intronRules = config_.intron_rules;
         in.geneIsMt.assign(gene_model_.n_genes(), 0);
         for (uint32_t g = 0; g < gene_model_.n_genes(); ++g) in.geneIsMt[g] = is_mt_gene(g) ? 1 : 0;
+        in.tidSpecies = tid_species_;   // kExonPrecedence within one species (empty: single-genome reference)
+        if ((config_.intron_rules & (intron_rule::kTxCompat | intron_rule::kStarGene)) && gene_model_.tx_gene_off_view().size() == static_cast<size_t>(gene_model_.n_genes()) + 1) {
+            in.txGeneOff = gene_model_.tx_gene_off_view(); in.txExonOff = gene_model_.tx_exon_off_view();
+            in.txExonStart = gene_model_.tx_exon_start_view(); in.txExonEnd = gene_model_.tx_exon_end_view();
+        }
         if (config_.intron_rules & intron_rule::kFlank) {   // refine_read's intronic-base count: gene bodies and their merged exons
             const auto& genes = gene_model_.genes();
             in.geneStart.reserve(genes.size()); in.geneEnd.reserve(genes.size()); in.geneExonOff.assign(1, 0);
@@ -1960,22 +2302,119 @@ public:
             for (uint32_t e = 0; e < ne; ++e) { in.exonStart[e] = gene_model_.exon_start(e); in.exonEnd[e] = gene_model_.exon_end(e); }
         }
         in.wantGeneMerges = (has_vdj_ && config_.umi_dedup) ? 1 : 0;   // R9 per gene for the host's V(D)J reducer
+        in.wantUmiKeys = (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) ? 1 : 0;   // the multimap record's counted UMIs
         in.wantReads = reads_matrix_on() ? 1 : 0;   // reads per molecule (exon_reads / intron_reads / histogram)
+        in.editStart = edit_snp_start_;   // D-101: the editing rows' counters apart (PileupOutput::edit*)
         in.nSnps = n_snps_loaded_; in.nBarcodes = static_cast<uint32_t>(barcodes_.size()); in.nTid = n_tid;
         in.nExons = gene_model_.n_exons(); in.nIntrons = gene_model_.n_introns(); in.nGenes = gene_model_.n_genes();
+        singlet_tail::mark("parent: build input: annotation (trees, SNPs, genes) done");
         const size_t nreads = gpu_col_->n_reads(), nsigs = gpu_col_->n_sigs(); const uint64_t inc = gpu_col_->incomplete();
         if (gpu_col_->handoff_used())
             std::cerr << "[gpu_pileup] hand-off: " << gpu_col_->n_handoff_reads() << " reads take their alignments from the GPU prefill, "
                       << gpu_col_->handoff_mismatches() << " primary alignments differ from the stream's\n";
-        gpu_col_->finish(in);
+        gpu_col_->finish(in, e16_.zc && e16_.reg.base != nullptr ? &e16_.reg : nullptr);
+        if (in.keep) { e16_.reg.base = nullptr; e16_.reg.cap = 0; }   // E16: the second mapping is the input's now
+        singlet_tail::mark("parent: build input: collector finished (records in the input)");
+        if (e16_.zc) gpu_clip_ = gpu_col_->take_clips(); else
         gpu_clip_ = gpu_col_->clips();   // gpu_host_pass rebuilds the poly(A) site of a clipped read from these, after gpu_col_ is gone
         gpu_col_.reset();
+        singlet_tail::mark("parent: build input: clips copied, collector freed");
         if (in.snpSkipN < 0) { std::cerr << "[gpu_pileup] not run: base qualities neither constant nor tied to N\n"; return false; }
         std::cerr << "[gpu_pileup] " << nreads << " reads, " << nsigs << " signatures (" << inc << " incomplete groups)\n";
         return true;
     }
+    // D-101: the all-site member from this pass's records (allsite.h), one host implementation for every mode
+    struct AllSiteView {
+        singlet_engine_gpu::PileupCat<SigRec> S; singlet_engine_gpu::PileupCat<AlnRec> A; singlet_engine_gpu::PileupCat<ReadRec> Rd;
+        singlet_engine_gpu::PileupCat<uint32_t> O; singlet_engine_gpu::PileupCat<uint8_t> Q; singlet_engine_gpu::PileupCat<uint64_t> L;
+        explicit AllSiteView(const singlet_engine_gpu::PileupInput& in)
+            : S(singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size())),
+              A(singlet_engine_gpu::pileupCat<AlnRec>(in.preAlns, in.alns.data(), in.alns.size())),
+              Rd(singlet_engine_gpu::pileupCat<ReadRec>(in.preReads, in.reads.data(), in.reads.size())),
+              O(singlet_engine_gpu::pileupCat<uint32_t>(in.preOps, in.ops.data(), in.ops.size() * sizeof(uint32_t))),
+              Q(singlet_engine_gpu::pileupCat<uint8_t>(in.preSeq, in.seq.data(), in.seq.size())),
+              L(singlet_engine_gpu::pileupCat<uint64_t>(in.preLowq, in.lowq.data(), in.lowq.size())) {}
+        uint64_t n_sigs() const { return S.size(); }
+        uint64_t n_reads() const { return Rd.size(); }
+        const SigRec& sig(uint64_t i) const { return S[i]; }
+        const AlnRec& aln(uint64_t i) const { return A[i]; }
+        const ReadRec& read(uint64_t i) const { return Rd[i]; }
+        const uint32_t* ops_at(uint64_t off) const { return O.at(off); }
+        const uint8_t* seq_at(uint64_t off) const { return Q.at(off); }
+        uint64_t lowq_word(uint64_t i) const { return L[i]; }
+    };
+    void allsite_from_input(const singlet_engine_gpu::PileupInput& in) {
+        if (!allsite_on() || allsite_done_) return;
+        allsite_done_ = true;
+        const auto t0 = std::chrono::steady_clock::now();
+        if (in.snpSkipN < 0 && !in.useQual) { std::cerr << "[allsite] not run: base qualities neither constant nor tied to N, and no masks\n"; return; }
+        allsite::Genome G; std::string err;
+        if (!G.open(config_.allsite_genome_dir, tid_to_chrom_, &err)) { std::cerr << "[allsite] not run: cannot read the reference (" << err << ")\n"; return; }
+        allsite::Params P;
+        P.min_mapq = in.minMapq; P.min_alt_molecules = config_.allsite_min_alt_molecules; P.min_alt_cells = config_.allsite_min_alt_cells;
+        P.skip_tid = chrm_tid_; P.use_qual = in.useQual; P.qwords = static_cast<int>(singlet_qmask::words()); P.skip_n = in.snpSkipN > 0;
+        P.umi_dedup = in.umiDedup; P.directional = in.directional; P.umi_len = in.umiLen;
+        P.threads = static_cast<unsigned>(std::max(1, std::max(config_.finalize_threads, config_.threads)));
+        P.progress = [] { singlet::rearm_stall_watchdog("allsite pass"); };
+        P.defer_build = true;   // finalize_allsite builds the matrices for the called cells once they are known
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        // the device route (allsite_device.h; SINGLET_ALLSITE_GPU=0 turns it off): the same sites and counts, the host pass when it declines
+        P.device = [](const allsite::dev::Input& i, allsite::dev::Output& o) { return singlet_engine_gpu::allsiteDeviceRun(i, o); };
+#endif
+        AllSiteView v(in);
+        if (const char* dd = std::getenv("SINGLET_ALLSITE_DUMP_DIR")) {   // speed work: the pass's input for `singlet allsite-replay`
+            namespace RP = allsite::replay; const std::string d = dd; ::mkdir(d.c_str(), 0755);
+            auto wr = [&](const char* f, const auto& c) { using T = std::remove_cv_t<std::remove_reference_t<decltype(c.a[0])>>;
+                return RP::write_parts(d + "/" + f, c.a, c.na * sizeof(T), c.b, c.nb * sizeof(T)); };
+            const bool ok = wr("sigs.bin", v.S) && wr("alns.bin", v.A) && wr("reads.bin", v.Rd) && wr("ops.bin", v.O) && wr("seq.bin", v.Q) && wr("lowq.bin", v.L)
+                && RP::write_meta(d, P, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), config_.allsite_genome_dir, tid_to_chrom_);
+            std::cerr << "[allsite] input written to " << d << (ok ? "" : " (FAILED)") << "\n";
+        }
+        allsite_ = allsite::run(v, G, static_cast<uint32_t>(tid_to_chrom_.size()), static_cast<uint32_t>(barcodes_.size()), P);
+        allsite_ok_ = true;
+        if (P.min_alt_pct > 0)
+            std::cerr << "[allsite] ALT-fraction floor " << P.min_alt_pct << "%: " << allsite_.sites_below_floor << " of " << (allsite_.sites.size() + allsite_.sites_below_floor)
+                      << " discovered sites dropped (pooled ALT below the floor of the pooled depth)\n";
+        std::cerr << "[allsite] " << allsite_.sites.size() << " sites (>= " << P.min_alt_molecules << " ALT molecules in >= " << P.min_alt_cells
+                  << " barcodes), DP records " << allsite_.dp_records << ", AD records " << allsite_.ad_records << "; reads " << allsite_.reads_used
+                  << ", mismatch observations " << allsite_.mismatch_obs << ", molecules " << allsite_.molecules << " (ambiguous " << allsite_.ambiguous
+                  << ", other " << allsite_.other << ") in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+    }
+    void allsite_cpu_mode() {
+        if (!gpu_col_ || gpupileup::enabled() || !allsite_on()) return;
+        singlet_engine_gpu::PileupInput in;
+        if (!gpu_build_input(in)) { std::cerr << "[allsite] not run: records not reproducible\n"; return; }
+        allsite_from_input(in);
+    }
+    // D-101 on the region-parallel path (run_parallel): the workers keep no alignment records, so the member reads the sorted BAM once
+    // more, in file order, into a collector, with the barcode column the stream gives (the CB, or the corrected CR when cb_from_cr).
+    // Every all-site count is a function of the set of reads (allsite.h), so the sorted order gives what the stream order gives.
+    void allsite_parallel_pass(const std::string& bam_path, int n_threads) {
+        if (!allsite_on() || allsite_done_) return;
+        const auto t0 = std::chrono::steady_clock::now();
+        htsFile* fp = hts_open(bam_path.c_str(), "r");
+        if (!fp) { std::cerr << "[allsite] not run: cannot open " << bam_path << "\n"; return; }
+        if (n_threads > 1) hts_set_threads(fp, n_threads);
+        sam_hdr_t* hdr = sam_hdr_read(fp);
+        if (!hdr) { hts_close(fp); std::cerr << "[allsite] not run: no BAM header\n"; return; }
+        gpu_col_.reset(new gpupileup::Collector(config_.min_baseq));
+        gpu_col_->prefer_raw_umi(true);   // UB in the sorted BAM is the corrected UMI and merges molecules the serial pass keeps apart
+        bam1_t* b = bam_init1();
+        uint64_t n = 0;
+        while (sam_read1(fp, hdr, b) >= 0) {
+            const char* cb = config_.cb_from_cr ? stream_cb(b, false) : inline_scan_cb(b);
+            gpu_col_->add(b, (cb && cb[0] != '-') ? bc_index_.lookup(cb) : -1);
+            if ((++n % 50000000) == 0) singlet::rearm_stall_watchdog("allsite pass");
+        }
+        bam_destroy1(b); sam_hdr_destroy(hdr); hts_close(fp);
+        std::cerr << "[allsite] parallel path: " << n << " records re-read in "
+                  << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+        singlet_engine_gpu::PileupInput in;
+        if (!gpu_build_input(in)) { std::cerr << "[allsite] not run: records not reproducible\n"; return; }
+        allsite_from_input(in);
+    }
     void gpu_pileup_compare() {
-        if (!gpu_col_) return;
+        if (!gpu_col_ || gpupileup::mode() != 1) return;
         { PileupStats dummy; if (gpu_col_->handoff()) gpu_handoff_pass(dummy, true); }
         using namespace singlet_engine_gpu;
         PileupInput in;
@@ -1986,6 +2425,7 @@ public:
         PileupOutput out;
         const bool ok = pileupRun(in, device, out);
         unlockDevice(lock_fd);
+        allsite_from_input(in);   // D-101
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return; }
         std::cerr << "[gpu_pileup] GPU " << out.msGpu
                   << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; R1 molecules " << out.snpMolecules << ", ambiguous "
@@ -2024,6 +2464,21 @@ public:
             const bool ok_in = g == c; all = all && ok_in;
             std::cerr << "[gpu_pileup] mt_indels " << (ok_in ? "identical" : "DIFFERENT") << " (gpu " << g.size() << ", cpu " << c.size() << ")\n";
         }
+        {   // multimap record: the ambiguous reads as a multiset of (cell, gene pair, UMI)
+            std::vector<em_rescue::AmbigRead> g;
+            gpu_ambig_reads(out.ambig, in.umiLen, g);
+            typedef std::tuple<int32_t, uint32_t, uint32_t, std::string> K;
+            auto key = [](const em_rescue::AmbigRead& a) {
+                return K(a.bc_idx, std::min(a.gene_a, a.gene_b), std::max(a.gene_a, a.gene_b), std::string(a.umi, std::min<int>(a.umi_len, 15)));
+            };
+            std::vector<K> kc, kg;
+            for (const auto& a : ambig_reads_) kc.push_back(key(a));
+            for (const auto& a : g) kg.push_back(key(a));
+            std::sort(kc.begin(), kc.end()); std::sort(kg.begin(), kg.end());
+            const bool same = kc == kg;
+            all = all && same;
+            std::cerr << "[gpu_pileup] multimap reads: CPU " << kc.size() << ", GPU " << kg.size() << (same ? " identical" : " DIFFERENT") << "\n";
+        }
         std::cerr << "[gpu_pileup] RESULT " << (all ? "IDENTICAL" : "DIFFERENT") << "\n";
     }
 
@@ -2031,6 +2486,18 @@ public:
     // intron and ambiguous accumulators (molecules), junctions (rows in (contig, donor, acceptor) order, the R7 order), SNP AD/DP (R1),
     // chrM allele counts and indels, and the counters those steps keep. The molecule label counts are applied after the CPU finalize.
     DirectionalUmiStore::MoleculeStats gpu_ms_{};
+    // multimap record: the GPU's ambiguous reads as the CPU engine collects them (em_rescue::AmbigRead, UMI characters from the 3-bit code)
+    static void gpu_ambig_reads(const std::vector<singlet_engine_gpu::PileupAmbig>& v, int umi_len, std::vector<em_rescue::AmbigRead>& out) {
+        static const char UMI_CH[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+        const int ul = std::max(0, std::min(umi_len, 15));
+        out.reserve(out.size() + v.size());
+        for (const auto& a : v) {
+            em_rescue::AmbigRead ar;
+            ar.bc_idx = a.bc; ar.gene_a = a.geneA; ar.gene_b = a.geneB; ar.umi_len = static_cast<uint8_t>(ul);
+            for (int i = 0; i < ul; ++i) ar.umi[i] = UMI_CH[(a.umi3 >> (3 * i)) & 7];
+            out.push_back(ar);
+        }
+    }
     std::vector<uint32_t> gpu_clip_;   // per read of the GPU pileup's input: its hand-off clip flags (0: not clipped)
     template <typename V>
     static void gpu_put(SparseAccumulator<V>& acc, const std::vector<singlet_engine_gpu::PileupTriplet>& v) {
@@ -2040,19 +2507,22 @@ public:
     // strand votes (non-mito contigs), wrong_strand, multigene, cross_gene_intron counters, poly(A) records (NH 1, gene assigned,
     // forward-oriented library) and VDJ usage. Same conditions as the loop: primary, barcode in the set, past the MAPQ gate.
     bool gpu_host_pass(const singlet_engine_gpu::PileupInput& in, const singlet_engine_gpu::PileupOutput& out, PileupStats& stats) {
-        const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
-        const AlnRec* A = reinterpret_cast<const AlnRec*>(in.alns.data());
-        const ReadRec* R = reinterpret_cast<const ReadRec*>(in.reads.data());
-        const size_t nR = in.reads.size() / sizeof(ReadRec);
-        if (out.alnStat.size() != in.alns.size() / sizeof(AlnRec)) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
-        uint64_t pd[16] = {0}; const bool pdbg = std::getenv("SINGLET_POLYA_DEBUG") != nullptr;   // diagnostics: why the poly(A) rebuild keeps or drops a read
+        // the arrays as [leading part read in place | vector] (E16; without leading parts, the vectors)
+        const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
+        const auto A = singlet_engine_gpu::pileupCat<AlnRec>(in.preAlns, in.alns.data(), in.alns.size());
+        const auto R = singlet_engine_gpu::pileupCat<ReadRec>(in.preReads, in.reads.data(), in.reads.size());
+        const auto OPS = singlet_engine_gpu::pileupCat<uint32_t>(in.preOps, in.ops.data(), in.ops.size() * 4);
+        const auto SEQ = singlet_engine_gpu::pileupCat<uint8_t>(in.preSeq, in.seq.data(), in.seq.size());
+        const size_t nR = R.size();
+        if (out.alnStat.size() != A.size()) { std::cerr << "[gpu_pileup] per-alignment results missing\n"; return false; }
         static const char UMI_CH[5] = {'A', 'C', 'G', 'T', 'N'};
         static const uint8_t COMP[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
         const int ulen = in.umiLen > 0 ? in.umiLen : 0;
         struct HostLocal {   // one chunk of reads: its counters and, in read order, its poly(A) records and V(D)J hits
-            PileupStats st; uint64_t pd[16] = {0}; std::vector<PolyARecord> polya; std::vector<uint32_t> ov;
+            PileupStats st; std::vector<PolyARecord> polya; std::vector<uint32_t> ov;
             struct VdjEv { uint32_t bc, vg, gene; int ulen; char umi[24]; };
             std::vector<VdjEv> vdj;
+            std::vector<TeRecord> te; std::vector<std::pair<int32_t, int32_t>> blocks; std::vector<uint32_t> te_scratch, te_exon_scratch;
         };
         // the chunks run on the job's cores (the streaming pileup is one thread; STAR has exited) and are merged in read order, so every
         // counter and the order of the poly(A) and V(D)J records are those of the serial loop (SINGLET_HANDOFF_PASS_SERIAL=1: one chunk)
@@ -2064,8 +2534,19 @@ public:
         auto runChunk = [&](int t) {
             HostLocal& L = hls[t];
             const size_t lo = nR * t / nT, hi = nR * (t + 1) / nT;
-            char umi[32];
+            char umiBuf[32];   // one read's UMI text; read only through umiText() below
             for (size_t r = lo; r < hi; ++r) {
+            // the reads are in barcode order and their signatures and alignments are not: fetch ahead, a signature 24 reads ahead, its
+            // first alignment and that alignment's results 12 ahead, its CIGAR 4 ahead (the hand-off pass does the same)
+            if (r + 24 < hi) __builtin_prefetch(S.at(R[r + 24].sig));
+            if (r + 12 < hi) {
+                const uint64_t o = S[R[r + 12].sig].aln_off;
+                if (o < A.size()) { __builtin_prefetch(A.at(o)); __builtin_prefetch(out.alnStat.data() + o); __builtin_prefetch(out.alnGene.data() + o); }
+            }
+            if (r + 4 < hi) {
+                const uint64_t o = S[R[r + 4].sig].aln_off;
+                if (o < A.size()) __builtin_prefetch(OPS.at(A[o].ops_off));
+            }
             const ReadRec& rr = R[r];
             const SigRec& sg = S[rr.sig];
             int p = -1;
@@ -2082,23 +2563,30 @@ public:
             if (st & 4) L.st.wrong_strand++;
             if (st & 16) L.st.multigene_reads++;
             if (st & 8) L.st.cross_gene_intron_reads++;
-            for (int i = 0; i < ulen && i < 21; ++i) umi[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
-            umi[std::min(ulen, 21)] = 0;
-            const char* umi_str = ulen > 0 ? umi : nullptr;
+            bool umiMade = false;   // the UMI's text, made for the reads that record one (a poly(A) site, a V(D)J hit or a TE read)
+            // the only way to the text: it is decoded on first use, so no site can hash or copy the buffer before it holds this read's UMI
+            auto umiText = [&]() -> const char* {
+                if (!umiMade) {
+                    umiMade = true;
+                    for (int i = 0; i < ulen && i < 21; ++i) umiBuf[i] = UMI_CH[std::min<uint64_t>((rr.umi3 >> (3 * i)) & 7, 4)];
+                    umiBuf[std::min(ulen, 21)] = 0;
+                }
+                return ulen > 0 ? umiBuf : nullptr;
+            };
             const int umi_len = ulen > 0 ? std::min(ulen, 21) : 0;
-            const uint32_t* ops = in.ops.data() + a.ops_off;
+            const uint32_t* ops = OPS.at(a.ops_off);
+            const uint8_t* rsq = SEQ.at(sg.seq_off);   // the record's sequence (in the part its signature is in)
             const bool rev = (a.flags & 1) != 0;
             // poly(A): polya_site_from_read on the BAM-orientation sequence (the collector stores the read's own orientation)
             if (nh == 1 && config_.count_polya && !config_.reverse_strand && gene != UINT32_MAX && a.n_ops >= 1) {   // BAM CIGAR of >= 2 ops (a clipped read adds soft clips)
                 const int qlen = sg.rlen;
                 auto base = [&](int j) -> uint8_t {   // BAM nt16 code of query position j
                     const int i = rev ? qlen - 1 - j : j;
-                    const uint8_t v = (in.seq[sg.seq_off + (i >> 1)] >> ((i & 1) * 4)) & 15;
+                    const uint8_t v = (rsq[i >> 1] >> ((i & 1) * 4)) & 15;
                     return rev ? COMP[v] : v;
                 };
                 uint64_t key = 0; bool ok = false;
                 const uint32_t clip = r < gpu_clip_.size() ? gpu_clip_[r] : 0u;
-                L.pd[0]++; if (clip) L.pd[1]++;
                 if (clip) {
                     // a clipped read: the BAM sequence is the whole read and its CIGAR has the clipped bases as soft clips, so the 3' soft
                     // clip (in read orientation; the BAM's last op when forward, its first when reverse) is the record's own plus the tail
@@ -2108,12 +2596,10 @@ public:
                     const int s3 = (o3 & 15) == BAM_CSOFT_CLIP ? (int) (o3 >> 4) : 0;
                     const int nb = a.n_ops + ((c3 > 0 && s3 == 0) ? 1 : 0) + ((c5 > 0 && (o5 & 15) != BAM_CSOFT_CLIP) ? 1 : 0);
                     const int cl = s3 + c3;
-                    auto rbase = [&](int j) -> uint8_t { return (in.seq[sg.seq_off + (j >> 1)] >> ((j & 1) * 4)) & 15; };   // record, read orientation
-                    if (nb < 2) L.pd[2]++; else if (cl < 6 || cl > ql) L.pd[3]++;
+                    auto rbase = [&](int j) -> uint8_t { return (rsq[j >> 1] >> ((j & 1) * 4)) & 15; };   // record, read orientation
                     if (nb >= 2 && cl >= 6 && cl <= ql) {
                         int na = nAt; for (int j = qlen - s3; j < qlen; ++j) na += rbase(j) == 1;
                         const bool firstA = s3 > 0 ? rbase(qlen - s3) == 1 : (clip & 2u) != 0;
-                        if (!(na >= 0.8 * cl)) L.pd[4]++; else if (!firstA) L.pd[5]++;
                         if (na >= 0.8 * cl && firstA) {
                             if (!rev) {
                                 int64_t end = a.pos;
@@ -2125,10 +2611,8 @@ public:
                 } else if (a.n_ops >= 2 && !rev) {
                     const uint32_t c = ops[a.n_ops - 1];
                     const int cl = static_cast<int>(c >> 4);
-                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { L.pd[9]++; if (cl >= 6) L.pd[10]++; if (cl > qlen) L.pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int na = 0; for (int i = qlen - cl; i < qlen; ++i) na += base(i) == 1;
-                        if (!(na >= 0.8 * cl)) L.pd[11]++; else if (base(qlen - cl) != 1) L.pd[12]++;
                         if (na >= 0.8 * cl && base(qlen - cl) == 1) {
                             int64_t end = a.pos;
                             for (int k = 0; k < a.n_ops; ++k) { const int op = ops[k] & 15; if (op == 0 || op == 2 || op == 3 || op == 7 || op == 8) end += ops[k] >> 4; }
@@ -2138,15 +2622,12 @@ public:
                 } else if (a.n_ops >= 2) {
                     const uint32_t c = ops[0];
                     const int cl = static_cast<int>(c >> 4);
-                    if (!clip && (c & 15) == BAM_CSOFT_CLIP) { L.pd[9]++; L.pd[14]++; if (cl >= 6) L.pd[10]++; if (cl > qlen) L.pd[13]++; }
                     if ((c & 15) == BAM_CSOFT_CLIP && cl >= 6 && cl <= qlen) {
                         int nt = 0; for (int i = 0; i < cl; ++i) nt += base(i) == 8;
-                        if (!(nt >= 0.8 * cl)) L.pd[11]++; else if (base(cl - 1) != 8) L.pd[12]++;
                         if (nt >= 0.8 * cl && base(cl - 1) == 8) { key = polya_site_key(a.tid, true, static_cast<uint32_t>(a.pos)); ok = true; }
                     }
                 }
-                if (ok) { L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umi_str, umi_len)}); L.pd[clip ? 6 : 7]++; }
-                else if (!clip) L.pd[8]++;
+                if (ok) L.polya.push_back({key, gene, static_cast<uint32_t>(rr.bc), polya_umi_hash(umiText(), umi_len)});
             }
             // VDJ usage: the first VDJ gene overlapping [first aligned block start, last aligned block end)
             if (has_vdj_) {
@@ -2160,10 +2641,26 @@ public:
                     L.ov.clear();
                     vdj_model_.query(a.tid, s0, e0, L.ov);
                     if (!L.ov.empty()) {   // replayed in read order after the chunks (vdj_umi_ and vdj_acc_ are not thread-safe)
+                        const char* ut = umiText();
                         HostLocal::VdjEv ev; ev.bc = static_cast<uint32_t>(rr.bc); ev.vg = L.ov[0]; ev.gene = nh == 1 ? gene : UINT32_MAX; ev.ulen = umi_len;
-                        std::memcpy(ev.umi, umi, sizeof(ev.umi));
+                        ev.umi[0] = 0; if (ut) std::memcpy(ev.umi, ut, sizeof(ev.umi));
                         L.vdj.push_back(ev);
                     }
+                }
+            }
+            // TE molecules (te_counts.h): the aligned blocks as the serial loop cuts them (one per M / = / X op; D and N move on)
+            if (has_te_) {
+                L.blocks.clear();
+                int32_t rpos = a.pos;
+                for (int k = 0; k < a.n_ops; ++k) {
+                    const int op = ops[k] & 15; const int32_t len = static_cast<int32_t>(ops[k] >> 4);
+                    if (op == 0 || op == 7 || op == 8) { L.blocks.push_back({rpos, rpos + len}); rpos += len; }
+                    else if (op == 2 || op == 3) rpos += len;
+                }
+                TeRecord tr;
+                if (!L.blocks.empty() && te_record(a.tid, L.blocks, nh, static_cast<uint32_t>(rr.bc), nullptr, 0, L.te_scratch, L.te_exon_scratch, tr)) {
+                    tr.umi = polya_umi_hash(umiText(), umi_len);   // the text is made on demand: only for a read a TE takes
+                    L.te.push_back(tr);
                 }
             }
             }
@@ -2174,16 +2671,14 @@ public:
             HostLocal& L = hls[t];
             stats.strand_sense += L.st.strand_sense; stats.strand_antisense += L.st.strand_antisense; stats.wrong_strand += L.st.wrong_strand;
             stats.multigene_reads += L.st.multigene_reads; stats.cross_gene_intron_reads += L.st.cross_gene_intron_reads;
-            for (int k = 0; k < 16; k++) pd[k] += L.pd[k];
             polya_recs_.insert(polya_recs_.end(), L.polya.begin(), L.polya.end());
+            te_recs_.insert(te_recs_.end(), L.te.begin(), L.te.end());
             for (const auto& ev : L.vdj) {
                 const char* us = ev.ulen > 0 ? ev.umi : nullptr;
                 if (config_.umi_dedup) vdj_umi_.add(ev.bc, ev.vg, us, ev.ulen, ev.gene);   // R9: counted at finalize, per (cell, gene)
                 else { vdj_acc_.increment(ev.vg, ev.bc); stats.vdj_hits++; }
             }
         }
-        if (pdbg) std::cerr << "[polya-debug] eligible " << pd[0] << ", clipped " << pd[1] << ": nb<2 " << pd[2] << ", cl out of range " << pd[3]
-                            << ", A-fraction " << pd[4] << ", not firstA " << pd[5] << ", kept clipped " << pd[6] << "; unclipped kept " << pd[7] << ", unclipped dropped " << pd[8] << ", unclipped fwd/rev with S " << pd[9] << ", S>=6 " << pd[10] << ", A-fraction fail " << pd[11] << ", first base fail " << pd[12] << ", cl>qlen " << pd[13] << ", rev " << pd[14] << "\n";
         return true;
     }
     // W11 "on": the reads STAR wrote no BAM record for (hand-off records; ReadAlign_outputAlignments.cpp): what the serial loop does
@@ -2210,7 +2705,7 @@ public:
     // of hand-off reads and every counter the same total as the serial pass (SINGLET_HANDOFF_PASS_SERIAL=1 runs that one).
     void gpu_pileup_pending_append(const std::vector<std::pair<uint32_t, uint32_t>>& v) { gpu_wl_pending_.insert(gpu_wl_pending_.end(), v.begin(), v.end()); }
     bool gpu_handoff_pass_entries(PileupStats& stats, const gpupileup::Handoff* H, const gpupileup::ReadEntry* E) {
-        struct Out { uint32_t rec; int32_t bc; uint64_t u3; uint32_t clip; gpupileup::QM qm; bool hasq; };
+        struct Out { uint32_t rec; int32_t bc; uint64_t u3; uint32_t clip; const uint64_t* qm; bool hasq; };   // qm: into STAR's mapped masks (P3-ENG-14)
         struct Ctx {
             PileupStats st; uint64_t n_done = 0, n_unwritten = 0, n_bigclip = 0, n_nohook = 0, lowq = 0, neqn = 0;
             uint64_t cb_status[8] = {}; char cb_buf[40] = {};
@@ -2230,7 +2725,7 @@ public:
         if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
         const uint64_t N = H->n_reads;
         if (N < (1u << 16)) nT = 1;
-        const gpupileup::QM* const QMs = gpu_col_->handoff_qmask();   // STAR's per-read low-quality masks (null if STAR wrote none)
+        const uint64_t* const QMs = gpu_col_->handoff_qmask(); const size_t QW = gpu_col_->q_words();   // STAR's per-read low-quality masks (null if STAR wrote none)
         std::vector<Ctx> ctxs(nT);
         auto work = [&](int t) {
             Ctx& c = ctxs[t];
@@ -2317,7 +2812,7 @@ public:
                 c.lowq += E[i].low_qual; c.neqn += E[i].qual_neq_n;
                 uint64_t u3 = 0;
                 for (int j = 0; j < (int) ur.size() && j < 21; j++) { const char ch = ur[j]; const uint64_t v = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; u3 |= v << (3 * j); }
-                c.out.push_back({rec, bc, u3, clip, QMs != nullptr ? QMs[i] : gpupileup::QM{{0, 0}}, QMs != nullptr && !(E[i].flags & 64u)});
+                c.out.push_back({rec, bc, u3, clip, QMs != nullptr ? QMs + QW * i : nullptr, QMs != nullptr && !(E[i].flags & 64u)});
                 st.barcoded_reads++;
                 if (static_cast<uint32_t>(bc) < c.cell_reads.size()) c.cell_reads[static_cast<uint32_t>(bc)]++;
                 const int nh = std::max<int>(pnh, 1);
@@ -2348,7 +2843,7 @@ public:
             for (size_t k = 0; k < c.wl_counts.size(); k++) wl_umi_counts_[k] += c.wl_counts[k];
             gpu_pileup_pending_append(c.wl_pending);
             gpu_col_->add_quality_counts64(c.lowq, c.neqn);
-            for (const Out& o : c.out) gpu_col_->add_handoff_read_u3(o.rec, o.bc, o.u3, static_cast<int>(H->umiL), o.clip, o.hasq ? &o.qm : nullptr);
+            for (const Out& o : c.out) gpu_col_->add_handoff_read_u3(o.rec, o.bc, o.u3, static_cast<int>(H->umiL), o.clip, o.hasq ? o.qm : nullptr);
             std::vector<Out>().swap(c.out);
         }
         if (n_unwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << n_unwritten << " hand-off reads\n"; return false; }
@@ -2360,7 +2855,161 @@ public:
         std::cerr << "[gpu_pileup] hand-off pass: " << n_done << " reads without BAM records (barcodes and qualities from STAR's per-read entries)\n";
         return true;
     }
+    // E8 (SINGLET_ENGINE_GPU_E2E=1; docs/gpu-engine/fable/E8-e2e.md): gpu_handoff_pass_entries on the device (singlet_engine_gpu::e2ePass) from
+    // the records STAR's prefill built on the device and STAR's per-read entries, both in the shared region. The host resolves each distinct CR
+    // once (R11, barcode set, WL-ambient index: what the pass looks up per read) and runs the R4 rRNA detector on the sampled unclipped reads;
+    // every counter, per-cell array and the collector's hand-off reads come out as the host pass makes them.
+    bool gpu_handoff_pass_e2e(PileupStats& stats) {
+        singlet_tail::mark("parent: hand-off pass starts (region mapped)");
+        const singlet_engine_gpu::E2ERegion& R = *gpu_col_->e2e();
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
+        if (!H.simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
+        if (gpu_col_->n_handoff_reads() != 0 || gpu_col_->e2e_stream_reads() != 0) {
+            std::cerr << "[gpu_pileup] hand-off: " << (gpu_col_->n_handoff_reads() + gpu_col_->e2e_stream_reads())
+                      << " hand-off reads also came through the stream (STAR's skip set differs)\n";
+            return false;
+        }
+        singlet_engine_gpu::E2EPassOut oLocal;
+        uint64_t nRrna = 0; double sR = 0;
+        if (e16_.ran) {   // E16: done while STAR mapped (the same pass on the same region bytes, through its own mapping of them)
+            if (!e16_.ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << e16_.o.log << "\n"; return false; }
+            if (e16_.rbg) { nRrna = 0; sR = -1; e16_.rrnaPending = true; }   // rrnabg: added by e16_rrna_join
+            else { nRrna = e16_.nRrna; sR = e16_.sR; }
+            e16_.o.log += "; E16: done " + std::to_string(e16_.lead) + " s before the stream ended";
+            return gpu_handoff_merge(stats, H, e16_.o, nRrna, sR, e16_.zc);
+        }
+        if (!gpu_handoff_device_pass(R, oLocal, nRrna, sR)) return false;
+        return gpu_handoff_merge(stats, H, oLocal, nRrna, sR, false);
+    }
+    // the hand-off pass's device part (e2ePass on the region R) and the rRNA detector on the reads it sends to the host; it only reads the
+    // engine's state (barcode indexes, corrector, detector, sizes fixed before the stream), so it may run on its own thread during the stream (E16)
+    // the hand-off pass's host threads
+    int gpu_pass_threads() const {
+        cpu_set_t cs; int nT = std::max(1, config_.threads);
+        if (sched_getaffinity(0, sizeof(cs), &cs) == 0) nT = std::max(nT, std::min(CPU_COUNT(&cs), 32));
+        if (const char* e = std::getenv("SINGLET_HANDOFF_PASS_THREADS")) nT = std::max(1, std::atoi(e));
+        return nT;
+    }
+    // R4: the sampled unclipped reads, the detector on the read as the BAM stores it (record sequence, reverse-complemented when reverse);
+    // rr: the records e2ePass sent to the host (record << 1 | reverse), S and Q the region's signatures and packed sequences
+    uint64_t gpu_rrna_detect(const SigRec* S, const uint8_t* Q, const std::vector<uint64_t>& rr) {
+        const int nT = gpu_pass_threads();
+        auto par = [&](uint64_t n, const std::function<void(uint64_t, uint64_t)>& fn) {
+            const int t = (int) std::min<uint64_t>((uint64_t) nT, n / 4096 + 1);
+            if (t <= 1) { fn(0, n); return; }
+            std::vector<std::thread> th; for (int k = 0; k < t; ++k) th.emplace_back([&, k] { fn(n * k / t, n * (k + 1) / t); });
+            for (auto& x : th) x.join();
+        };
+        std::atomic<uint64_t> n_rrna{0};
+        par(rr.size(), [&](uint64_t lo, uint64_t hi) {
+            char comp[256]; for (int i = 0; i < 256; i++) comp[i] = 'N';
+            comp[(int)'A'] = 'T'; comp[(int)'C'] = 'G'; comp[(int)'G'] = 'C'; comp[(int)'T'] = 'A';
+            std::string rseq; uint64_t c = 0;
+            for (uint64_t k = lo; k < hi; ++k) {
+                const uint64_t rec = rr[k] >> 1; const bool rev = rr[k] & 1;
+                const int L2 = S[rec].rlen; const uint8_t* rs = Q + S[rec].seq_off;
+                rseq.resize(L2); for (int j = 0; j < L2; j++) rseq[j] = seq_nt16_str[(rs[j >> 1] >> ((j & 1) * 4)) & 15];
+                if (rev) { const std::string fw = rseq; for (int j = 0; j < L2; j++) rseq[j] = comp[(uint8_t) fw[L2 - 1 - j]]; }
+                if (rrna_detector_.detect(rseq)) ++c;
+            }
+            n_rrna += c;
+        });
+        return n_rrna.load();
+    }
+    // (deferRrna, E16 "rrnabg": the detector is left to the caller, sROut = -1)
+    bool gpu_handoff_device_pass(const singlet_engine_gpu::E2ERegion& R, singlet_engine_gpu::E2EPassOut& o, uint64_t& nRrnaOut, double& sROut,
+                                 bool keepPinned = false, bool deferRrna = false) {
+        const singlet_engine_gpu::E2EHeader& H = *R.hdr();
+        const CbCorrector* const cbc = config_.cb_corrector;
+        const int nT = gpu_pass_threads();
+        auto par = [&](uint64_t n, const std::function<void(uint64_t, uint64_t)>& fn) {
+            const int t = (int) std::min<uint64_t>((uint64_t) nT, n / 4096 + 1);
+            if (t <= 1) { fn(0, n); return; }
+            std::vector<std::thread> th; for (int k = 0; k < t; ++k) th.emplace_back([&, k] { fn(n * k / t, n * (k + 1) / t); });
+            for (auto& x : th) x.join();
+        };
+        // per distinct CR (3 bits per base, as STAR packs it): barcode column, WL-ambient index, cb_status_ index (the pass's checks, in its order)
+        auto table = [&](const std::vector<uint64_t>& keys, std::vector<singlet_engine_gpu::E2ECrVal>& vals) {
+            par(keys.size(), [&](uint64_t lo, uint64_t hi) {
+                static const char kB[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+                std::string cr; char buf[40] = {};
+                for (uint64_t k = lo; k < hi; ++k) {
+                    cr.resize(H.cbL); for (uint32_t j = 0; j < H.cbL; j++) cr[j] = kB[(keys[k] >> (3 * j)) & 7];
+                    singlet_engine_gpu::E2ECrVal v{-2, -1, 0};
+                    bool ok = !cr.empty();
+                    if (!cbc) { for (char ch : cr) if (ch == 'N') ok = false; }
+                    else if (static_cast<int>(cr.size()) != cbc->length()) { v.status = 3; ok = false; }
+                    else {
+                        const int cst = cbc->resolve(cr.c_str(), nullptr, buf);
+                        v.status = static_cast<uint32_t>(cst + 4);
+                        if (cst < 0) ok = false; else cr.assign(buf, static_cast<size_t>(cbc->length()));
+                    }
+                    if (ok && cr[0] != '-') {
+                        const int32_t bc = bc_index_.lookup(cr.c_str());
+                        v.col = bc >= 0 ? bc : -1;
+                        if (bc < 0 && !wl_umi_counts_.empty()) { const int32_t w = wl_amb_index_.lookup(cr.c_str()); v.wl = w >= 0 ? w : -1; }
+                    }
+                    vals[k] = v;
+                }
+            });
+        };
+        singlet_engine_gpu::E2EPassIn pin;
+        pin.region = &R; pin.chrmTid = chrm_tid_; pin.minMapq = static_cast<uint8_t>(config_.min_mapq); pin.cbc = cbc != nullptr;
+        pin.wlOn = !wl_umi_counts_.empty(); pin.wlPend = has_gene_model_ && !wl_ambient_gene_counts_.empty();
+        pin.nCells = static_cast<uint32_t>(per_cell_reads_.size()); pin.nCellsQc = static_cast<uint32_t>(per_cell_qc_.size());
+        pin.nWl = static_cast<uint32_t>(wl_umi_counts_.size());
+        pin.keepPinned = keepPinned;
+        int lock_fd = -1;
+        const int device = singlet_engine_gpu::lockDevice(&lock_fd);
+        singlet_tail::mark("parent: hand-off pass: device lock taken");
+        const bool ok = singlet_engine_gpu::e2ePass(pin, device, table, o);
+        singlet_engine_gpu::unlockDevice(lock_fd);
+        singlet_tail::mark("parent: hand-off pass: e2ePass returned (%s)", o.log.c_str());
+        if (!ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << o.log << "\n"; return false; }
+        if (deferRrna) { nRrnaOut = 0; sROut = -1; return true; }
+        const auto tR = std::chrono::steady_clock::now();
+        nRrnaOut = gpu_rrna_detect(R.at<SigRec>(H.oSigs), R.at<uint8_t>(H.oSeq), o.rrnaHost);
+        sROut = std::chrono::duration<double>(std::chrono::steady_clock::now() - tR).count();
+        singlet_tail::mark("parent: hand-off pass: rRNA detector done");
+        return true;
+    }
+    // the hand-off pass's results into the counters, the per-cell arrays and the collector (after the stream; they add to the stream's)
+    // (zc, E16: the kept reads are taken in place, page-locked, for pileupRun; else copied into the collector)
+    bool gpu_handoff_merge(PileupStats& stats, const singlet_engine_gpu::E2EHeader& H, singlet_engine_gpu::E2EPassOut& o, uint64_t nRrna, double sR,
+                           bool zc) {
+        stats.total_reads += o.totalAln; stats.mapped_reads += o.totalAln; stats.secondary_reads += o.secondary;
+        stats.rrna_reads_sampled += o.rrnaSampled; stats.rrna_reads += o.rrnaHook + nRrna; stats.chrm_reads += o.chrm;
+        stats.no_barcode += o.noBarcode; stats.barcoded_reads += o.barcoded; stats.multimapper_reads += o.multimapper; stats.low_mapq += o.lowMapq;
+        for (int k = 0; k < 8; k++) cb_status_[k] += o.cbStatus[k];
+        for (size_t k = 0; k < o.cellReads.size() && k < per_cell_reads_.size(); k++) per_cell_reads_[k] += o.cellReads[k];
+        for (size_t k = 0; k < o.cellUnique.size() && k < per_cell_qc_.size(); k++) {
+            CellAlignQC q; q.multimapped = o.cellMulti[k]; q.unique = o.cellUnique[k]; q.mismatches = o.cellMism[k]; q.aligned_bases = o.cellBases[k];
+            per_cell_qc_[k].merge(q);
+        }
+        for (size_t k = 0; k < o.wlCounts.size() && k < wl_umi_counts_.size(); k++) wl_umi_counts_[k] += o.wlCounts[k];
+        gpu_pileup_pending_append(o.wlPending);
+        gpu_col_->add_quality_counts64(o.lowQualSum, o.qualNeqNSum);
+        singlet_tail::mark("parent: hand-off pass: counters merged");
+        const size_t nKept = o.clip.size();
+        if (!(zc && gpu_col_->take_e2e_reads(std::move(o.reads), std::move(o.clip), std::move(o.lowq), o.maskAll, static_cast<int>(H.umiL)))) {
+            if (zc) e16_.zc = false;   // the vectors stay in e16_.o (page-locked until pileupRun's device reset)
+            gpu_col_->add_e2e_reads(o.reads, o.clip, o.lowq, o.maskAll, static_cast<int>(H.umiL));
+        }
+        singlet_tail::mark("parent: hand-off pass: kept reads appended to the collector");
+        if (o.nUnwritten) { std::cerr << "[gpu_pileup] hand-off: STAR wrote no entry for " << o.nUnwritten << " hand-off reads\n"; return false; }
+        if (o.nBigClip || o.nNoHook || o.nNoKey) {
+            std::cerr << "[gpu_pileup] hand-off: " << o.nBigClip << " reads clipped by more than 255 bases, " << o.nNoHook
+                      << " sampled clipped reads without the rRNA verdict (g_handoffReadHook unset), " << o.nNoKey << " CRs missing from the table\n";
+            return false;
+        }
+        std::cerr << "[gpu_pileup] hand-off pass: " << o.nDone << " reads without BAM records (E8: on the device; " << nKept << " kept, "
+                  << o.rrnaHost.size() << " to the rRNA detector " << (sR < 0 ? std::string("on a thread (E16)") : "in " + std::to_string(sR) + " s") << "; "
+                  << o.log << ")\n";
+        return true;
+    }
     bool gpu_handoff_pass(PileupStats& stats, bool check = false) {
+        e16_early_join();   // E16: the early device pass is done (or never ran: then gpu_handoff_pass_e2e runs it here)
+        if (!check && gpu_col_ && gpu_col_->e2e() != nullptr) return gpu_handoff_pass_e2e(stats);   // E8
         const gpupileup::Handoff* H = gpu_col_ ? gpu_col_->handoff() : nullptr;
         if (!H) return true;   // no hand-off: every read came through the stream
         if (!H->simple) { std::cerr << "[gpu_pileup] hand-off: barcode layout is not CB_UMI_Simple\n"; return false; }
@@ -2549,6 +3198,8 @@ public:
         const auto tA0 = std::chrono::steady_clock::now();
         auto since = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); };
         PileupInput in;
+        // E16 rrnabg: the detector's thread may read the region through the input's mapping (zc): joined before `in` goes on every return
+        struct E16RrnaGuard { std::thread& t; ~E16RrnaGuard() { if (t.joinable()) t.join(); } } e16rg{e16_.rth};
         if (!gpu_build_input(in)) return false;
         const double sBuild = since(tA0);
         int lock_fd = -1;
@@ -2557,69 +3208,140 @@ public:
         const double sWait = since(tL0);
         PileupOutput out;
         const auto tA1 = std::chrono::steady_clock::now();
-        // pileupRun releases the device when its device work is done; the host post-processing of the results needs no GPU
-        bool lockReleased = false; double sHeld = 0;
-        in.release = [&]() { if (!lockReleased) { lockReleased = true; sHeld = since(tA1); unlockDevice(lock_fd); } };
+        singlet_tail::mark("parent: pileupRun starts");
+        // #136: pileupRun releases the device when its device work is done (the host post-processing of the results needs no GPU)
+        bool lockReleased = false; double sHeld = 0; std::chrono::steady_clock::time_point tRel = tA1;
+        in.release = [&]() { if (!lockReleased) { lockReleased = true; sHeld = since(tA1); tRel = std::chrono::steady_clock::now(); unlockDevice(lock_fd); } };
         const bool ok = pileupRun(in, device, out);
         const double sRun = since(tA1);
-        in.release();
-        std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sHeld << " s\n";
+        // E16 resetbg: the context (with the input's page-locked memory) is reset on a thread at the end, which then unlocks the device.
+        // E20 (docs/gpu-engine/fable/E20-lockclip.md): that thread starts as soon as pileupRun returns (the device's work is done), beside the puts
+        // and the host pass, which read the input's host memory only (the reset unpins it; the input is freed after the reset, below).
+        // SINGLET_GPU_PILEUP_UNLOCK=late: E16's order (the reset and the unlock after the host pass)
+        const bool e16rb = ok && out.resetDeferred;
+        const char* ulE = std::getenv("SINGLET_GPU_PILEUP_UNLOCK");
+        const bool e20ul = e16rb && !(ulE != nullptr && std::string(ulE) == "late");
+        std::chrono::steady_clock::time_point tUnl = std::chrono::steady_clock::now(); double sReset = 0;
+        struct RstJoin { std::thread t; ~RstJoin() { if (t.joinable()) t.join(); } } e20rst;   // joined before `in` goes, on every return
+        if (!e16rb) in.release();
+        else if (e20ul) e20rst.t = std::thread([device, lock_fd, e24early = out.unlockedEarly, tRel, &tUnl, &sReset] {
+            // E24 "lockpost": pileupRun unlocked the device itself before its host half (PileupOutput::unlockedEarly); this thread only resets
+            // pileupRun freed its arena: what the reset still does is host work (the context's teardown, unpinning the input), so the
+            // device is unlocked first (SINGLET_GPU_PILEUP_UNLOCK=reset: the reset first, then the unlock)
+            static const bool resetFirst = [] { const char* e = std::getenv("SINGLET_GPU_PILEUP_UNLOCK"); return e != nullptr && std::string(e) == "reset"; }();
+            if (!resetFirst) { if (e24early) tUnl = tRel; else { unlockDevice(lock_fd); tUnl = std::chrono::steady_clock::now(); } }
+            const auto r0 = std::chrono::steady_clock::now();
+            pileupRelease(device);
+            sReset = std::chrono::duration<double>(std::chrono::steady_clock::now() - r0).count();
+            if (resetFirst) { unlockDevice(lock_fd); tUnl = std::chrono::steady_clock::now(); }
+            singlet_tail::mark("parent (E20): device %s, reset in %.3f s, right after pileupRun", resetFirst ? "reset, then unlocked" : "unlocked, then reset", sReset); });
+        singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
+        if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
-        gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
-        gpu_put(mixed_exon_acc_, out.mixedExon); gpu_put(mixed_intron_acc_, out.mixedIntron);   // export.h's pre-USA exon / intron split
-        if (reads_matrix_on()) {   // reads per molecule: the GPU's sums and histogram (the CPU store is empty)
-            gpu_put(exon_reads_acc_, out.exonReads); gpu_put(intron_reads_acc_, out.intronReads);
-            for (size_t i = 0; i < out.histCell.size(); ++i)
-                std::copy_n(out.hist.begin() + i * kReadsHistBins, kReadsHistBins, read_hist_[out.histCell[i]].begin());
-        }
-        gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
-        sj_names_.clear(); sj_index_.clear();
-        // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
-        // names a junction when a counted read has it, so keep the junctions with a count, in table (R7) order
-        std::vector<uint32_t> sj_new(out.sjtab.size(), UINT32_MAX);
-        for (const auto& t : out.sj) if (t.row < sj_new.size()) sj_new[t.row] = 0;
-        for (size_t j = 0; j < out.sjtab.size(); ++j) {
-            if (sj_new[j] == UINT32_MAX) continue;
-            const auto& k = out.sjtab[j];
-            sj_new[j] = static_cast<uint32_t>(sj_names_.size());
-            sj_index_[((static_cast<uint64_t>(k[0]) << 32) | k[1]) ^ (static_cast<uint64_t>(k[2]) * 0x9e3779b97f4a7c15ULL)] =
-                sj_new[j];   // keyed as extract_splice_junctions keys them
-            sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
-        }
-        for (auto& t : out.sj) t.row = sj_new[t.row];
-        if (!sj_names_.empty()) {   // the CPU grows the feature count in steps of 1000 as junctions appear (extract_splice_junctions)
-            const uint32_t n = static_cast<uint32_t>(sj_names_.size());
-            sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(((n - 1) / 1000 + 1) * 1000);
-        }
-        gpu_put(sj_acc_, out.sj);
-        for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
-        stats.snp_hits += out.snpHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
-        stats.snp_molecules += out.snpMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous; stats.snp_molecules_other += out.snpOther;
-        gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
-        gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
-        gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
-        gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
-        if (!out.cellMixed.empty() && !barcodes_.empty()) {   // legacy_exon_extra: the GPU's per-cell count of unspliced molecules with an exon-only read
-            if (!mixed_bc_) { mixed_n_ = barcodes_.size(); mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]()); }
-            for (size_t c = 0; c < out.cellMixed.size() && c < mixed_n_; ++c)
-                if (out.cellMixed[c]) mixed_bc_[c].fetch_add(out.cellMixed[c], std::memory_order_relaxed);
-        }
-        gpu_merges_.swap(out.geneMerges);
-        stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
-        if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
-            const SigRec* S = reinterpret_cast<const SigRec*>(in.sigs.data());
-            for (const auto& [rec, k] : gpu_wl_pending_) {
-                const uint32_t g = out.alnExonGene[S[rec].aln_off + k];
-                if (g != UINT32_MAX && g < wl_ambient_gene_counts_.size()) wl_ambient_gene_counts_[g]++;
+        allsite_from_input(in);   // D-101: host pass over the same records (the input lives until this function returns)
+        // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
+        // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
+        auto applyOut = [&]() {
+            if (singlet_tail::cut("puts")) {   // E16 "puts" (level 5): one thread per accumulator (each fills its own vectors in the same order)
+                std::thread p1([&] { gpu_put(exon_acc_, out.exon); }), p2([&] { gpu_put(intron_acc_, out.intron); }), p3([&] { gpu_put(amb_acc_, out.amb); }),
+                    p4([&] { gpu_put(snp_ad_, out.snpAd); }), p5([&] { gpu_put(snp_dp_, out.snpDp); }), p6([&] { gpu_put(mt_acc_rev_, out.mtRev); });
+                gpu_put(mt_acc_, out.mt);
+                p1.join(); p2.join(); p3.join(); p4.join(); p5.join(); p6.join();
+            } else {
+            gpu_put(exon_acc_, out.exon); gpu_put(intron_acc_, out.intron); gpu_put(amb_acc_, out.amb);
+            gpu_put(snp_ad_, out.snpAd); gpu_put(snp_dp_, out.snpDp); gpu_put(mt_acc_, out.mt); gpu_put(mt_acc_rev_, out.mtRev);
             }
-            gpu_wl_pending_.clear();
+            gpu_put(mixed_exon_acc_, out.mixedExon); gpu_put(mixed_intron_acc_, out.mixedIntron);   // export.h's pre-USA exon / intron split
+            if (reads_matrix_on()) {   // reads per molecule: the GPU's sums and histogram (the CPU store is empty)
+                gpu_put(exon_reads_acc_, out.exonReads); gpu_put(intron_reads_acc_, out.intronReads);
+                for (size_t i = 0; i < out.histCell.size(); ++i)
+                    std::copy_n(out.hist.begin() + i * kReadsHistBins, kReadsHistBins, read_hist_[out.histCell[i]].begin());
+            }
+            sj_names_.clear(); sj_index_.clear();
+            // the GPU's table has every junction of every signature (hand-off records include reads without a cell barcode); the CPU
+            // names a junction when a counted read has it, so keep the junctions with a count, in table (R7) order
+            std::vector<uint32_t> sj_new(out.sjtab.size(), UINT32_MAX);
+            for (const auto& t : out.sj) if (t.row < sj_new.size()) sj_new[t.row] = 0;
+            for (size_t j = 0; j < out.sjtab.size(); ++j) {
+                if (sj_new[j] == UINT32_MAX) continue;
+                const auto& k = out.sjtab[j];
+                sj_new[j] = static_cast<uint32_t>(sj_names_.size());
+                sj_index_[((static_cast<uint64_t>(k[0]) << 32) | k[1]) ^ (static_cast<uint64_t>(k[2]) * 0x9e3779b97f4a7c15ULL)] =
+                    sj_new[j];   // keyed as extract_splice_junctions keys them
+                sj_names_.push_back(tid_to_chrom_[k[0]] + ":" + std::to_string(k[1]) + "-" + std::to_string(k[2]));
+            }
+            for (auto& t : out.sj) t.row = sj_new[t.row];
+            if (!sj_names_.empty()) {   // the CPU grows the feature count in steps of 1000 as junctions appear (extract_splice_junctions)
+                const uint32_t n = static_cast<uint32_t>(sj_names_.size());
+                sj_acc_.set_barcodes(barcodes_); sj_acc_.set_n_features(((n - 1) / 1000 + 1) * 1000);
+            }
+            gpu_put(sj_acc_, out.sj);
+            for (const auto& e : out.indels) mt_indels_.push_back(mt::MtIndelEvent{e[0], e[1], static_cast<uint16_t>(e[2]), e[3] != 0});
+            stats.snp_hits += out.snpHits - out.editHits; stats.sj_hits += out.sjHits; stats.mt_pileup_bases += out.mtBases;
+            stats.snp_molecules += out.snpMolecules - out.editMolecules; stats.snp_molecules_ambiguous += out.snpAmbiguous - out.editAmbiguous;
+            stats.snp_molecules_other += out.snpOther - out.editOther;
+            stats.edit_hits += out.editHits; stats.edit_molecules += out.editMolecules; stats.edit_molecules_ambiguous += out.editAmbiguous;
+            stats.edit_molecules_other += out.editOther;   // D-101: the GPU counts the editing rows apart (pileup_gpu.cu)
+            gpu_ms_ = DirectionalUmiStore::MoleculeStats{};
+            gpu_ms_.spliced = out.molSpliced; gpu_ms_.unspliced = out.molUnspliced; gpu_ms_.ambiguous = out.molAmbiguous;
+            gpu_ms_.legacy_double = out.molLegacyDouble; gpu_ms_.dropped = out.molDropped;
+            gpu_cell_reads_.swap(out.cellReads); gpu_cell_mols_.swap(out.cellMolecules);
+            if (!out.cellMixed.empty() && !barcodes_.empty()) {   // legacy_exon_extra: the GPU's per-cell count of unspliced molecules with an exon-only read
+                if (!mixed_bc_) { mixed_n_ = barcodes_.size(); mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]()); }
+                for (size_t c = 0; c < out.cellMixed.size() && c < mixed_n_; ++c)
+                    if (out.cellMixed[c]) mixed_bc_[c].fetch_add(out.cellMixed[c], std::memory_order_relaxed);
+            }
+            gpu_merges_.swap(out.geneMerges);
+            gpu_ambig_reads(out.ambig, in.umiLen, ambig_reads_);   // the multimap record's reads (the CPU steps that collect them were skipped)
+            counted_umis_.swap(out.umiKeys);                        // ... and the UMIs it leaves out (finalize_all's keys on the CPU)
+            stats.mt_numt_rescued += out.mtRescued; stats.exon_hits += out.hitsExon; stats.intron_hits += out.hitsIntron; stats.umi_duplicate += out.umiRecorded;
+            if (!gpu_wl_pending_.empty()) {   // hand-off reads with a WL-ambient barcode: their primary's exon gene (determine_exon_gene)
+                const auto S = singlet_engine_gpu::pileupCat<SigRec>(in.preSigs, in.sigs.data(), in.sigs.size());
+                for (const auto& [rec, k] : gpu_wl_pending_) {
+                    const uint32_t g = out.alnExonGene[S[rec].aln_off + k];
+                    if (g != UINT32_MAX && g < wl_ambient_gene_counts_.size()) wl_ambient_gene_counts_[g]++;
+                }
+                gpu_wl_pending_.clear();
+            }
+            singlet_tail::mark("parent: pileup results put into the accumulators");
+        };
+        auto tA2 = std::chrono::steady_clock::now();
+        if (has_gene_model_ && singlet_tail::cut("overlap")) {   // (the log's "host pass" time then includes the puts)
+            std::thread tPut(applyOut);
+            const bool okHost = gpu_host_pass(in, out, stats);
+            tPut.join();
+            if (!okHost) return false;
+        } else {
+            applyOut();
+            tA2 = std::chrono::steady_clock::now();
+            if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
         }
-        const auto tA2 = std::chrono::steady_clock::now();
-        if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
+        singlet_tail::mark("parent: host pass done");
+        e16_rrna_join(stats);
+        if (e20ul) {   // E20: the hold is pileupRun and the reset (done on its thread long before the host pass ends)
+            e20rst.t.join();
+            std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << std::chrono::duration<double>(tUnl - tA1).count() << " s (E20: pileupRun "
+                      << sRun << " s; the device reset " << sReset << " s on a thread beside the puts and the host pass, after the unlock unless SINGLET_GPU_PILEUP_UNLOCK=reset)\n";
+        }
         std::cerr << "[gpu_pileup] apply: build input " << sBuild << " s, pileupRun " << sRun << " s, host pass " << since(tA2) << " s" << "\n";
         std::cerr << "[gpu_pileup] on: GPU " << out.msGpu << " ms, total " << out.msTotal << " ms, peak " << out.peakGB << " GB; molecules "
                   << gpu_ms_.total() << ", junctions " << sj_names_.size() << ", R1 molecules " << out.snpMolecules
                   << (out.log.empty() ? "" : "; ") << out.log << "\n";
+        // E16 "free2" (level 5): the input (the region's second mapping, the records) and the output freed on a thread; with resetbg the
+        // device's context goes first on that thread (the input's memory is page-locked in it), under the device lock pileupRun took
+        if (singlet_tail::cut("free2") || e16rb) {
+            auto* fIn = new PileupInput(std::move(in)); auto* fOut = new PileupOutput(std::move(out));
+            std::thread([fIn, fOut, e16rb, e20ul, device, lock_fd] {
+                const double a = singlet_tail::now();
+                if (e16rb && !e20ul) {
+                    pileupRelease(device);
+                    unlockDevice(lock_fd);
+                    singlet_tail::mark("parent (bg): device reset in %.3f s, device unlocked", singlet_tail::now() - a);
+                }
+                const double b = singlet_tail::now();
+                delete fIn; delete fOut;
+                singlet_tail::mark("parent (bg): pileup input and output freed in %.3f s", singlet_tail::now() - b); }).detach();
+        }
         return true;
     }
 #endif
@@ -2643,6 +3365,9 @@ public:
     };
 #endif
     bool gpu_covers_ = false;   // W11: SINGLET_GPU_PILEUP=on in a GPU build (always false in a CPU-only build)
+    mutable allsite::Result allsite_;   // D-101 (allsite.h); allsite_ok_ once computed
+    mutable bool allsite_ok_ = false;
+    mutable bool allsite_built_ = false;   // finalize_allsite ran
     std::vector<uint32_t> gpu_cell_reads_, gpu_cell_mols_;   // W11 "on": per-cell molecule-store reads and molecules from the GPU
     // W11 "on": the per-cell saturation inputs the molecule store would give (empty when the CPU store was used)
     bool gpu_saturation(std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>>& cells) const {
@@ -2654,6 +3379,30 @@ public:
     }
     // Get accumulators for export
     const SparseAccumulator<uint16_t>& snp_ad() const { return snp_ad_; }
+    // D-101 all-site member: on when a genome dir is set (GPU builds); allsite() is valid when allsite_ready()
+    bool allsite_on() const {
+#ifdef SINGLET_HAVE_ENGINE_GPU
+        return !config_.allsite_genome_dir.empty();
+#else
+        return false;
+#endif
+    }
+    bool allsite_ready() const { return allsite_ok_; }
+    // Builds the all-site matrices once, after cell calling and demux: build(result) applies the storage rule (allsite_store.h). A false
+    // result (the entries do not fit int32 column pointers) turns the member off.
+    bool finalize_allsite(const std::function<bool(allsite::Result&)>& build) const {   // export holds the engine by const reference; the build is a one-time lazy step
+        if (!allsite_ok_ || allsite_built_) return allsite_ok_;
+        allsite_built_ = true;
+        if (!build(allsite_)) { allsite_ok_ = false; return false; }
+        return true;
+    }
+    const allsite::Result& allsite() const { return allsite_; }
+    std::vector<std::string> allsite_names() const {
+        std::vector<std::string> v; v.reserve(allsite_.sites.size());
+        for (const auto& x : allsite_.sites) v.push_back(allsite::site_name(x, tid_to_chrom_));
+        return v;
+    }
+    const std::vector<std::string>& contig_names() const { return tid_to_chrom_; }
     const SparseAccumulator<uint16_t>& snp_dp() const { return snp_dp_; }
     const SparseAccumulator<uint16_t>& exons() const { return exon_acc_; }
     const SparseAccumulator<uint16_t>& introns() const { return intron_acc_; }
@@ -2678,9 +3427,33 @@ public:
     const std::vector<CellAlignQC>& per_cell_align_qc() const { return per_cell_qc_; }
     /// Poly(A)-tailed read ends (count_polya); export clusters them (polya_sites.h). Mutable: export sorts in place.
     std::vector<PolyARecord>& polya_records() const { return polya_recs_; }
+    /// TE records (te_counts.h) and the model that names their rows; has_te() is false without a TE annotation.
+    const std::vector<TeRecord>& te_records() const { return te_recs_; }
+    const TeModel& te_model() const { return te_model_; }
+    bool has_te() const { return has_te_; }
+    /// One alignment's TE record, if it has one: the shared rule of the serial, worker and GPU host paths.
+    bool te_record(int32_t tid, const std::vector<std::pair<int32_t, int32_t>>& blocks, int nh, uint32_t bc, const char* umi_str,
+                   int umi_len, std::vector<uint32_t>& scratch, std::vector<uint32_t>& exon_scratch, TeRecord& out) const {
+        uint32_t fam = 0, locus = UINT32_MAX;
+        auto exonic = [&](int32_t s, int32_t e) {
+            gene_model_.query_exons(tid, s, e, exon_scratch);
+            return !exon_scratch.empty();
+        };
+        if (!te_model_.assign(tid, blocks, nh == 1, exonic, fam, locus, scratch)) return false;
+        out = TeRecord{fam, bc, polya_umi_hash(umi_str, umi_len), locus};
+        return true;
+    }
     const std::vector<std::string>& tid_to_chrom() const { return tid_to_chrom_; }
     /// N13: first SNP index belonging to the built-in AIM panel (UINT32_MAX if not injected)
     uint32_t aim_snp_start() const { return aim_snp_start_; }
+    /// D-101: first SNP index of the RNA editing panel (UINT32_MAX without one); rows from here to the end are editing sites
+    uint32_t edit_snp_start() const { return edit_snp_start_; }
+    /// D-101: names of the editing rows (chrom:pos:R>A), row i = SNP index edit_snp_start() + i; snp_names() stops before them
+    std::string edit_name(uint32_t i) const {
+        const auto& e = edit_sites_[i];
+        return edit_chroms_[e.chrom] + ":" + std::to_string(e.pos0 + 1) + ":" + e.ref + ">" + e.alt;
+    }
+    uint32_t n_edit_sites() const { return edit_snp_start_ == UINT32_MAX ? 0u : n_snps_loaded_ - edit_snp_start_; }
     const std::vector<std::string>& snp_names() const { return snp_names_; }
     const std::vector<std::string>& exon_names() const { return gene_model_.exon_names(); }
     const std::vector<std::string>& intron_names() const { return gene_model_.intron_names(); }
@@ -2701,6 +3474,8 @@ public:
     bool reverse_strand() const { return config_.reverse_strand; }
     /// Per-molecule dump path (diagnostics; "" = none). Defaults to SINGLET_MOLECULE_DUMP.
     void set_molecule_dump(const std::string& path) { molecule_dump_ = path; }
+    /// Sorted (cell << 32 | 2-bit packed UMI) of every exact UMI with a read in the gene counts (multimap::build drops these UMIs).
+    const std::vector<uint64_t>& counted_umis() const { return counted_umis_; }
     /// Carry the probe record of an earlier pass over to this (retry) engine.
     void keep_strand_probe(const PileupEngine& prev) {
         strand_probed_ = prev.strand_probed_;
@@ -2744,6 +3519,7 @@ private:
         h[std::min<uint32_t>(reads, kReadsHistBins) - 1]++;
     }
     std::string molecule_dump_;     // SINGLET_MOLECULE_DUMP: per-molecule TSV (gz) for diagnostics
+    mutable std::vector<uint64_t> counted_umis_;   // sorted (cell << 32 | packed UMI) of the gene counts' reads (finalize_all)
     bool strand_probed_ = false;    // Auto-strand probe reached a decision
     bool strand_flipped_ = false;   // ... and changed reverse_strand
     StrandEvidence strand_probe_;
@@ -2949,9 +3725,18 @@ private:
 
     // Per-chromosome sorted SNP data (binary search, cache-friendly)
     std::vector<std::vector<ChrSNP>> chrom_snps_;      // indexed by tid
+    // Per tid, bucket k holds the index of the first SNP at or after position k << kSnpBucketShift, plus one bucket past the last SNP
+    // (= the SNP count). snp_lower_bound() searches one bucket instead of the whole chromosome and returns std::lower_bound's answer.
+    static constexpr int kSnpBucketShift = 10;
+    std::vector<std::vector<uint32_t>> chrom_snp_bucket_;
     std::vector<std::string> snp_names_;
     uint32_t n_snps_loaded_ = 0;
     uint32_t aim_snp_start_ = UINT32_MAX;   // N13: first AIM index in snp matrices
+    uint32_t edit_snp_start_ = UINT32_MAX;  // D-101: first editing-site index in snp matrices
+    int edit_baseq_ = 10;                    // config_.edit_baseq(), cached for the pileup loops
+    struct EditSite { int32_t pos0; uint16_t chrom; char ref, alt; };   // 8 bytes: 15.7 M human sites in 126 MB
+    std::vector<EditSite> edit_sites_;       // D-101: panel row i = SNP index edit_snp_start_ + i (names made on demand: edit_name)
+    std::vector<std::string> edit_chroms_;
 
     // Splice junction tracking
     std::unordered_map<uint64_t, uint32_t> sj_index_;  // (tid<<32|donor)^acceptor → sj idx
@@ -2962,6 +3747,7 @@ private:
     std::vector<std::string> tid_to_chrom_;  // Reverse map: tid → chrom name
     int32_t chrm_tid_ = -1;
     std::vector<char> mito_tid_;  // per tid: mitochondrial contig (excluded from strand evidence)
+    std::vector<uint8_t> tid_species_;   // per tid: one bit per genome of a joint reference (empty for a single-genome reference)
 
     // Accumulators
     SparseAccumulator<uint16_t> snp_ad_;
@@ -2993,6 +3779,12 @@ private:
     SparseAccumulator<uint16_t> vdj_acc_;
     UmiFeatureCollapse vdj_umi_;       // V(D)J molecules (order-free-rules R9)
 
+    // TE molecules (te_counts.h): records in any order, collapsed to molecules at export
+    TeModel te_model_;
+    bool has_te_ = false;
+    mutable std::vector<TeRecord> te_recs_;
+    std::vector<uint32_t> te_scratch_, te_exon_scratch_;   // serial path scratch
+
     // G-RRNA: rRNA contamination detector (stateless, shared across serial path)
     singlet::RrnaDetector rrna_detector_;
 
@@ -3009,6 +3801,8 @@ private:
         uint32_t gene_idx = UINT32_MAX;
         uint32_t exon_idx = UINT32_MAX;
         bool multi_gene = false;  // true if overlaps 2+ genes (vs intergenic)
+        uint32_t body_gene = UINT32_MAX;  // intron_rule::kGeneFullSet: the one gene whose introns an exon-free alignment lies in
+        bool exonic = false;              // some same-strand exon overlap (intron_rule::kExonPrecedence: an exonic alignment)
     };
 
     // ── Hash functions for zero-allocation lookups ──
@@ -3024,22 +3818,14 @@ private:
         return h;
     }
 
-    // Test hook (ws-w3b, R10b stability gate): SINGLET_TEST_DROP_READS_PCT=P skips every alignment of the reads whose
-    // name hashes into P percent, as if those reads had not been sequenced. 0 / unset = off.
-    static bool test_drop_read(const bam1_t* b) {
-        static const uint64_t pct = [] {
-            const char* e = std::getenv("SINGLET_TEST_DROP_READS_PCT");
-            return e ? static_cast<uint64_t>(std::strtoull(e, nullptr, 10)) : uint64_t(0);
-        }();
-        if (pct == 0) return false;
-        const uint64_t h = hash_qname(bam_get_qname(b)) * 0x9E3779B97F4A7C15ULL;
-        return (h >> 32) % 100 < pct;
-    }
-
     // R11: the stream's CB (PileupConfig::cb_from_cr). `count` tallies primary records by correction status.
     char cb_buf_[40] = {};
     uint64_t cb_status_[8] = {};   // index status + 4: -4 rejected, -3 bad UMI, -2 two N, -1 no match, 0 exact, 1 one, 2 posterior
     const char* stream_cb(const bam1_t* b, bool count) {
+        if (look_cur_) {   // resolved ahead by the stream reader (LookAhead): the same function of the same record
+            if (count) ++cb_status_[look_cur_->st_idx];
+            return look_cur_->ok ? look_cur_->cb : nullptr;
+        }
         const CbCorrector* cc = config_.cb_corrector;
         const char* cr = inline_scan_cb_from_cr(b, cc == nullptr);
         if (!cc) return cr;
@@ -3051,6 +3837,204 @@ private:
         cb_buf_[cc->length()] = '\0';
         return cb_buf_;
     }
+    // stream_cb()'s work for one record, done ahead of the loop: its tally slot, its CB, and that CB's barcode index.
+    // ei = 1: the reader also took the record's aligned blocks (blk_n of them from blk_off in LookEI::blocks) and every exon and
+    // intron interval that overlaps each block, before any strand filter (the filter stays in the loop, whose strand can change
+    // at the inline probe). The loop reads them instead of querying the gene model: the same function of the same record.
+    struct LookRec { int32_t bc; int8_t st_idx; int8_t ok; int8_t ei; int8_t has_n; uint16_t blk_n; uint32_t blk_off; char cb[40]; };
+    struct BlockOvl { uint32_t e_off, e_n, i_off, i_n; };   // per block: its exon and intron overlaps in LookEI::ovl
+    struct LookEI {
+        std::vector<std::pair<int32_t, int32_t>> blocks;
+        std::vector<BlockOvl> bov;   // parallel to blocks
+        std::vector<uint32_t> ovl;
+        std::vector<uint32_t> scratch;
+        void clear() { blocks.clear(); bov.clear(); ovl.clear(); }
+    };
+    // Steps the loop defers to the post stage (LookAhead::post) for one record: its splice junctions, its SNP bases and its chrM
+    // bases, with the barcode, UMI and gene the loop had for it. While the stream runs, the state these steps fill (sj_*, snp_cons_,
+    // mt_*) is touched by the post stage alone, and it sees the records in stream order, as the loop would have.
+    enum : uint8_t { kPostSj = 1, kPostVariant = 2, kPostMt = 4 };
+    struct PostRec { uint8_t steps; int umi_len; int32_t tid; uint32_t bc; uint32_t gene; const char* umi; };
+    PostRec* post_cur_ = nullptr;       // look_cur_'s post-stage slot (null without a post stage)
+    bool post_ahead_ = false;           // set before the reader starts: a post stage runs (CPU path, look-ahead on)
+    PileupStats post_stats_;            // the post stage's counts (sj_hits, snp_hits, mt_pileup_bases), added to the run's after finish()
+    void post_set(uint8_t step, int32_t tid, uint32_t bc, const char* umi, int umi_len) {
+        PostRec& p = *post_cur_;
+        p.steps |= step; p.tid = tid; p.bc = bc; p.umi = umi; p.umi_len = umi_len; p.gene = cur_read_gene_;
+    }
+    void run_post(bam1_t* b, const PostRec& p) {
+        if (p.steps & kPostSj) extract_splice_junctions(b, p.tid, p.bc, p.umi, p.umi_len, post_stats_, p.gene);
+        if ((p.steps & kPostVariant) && has_variant_overlap(p.tid, b->core.pos, bam_endpos(b)))
+            pileup_aligned_bases(b, p.tid, p.bc, p.umi, p.umi_len, post_stats_, p.gene);
+        if (p.steps & kPostMt) pileup_mt_bases(b, p.bc, post_stats_);
+    }
+    const LookRec* look_cur_ = nullptr;
+    const LookEI* look_ei_ = nullptr;   // the batch of look_cur_
+    bool ei_ahead_ = false;             // set before the reader starts: the exon/intron section runs on the CPU (gene model, no W11 "on")
+    void look_resolve(const bam1_t* b, LookRec& r, LookEI& ei) const {
+        const CbCorrector* cc = config_.cb_corrector;
+        r.ok = 0; r.bc = -1; r.ei = 0;
+        const char* cr = inline_scan_cb_from_cr(b, false);
+        if (!cr) { r.st_idx = 1; return; }
+        if (static_cast<int>(std::strlen(cr)) != cc->length()) { r.st_idx = 3; return; }
+        const int st = cc->resolve(cr, nullptr, r.cb);
+        r.st_idx = static_cast<int8_t>(st + 4);
+        if (st < 0) return;
+        r.cb[cc->length()] = '\0';
+        r.ok = 1;
+        r.bc = bc_index_.lookup(r.cb);
+        if (ei_ahead_ && r.bc >= 0 && !(b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FSUPPLEMENTARY))) look_ei(b, r, ei);
+    }
+    // The exon/intron section's CIGAR walk and gene-model queries for one primary record (see LookRec::ei).
+    void look_ei(const bam1_t* b, LookRec& r, LookEI& ei) const {
+        const int32_t tid = b->core.tid;
+        r.blk_off = static_cast<uint32_t>(ei.blocks.size());
+        r.has_n = 0;
+        const uint32_t* cigar = bam_get_cigar(b);
+        int32_t rpos = b->core.pos;
+        for (int ci = 0; ci < b->core.n_cigar; ++ci) {
+            const int op = bam_cigar_op(cigar[ci]);
+            const int len = bam_cigar_oplen(cigar[ci]);
+            switch (op) {
+                case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF:
+                    ei.blocks.push_back({rpos, rpos + len}); rpos += len; break;
+                case BAM_CREF_SKIP: r.has_n = 1; rpos += len; break;
+                case BAM_CDEL: rpos += len; break;
+                default: break;
+            }
+        }
+        const size_t nb = ei.blocks.size() - r.blk_off;
+        if (nb > 0xFFFF) { ei.blocks.resize(r.blk_off); return; }   // the loop queries such a record itself
+        r.blk_n = static_cast<uint16_t>(nb);
+        for (size_t k = r.blk_off; k < ei.blocks.size(); ++k) {
+            BlockOvl o{};
+            gene_model_.query_exons(tid, ei.blocks[k].first, ei.blocks[k].second, ei.scratch);
+            o.e_off = static_cast<uint32_t>(ei.ovl.size()); o.e_n = static_cast<uint32_t>(ei.scratch.size());
+            ei.ovl.insert(ei.ovl.end(), ei.scratch.begin(), ei.scratch.end());
+            if (config_.count_introns) {
+                gene_model_.query_introns(tid, ei.blocks[k].first, ei.blocks[k].second, ei.scratch);
+                o.i_off = static_cast<uint32_t>(ei.ovl.size()); o.i_n = static_cast<uint32_t>(ei.scratch.size());
+                ei.ovl.insert(ei.ovl.end(), ei.scratch.begin(), ei.scratch.end());
+            }
+            ei.bov.push_back(o);
+        }
+        r.ei = 1;
+    }
+    // The stream reader: decodes records into a ring of batches and resolves each one (look_resolve) on its own thread; next()
+    // hands the loop the records in stream order. With a post stage (post_ahead_), a batch the loop is done with goes to a third
+    // thread, which runs the loop's deferred per-record steps (PostRec, run_post) in stream order before the reader reuses the
+    // batch. finish() hands over the loop's last batch and joins the post stage; stop() (or the destructor) joins the reader.
+    struct LookAhead {
+        static constexpr size_t kBatches = 8, kRecs = 2048;
+        enum : int { kFree = 0, kFull = 1, kDone = 2 };   // kFull: read, for the loop; kDone: the loop is done, for the post stage
+        struct Batch {
+            std::vector<bam1_t*> rec; std::vector<LookRec> look; std::vector<PostRec> post; LookEI ei;
+            size_t n = 0, n_post = 0; bool last = false; int state = kFree;
+        };
+        PileupEngine& eng; htsFile* fp; sam_hdr_t* hdr;
+        Batch ring[kBatches];
+        std::mutex mu; std::condition_variable cv_full, cv_free, cv_post;
+        bool stop_ = false, finished_ = false;
+        const bool post_on;
+        std::thread th, th_post;
+        uint64_t seq = 0; size_t pos = 0; Batch* cur = nullptr;
+        LookAhead(PileupEngine& e, htsFile* f, sam_hdr_t* h) : eng(e), fp(f), hdr(h), post_on(e.post_ahead_) {
+            for (auto& B : ring) {
+                B.rec.resize(kRecs); B.look.resize(kRecs);
+                if (post_on) B.post.resize(kRecs);
+                for (auto& r : B.rec) r = bam_init1();
+            }
+            th = std::thread([this] { read(); });
+            if (post_on) th_post = std::thread([this] { post(); });
+        }
+        ~LookAhead() {
+            finish();
+            stop();
+            for (auto& B : ring) for (auto* r : B.rec) bam_destroy1(r);
+        }
+        void read() {
+            for (uint64_t k = 0;; ++k) {
+                Batch& B = ring[k % kBatches];
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_free.wait(lk, [&] { return B.state == kFree || stop_; });
+                    if (stop_) return;
+                }
+                B.n = 0; B.last = false; B.ei.clear();
+                while (B.n < kRecs) {
+                    if (sam_read1(fp, hdr, B.rec[B.n]) < 0) { B.last = true; break; }
+                    eng.look_resolve(B.rec[B.n], B.look[B.n], B.ei);
+                    ++B.n;
+                }
+                { std::lock_guard<std::mutex> lk(mu); B.state = kFull; }
+                cv_full.notify_one();
+                if (B.last) return;
+            }
+        }
+        // The post stage: the batches the loop is done with, in stream order, each record's deferred steps.
+        void post() {
+            for (uint64_t k = 0;; ++k) {
+                Batch& B = ring[k % kBatches];
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_post.wait(lk, [&] { return B.state == kDone || finished_; });
+                    if (B.state != kDone) return;   // finished, and every batch handed over is done
+                }
+                for (size_t i = 0; i < B.n_post; ++i)
+                    if (B.post[i].steps) eng.run_post(B.rec[i], B.post[i]);
+                { std::lock_guard<std::mutex> lk(mu); B.state = kFree; }
+                cv_free.notify_one();
+            }
+        }
+        // The loop is done with records [0, n) of the current batch: to the post stage, or straight back to the reader.
+        void release(size_t n) {
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                cur->n_post = n;
+                cur->state = post_on ? kDone : kFree;
+            }
+            if (post_on) cv_post.notify_one(); else cv_free.notify_one();
+            cur = nullptr;
+        }
+        // The next record, its resolved CB, its batch's look-ahead data, and its post-stage slot (null without a post stage).
+        // False at the end of the stream.
+        bool next(bam1_t*& b, const LookRec*& lr, const LookEI*& ei, PostRec*& pr) {
+            for (;;) {
+                if (cur && pos < cur->n) {
+                    b = cur->rec[pos]; lr = &cur->look[pos]; ei = &cur->ei;
+                    pr = post_on ? &cur->post[pos] : nullptr;
+                    if (pr) pr->steps = 0;
+                    ++pos;
+                    return true;
+                }
+                if (cur) {
+                    const bool last = cur->last;
+                    release(cur->n);
+                    if (last) return false;
+                    ++seq;
+                }
+                Batch& B = ring[seq % kBatches];
+                std::unique_lock<std::mutex> lk(mu);
+                cv_full.wait(lk, [&] { return B.state == kFull; });
+                cur = &B; pos = 0;
+            }
+        }
+        // After the loop: the records it took from the current batch go to the post stage (after a strand abort the batch is
+        // partly read), then the post stage drains and is joined. The deferred steps' results are complete when this returns.
+        void finish() {
+            if (cur) release(pos);
+            if (!th_post.joinable()) return;
+            { std::lock_guard<std::mutex> lk(mu); finished_ = true; }
+            cv_post.notify_all();
+            th_post.join();
+        }
+        void stop() {
+            if (!th.joinable()) return;
+            { std::lock_guard<std::mutex> lk(mu); stop_ = true; }
+            cv_free.notify_all();
+            th.join();
+        }
+    };
     void report_cb_status() const {
         if (!config_.cb_corrector) return;
         std::cerr << "[cb-correct] primary records: exact=" << cb_status_[4] << " one_candidate=" << cb_status_[5]
@@ -3100,7 +4084,7 @@ private:
         return h;
     }
 
-    GeneHit determine_exon_gene(bam1_t* b, int32_t tid) {
+    GeneHit determine_exon_gene(bam1_t* b, int32_t tid, bool body = false) {
         GeneHit result;
         if (!has_gene_model_) return result;
 
@@ -3149,7 +4133,13 @@ private:
             }
         }
 
-        if (mm_overlaps_.empty()) return result;
+        if (tx_resolve(b, mm_overlaps_) && body) return result;   // intron_rule::kTxCompat; kStarGene: a non-concordant secondary gives no gene
+        const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
+        if (mm_overlaps_.empty()) {
+            if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
+            return result;
+        }
+        result.exonic = true;
 
         // Check single-gene (any-overlap-based)
         uint32_t gene = gene_model_.exon_to_gene(mm_overlaps_[0]);
@@ -3163,7 +4153,35 @@ private:
 
         result.gene_idx = gene;
         result.exon_idx = mm_overlaps_[0];
+        if (gf) gene_full_extend(result, aligned_blocks_, tid, read_reverse, block_overlaps_);
         return result;
+    }
+
+    // intron_rule::kGeneFullSet for one secondary alignment: its blocks' same-strand intron overlaps extend the exon hit to STARsolo
+    // GeneFull's gene-body set. An intron of a second gene makes the hit multi-gene; an exon-free alignment inside the introns of exactly
+    // one gene reports it as body_gene, which marks ambiguity but is never assigned (intronic multimappers carry no evidence, kUnique).
+    void gene_full_extend(GeneHit& r, const std::vector<std::pair<int32_t, int32_t>>& blocks, int32_t tid, bool read_reverse,
+                          std::vector<uint32_t>& scratch) const {
+        if (r.multi_gene || !config_.count_introns) return;
+        uint32_t g0 = r.gene_idx;
+        for (const auto& [bs, be] : blocks) {
+            gene_model_.query_introns(tid, bs, be, scratch);
+            for (uint32_t idx : scratch) {
+                const uint32_t g = gene_model_.intron_to_gene(idx);
+                if (g == UINT32_MAX) continue;
+                if (config_.stranded) {
+                    const char gs = gene_model_.gene_strand(g);
+                    if (gs != '.') {
+                        bool expect_reverse = (gs == '-');
+                        if (config_.reverse_strand) expect_reverse = !expect_reverse;
+                        if (read_reverse != expect_reverse) continue;
+                    }
+                }
+                if (g0 == UINT32_MAX) g0 = g;
+                else if (g != g0) { const bool ex = r.exonic; r = GeneHit{}; r.multi_gene = true; r.exonic = ex; return; }
+            }
+        }
+        if (r.gene_idx == UINT32_MAX) r.body_gene = g0;
     }
 
     static uint64_t pos_key(int32_t tid, int32_t pos) {
@@ -3171,6 +4189,8 @@ private:
     }
 
     bool is_chrm(int32_t tid) const { return tid == chrm_tid_; }
+    uint8_t species_bit(int32_t tid) const {
+        return (tid >= 0 && static_cast<size_t>(tid) < tid_species_.size()) ? tid_species_[static_cast<size_t>(tid)] : 0; }
 
     // ── RAII gzip-aware line reader ──
     class LineReader {
@@ -3216,6 +4236,17 @@ private:
         int n = sam_hdr_nref(hdr);
         tid_to_chrom_.resize(n);
         mito_tid_.assign(n, 0);
+        tid_species_.assign(n, 0);
+        std::vector<std::string> prefixes;   // joint references name contigs <genome>___<contig> (GRCh38___chr1, GRCm39___1)
+        for (int i = 0; i < n; ++i) {
+            const std::string nm = sam_hdr_tid2name(hdr, i);
+            const size_t u = nm.find("___");
+            const std::string pfx = u == std::string::npos ? std::string() : nm.substr(0, u);
+            size_t k = 0; while (k < prefixes.size() && prefixes[k] != pfx) ++k;
+            if (k == prefixes.size()) prefixes.push_back(pfx);
+            tid_species_[i] = static_cast<uint8_t>(1u << std::min<size_t>(k, 7));
+        }
+        if (prefixes.size() < 2) tid_species_.clear();   // one genome: species_bit is 0 everywhere and nothing changes
         for (int i = 0; i < n; ++i) {
             std::string name = sam_hdr_tid2name(hdr, i);
             chrom_to_tid_[name] = i;
@@ -3271,6 +4302,43 @@ private:
         }
         std::cerr << "[singlet-pileup] Injected " << aims.size()
                   << " AIM positions for ancestry (start_idx=" << aim_snp_start_ << ")\n";
+    }
+
+    // D-101: parse the RNA editing panel (CHROM POS REF ALT [...], 1-based, genome strand) into edit_sites_. Only single-base
+    // A>G and T>C rows are taken; anything else is skipped and counted. Runs on its own thread during load_references (it touches
+    // only edit_sites_ and edit_chroms_); load_references gives the block its SNP indices after the AIM block, and
+    // resolve_pending_snps puts the sites into chrom_snps_.
+    bool parse_edit_panel() {
+        LineReader f(config_.edit_path);
+        if (!f.good()) {
+            std::cerr << "[singlet-pileup] ERROR: Cannot open editing panel: " << config_.edit_path << "\n";
+            return false;
+        }
+        std::unordered_map<std::string, uint16_t> chrom_id;
+        std::string line;
+        uint64_t n_skip = 0;
+        while (f.getline(line)) {
+            if (line.empty() || line[0] == '#') continue;
+            const char* p = line.c_str();
+            const char* end = p + line.size();
+            const char* f0 = p;
+            while (p < end && *p != '\t') ++p;
+            if (p >= end) { ++n_skip; continue; }
+            const size_t chrom_len = static_cast<size_t>(p - f0);
+            ++p;
+            int32_t pos = 0;
+            while (p < end && *p >= '0' && *p <= '9') pos = pos * 10 + (*p++ - '0');
+            if (p + 4 > end || *p != '\t' || p[2] != '\t') { ++n_skip; continue; }
+            const char ref = p[1], alt = p[3];
+            if ((p + 4 < end && p[4] != '\t' && p[4] != '\r') || pos < 1 ||
+                !((ref == 'A' && alt == 'G') || (ref == 'T' && alt == 'C'))) { ++n_skip; continue; }
+            auto it = chrom_id.try_emplace(std::string(f0, chrom_len), static_cast<uint16_t>(edit_chroms_.size()));
+            if (it.second) edit_chroms_.push_back(it.first->first);
+            edit_sites_.push_back({pos - 1, it.first->second, ref, alt});
+        }
+        std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites (skipped " << n_skip
+                  << " rows) from " << config_.edit_path << "\n";
+        return true;
     }
 
     bool load_barcodes() {
@@ -3440,6 +4508,173 @@ private:
     };
     std::vector<PendingSNP> snp_pending_;
 
+public:
+    // ── Pool-resident references ──
+    // `singlet gpu-pool` parses each genome's GTF and SNP panel once, before it forks the samples (preload_pool_references), with the
+    // loaders below on the same bytes. A sample's load_references takes those structures when its file is the same file (device, inode,
+    // size and modification time): they are moved out of the sample's copy-on-write copy of the pool's memory, so nothing is parsed or
+    // copied, and the outputs are the loaders' own. Each is taken once per process; a second engine, a changed file or a failed parse in
+    // the pool parses as before. SINGLET_POOL_REFS=0 (in the pool or in a sample): every sample parses its own.
+    struct PoolFileId {
+        dev_t dev = 0; ino_t ino = 0; off_t size = 0; time_t mtime = 0; long mtime_ns = 0;
+        bool operator==(const PoolFileId& o) const {
+            return dev == o.dev && ino == o.ino && size == o.size && mtime == o.mtime && mtime_ns == o.mtime_ns;
+        }
+    };
+    static bool pool_file_id(const std::string& path, PoolFileId& id) {
+        struct stat st{};
+        if (path.empty() || ::stat(path.c_str(), &st) != 0) return false;
+        id.dev = st.st_dev; id.ino = st.st_ino; id.size = st.st_size; id.mtime = st.st_mtim.tv_sec; id.mtime_ns = st.st_mtim.tv_nsec;
+        return true;
+    }
+    static bool pool_refs_enabled() { const char* e = std::getenv("SINGLET_POOL_REFS"); return !(e && e[0] == '0'); }
+    struct PoolSnps {
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        std::vector<PendingSNP> pending; std::vector<std::string> names; uint32_t n = 0; double sec = 0;
+    };
+    struct PoolGtf {
+        PoolFileId id; std::string path; bool is_bed = false, ok = false, vdj_ok = false, taken = false;
+        GeneModel gm; VdjModel vdj; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolSnps>>& pool_snps() { static std::vector<std::unique_ptr<PoolSnps>> v; return v; }
+    static std::vector<std::unique_ptr<PoolGtf>>& pool_gtfs() { static std::vector<std::unique_ptr<PoolGtf>> v; return v; }
+    struct PoolEdit {   // D-101 editing panel: parse_edit_panel's edit_sites_ and edit_chroms_
+        PoolFileId id; std::string path; bool ok = false, taken = false;
+        std::vector<EditSite> sites; std::vector<std::string> chroms; double sec = 0;
+    };
+    static std::vector<std::unique_ptr<PoolEdit>>& pool_edits() { static std::vector<std::unique_ptr<PoolEdit>> v; return v; }
+
+    // In the pool, before any sample is forked: parse each distinct file of `snp_paths` and `gtf_paths` once (each file on a thread of its
+    // own, as load_references runs its two loaders). Returns a log line.
+    static std::string preload_pool_references(const std::vector<std::string>& snp_paths, const std::vector<std::string>& gtf_paths,
+                                               const std::vector<std::string>& edit_paths = {}) {
+        std::string log;
+        if (!pool_refs_enabled()) return "off (SINGLET_POOL_REFS=0)";
+        std::vector<std::thread> th;
+        for (const std::string& p : snp_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "SNP panel " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_snps()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_snps().push_back(std::make_unique<PoolSnps>());
+            PoolSnps* e = pool_snps().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                PileupConfig c; c.snp_path = e->path;
+                auto eng = std::make_unique<PileupEngine>(c);
+                e->ok = eng->load_snps();
+                e->pending = std::move(eng->snp_pending_); e->names = std::move(eng->snp_names_); e->n = eng->n_snps_loaded_;
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (const std::string& p : gtf_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "GTF " + p + ": not found; "; continue; }
+            const bool is_bed = p.find(".bed") != std::string::npos;
+            bool seen = false;
+            for (const auto& e : pool_gtfs()) seen = seen || (e->id == id && e->is_bed == is_bed);
+            if (seen) continue;
+            pool_gtfs().push_back(std::make_unique<PoolGtf>());
+            PoolGtf* e = pool_gtfs().back().get();
+            e->id = id; e->path = p; e->is_bed = is_bed;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                e->ok = e->is_bed ? e->gm.load_bed(e->path) : e->gm.load_gtf(e->path);
+                if (e->ok && !e->is_bed) e->vdj_ok = e->vdj.load_gtf(e->path);   // load_references reads it when config.count_vdj
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (const std::string& p : edit_paths) {
+            PoolFileId id;
+            if (!pool_file_id(p, id)) { log += "editing panel " + p + ": not found; "; continue; }
+            bool seen = false;
+            for (const auto& e : pool_edits()) seen = seen || e->id == id;
+            if (seen) continue;
+            pool_edits().push_back(std::make_unique<PoolEdit>());
+            PoolEdit* e = pool_edits().back().get();
+            e->id = id; e->path = p;
+            th.emplace_back([e]() {
+                const auto t0 = std::chrono::steady_clock::now();
+                PileupConfig c; c.edit_path = e->path;
+                auto eng = std::make_unique<PileupEngine>(c);
+                e->ok = eng->parse_edit_panel();
+                e->sites = std::move(eng->edit_sites_); e->chroms = std::move(eng->edit_chroms_);
+                e->sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            });
+        }
+        for (auto& t : th) t.join();
+        char b[64];
+        for (const auto& e : pool_snps()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "SNP panel " + e->path + ": " + (e->ok ? std::to_string(e->n) + " sites" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_gtfs()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "GTF " + e->path + ": " +
+                   (e->ok ? std::to_string(e->gm.n_exons()) + " exons, " + std::to_string(e->gm.n_genes()) + " genes" : std::string("failed")) + b;
+        }
+        for (const auto& e : pool_edits()) {
+            std::snprintf(b, sizeof b, " in %.1f s; ", e->sec);
+            log += "editing panel " + e->path + ": " + (e->ok ? std::to_string(e->sites.size()) + " sites" : std::string("failed")) + b;
+        }
+        return log.empty() ? "no reference files" : log;
+    }
+
+private:
+    // load_snps' result from the pool, for config_.snp_path (false: load_snps runs)
+    bool take_pool_snps() {
+        if (pool_snps().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.snp_path, id)) return false;
+        for (auto& e : pool_snps()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            snp_pending_ = std::move(e->pending); snp_names_ = std::move(e->names); n_snps_loaded_ = e->n;
+            e->taken = true;
+            std::cerr << "[singlet-pileup] Loaded " << n_snps_loaded_ << " SNP sites (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // parse_edit_panel's result from the pool, for config_.edit_path (false: parse_edit_panel runs)
+    bool take_pool_edit() {
+        if (pool_edits().empty() || !pool_refs_enabled()) return false;
+        PoolFileId id;
+        if (!pool_file_id(config_.edit_path, id)) return false;
+        for (auto& e : pool_edits()) {
+            if (!(e->id == id) || !e->ok || e->taken) continue;
+            edit_sites_ = std::move(e->sites); edit_chroms_ = std::move(e->chroms);
+            e->taken = true;
+            std::cerr << "[singlet-pileup] Loaded " << edit_sites_.size() << " RNA editing sites from " << config_.edit_path
+                      << " (parsed once by the pool)\n";
+            return true;
+        }
+        return false;
+    }
+    // the GTF thread's result from the pool, for config_.exon_gtf_path (false: the thread runs); ok: the parse's result
+    bool take_pool_gtf(bool& ok) {
+        if (pool_gtfs().empty() || !pool_refs_enabled()) return false;
+        const auto& path = config_.exon_gtf_path;
+        const bool is_bed = (path.find(".bed") != std::string::npos);
+        PoolFileId id;
+        if (!pool_file_id(path, id)) return false;
+        for (auto& e : pool_gtfs()) {
+            if (!(e->id == id) || e->is_bed != is_bed || !e->ok || e->taken) continue;
+            gene_model_ = std::move(e->gm);
+            if (!is_bed && config_.count_vdj) {
+                vdj_model_ = std::move(e->vdj);
+                if (e->vdj_ok && !vdj_model_.empty()) has_vdj_ = true;
+            }
+            e->taken = true;
+            ok = true;
+            std::cerr << "[singlet-pileup] Gene model of " << path << " parsed once by the pool: " << gene_model_.n_exons() << " exons, "
+                      << gene_model_.n_genes() << " genes\n";
+            return true;
+        }
+        return false;
+    }
+
     void resolve_pending_snps() {
         // Determine max tid for vector sizing
         int32_t max_tid = -1;
@@ -3461,15 +4696,59 @@ private:
                 n_resolved++;
             }
         }
+        // D-101: editing sites, one chromosome lookup per contig
+        if (!edit_sites_.empty()) {
+            std::vector<int32_t> etid(edit_chroms_.size());
+            for (size_t c = 0; c < edit_chroms_.size(); ++c) {
+                etid[c] = resolve_chrom(edit_chroms_[c]);
+                if (etid[c] >= 0 && static_cast<size_t>(etid[c]) >= chrom_snps_.size()) chrom_snps_.resize(etid[c] + 1);
+            }
+            uint64_t n_edit_resolved = 0;
+            for (size_t i = 0; i < edit_sites_.size(); ++i) {
+                const auto& e = edit_sites_[i];
+                const int32_t tid = etid[e.chrom];
+                if (tid < 0) continue;
+                chrom_snps_[tid].push_back({e.pos0, edit_snp_start_ + static_cast<uint32_t>(i), e.ref, e.alt});
+                ++n_edit_resolved;
+            }
+            std::cerr << "[singlet-pileup] Resolved " << n_edit_resolved << " of " << edit_sites_.size() << " RNA editing sites\n";
+        }
         // Sort per-chromosome for binary search
         for (auto& snps : chrom_snps_) {
             std::sort(snps.begin(), snps.end(),
                 [](const ChrSNP& a, const ChrSNP& b) { return a.pos < b.pos; });
         }
+        chrom_snp_bucket_.assign(chrom_snps_.size(), {});
+        for (size_t t = 0; t < chrom_snps_.size(); ++t) {
+            const auto& snps = chrom_snps_[t];
+            if (snps.empty()) continue;
+            const size_t nb = (static_cast<size_t>(std::max(snps.back().pos, 0)) >> kSnpBucketShift) + 2;
+            auto& bk = chrom_snp_bucket_[t];
+            bk.resize(nb);
+            size_t i = 0;
+            for (size_t k = 0; k < nb; ++k) {
+                const int64_t start = static_cast<int64_t>(k) << kSnpBucketShift;
+                while (i < snps.size() && snps[i].pos < start) ++i;
+                bk[k] = static_cast<uint32_t>(i);
+            }
+        }
         snp_pending_.clear();
         snp_pending_.shrink_to_fit();
         std::cerr << "[singlet-pileup] Resolved " << n_resolved
                   << " SNPs to BAM chromosome IDs\n";
+    }
+
+    // std::lower_bound over chrom_snps_[tid] by position (the first SNP at or after pos), searched within pos's bucket: every SNP
+    // before bucket k lies before k's start, and the SNP at the next bucket's index lies past pos, so the answer is in [bk[k], bk[k+1]].
+    // chrom_snps_[tid] must be non-empty.
+    std::vector<ChrSNP>::const_iterator snp_lower_bound(int32_t tid, int32_t pos) const {
+        const auto& snps = chrom_snps_[tid];
+        const auto& bk = chrom_snp_bucket_[tid];
+        auto cmp = [](const ChrSNP& s, int32_t p) { return s.pos < p; };
+        if (pos < 0) return std::lower_bound(snps.begin(), snps.end(), pos, cmp);
+        const size_t k = static_cast<size_t>(pos) >> kSnpBucketShift;
+        if (k + 1 >= bk.size()) return snps.end();
+        return std::lower_bound(snps.begin() + bk[k], snps.begin() + bk[k + 1], pos, cmp);
     }
 
     // ── Fast variant overlap check ──
@@ -3478,8 +4757,7 @@ private:
     bool has_variant_overlap(int32_t tid, int32_t start, int32_t end) const {
         if (static_cast<size_t>(tid) < chrom_snps_.size() && !chrom_snps_[tid].empty()) {
             const auto& snps = chrom_snps_[tid];
-            auto lb = std::lower_bound(snps.begin(), snps.end(), start,
-                [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+            auto lb = snp_lower_bound(tid, start);
             if (lb != snps.end() && lb->pos < end) return true;
         }
         return false;
@@ -3496,7 +4774,7 @@ private:
     // For each N op: donor = ref_pos (last exonic base + 1), acceptor = ref_pos + len
     void extract_splice_junctions(bam1_t* b, int32_t tid, uint32_t bc_idx,
                                   const char* umi_str, int umi_len,
-                                  PileupStats& stats) {
+                                  PileupStats& stats, uint32_t read_gene) {
         if (config_.sj_unique_only && alignment_is_multimapped(b)) return;
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
@@ -3548,7 +4826,7 @@ private:
                     // UMI dedup: exact match on (barcode, junction_id, UMI)
                     // R9: molecules are counted at finalize, after UMI correction
                     if (config_.umi_dedup) {
-                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, cur_read_gene_);
+                        sj_umi_dedup_.add(bc_idx, sj_idx, umi_str, umi_len, read_gene);
                     } else {
                         sj_acc_.increment(sj_idx, bc_idx);
                         stats.sj_hits++;
@@ -3571,7 +4849,7 @@ private:
 
     void pileup_aligned_bases(bam1_t* b, int32_t tid, uint32_t bc_idx,
                               const char* umi_str, int umi_len,
-                              PileupStats& stats) {
+                              PileupStats& stats, uint32_t read_gene) {
         const uint32_t* cigar = bam_get_cigar(b);
         int32_t ref_pos = b->core.pos;
         int32_t query_pos = 0;
@@ -3595,18 +4873,17 @@ private:
 
                     // Binary search for SNPs in [ref_pos, block_end)
                     if (snps) {
-                        auto it = std::lower_bound(snps->begin(), snps->end(), ref_pos,
-                            [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+                        auto it = snp_lower_bound(tid, ref_pos);
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
-                            if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
+                            if (qual[0] != 0xff && qual[query_pos + offset] < (it->index >= edit_snp_start_ ? edit_baseq_ : config_.min_baseq))
                                 continue;
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
                             snp_cons_.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
                                           SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
-                                          cur_read_gene_);
-                            stats.snp_hits++;
+                                          read_gene);
+                            if (it->index >= edit_snp_start_) stats.edit_hits++; else stats.snp_hits++;
                         }
                     }
 
@@ -3744,7 +5021,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════
 
     // Thread-safe gene determination using per-worker scratch vectors
-    GeneHit determine_exon_gene_parallel(WorkerContext& wc, bam1_t* b, int32_t tid) {
+    GeneHit determine_exon_gene_parallel(WorkerContext& wc, bam1_t* b, int32_t tid, bool body = false) {
         GeneHit result;
         if (!has_gene_model_) return result;
 
@@ -3784,7 +5061,13 @@ private:
             }
         }
 
-        if (wc.mm_overlaps.empty()) return result;
+        if (tx_resolve(b, wc.mm_overlaps) && body) return result;   // intron_rule::kTxCompat; kStarGene: a non-concordant secondary gives no gene
+        const bool gf = body && (config_.intron_rules & intron_rule::kGeneFullSet);
+        if (wc.mm_overlaps.empty()) {
+            if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
+            return result;
+        }
+        result.exonic = true;
 
         uint32_t gene = gene_model_.exon_to_gene(wc.mm_overlaps[0]);
         for (size_t i = 1; i < wc.mm_overlaps.size(); ++i) {
@@ -3796,6 +5079,7 @@ private:
 
         result.gene_idx = gene;
         result.exon_idx = wc.mm_overlaps[0];
+        if (gf) gene_full_extend(result, wc.aligned_blocks, tid, read_reverse, wc.block_overlaps);
         return result;
     }
 
@@ -3807,33 +5091,20 @@ private:
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
-        // A read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a
-        // pseudogene) comes from the mitochondrial genome (hundreds of copies per cell vs. one nuclear
-        // copy): count it for the chrM gene instead of dropping it as gene-ambiguous.
-        if (mt_numt_tie(e)) {
+        const MmVerdict v = mm_verdict(e);
+        if (v.kind == MmVerdict::kMt) {   // chrM gene vs. its nuclear copy (NUMT): count the chrM gene (mm_verdict)
             count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                       mt_rescue_features(e), e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+                       v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
             wc.stats.mt_numt_rescued++;
-            return;
-        }
-        if (e.gene_ambiguous) {
+        } else if (v.kind == MmVerdict::kAmbig) {
             // G-EM: collect for post-pileup EM rescue
-            if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
-                em_rescue::AmbigRead ar;
-                ar.bc_idx  = e.bc_idx;
-                ar.umi_len = e.umi_len;
-                std::memcpy(ar.umi, e.umi, e.umi_len);
-                ar.gene_a  = e.first_gene;
-                ar.gene_b  = e.second_gene;
-                wc.ambig_reads.push_back(ar);
-            }
-            return;
+            record_mm(e, v, wc.ambig_reads);   // multimap record: the verdict decides (no double count with kCount)
+        } else if (v.kind == MmVerdict::kCount) {
+            count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
+                       v.rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+        } else {
+            record_mm(e, v, wc.ambig_reads);   // gene-ambiguous without a G-EM pair (kNone)
         }
-        if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return;
-        ReadFeatures rf{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags,
-                        static_cast<uint8_t>(e.read_diag | DirectionalUmiStore::kDiagMulti)};
-        count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
-                   rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
     }
 
     // ── Read → (gene, spliced/unspliced evidence) ──────────────────────────
@@ -3854,10 +5125,11 @@ private:
 
     // intron_rule::kMtPrefer, shared by the serial and the parallel multimapper buffers (E = either MultiHitEntry):
     // remember the alignment that lies in a chrM gene ...
+    // `exonic`: the alignment overlaps an exon of the gene (intron_rule::kExonPrecedence decides the tie on exonic alignments only).
     template <class E>
-    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag) const {
+    void note_mt_alignment(E& e, uint32_t gene, uint32_t exon, uint32_t intron, uint8_t flags, uint8_t diag, bool exonic) const {
         if (!(config_.intron_rules & intron_rule::kMtPrefer) || gene == UINT32_MAX || !is_mt_gene(gene)) return;
-        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag;
+        e.mt_gene = gene; e.mt_exon = exon; e.mt_intron = intron; e.mt_flags = flags; e.mt_diag = diag; e.mt_ex = exonic;
     }
     // ... a read aligning equally to a chrM gene and a nuclear gene (NUMT) comes from the mitochondrial genome
     // (hundreds of copies per cell vs. one nuclear copy), so it is counted for the chrM gene instead of dropped
@@ -3866,24 +5138,294 @@ private:
     // order of the sorted BAM, worker order of the cross-worker merge): first_gene and second_gene are the two smallest distinct genes, has_nuc says that
     // some alignment touched a non-chrM gene, and more than one distinct gene makes the read gene-ambiguous. The tie and the EM candidates then do not
     // depend on how the work was split. (Before: the first two genes met; for three or more alignments the chrM tie and the EM pair depended on the order.)
-    template <class E>
-    void note_gene(E& e, uint32_t g) const {
+    void note_gene_set(uint32_t& first, uint32_t& second, bool& ambiguous, bool& has_nuc, uint32_t g) const {
         if (g == UINT32_MAX) return;
-        if (!is_mt_gene(g)) e.has_nuc = true;
-        if (g == e.first_gene || g == e.second_gene) return;
-        if (e.first_gene == UINT32_MAX) { e.first_gene = g; return; }
-        e.gene_ambiguous = true;
-        if (g < e.first_gene) { e.second_gene = e.first_gene; e.first_gene = g; }
-        else if (e.second_gene == UINT32_MAX || g < e.second_gene) e.second_gene = g;
+        if (!is_mt_gene(g)) has_nuc = true;
+        if (g == first || g == second) return;
+        if (first == UINT32_MAX) { first = g; return; }
+        ambiguous = true;
+        if (g < first) { second = first; first = g; }
+        else if (second == UINT32_MAX || g < second) second = g;
+    }
+    // multimap record (multimap_record.h): the second and a third distinct gene among a primary's strand-filtered exon overlaps, in
+    // overlap order (the GPU's ExonCb::second_gene and ExonCb::more)
+    uint32_t second_exon_gene(const std::vector<uint32_t>& ov, uint32_t ga) const {
+        for (size_t i = 1; i < ov.size(); ++i) { const uint32_t g = gene_model_.exon_to_gene(ov[i]); if (g != UINT32_MAX && g != ga) return g; }
+        return UINT32_MAX;
+    }
+    bool third_exon_gene(const std::vector<uint32_t>& ov, uint32_t ga, uint32_t gb) const {
+        for (size_t i = 1; i < ov.size(); ++i) { const uint32_t g = gene_model_.exon_to_gene(ov[i]); if (g != UINT32_MAX && g != ga && g != gb) return true; }
+        return false;
+    }
+    // multimap record: a gene set of up to two genes (more = a third). record_set is a primary alignment's same-strand gene-body set, STARsolo
+    // GeneFull's: the genes of its exon overlaps, and with intron_rule::kGeneFullSet the genes of its intron overlaps (the GPU's AA::ba / bb / pmore)
+    struct RecSet {
+        uint32_t a = UINT32_MAX, b = UINT32_MAX; bool more = false;
+        void add(uint32_t g) {
+            if (g == UINT32_MAX || g == a || g == b) return;
+            if (a == UINT32_MAX) a = g; else if (b == UINT32_MAX) b = g; else more = true;
+        }
+    };
+    RecSet record_set(const std::vector<uint32_t>& ex, const std::vector<uint32_t>& in) const {
+        RecSet r;
+        for (uint32_t idx : ex) { const uint32_t g = gene_model_.exon_to_gene(idx); if (g == UINT32_MAX) r.more = true; else r.add(g); }
+        if ((config_.intron_rules & intron_rule::kGeneFullSet) && config_.count_introns)
+            for (uint32_t idx : in) r.add(gene_model_.intron_to_gene(idx));
+        return r;
     }
     template <class E>
-    bool mt_numt_tie(const E& e) const {
-        return e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.has_nuc;
+    static void note_body(E& e, uint32_t g) {   // record-only: never touches the fields the counting reads (has_nuc, gene_ambiguous)
+        if (g == UINT32_MAX || g == e.body_a || g == e.body_b) return;
+        if (e.body_a == UINT32_MAX) e.body_a = g; else if (e.body_b == UINT32_MAX) e.body_b = g; else e.body_more = true;
+    }
+    // Whether a completed multimapper entry is judged on its exonic alignments (intron_rule::kExonPrecedence with an exonic alignment) or on
+    // all of them. kExonPrecedence decides only within one species: on a joint reference (barnyard) a read whose alignments span species stays
+    // judged on all of them, as at 2957 (a human rRNA read whose one exonic alignment is a mouse 18S pseudogene is not mouse). mm_verdict,
+    // record_mm and rec_pair share it, as the GPU's k_resolve shares its X.
+    template <class E>
+    bool judged_on_exonic(const E& e) const {
+        return (config_.intron_rules & intron_rule::kExonPrecedence) && e.ex_seen && (e.sp_mask & (e.sp_mask - 1)) == 0;
+    }
+    // the record pair of a gene-ambiguous multimapper, exactly two genes: the genes its alignments touched (note_gene) and its primary's body
+    // set; under intron_rule::kExonPrecedence (the gene set mm_verdict judges) the exonic alignments' genes and, when the primary is exonic,
+    // its body set
+    template <class E>
+    bool rec_pair(const E& e, uint32_t& ga, uint32_t& gb) const {
+        RecSet r;
+        if (judged_on_exonic(e)) {
+            if (e.ex_partial || (e.body_ex && e.body_more)) return false;
+            r.add(e.ex_first); r.add(e.ex_second);
+            if (e.body_ex) { r.add(e.body_a); r.add(e.body_b); }
+        } else {
+            if (e.partial || e.body_more) return false;
+            r.add(e.first_gene); r.add(e.second_gene); r.add(e.body_a); r.add(e.body_b);
+        }
+        if (r.more || r.b == UINT32_MAX) return false;
+        ga = std::min(r.a, r.b); gb = std::max(r.a, r.b);
+        return true;
+    }
+    // a uniquely mapped read that is gene-ambiguous (exons of two genes, or with kGeneFullSet a gene-body set of two genes) is one record read
+    // (STARsolo counts it as a multi-gene read)
+    void note_unique_multigene(std::vector<em_rescue::AmbigRead>& out, const std::vector<uint32_t>& ex, const std::vector<uint32_t>& in,
+                               int32_t bc_idx, const char* umi, int umi_len) const {
+        if (bc_idx < 0) return;
+        const RecSet r = record_set(ex, in);
+        if (r.more || r.b == UINT32_MAX) return;
+        em_rescue::AmbigRead ar;
+        ar.bc_idx = bc_idx;
+        const int clen = umi ? std::min(umi_len, 15) : 0;
+        if (clen > 0) std::memcpy(ar.umi, umi, clen);
+        ar.umi_len = static_cast<uint8_t>(clen);
+        ar.gene_a = std::min(r.a, r.b);
+        ar.gene_b = std::max(r.a, r.b);
+        out.push_back(ar);
+    }
+    template <class E>
+    void note_gene(E& e, uint32_t g) const {
+        if (g != UINT32_MAX && g != e.first_gene && g != e.second_gene && e.second_gene != UINT32_MAX)
+            e.partial = true;   // multimap record: a third distinct gene, the two smallest are not the read's gene set
+        note_gene_set(e.first_gene, e.second_gene, e.gene_ambiguous, e.has_nuc, g);
     }
     template <class E>
     static ReadFeatures mt_rescue_features(const E& e) {
         return ReadFeatures{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
                             static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+    }
+
+    // intron_rule::kExonPrecedence. Every multimapper entry also keeps, over its exonic alignments only (an alignment whose same-strand
+    // exon overlaps are not empty), what note_gene keeps over all of them (ex_first / ex_second / ex_ambiguous / ex_has_nuc, order-free
+    // in the same way) and the R7 assignment restricted to them (xa_*: the primary's features when the primary is exonic and kept by the
+    // read-level rules, else the smallest secondary exon). The state is kept whatever the rules; only mm_verdict reads it, under the rule.
+    template <class E>
+    void note_ex_gene(E& e, uint32_t g) const {
+        if (g != UINT32_MAX && g != e.ex_first && g != e.ex_second && e.ex_second != UINT32_MAX) e.ex_partial = true;   // multimap record
+        note_gene_set(e.ex_first, e.ex_second, e.ex_ambiguous, e.ex_has_nuc, g);
+    }
+    // the primary alignment: exon_gene / exon_multigene as the primary path computed them, gf_multi = gene_full_multi (kGeneFullSet's
+    // single-alignment rule: an exon of one gene inside another gene's intron stays ambiguous), rf after classify_read and refine_read
+    template <class E>
+    void note_primary_exonic(E& e, const std::vector<uint32_t>& exon_overlaps, uint32_t exon_gene, bool exon_multigene, bool gf_multi,
+                             const ReadFeatures& rf, int32_t tid) const {
+        e.sp_mask |= species_bit(tid);       // every alignment, exonic or not
+        if (is_chrm(tid)) e.mt_aln = true;
+        if (exon_overlaps.empty()) return;   // intron-only or intergenic: not an exonic alignment
+        e.ex_seen = true;
+        e.body_ex = true;                    // multimap record: the primary's body set belongs to the exonic gene set
+        if (exon_multigene) {
+            e.ex_ambiguous = true;
+            // its first two exon genes, as the all-alignment set takes them (G-EM candidates)
+            const uint32_t ga = gene_model_.exon_to_gene(exon_overlaps[0]);
+            uint32_t gb = UINT32_MAX;
+            if (ga != UINT32_MAX) {
+                note_ex_gene(e, ga);
+                gb = second_exon_gene(exon_overlaps, ga);
+                if (gb != UINT32_MAX) note_ex_gene(e, gb);
+            }
+            if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(exon_overlaps, ga, gb)) e.ex_partial = true;   // multimap record
+            return;
+        }
+        if (gf_multi) e.ex_ambiguous = true;
+        note_ex_gene(e, exon_gene);
+        if (rf.gene != UINT32_MAX) {
+            e.xa_primary = true;
+            e.xa_gene = rf.gene; e.xa_exon = rf.exon_idx; e.xa_intron = rf.intron_idx; e.xa_flags = rf.flags; e.xa_diag = rf.diag;
+        }
+    }
+    // a secondary alignment (determine_exon_gene*'s hit; multi_gene of an exonic hit = exons of two genes, or under kGeneFullSet an exon
+    // and another gene's intron)
+    template <class E>
+    void note_secondary_exonic(E& e, const GeneHit& hit, int32_t tid) const {
+        e.sp_mask |= species_bit(tid);
+        if (is_chrm(tid)) e.mt_aln = true;
+        if (!hit.exonic) return;
+        e.ex_seen = true;
+        if (hit.multi_gene) { e.ex_ambiguous = true; e.ex_partial = true; return; }   // ex_partial: its genes are not noted (multimap record)
+        note_ex_gene(e, hit.gene_idx);
+        if (hit.gene_idx != UINT32_MAX && !e.xa_primary && (e.xa_gene == UINT32_MAX || hit.exon_idx < e.xa_exon)) {
+            e.xa_gene = hit.gene_idx; e.xa_exon = hit.exon_idx; e.xa_intron = UINT32_MAX; e.xa_flags = kExonicReadFlags; e.xa_diag = 0;
+        }
+    }
+    // the cross-worker merge of two partial entries of one read (order-free: the union of the gene sets, the primary's or the smallest exon)
+    template <class E>
+    void merge_exonic(E& m, const E& w) const {
+        m.sp_mask |= w.sp_mask;
+        if (w.mt_aln) m.mt_aln = true;
+        if (!w.ex_seen) return;
+        m.ex_seen = true;
+        if (w.ex_ambiguous) m.ex_ambiguous = true;
+        if (w.ex_has_nuc) m.ex_has_nuc = true;
+        if (w.ex_partial) m.ex_partial = true;   // multimap record
+        if (w.body_ex) m.body_ex = true;
+        note_ex_gene(m, w.ex_first);
+        note_ex_gene(m, w.ex_second);
+        if (w.xa_gene != UINT32_MAX && !m.xa_primary && (w.xa_primary || m.xa_gene == UINT32_MAX || w.xa_exon < m.xa_exon)) {
+            m.xa_primary = w.xa_primary;
+            m.xa_gene = w.xa_gene; m.xa_exon = w.xa_exon; m.xa_intron = w.xa_intron; m.xa_flags = w.xa_flags; m.xa_diag = w.xa_diag;
+        }
+    }
+
+    // What a completed multimapper entry yields (the serial resolve_mm, resolve_mm_parallel and the cross-worker merge share it):
+    // kMt  intron_rule::kMtPrefer: gene-ambiguous between a chrM gene and a nuclear gene (NUMT); counted for the chrM gene (rf)
+    // kAmbig  gene-ambiguous with two candidate genes for G-EM (gene_a < gene_b); kCount  counted with rf; kNone  nothing.
+    // The gene set it is judged on: all alignments (note_gene), or under intron_rule::kExonPrecedence the exonic alignments when there are any.
+    struct MmVerdict {
+        enum Kind { kNone, kMt, kAmbig, kCount } kind = kNone;
+        ReadFeatures rf;
+        uint32_t gene_a = UINT32_MAX, gene_b = UINT32_MAX;
+    };
+    // intron_rule::kChrMPrecedence over the verdict of the other rules: a multimapper with an alignment on chrM keeps a chrM gene's count,
+    // goes to the chrM gene it touches (kMtPrefer's alignment), or is dropped; it is never counted for, or rescued (G-EM) into, a nuclear gene
+    // intron_rule::kTxCompat: exon overlaps (strand-filtered, query order) in two or more genes keep only the one gene with a concordant
+    // transcript (singlet_tx::pick); otherwise they are left as they are. The GPU's k_annotate decides the same way.
+    // Returns true under intron_rule::kStarGene when the overlaps name genes of which none has a transcript concordant with the alignment
+    // (STAR's classifyAlign adds no gene for it); the overlaps are then left unchanged and the caller decides.
+    bool tx_resolve(const bam1_t* b, std::vector<uint32_t>& overlaps) const {
+        const bool txc = (config_.intron_rules & intron_rule::kTxCompat) != 0, star = (config_.intron_rules & intron_rule::kStarGene) != 0;
+        if (!(txc || star) || overlaps.empty()) return false;
+        const auto& gtoff = gene_model_.tx_gene_off_view();
+        if (gtoff.size() != static_cast<size_t>(gene_model_.n_genes()) + 1) return false;
+        uint32_t cand[singlet_tx::kMaxCandidates]; int nc = 0;
+        for (uint32_t idx : overlaps) {
+            const uint32_t g = gene_model_.exon_to_gene(idx);
+            if (g == UINT32_MAX) return false;
+            bool seen = false;
+            for (int c = 0; c < nc; ++c) if (cand[c] == g) { seen = true; break; }
+            if (seen) continue;
+            if (nc == singlet_tx::kMaxCandidates) return false;
+            cand[nc++] = g;
+        }
+        if (nc < 2 && !star) return false;
+        const uint32_t* cig = bam_get_cigar(b);
+        int32_t ss[singlet_tx::kMaxSegments], se[singlet_tx::kMaxSegments];
+        const int ns = singlet_tx::segments(static_cast<int>(b->core.n_cigar), static_cast<int32_t>(b->core.pos),
+            [&](int i, int& op, int32_t& len) { op = bam_cigar_op(cig[i]); len = static_cast<int32_t>(bam_cigar_oplen(cig[i])); }, ss, se);
+        if (ns <= 0) return false;
+        uint32_t w = UINT32_MAX;
+        const int found = singlet_tx::pick(cand, nc, gtoff.data(), gene_model_.tx_exon_off_view().data(), gene_model_.tx_exon_start_view().data(),
+                                           gene_model_.tx_exon_end_view().data(), gene_model_.n_genes(), ss, se, ns, w);
+        if (found == 0) return star;
+        if (found != 1 || nc < 2 || !txc) return false;
+        size_t k = 0;
+        for (uint32_t idx : overlaps) if (gene_model_.exon_to_gene(idx) == w) overlaps[k++] = idx;
+        overlaps.resize(k);
+        return false;
+    }
+    template <class E>
+    MmVerdict mm_verdict(const E& e) const {
+        MmVerdict v = mm_verdict_rules(e);
+        if (!(config_.intron_rules & intron_rule::kChrMPrecedence) || !e.mt_aln || v.kind == MmVerdict::kMt) return v;
+        if (v.kind == MmVerdict::kCount && is_mt_gene(v.rf.gene)) return v;
+        if (e.mt_gene != UINT32_MAX) {
+            v.kind = MmVerdict::kMt;
+            v.rf = mt_rescue_features(e);
+            v.gene_a = v.gene_b = UINT32_MAX;
+            return v;
+        }
+        return MmVerdict{};
+    }
+    template <class E>
+    MmVerdict mm_verdict_rules(const E& e) const {
+        MmVerdict v;
+        const bool ex = judged_on_exonic(e);
+        const bool ambiguous = ex ? e.ex_ambiguous : e.gene_ambiguous;
+        // a read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a pseudogene) comes from the mitochondrial
+        // genome (hundreds of copies per cell vs. one nuclear copy): count it for the chrM gene instead of dropping it as gene-ambiguous
+        if (ambiguous && e.mt_gene != UINT32_MAX && (ex ? (e.ex_has_nuc && e.mt_ex) : e.has_nuc)) {
+            v.kind = MmVerdict::kMt;
+            v.rf = mt_rescue_features(e);
+            return v;
+        }
+        if (ambiguous) {
+            v.gene_a = ex ? e.ex_first : e.first_gene;
+            v.gene_b = ex ? e.ex_second : e.second_gene;
+            if (v.gene_a != UINT32_MAX && v.gene_b != UINT32_MAX) v.kind = MmVerdict::kAmbig;
+            return v;
+        }
+        if (ex) {
+            if (e.ex_first == UINT32_MAX || e.xa_gene == UINT32_MAX) return v;
+            v.rf = ReadFeatures{e.xa_gene, e.xa_exon, e.xa_intron, e.xa_flags, e.xa_diag};
+        } else {
+            // gene-unique: first_gene is the only gene (or all intergenic)
+            if (e.first_gene == UINT32_MAX || e.gene_idx == UINT32_MAX) return v;
+            v.rf = ReadFeatures{e.gene_idx, e.exon_idx, e.intron_idx, e.read_flags, e.read_diag};
+        }
+        v.rf.diag = static_cast<uint8_t>(v.rf.diag | DirectionalUmiStore::kDiagMulti);
+        v.kind = MmVerdict::kCount;
+        return v;
+    }
+
+    // multimap record: a completed multimapper the verdict leaves uncounted and gene-ambiguous (kAmbig, or kNone without a G-EM pair) is one
+    // record read when its gene set (rec_pair) is exactly two genes. Counted verdicts (kCount, kMt) never reach the record, so a read rescued
+    // by intron_rule::kExonPrecedence is counted once.
+    template <class E>
+    void record_mm(const E& e, const MmVerdict& v, std::vector<em_rescue::AmbigRead>& out) const {
+        if (e.bc_idx < 0 || v.kind == MmVerdict::kCount || v.kind == MmVerdict::kMt) return;
+        const bool ex = judged_on_exonic(e);   // the gene set mm_verdict judged
+        if (!(ex ? e.ex_ambiguous : e.gene_ambiguous)) return;
+        uint32_t ra, rb;
+        if (!rec_pair(e, ra, rb)) return;
+        em_rescue::AmbigRead ar;
+        ar.bc_idx  = e.bc_idx;
+        ar.umi_len = e.umi_len;
+        std::memcpy(ar.umi, e.umi, e.umi_len);
+        ar.gene_a  = ra;
+        ar.gene_b  = rb;
+        out.push_back(ar);
+    }
+
+    // intron_rule::kGeneFullSet on a primary alignment: more than one gene in its same-strand body set (exons of two genes, an exon of one
+    // gene and an intron of another, or introns of two genes). The multimapper buffer then treats the read as gene-ambiguous.
+    bool gene_full_multi(uint32_t exon_gene, bool exon_multigene, const std::vector<uint32_t>& intron_overlaps) const {
+        if (!(config_.intron_rules & intron_rule::kGeneFullSet)) return false;
+        if (exon_multigene) return true;
+        uint32_t g0 = exon_gene;
+        for (uint32_t idx : intron_overlaps) {
+            const uint32_t g = gene_model_.intron_to_gene(idx);
+            if (g == UINT32_MAX) continue;
+            if (g0 == UINT32_MAX) g0 = g;
+            else if (g != g0) return true;
+        }
+        return false;
     }
 
     ReadFeatures classify_read(uint32_t exon_gene, uint32_t first_exon_idx, bool exon_multigene,
@@ -3905,7 +5447,7 @@ private:
             }
             if (other_gene_intron) {
                 st.cross_gene_intron_reads++;
-                if (config_.intron_rules & intron_rule::kNoExonPriority) return ReadFeatures{};
+                if (config_.intron_rules & (intron_rule::kNoExonPriority | intron_rule::kGeneFullSet)) return ReadFeatures{};
                 rf.diag |= DirectionalUmiStore::kDiagOtherGene;
             }
             rf.flags = (rf.intron_idx == UINT32_MAX)
@@ -4075,6 +5617,16 @@ private:
             mixed_bc_.reset(new std::atomic<uint32_t>[mixed_n_]());
         }
         const uint32_t mrules = config_.intron_rules & intron_rule::kMoleculeRules;
+        // The multimap record's counted-UMI keys (multimap::build): every exact (cell, UMI) with a read in the gene counts' store,
+        // taken before the stores are consumed. STARsolo pools a UMI's reads, so one uniquely assigned read makes the UMI unique.
+        // (After the GPU pileup the stores are empty and its keys, PileupOutput::umiKeys, stay.)
+        if (has_gene_model_ && config_.umi_len > 0 && config_.umi_len <= 16) {
+            std::vector<uint64_t> keys;
+            for (const auto& t : targets) t.store->append_umi_keys(keys);
+            std::sort(keys.begin(), keys.end());
+            keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+            if (!keys.empty()) counted_umis_.swap(keys);
+        }
         D::MoleculeStats st;
         if (!mrules && molecule_dump_.empty()) {
             for (const auto& t : targets) st += finalize_store(*t.store, *t.exon, *t.intron, *t.amb, t.mixed_exon, t.mixed_intron);
@@ -4084,7 +5636,8 @@ private:
         std::vector<std::vector<D::Molecule>> mols(targets.size());
         for (size_t i = 0; i < targets.size(); ++i)
         {
-            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
+            if (targets[i].consume) targets[i].store->consume_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i],
+                                                                        config_.finalize_threads);
             else targets[i].store->collapse_molecules(config_.umi_len, config_.umi_dedup_directional, mols[i]);
         }
         fin_mark("molecules collapsed");
@@ -4128,7 +5681,10 @@ private:
                             const auto& u = ug.find({m.umi, m.bc})->second;
                             bool d;
                             if (u.n_genes <= 1) d = false;
-                            else if (mrules & intron_rule::kUmiGeneCR) d = u.tie || m.gene != u.best_gene;
+                            else if (mrules & intron_rule::kUmiGeneCR)
+                                d = u.tie || m.gene != u.best_gene ||
+                                    ((config_.intron_rules & intron_rule::kUmiGeneVelo) && m.label() == D::MoleculeLabel::Unspliced) ||
+                                    ((config_.intron_rules & intron_rule::kUmiGeneSpliced) && m.label() != D::MoleculeLabel::Spliced);
                             else if (mrules & intron_rule::kUmiGeneAll) d = true;
                             else d = m.label() != D::MoleculeLabel::Spliced;   // kUmiGene
                             drop[i][k] = d ? 1 : 0;
@@ -4264,18 +5820,17 @@ private:
                 case BAM_CMATCH: case BAM_CEQUAL: case BAM_CDIFF: {
                     int32_t block_end = ref_pos + len;
                     if (snps) {
-                        auto it = std::lower_bound(snps->begin(), snps->end(), ref_pos,
-                            [](const ChrSNP& s, int32_t p) { return s.pos < p; });
+                        auto it = snp_lower_bound(tid, ref_pos);
                         for (; it != snps->end() && it->pos < block_end; ++it) {
                             int offset = it->pos - ref_pos;
-                            if (qual[0] != 0xff && qual[query_pos + offset] < config_.min_baseq)
+                            if (qual[0] != 0xff && qual[query_pos + offset] < (it->index >= edit_snp_start_ ? edit_baseq_ : config_.min_baseq))
                                 continue;
                             char base = seq_nt16_str[bam_seqi(seq, query_pos + offset)];
                             // one allele per molecule, by consensus at finalize (order-free-rules R1)
                             wc.snp_cons.add(bc_idx, it->index, config_.umi_dedup ? umi_str : nullptr, umi_len,
                                             SnpConsensus::base_class(base, it->ref_allele, it->alt_allele),
                                             wc.cur_gene);
-                            wc.stats.snp_hits++;
+                            if (it->index >= edit_snp_start_) wc.stats.edit_hits++; else wc.stats.snp_hits++;
                         }
                     }
                     ref_pos += len;
@@ -4334,13 +5889,16 @@ private:
                                 uint64_t qh = hash_qname(bam_get_qname(b));
                                 auto it = wc.mm_buffer.find(qh);
                                 if (it != wc.mm_buffer.end()) {
-                                    auto hit = determine_exon_gene_parallel(wc, b, tid);
+                                    auto hit = determine_exon_gene_parallel(wc, b, tid, true);
                                     it->second.seen++;
                                     if (hit.multi_gene) {
                                         it->second.gene_ambiguous = true;
+                                        it->second.partial = true;   // this alignment's genes are not noted
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(it->second, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(it->second, hit.gene_idx);
-                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(it->second, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                         // Without a primary assignment, the smallest exon over the
                                         // secondaries, not the first seen (order-free-rules R7)
                                         if (!it->second.primary_assigned &&
@@ -4351,24 +5909,29 @@ private:
                                             it->second.read_flags = kExonicReadFlags;
                                         }
                                     }
+                                    note_secondary_exonic(it->second, hit, tid);
                                     if (it->second.seen >= it->second.nh && it->second.nh > 0) {
                                         resolve_mm_parallel(wc, it->second);
                                         wc.mm_buffer.erase(it);
                                     }
                                 } else {
-                                    auto hit = determine_exon_gene_parallel(wc, b, tid);
+                                    auto hit = determine_exon_gene_parallel(wc, b, tid, true);
                                     auto& entry = wc.mm_buffer[qh];
                                     entry.seen++;
                                     if (entry.nh == 0) entry.nh = static_cast<uint8_t>(std::min(nh_sec, 255));
                                     if (hit.multi_gene) {
                                         entry.gene_ambiguous = true;
+                                        entry.partial = true;   // this alignment's genes are not noted
+                                    } else if (hit.body_gene != UINT32_MAX) {   // intron_rule::kGeneFullSet: an intron-only secondary
+                                        note_gene(entry, hit.body_gene);
                                     } else if (hit.gene_idx != UINT32_MAX) {
                                         note_gene(entry, hit.gene_idx);
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
-                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0);
+                                        note_mt_alignment(entry, hit.gene_idx, hit.exon_idx, UINT32_MAX, kExonicReadFlags, 0, true);
                                     }
+                                    note_secondary_exonic(entry, hit, tid);
                                 }
                             }
                         }
@@ -4407,7 +5970,6 @@ private:
         }
         const char* cb_str = bam_aux2Z(cb_tag);
         if (cb_check_ && !(b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY))) check_cb_against_star(b, cb_str);
-        if (test_drop_read(b)) return;
         int32_t bc_idx = bc_index_.lookup(cb_str);
         wc.cur_gene = UINT32_MAX;
         if (bc_idx < 0) {
@@ -4528,6 +6090,7 @@ private:
             if (wc.exon_overlaps.empty() && had_strand_reject) wc.stats.wrong_strand++;
             if (vote_sense != vote_anti && !mito_tid_[tid] && !(b->core.flag & BAM_FSECONDARY))
                 (vote_sense ? wc.stats.strand_sense : wc.stats.strand_antisense)++;
+            const bool star_skip = tx_resolve(b, wc.exon_overlaps) && nh > 1;   // intron_rule::kTxCompat; kStarGene (the buffer below)
 
             uint32_t exon_gene = UINT32_MAX;
             uint32_t first_exon_idx = UINT32_MAX;
@@ -4595,12 +6158,24 @@ private:
             if (nh == 1) {
                 count_read(wc.mol_store, wc.exon, wc.intron, wc.stats,
                            static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
+                if (primary_multigene || gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps))
+                    note_unique_multigene(wc.ambig_reads, wc.exon_overlaps, wc.intron_overlaps, bc_idx, umi_str, umi_len);
             } else {
                 uint64_t qh = hash_qname(bam_get_qname(b));
                 auto& entry = wc.mm_buffer[qh];
                 entry.nh = static_cast<uint8_t>(std::min(nh, 255));
                 entry.seen++;
                 entry.bc_idx = bc_idx;
+                if (star_skip) {   // intron_rule::kStarGene, as the serial loop
+                    entry.sp_mask |= species_bit(tid);
+                    if (is_chrm(tid)) entry.mt_aln = true;
+                        if (umi_str && umi_len > 0) {
+                            int clen = std::min(umi_len, 15);
+                            std::memcpy(entry.umi, umi_str, clen);
+                            entry.umi[clen] = 0;
+                            entry.umi_len = static_cast<uint8_t>(umi_len);
+                        }
+                } else {
                 if (rf.gene != UINT32_MAX) {
                     entry.primary_assigned = true;
                     entry.gene_idx = rf.gene;
@@ -4608,7 +6183,7 @@ private:
                     entry.intron_idx = rf.intron_idx;
                     entry.read_flags = rf.flags;
                     entry.read_diag = rf.diag;
-                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag);
+                    note_mt_alignment(entry, rf.gene, rf.exon_idx, rf.intron_idx, rf.flags, rf.diag, exon_gene != UINT32_MAX);
                 }
                 if (umi_str && umi_len > 0) {
                     int clen = std::min(umi_len, 15);
@@ -4616,25 +6191,31 @@ private:
                     entry.umi[clen] = '\0';
                     entry.umi_len = static_cast<uint8_t>(umi_len);
                 }
+                const bool gf_multi = gene_full_multi(exon_gene, primary_multigene, wc.intron_overlaps);
+                note_primary_exonic(entry, wc.exon_overlaps, exon_gene, primary_multigene, gf_multi, rf, tid);
                 if (primary_multigene) {
                     entry.gene_ambiguous = true;
                     // G-EM: two candidate genes of the alignment (the first, and the first one that differs) from wc.exon_overlaps
                     if (!wc.exon_overlaps.empty()) {
-                        uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]);
+                        uint32_t ga = gene_model_.exon_to_gene(wc.exon_overlaps[0]), gb = UINT32_MAX;
                         if (ga != UINT32_MAX) {
                             note_gene(entry, ga);
-                            for (size_t _i = 1; _i < wc.exon_overlaps.size(); ++_i) {
-                                uint32_t gb = gene_model_.exon_to_gene(wc.exon_overlaps[_i]);
-                                if (gb != UINT32_MAX && gb != ga) {
-                                    note_gene(entry, gb); break;
-                                }
-                            }
+                            gb = second_exon_gene(wc.exon_overlaps, ga);
+                            if (gb != UINT32_MAX) note_gene(entry, gb);
                         }
+                        if (ga == UINT32_MAX || gb == UINT32_MAX || third_exon_gene(wc.exon_overlaps, ga, gb)) entry.partial = true;
                     }
                 }
 
+                if (gf_multi) entry.gene_ambiguous = true;
+                if (primary_multigene || gf_multi) {   // multimap record: the primary's gene-body set
+                    const RecSet bs = record_set(wc.exon_overlaps, wc.intron_overlaps);
+                    note_body(entry, bs.a); note_body(entry, bs.b);
+                    if (bs.more) entry.body_more = true;
+                }
                 uint32_t aln_gene = (exon_gene != UINT32_MAX) ? exon_gene : intron_gene;
                 note_gene(entry, aln_gene);
+                }   // !star_skip
 
                 if (entry.seen >= entry.nh && entry.nh > 0) {
                     resolve_mm_parallel(wc, entry);
@@ -4661,6 +6242,12 @@ private:
                         wc.stats.vdj_hits++;
                     }
                 }
+            }
+            // TE molecules (te_counts.h)
+            if (has_te_ && !wc.aligned_blocks.empty()) {
+                TeRecord tr;
+                if (te_record(tid, wc.aligned_blocks, nh, static_cast<uint32_t>(bc_idx), umi_str, umi_len, wc.te_scratch, wc.te_exon_scratch, tr))
+                    wc.te.push_back(tr);
             }
         }
 
@@ -4814,6 +6401,10 @@ public:
         }
         if (has_vdj_) {
             vdj_model_.resolve_chroms(chrom_to_tid_);
+        }
+        if (has_te_) {
+            te_model_.resolve_chroms(chrom_to_tid_);
+            std::cerr << "[te] resolved " << te_model_.n_resolved_contigs() << " contigs\n";
         }
     }
 };

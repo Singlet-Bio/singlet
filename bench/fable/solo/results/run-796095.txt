@@ -1,0 +1,70 @@
+node=g052.clipper.gvsu.edu job=796095 truth=796074 commit=ff2b5dc0 mode=both reps=3 2026-11-01T01:14:41-05:00
+[load] engine dump: 31636557 records, 66601887 reads, 2231916521 blob bytes, 194 chromosomes (3.4 s)
+[load] Solo dump: 8 thread files, 66601887 reads (iRead base 1), 0 duplicates, 0 out of range, 0 reads without a record (13.7 s)
+[load] 194 chromosomes; mito set: 22 194
+[load] genes 38606, transcripts 226005, exons 1586950, whitelist 3686400 (0.9 s)
+[params] cbL 16 umiL 12 strand 0 cbMinP 0.975000024 qual 'F' -> pq 0.00050118723362727253 umiMaskLow fff
+[inputs] 156931 reads without a record (annotation from STAR's host mapping)
+[host] OpenMP threads 18
+[host] rep 0: soloRun(host): 66601887 reads, 31636557 records (0 exon overflow), 903105 distinct CRs, 707240 matches, 36678568 counted reads, 11500780 distinct (CB,gene,UMI), 3686799 (CB,gene)
+[host] rep 0 stages (ms): upload 0.1 gene 1213.1 cb 3985.7 reads 2393.5 sort 724.3 collapse 91.0 compact 24.5 download 73.8 | compute (no upload) 8505.9, wall 9522.9
+[host] rep 1: soloRun(host): 66601887 reads, 31636557 records (0 exon overflow), 903105 distinct CRs, 707240 matches, 36678568 counted reads, 11500780 distinct (CB,gene,UMI), 3686799 (CB,gene)
+[host] rep 1 stages (ms): upload 0.0 gene 1235.6 cb 3960.4 reads 2394.3 sort 717.0 collapse 74.5 compact 24.2 download 73.2 | compute (no upload) 8479.3, wall 8587.2
+[host] rep 2: soloRun(host): 66601887 reads, 31636557 records (0 exon overflow), 903105 distinct CRs, 707240 matches, 36678568 counted reads, 11500780 distinct (CB,gene,UMI), 3686799 (CB,gene)
+[host] rep 2 stages (ms): upload 0.0 gene 1237.4 cb 3956.8 reads 2396.0 sort 716.7 collapse 67.9 compact 24.2 download 73.0 | compute (no upload) 8472.1, wall 8581.4
+[host] per read vs STAR (66444956 reads with a record annotated by the library; all 66601887 reads for the barcode and flag):
+    nTr            0 differ
+    gene set size  0 differ
+    gene           0 differ
+    mito           0 differ
+    exonic         0 differ
+    cbMatch        0 differ
+    first match    0 differ
+    record flag    0 differ
+[host] write (CellReads rows sorted): 501.3 ms
+[host] write: 749.1 ms (filter + files); nCB 333210, CellRanger2.2 nUMImax 19191 nUMImin 1919, cells 1136; 
+[host] files vs STAR's /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/results/truth-796074/dump/star_Solo.out/: 10 of 10 identical
+Barcodes.stats                   IDENTICAL (792 bytes, 12 lines)
+Gene/Features.stats              IDENTICAL (726 bytes, 11 lines)
+Gene/raw/barcodes.tsv            IDENTICAL (62668800 bytes, 3686400 lines)
+Gene/raw/features.tsv            IDENTICAL (1627536 bytes, 38606 lines)
+Gene/raw/matrix.mtx              IDENTICAL (56944066 bytes, 3686802 lines)
+Gene/filtered/barcodes.tsv       IDENTICAL (19312 bytes, 1136 lines)
+Gene/filtered/features.tsv       IDENTICAL (1627536 bytes, 38606 lines)
+Gene/filtered/matrix.mtx         IDENTICAL (31515344 bytes, 2675097 lines)
+Gene/UMIperCellSorted.txt        IDENTICAL (503185 bytes, 233950 lines)
+Gene/CellReads.stats             IDENTICAL (18353470 bytes, 323543 lines)
+[gpu] device NVIDIA H100 NVL
+[gpu] OpenMP threads 18
+[gpu] rep 0: soloRun(device): 66601887 reads, 31636557 records (0 exon overflow), 903105 distinct CRs, 707240 matches, 36678568 counted reads, 11500780 distinct (CB,gene,UMI), 3686799 (CB,gene)
+[gpu] rep 0 stages (ms): upload 1313.8 gene 36.5 cb 15.4 reads 14.5 sort 12.0 collapse 1.5 compact 0.5 download 34.6 | compute (no upload) 115.0, wall 2232.5
+[gpu] rep 1: soloRun(device): 66601887 reads, 31636557 records (0 exon overflow), 903105 distinct CRs, 707240 matches, 36678568 counted reads, 11500780 distinct (CB,gene,UMI), 3686799 (CB,gene)
+[gpu] rep 1 stages (ms): upload 1128.3 gene 34.1 cb 15.0 reads 16.7 sort 7.7 collapse 1.3 compact 0.5 download 53.4 | compute (no upload) 128.6, wall 1267.5
+[gpu] rep 2: soloRun(device): 66601887 reads, 31636557 records (0 exon overflow), 903105 distinct CRs, 707240 matches, 36678568 counted reads, 11500780 distinct (CB,gene,UMI), 3686799 (CB,gene)
+[gpu] rep 2 stages (ms): upload 998.4 gene 34.2 cb 15.0 reads 15.7 sort 7.7 collapse 1.3 compact 0.5 download 63.2 | compute (no upload) 137.6, wall 1146.7
+[gpu] per read vs STAR (66444956 reads with a record annotated by the library; all 66601887 reads for the barcode and flag):
+    nTr            0 differ
+    gene set size  0 differ
+    gene           0 differ
+    mito           0 differ
+    exonic         0 differ
+    cbMatch        0 differ
+    first match    0 differ
+    record flag    0 differ
+[gpu] write (CellReads rows sorted): 577.1 ms
+[gpu] write: 773.5 ms (filter + files); nCB 333210, CellRanger2.2 nUMImax 19191 nUMImin 1919, cells 1136; 
+[gpu] files vs STAR's /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/solo/results/truth-796074/dump/star_Solo.out/: 10 of 10 identical
+Barcodes.stats                   IDENTICAL (792 bytes, 12 lines)
+Gene/Features.stats              IDENTICAL (726 bytes, 11 lines)
+Gene/raw/barcodes.tsv            IDENTICAL (62668800 bytes, 3686400 lines)
+Gene/raw/features.tsv            IDENTICAL (1627536 bytes, 38606 lines)
+Gene/raw/matrix.mtx              IDENTICAL (56944066 bytes, 3686802 lines)
+Gene/filtered/barcodes.tsv       IDENTICAL (19312 bytes, 1136 lines)
+Gene/filtered/features.tsv       IDENTICAL (1627536 bytes, 38606 lines)
+Gene/filtered/matrix.mtx         IDENTICAL (31515344 bytes, 2675097 lines)
+Gene/UMIperCellSorted.txt        IDENTICAL (503185 bytes, 233950 lines)
+Gene/CellReads.stats             IDENTICAL (18353470 bytes, 323543 lines)
+[done] ALL IDENTICAL
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:58.75
+	Maximum resident set size (kbytes): 12062248
+done 2026-11-01T01:15:40-05:00

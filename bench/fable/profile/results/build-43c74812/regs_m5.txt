@@ -1,0 +1,15 @@
+16 regs | 0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_cost<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640> >(unsigned long long, m5::Work<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640> > const*, unsigned long long const*, unsigned long long*, unsigned int*)
+16 regs | 0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_cost<m5::Caps<160, 4, 32, 64, 8, 1024, 8, 8, 32, 2048> >(unsigned long long, m5::Work<m5::Caps<160, 4, 32, 64, 8, 1024, 8, 8, 32, 2048> > const*, unsigned long long const*, unsigned long long*, unsigned int*)
+16 regs | 0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_cost<m5::Caps<160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096> >(unsigned long long, m5::Work<m5::Caps<160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096> > const*, unsigned long long const*, unsigned long long*, unsigned int*)
+104 regs | 640 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_lane<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640>, false>
+88 regs | 47232 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_lane<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640>, true>
+106 regs | 1728 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_lane<m5::Caps<160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096>, false>
+95 regs | 128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p1<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640> >
+95 regs | 128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p1<m5::Caps<160, 4, 32, 64, 8, 1024, 8, 8, 32, 2048> >
+95 regs | 128 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p1<m5::Caps<160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096> >
+42 regs | 0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p2<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640> >
+42 regs | 0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p2<m5::Caps<160, 4, 32, 64, 8, 1024, 8, 8, 32, 2048> >
+42 regs | 0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p2<m5::Caps<160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096> >
+80 regs | 576 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p3<m5::Caps<160, 4, 32, 16, 16, 256, 8, 8, 8, 640> >
+80 regs | 320 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p3<m5::Caps<160, 4, 32, 64, 8, 1024, 8, 8, 32, 2048> >
+94 regs | 1664 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads | void k_p3<m5::Caps<160, 8, 128, 128, 50, 4096, 20, 32, 64, 4096> >

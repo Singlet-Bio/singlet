@@ -56,3 +56,20 @@ scATAC (Cell Ranger ATAC 1.2.0 outputs), `https://cf.10xgenomics.com/samples/cel
 | atac_hgmm_10k_nextgem | 43,140,358 | `90738a593dc98c0c9b57d394192af207f4d4925cdadf3dedca8f555cca312580` |
 | atac_hgmm_5k_v1 | 39,951,457 | `1eb8eb8a655642eb5cf601e77b43e290fad617942d8c4ac81988bebb40d0f615` |
 | atac_v1_E18_brain_fresh_5k | 29,034,595 | `fade603d33e94a6e5fd9d93b7bb85fb329eaa2bc3e56af8364367314503aaa97` |
+
+# Barcode lists fetched at install time (not in this repository)
+
+The 10x GEM-X barcode lists ship with 10x software only, so they are not bundled. `singlet whitelists fetch` downloads the copies
+that the Broad Institute publishes for its WARP Optimus pipeline in the public bucket `gcp-public-data--broad-references`
+(https://broadinstitute.github.io/warp/docs/Pipelines/Optimus_Pipeline/v4_chemistry), checks each against the sha256 below
+(pinned in `include/singlet/fq/protocol.h`, `fetchable_whitelists()`) and refuses a file that differs. Without them a GEM-X call
+fails and names the fetch command; no other list is substituted.
+
+| file | chemistry (engine tag) | source | bytes | rows | sha256 |
+|---|---|---|---|---|---|
+| `3M-3pgex-may-2023.txt` | 10x GEM-X Single Cell 3' v4 (`10x-3p-v4`) | https://storage.googleapis.com/gcp-public-data--broad-references/optimus_whitelists/3M-3pgex-may-2023.txt | 125,337,600 | 7,372,800 | `62df04844ed0d1281b302f862ec0d005d3298fc169f507f68dd6e8d4cb5ccccd` |
+| `3M-5pgex-jan-2023.txt` | 10x GEM-X Single Cell 5' v3 (`10x-5p-v4`) | https://storage.googleapis.com/gcp-public-data--broad-references/optimus_whitelists/3M-5pgex-jan-2023.txt | 62,668,800 | 3,686,400 | `b402db8acbcd3a076bf50991538d6c08464ddb137e0b81916a9fa92cf222dd0d` |
+
+The 3' v4 file is Broad's list "for Cell Ranger v8.0 and v8.0.1"; its 3,686,400-row `_TRU` variant (Cell Ranger 9) is a subset of it.
+Measured on 2026-11-08: the 3' v4 list shares 34,181 barcodes (0.5%) with `3M-february-2018.txt` (3' v3) and the 5' list 8,645,
+so a library's whitelist hit rate separates GEM-X from v3.

@@ -40,6 +40,9 @@ class ReadAlign {
         void seqCacheAlignRecords(const char *seqNum, uint L, const std::vector<uint8> &blob, std::vector<uint8> &out);
         //the same, from a pointer to the blob (the prefill's threads no longer copy each blob first)
         void seqCacheAlignRecords(const char *seqNum, uint L, const uint8 *blob, std::vector<uint8> &out);
+        //its first half: the read state of the sequence restored from its cached result, mappedFilter done (singlet E8: the summary
+        //alone, the records being built on the GPU)
+        void seqCacheRestoreRecord(const char *seqNum, uint L, const uint8 *blob);
         //the BAM core fields alignBAM would write for a single-end alignment, without building the record (ReadAlign_seqCache.cpp)
         bool seqCacheLeanAln(Transcript const &trOut, uint nTrOut, uint trChrStart, int32 &refID, int32 &pos, uint16 &flag, uint8 &mapq, uint32 &nCig, uint32 *cig);
         //singlet GPU pileup "on": what STAR's per-read output (mapping stats, SJ.out.tab, Solo Gene) takes from the alignments of a
@@ -49,9 +52,19 @@ class ReadAlign {
         void seqCacheHandoffSummary(std::vector<uint8> &out);
         static bool seqCacheHandoffConfig(const Parameters &P);
         const uint8 *handoffSum = nullptr;
+        //singlet E10 (g_e10Level >= 3): this read has a GPU record; the device computed its stats, junctions and Unmapped.out record
+        bool e10Skip = false;
         Transcript handoffTr[2]; //stand-ins carrying only Chr for SoloReadFeature::record (0: a mito contig, 1: another)
         void outputHandoffSummary();
         void handoffReadEntry(); //the pileup's per-read entry (g_handoffReads) of a hand-off read, after getCBandUMI
+        //singlet E9 debug dump (SINGLET_SOLO_DUMP=<dir>, off by default): per read what Solo's Gene feature saw (ReadAlign_outputAlignments.cpp)
+        int soloDumpChunk = -1;
+        void *soloDumpF = nullptr;
+        void soloDumpRead(uint64 nTrSolo);
+        //singlet E11 (g_e10Level == 5, SINGLET_ENGINE_GPU_E2E=5): Solo counts on the device after mapping (SeqCacheGpuPrefill.cpp); for each read
+        //this loop maps, what SoloReadFeature::record takes from it for the Gene feature replaces the record: (iReadAll - 1, packed annotation)
+        std::vector<uint64> e11Ann;
+        void e11Annot(uint64 nTrSolo);
 
         Genome &mapGen, &genOut; //mapped-to-genome structure
 
@@ -63,6 +76,7 @@ class ReadAlign {
         istream* readInStream[MAX_N_MATES];
         BAMoutput *outBAMcoord, *outBAMunsorted, *outBAMquant;//sorted by coordinate, unsorted, transcriptomic BAM structure
         fstream chunkOutChimSAM, *chunkOutChimJunction, chunkOutUnmappedReadsStream[MAX_N_MATES], chunkOutFilterBySJoutFiles[MAX_N_MATES];
+        fstream chunkOutSoftclipStream[MAX_N_MATES]; //singlet --chimeric: mapped reads with a long unaligned part, for the chimeric pass (Softclip.out.mate*)
         OutSJ *chunkOutSJ, *chunkOutSJ1;
 
         ostream* outSAMstream;
@@ -206,6 +220,7 @@ class ReadAlign {
         Transcript trChim[MAX_N_CHIMERAS];
         //new chimeric detection
         bool chimRecord; //true if chimeric aligment was detected
+        bool barcodeLoaded=false; //the Solo barcode of this read was parsed before chimeric detection (chimeric junction lines carry CB/UMI); output must not parse it twice
 
         struct {
             bool yes;
@@ -267,12 +282,16 @@ class ReadAlign {
         //output alignments functions
         void outFilterBySJout();
         void outReadsUnmapped();
+        void outReadsSoftclip(); //singlet --chimeric soft-clip route
+        void softclipRoute(uint64 alignedBases); //writes the read when Lread-alignedBases >= P.singletSoftclipMin
         void spliceGraphWriteSAM();
         void alignedAnnotation();
         void writeSAM(uint64 nTrOutSAM, Transcript **trOutSAM, Transcript *trBestSAM);
         void recordSJ(uint64 nTrO, Transcript **trO, OutSJ *cSJ);
 
 };
+
+void soloDumpFlushAll(); //singlet E9 debug dump (SINGLET_SOLO_DUMP): writes out the threads' buffers (the STAR child leaves with _exit)
 
 #endif
 

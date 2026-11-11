@@ -1,0 +1,65 @@
+{
+ "dataset": "nuclei2k_v2",
+ "label": "mc99cpu-default-rules",
+ "singlet_run": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/perf/nuclei2k_v2_usa/t8_r1",
+ "n_cells": 2202,
+ "n_genes": 78298,
+ "unspliced_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9625673962917263,
+   "spearman": 0.9333010828397564
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.9494328289461733,
+   "spearman": 0.8975302857414313
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9593178528884646,
+   "spearman": 0.9220341531782015
+  }
+ },
+ "spliced_ambiguous_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.8816228851861035,
+   "spearman": 0.8318214112526432
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.9604445818692062,
+   "spearman": 0.9359829487919813
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.8871235571910632,
+   "spearman": 0.8431434563865546
+  }
+ },
+ "unspliced_cell_median_r": {
+  "singlet~starsolo": 0.843891603695924,
+  "singlet~alevinfry": 0.8583803179580619,
+  "starsolo~alevinfry": 0.8606423136230676
+ },
+ "layer_shares": {
+  "singlet": {
+   "S": 0.3722212261176705,
+   "U": 0.5992713025343589,
+   "A": 0.028507471347970607,
+   "umi": 7685494.0
+  },
+  "starsolo": {
+   "S": 0.25933719980222725,
+   "U": 0.6753488414775561,
+   "A": 0.0653139587202166,
+   "umi": 7192092.0
+  },
+  "alevinfry": {
+   "S": 0.03258440987853128,
+   "U": 0.6469124836092586,
+   "A": 0.32050310651221015,
+   "umi": 7941221.0
+  }
+ },
+ "unspliced_fraction": {
+  "singlet": 0.5992713025343589,
+  "starsolo": 0.6753488414775561,
+  "alevinfry": 0.6469124836092586
+ }
+}

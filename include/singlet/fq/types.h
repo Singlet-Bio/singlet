@@ -707,6 +707,7 @@ struct EncoderConfig {
     // Feature disable flags (override protocol-level defaults)
     bool no_dedup = false;    // --no-dedup: skip PCR duplicate collapsing
     bool no_trim = false;     // --no-trim: skip polyA/adapter trimming
+    bool trim_polya = false;  // --trim-polya: poly(A) trimming on any 3' protocol, including 10x Visium (off there by default)
     bool sort_by_bc = false;  // --sort-by-bc: sort reads by barcode within blocks
 
     // When set, flushed blocks go to this sink (no .1fq is written, no sort); see StagedBlock
@@ -725,6 +726,9 @@ struct EncoderConfig {
 
     // SRA / GEO metadata to embed in the .1fq metadata block
     SraMetadata sra_meta;
+
+    // The metadata block's "source" (empty = the input path or accession). FASTQ and BAM inputs pass the run they hold.
+    std::string source_label;
 
     // Progress callback: called every N reads
     std::function<void(uint64_t reads, uint64_t total)> progress_cb;

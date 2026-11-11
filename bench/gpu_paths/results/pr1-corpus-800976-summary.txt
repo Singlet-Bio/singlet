@@ -1,0 +1,122 @@
+PROVENANCE job=800976 node=g052 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/65c82935/singlet-gpu sha256=ba69c4173ae1281e2f33fd09926d29d0a55c37307943d1d58db9a20bcdc3d513 commit=65c8293558afa5a84c5696c79b88cad1a89c0415 expect=65c82935 embedded=yes scripts=43cf834e T=8 modes=gpu 2026-11-06T11:12:40-05:00
+NVIDIA H100 NVL, 610.43.02, 95830 MiB
+######## strand100 (stream strand check restarts on the sorted path, reads under 128 bases, GPU hand-off on) [real]
+strand100 gpu: exit 0 wall 51.4880 s maxRSS 20.0 GB
+VERDICT strand100 FAIL (identity IDENTICAL, path FAIL, invariants PASS, fallback PASS)
+  path_missing: ['(?m)low-quality masks for [0-9]+ reads(, 2 words each)?$']
+  DISALLOWED [1fq-ingest] not used (the sorted-BAM path: no GPU pileup on STAR's stream): the .1fq is decoded to FASTQ files
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E11 (level 5) not used: E10 not used
+  DISALLOWED [engine_gpu] level 0 (requested 5): FELL BACK
+strand100: 55 s
+######## strand150 (stream strand restart with reads over 128 bases (3 words)) [real]
+strand150 gpu: exit 0 wall 59.4812 s maxRSS 20.0 GB
+VERDICT strand150 FAIL (identity IDENTICAL, path FAIL, invariants PASS, fallback PASS)
+  path_missing: ["\\.1fq scanned: STAR's prefill decodes", '3 words each']
+  DISALLOWED [1fq-ingest] not used (cDNA reads over 128 bases: the GPU pileup will be declined): the .1fq is decoded to FASTQ files
+  DISALLOWED [singlet] SINGLET_GPU_PILEUP ignored: reads over 128 bases (the per-base-quality mask holds 128); the CPU pileup runs on the GPU-mapped reads
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E11 (level 5) not used: E10 not used
+  DISALLOWED [engine_gpu] level 0 (requested 5): FELL BACK
+  DISALLOWED [1fq-ingest] not used (cDNA reads over 128 bases: the GPU pileup will be declined): the .1fq is decoded to FASTQ files
+  DISALLOWED [singlet] SINGLET_GPU_PILEUP ignored: reads over 128 bases (the per-base-quality mask holds 128); the CPU pileup runs on the GPU-mapped reads
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E11 (level 5) not used: E10 not used
+  DISALLOWED [engine_gpu] level 0 (requested 5): FELL BACK
+strand150: 63 s
+######## v5p150 (5' label, no restart, 3-word mask, ingest) [real]
+v5p150 gpu: exit 0 wall 27.7489 s maxRSS 19.9 GB
+VERDICT v5p150 FAIL (identity IDENTICAL, path FAIL, invariants PASS, fallback FAIL)
+  path_missing: ["\\.1fq scanned: STAR's prefill decodes", '\\[engine_gpu\\] level 5 \\(requested 5\\)', '3 words each']
+  DISALLOWED [1fq-ingest] not used (cDNA reads over 128 bases: the GPU pileup will be declined): the .1fq is decoded to FASTQ files
+  DISALLOWED [singlet] SINGLET_GPU_PILEUP ignored: reads over 128 bases (the per-base-quality mask holds 128); the CPU pileup runs on the GPU-mapped reads
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E11 (level 5) not used: E10 not used
+  DISALLOWED [engine_gpu] level 0 (requested 5): FELL BACK
+v5p150: 31 s
+######## mask2 (2-word mask, ingest, level 5) [real]
+mask2 gpu: exit 0 wall 24.9272 s maxRSS 27.9 GB
+VERDICT mask2 PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+mask2: 28 s
+######## mask3syn (3-word mask, ingest, level 5) [synthetic]
+mask3syn gpu: exit 0 wall 77.8361 s maxRSS 20.4 GB
+VERDICT mask3syn FAIL (identity IDENTICAL, path FAIL, invariants PASS, fallback FAIL)
+  path_missing: ["\\.1fq scanned: STAR's prefill decodes", '\\[engine_gpu\\] level 5 \\(requested 5\\)', '3 words each']
+  DISALLOWED [1fq-ingest] not used (cDNA reads over 128 bases: the GPU pileup will be declined): the .1fq is decoded to FASTQ files
+  DISALLOWED [singlet] SINGLET_GPU_PILEUP ignored: reads over 128 bases (the per-base-quality mask holds 128); the CPU pileup runs on the GPU-mapped reads
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E11 (level 5) not used: E10 not used
+  DISALLOWED [engine_gpu] level 0 (requested 5): FELL BACK
+mask3syn: 81 s
+######## mask2short (width request of 1 word (reads of 60 bases): clamps to 2 words) [synthetic]
+mask2short gpu: exit 0 wall 28.2839 s maxRSS 20.1 GB
+VERDICT mask2short PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+mask2short: 32 s
+######## q0 (quality mode 0 (none): no mask) [real]
+q0 gpu: exit 0 wall 25.0891 s maxRSS 27.9 GB
+VERDICT q0 PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+q0: 27 s
+######## q2 (quality mode 2 (full): ingest declined by design, mask built) [real]
+q2 gpu: exit 0 wall 24.8010 s maxRSS 28.1 GB
+VERDICT q2 PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+  DISALLOWED [1fq-ingest] not used (per-base quality stored in full): the .1fq is decoded to FASTQ files
+q2: 28 s
+######## q4 (quality mode 4 (Illumina 4-bin): ingest, mask) [real]
+q4 gpu: exit 0 wall 25.1139 s maxRSS 27.9 GB
+VERDICT q4 PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+q4: 27 s
+######## v2hgmm (3' v2 chemistry and species mix (barnyard genome)) [real]
+v2hgmm gpu: exit 0 wall 54.1388 s maxRSS 55.5 GB
+VERDICT v2hgmm PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+v2hgmm: 57 s
+######## v3 (3' v3 chemistry, mode 4, no mask) [real]
+v3 gpu: exit 0 wall 28.9778 s maxRSS 20.1 GB
+VERDICT v3 PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+v3: 32 s
+######## adt (CITE antibody library mapped as RNA) [real]
+adt gpu: exit 0 wall 31.1225 s maxRSS 20.4 GB
+VERDICT adt PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+adt: 37 s
+######## donors (multi-donor pool (donor assignment)) [real]
+donors gpu: exit 0 wall 20.9030 s maxRSS 19.3 GB
+VERDICT donors PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+donors: 23 s
+######## long_q4 (reads over 128 bases, mode 4, no mask) [real]
+long_q4 gpu: exit 0 wall 78.0211 s maxRSS 20.4 GB
+VERDICT long_q4 FAIL (identity IDENTICAL, path FAIL, invariants PASS, fallback FAIL)
+  path_missing: ["\\.1fq scanned: STAR's prefill decodes", '\\[engine_gpu\\] level 5 \\(requested 5\\)', 'longest 151']
+  DISALLOWED [1fq-ingest] not used (cDNA reads over 128 bases: the GPU pileup will be declined): the .1fq is decoded to FASTQ files
+  DISALLOWED [singlet] SINGLET_GPU_PILEUP ignored: reads over 128 bases (the per-base-quality mask holds 128); the CPU pileup runs on the GPU-mapped reads
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  DISALLOWED [engine_gpu] fallback: ENGINE_GPU: E11 (level 5) not used: E10 not used
+  DISALLOWED [engine_gpu] level 0 (requested 5): FELL BACK
+long_q4: 82 s
+######## tiny (tiny library (20000 pairs)) [real]
+tiny gpu: exit 0 wall 22.5768 s maxRSS 19.6 GB
+VERDICT tiny PASS (identity IDENTICAL, path PASS, invariants PASS, fallback PASS)
+tiny: 25 s
+######## near_empty (near-empty library (100 pairs): the CPU engine is the oracle for success or failure) [real]
+near_empty gpu: exit 2 wall 2.08503 s maxRSS 16.4 GB
+VERDICT near_empty PASS (identity SAME FAILURE, path PASS, invariants PASS, fallback PASS)
+near_empty: 3 s
+CORPUS: 16 inputs, 11 pass, 5 fail
+id          kind       reads    overall  identity      path  invariants  fallback  fallback_disallowed  out_equiv  field_unexplained  level   ingest    mask_line                         restarted  bam          cpu_exit  gpu_exit  cpu_wall_s  gpu_wall
+strand100   real       1000000  FAIL     IDENTICAL     FAIL  PASS        PASS      4                    64/6/2     0                  0 of 5  used      none                              True       not written  0         0         57.0605     51.488  
+strand150   real       1000000  FAIL     IDENTICAL     FAIL  PASS        PASS      10                   61/6/2     0                  0 of 5  not used  none                              True       not written  0         0         69.0231     59.4812 
+v5p150      real       1000000  FAIL     IDENTICAL     FAIL  PASS        FAIL      5                    64/4/3     0                  0 of 5  not used  none                              False      not written  0         0         33.8629     27.7489 
+mask2       real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    64/5/4     0                  5 of 5  used      6957 reads, 2 (not logged) words  False      not written  0         0         37.7321     24.9272 
+mask3syn    synthetic  1000000  FAIL     IDENTICAL     FAIL  PASS        FAIL      5                    64/6/3     0                  0 of 5  not used  none                              False      not written  0         0         110.526     77.8361 
+mask2short  synthetic  1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    64/5/4     0                  5 of 5  used      1265 reads, 2 (not logged) words  False      not written  0         0         40.8617     28.2839 
+q0          real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    64/5/4     0                  5 of 5  used      none                              False      not written  0         0         39.562      25.0891 
+q2          real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      1                    64/5/4     0                  5 of 5  not used  6957 reads, 2 (not logged) words  False      not written  0         0         33.7219     24.801  
+q4          real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    64/5/4     0                  5 of 5  used      6957 reads, 2 (not logged) words  False      not written  0         0         34.2844     25.1139 
+v2hgmm      real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    52/5/4     0                  5 of 5  used      none                              False      not written  0         0         55.4046     54.1388 
+v3          real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    64/5/4     0                  5 of 5  used      none                              False      not written  0         0         39.1709     28.9778 
+adt         real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    55/5/4     0                  5 of 5  used      none                              False      not written  0         0         47.372      31.1225 
+donors      real       1000000  PASS     IDENTICAL     PASS  PASS        PASS      0                    61/3/4     0                  5 of 5  used      none                              False      not written  0         0         27.547      20.903  
+long_q4     real       1000000  FAIL     IDENTICAL     FAIL  PASS        FAIL      5                    64/6/3     0                  0 of 5  not used  none                              False      not written  0         0         111.313     78.0211 
+tiny        real       20000    PASS     IDENTICAL     PASS  PASS        PASS      0                    64/5/4     0                  5 of 5  used      none                              False      not written  0         0         27.5929     22.5768 
+near_empty  real       100      PASS     SAME FAILURE  PASS  PASS        PASS      0                                                  none    not used  none                              False      not written  2         2         2.58093     2.08503 
+TOTAL 631 s
+PROVENANCE job=800976 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/65c82935/singlet-gpu sha256=ba69c4173ae1281e2f33fd09926d29d0a55c37307943d1d58db9a20bcdc3d513 commit=65c8293558afa5a84c5696c79b88cad1a89c0415 scripts=43cf834e T=8
+PATHS CORPUS FAILED

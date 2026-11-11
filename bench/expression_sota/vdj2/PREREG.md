@@ -156,3 +156,320 @@ Cell Ranger V agreement on pbmc2_b / pbmc10k_b.
 - The anchor follows the convention of each library's Cell Ranger version (`vdj_human_imgtcys.tsv.gz` for CR >= 5).
 - The held-out run uses these defaults, with no `PARAMS`, at the frozen SHA recorded in `RESULTS.md`.
 - Held-out pass rule: unchanged, with the Addendum 1 ARI tolerance applied in the same way.
+
+## Addendum 5 (2026-11-07, registered before any run of the new assembler): mismatch- and repeat-tolerant assembly graph
+
+**Why.** With the first-Cys reference (PR 213) and the frozen IG rules (PR 214) pooled correct pairing on pbmc3_b, ngpbmc3_b and
+melanoma_b is 0.9062 against TRUST4 0.9198 (gap -0.0136). Threshold changes on the development libraries move pairing by at most
+0.0001 (job 804122), so the remaining loss is in the assembly: 1 to 4% of Cell Ranger's contigs never assemble, and heavy-chain
+CDR3s that contain a tandem repeat (for example `TACTACTACTAC`) come out one or more codons short or long.
+
+**Mechanism (all default off until the rule below is met).** Two changes to the assembly graph (`K_ASM = 19`), each a Params field:
+1. `asm_bubble_mm` (0 = off): two paths of one (barcode, chain) group that differ by at most this many substitutions over equal
+   length are merged into the path with more molecules (a sequencing or UMI-consensus error, or a somatic mutation that splits the
+   k-mer chain). The error-variant filter of `filter_contigs` (at most 2 substitutions) is unchanged.
+2. `asm_repeat_len` (0 = off): at a tandem repeat of period 1 to 3 nt and at least `asm_repeat_len` nt long, the path whose repeat
+   length has the most supporting molecules is chosen, instead of the length of the first path found.
+No change to V, J or C calling, to the reference, or to any filter.
+
+**Libraries.**
+- Development, the only data used to choose settings: melv11_b, nsclc22_b, chx10k_b, pbmc2_b, pbmc10k_b (BCR) and pbmc2_t, pbmc10k_t (TCR).
+- Confirmation, touched by earlier V(D)J runs and by this study's diagnosis, so not held out: pbmc3_b, ngpbmc3_b, melanoma_b.
+- Held-out: one NextGem BCR library from outside the corpus and outside every V(D)J run, named in a note before the freeze, not
+  opened until the settings are frozen, run once for Singlet and TRUST4.
+
+**Baseline.** `gpu/frontier` with PR 213 and PR 214 merged, default parameters (pooled development pairing 0.9164, TRUST4 0.9159;
+confirmation pairing 0.9062).
+
+**Metrics.** Primary: correct pairing (`bench/expression_sota/vdj/primary.py`). Guards: contig F1, wrong-lineage rate, clonotype ARI,
+V and J agreement with Cell Ranger, TCR pairing and contig F1, wall time.
+
+**Dev rule.** Keep a setting when all hold: pooled development BCR pairing rises by at least 0.003; no library loses more than 0.005 in
+pairing or contig F1; pooled wrong-lineage rate rises by at most 0.001; clonotype ARI of no library falls by more than 0.02; TCR
+pairing and contig F1 of pbmc2_t and pbmc10k_t fall by at most 0.002; wall time rises by at most 50%. If several settings keep, the
+one with the highest pooled pairing is taken. If none keeps, nothing is merged and the result is reported as negative.
+
+**Confirmation.** Reported next to the development result, with the same guards: pairing on pbmc3_b, ngpbmc3_b and melanoma_b before
+and after, and the gap to TRUST4. A confirmation library that loses more than 0.005 in pairing is reported as a failure of the setting.
+
+**Held-out pass rule.** Correct pairing of Singlet minus TRUST4 on the fresh library, with its paired bootstrap 95% interval, passes
+when the difference is at least the negative half-width of that interval (the gate contract); wrong-lineage rate at most Cell Ranger's
+plus 0.005; contig F1 above TRUST4's. One run, no tuning afterwards, and the result is reported whichever way it falls.
+
+**Amendment to Addendum 5 (2026-11-07, before any run with the change): mutated Phe/Trp118 codon.** A diagnosis on the five development
+libraries (not on the confirmation libraries) shows that the terminal anchor of the assembly graph accepts only a Phe or Trp codon
+(TTT, TTC, TGG) followed by Gly-X-Gly (`_codon_at`, `which = 1`). Cell Ranger contigs whose last codon is something else (a somatic
+mutation of Phe118, for example Val `GTC` or Leu `CTT`) are 0.3 to 1.0% of the reference contigs of a library and none of them is
+assembled; they are 17 to 43% of the contigs Singlet misses outright. Reads covering the CDR3 of the missed chains exist in the
+library (a median of tens to hundreds). A third mechanism is therefore registered with the other two, default off until the rule is met:
+3. `asm_fw_relax` (False = off): when no offset (0, -1, +1) of the J-anchor diagonal carries a canonical Phe/Trp codon, the codon at
+   offset 0 is accepted if it is not a stop codon and the J motif continues (Gly at the next two bases, and Gly at +9 and +10 when the
+   read extends that far). The terminal still needs the UMI support it has now. Canonical codons are tried first, so a read that
+   has one keeps its terminal.
+Metrics, libraries, dev rule, confirmation and held-out rule are those of Addendum 5. The three mechanisms are tested one at a time
+and in combination on the development libraries; the setting with the highest pooled development pairing that meets the dev rule is
+taken. `productive` is unchanged (a contig without a Phe/Trp end stays non-productive).
+
+**Result of the amendment (2026-11-07, development libraries only; job 804171, same code with `asm_fw_relax` off and on).** Pooled development BCR pairing 0.9164 (off) and 0.9161 (on), TRUST4 0.9159; the registered rule asked for +0.003. Per library the pairing moves by at most 0.0013 (nsclc22_b 0.8346 to 0.8333; the other four are unchanged), contig F1 by at most 0.0003, ARI and wrong-lineage rate not at all, TCR pairing on pbmc2_t and pbmc10k_t by -0.0004. The setting does not meet the dev rule and is not merged; the code stays off by default. The diagnosis stands as measured (the contigs with a mutated Phe118 are never assembled), but this change did not recover them: the recovery needs more than a relaxed terminal codon, and what else the assembly graph needs for those chains is not yet known.
+
+## Addendum 6 (2026-11-07, registered before any run of the change): mutated Phe/Trp118 chains, assembled and productive
+
+**Diagnosis (development libraries only, code at `gpu/frontier` b0a96f49).** Every chain of a reference-paired cell that the
+baseline gets wrong was traced through the assembler (a diagnostic run of `run_library` with hooks at the
+molecule read-support cut, the one-chain-per-molecule cut and the group step, and a copy of `assemble_group` that also returns its
+seeds, seed support and terminal votes). Of 8,012 reference-paired cells, 670 are wrong; they hold 949 wrong chains:
+
+| Outcome of the reference chain | Chains |
+|---|---|
+| Barcode is not a GEX-called cell (wrong for every method) | 474 |
+| Assembled, removed by a filter (mostly the cross filter) | 131 |
+| Assembled and kept, another contig of the chain has more UMIs | 105 |
+| Never assembled: Phe/Trp118 mutated (last codon not TTT/TTC/TGG) | 70 |
+| Never assembled: other | 91 |
+| Never assembled or near miss: Cell Ranger's junction starts or ends at another codon inside Singlet's junction | 42 |
+| Low-confidence contig, near miss with another cause | 36 |
+
+For the never-assembled chains the first stage that drops the reference junction is the anchor, not the path search: no read of the
+group puts a terminal (66 of the 70 mutated Phe/Trp118 chains and 22 others) or a seed (49 others and 29 boundary cases) on the
+reference junction although the reads carry its k-mers. The path search explains 14 chains, seed or terminal support below the cut
+21, and 7 have no classified read of the barcode that holds the junction. The registered `asm_bubble_mm` and `asm_repeat_len`
+target path-level errors, which are a small share, so they are not built.
+
+The mutated Phe/Trp118 chains include strong ones (plasma cells with thousands of UMIs, which Cell Ranger calls productive). The
+amendment to Addendum 5 relaxed the terminal codon but kept `productive` unchanged, so a recovered contig still ended in a codon
+other than Phe/Trp, stayed non-productive and never entered the pairing. That explains its null result.
+
+**Change.** Two Params fields, tested together as one setting:
+1. `asm_fw_relax=True`, exactly as registered in the amendment to Addendum 5.
+2. `fw_mut_productive=True` (new): a junction whose last codon is not Phe/Trp is productive when its J gene is called and the J
+   germline codon at the anchor is Phe or Trp (a somatic substitution of Phe/Trp118), and every other productivity check holds
+   (in frame, no stop codon, Cys start, J frame open).
+No other change: V, J and C calling, the reference, thresholds and filters stay as they are.
+
+**Libraries.** Development, confirmation and baseline as in Addendum 5. The fresh held-out library is named here, before the change
+is scored: **10x Genomics "Human B cells from a healthy donor pre-flu vaccination (v2)"**, file prefix
+`sc5p_v2_hs_B_prevax_10k_5gex_B` (Chromium Next GEM 5' v2, Cell Ranger 5.0.0 `multi`, about 8,660 cells with a productive
+heavy-light pair; BCR FASTQs from the dataset's FASTQ tarball, truth from its `vdj_b_filtered_contig_annotations.csv`, called cells
+from its GEX filtered matrix). A search of both repositories (all branches) and of the cluster's data and job folders found no
+earlier use. Only its page and its metrics summary have been read. It is run once, with the frozen code, first-Cys reference
+(`vdj_human_imgtcys.tsv.gz`, Cell Ranger >= 5), for Singlet and for TRUST4, and scored with `primary.py` and `compare_vdj.py`.
+
+**Rules.** The dev rule, the confirmation report and the held-out pass rule are those of Addendum 5, unchanged. Dev: keep the setting
+when pooled development BCR pairing rises by at least 0.003, no development library loses more than 0.005 in pairing or contig F1,
+pooled wrong-lineage rate rises by at most 0.001, clonotype ARI of no library falls by more than 0.02, TCR pairing and contig F1 of
+pbmc2_t and pbmc10k_t fall by at most 0.002 and wall time rises by at most 50%. Confirmation: pairing on pbmc3_b, ngpbmc3_b and
+melanoma_b before and after, with the gap to TRUST4; a library that loses more than 0.005 counts as a failure. Held-out: the
+difference Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95%
+interval, with wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's. If the setting fails the dev rule,
+nothing is merged, and the held-out library is still run once with the code as it then stands.
+
+**Result of Addendum 6 (2026-11-07, development and confirmation libraries; job 804415, same code with both flags off and on).**
+Pooled development BCR pairing rises from 0.9164 to 0.9217 (+0.0053; TRUST4 0.9159), and every development library gains:
+chx10k_b 0.9407 to 0.9534, pbmc10k_b 0.9740 to 0.9792, pbmc2_b 0.9328 to 0.9346, nsclc22_b 0.8346 to 0.8423, melv11_b 0.9272
+to 0.9318. The guards hold: contig F1 moves by at most -0.0008 (pbmc2_b), clonotype ARI does not fall, the pooled wrong-lineage
+rate moves from 0.00297 to 0.00306, TCR pairing on pbmc2_t and pbmc10k_t falls by 0.0004 each and TCR contig F1 by at most 0.0005,
+and wall time rises by at most 11% (nsclc22_b). The setting meets the dev rule and is adopted: `asm_fw_relax` and
+`fw_mut_productive` are on by default. Confirmation: pooled pairing on pbmc3_b, ngpbmc3_b and melanoma_b rises from 0.9062 to
+0.9123 (pbmc3_b 0.9515 to 0.9584, ngpbmc3_b 0.9394 to 0.9505, melanoma_b 0.8927 to 0.8976), with no library losing; the gap to
+TRUST4 (0.9198) narrows from -0.0136 to -0.0075 (95% interval -0.0122 to -0.0031). The held-out library is run next, once, with
+these defaults.
+
+**Held-out result of Addendum 6 (2026-11-08, job 804485, the single registered run; frozen code f78f51b7, first-Cys reference).**
+On `sc5p_v2_hs_B_prevax_10k_5gex_B` (8,662 reference-paired cells), correct pairing is 0.9702 for Singlet (95% interval 0.9666 to
+0.9738) and 0.9718 for TRUST4. The difference is -0.0016 with a paired bootstrap 95% interval of -0.0054 to +0.0021, so its
+half-width is 0.0037 and the difference lies above the negative half-width. The wrong-lineage rate is 0 for Singlet and for Cell
+Ranger, and contig F1 is 0.9815 for Singlet against 0.7316 for TRUST4. All three conditions of the registered rule hold: **pass**.
+The point estimate stays 0.0016 below TRUST4, within the interval.
+
+## Addendum 7 (2026-11-08, registered before any run of the change): IG chains of expanded clones removed by the cross filter
+
+**Diagnosis (development libraries only, Addendum 6 code with its defaults on).** On the GEX-called reference-paired cells, 429
+reference chains are still wrong. The two largest groups after the never-assembled chains are chains removed by the cross filter
+(104, of which TRUST4 reports 96 correctly) and kept chains outranked by another kept contig of the same chain (106, of which TRUST4
+reports 38). The outranked contigs are mostly second cells in a droplet, each with its own junction, and neither tool resolves them
+reliably, so they are not targeted. Among the 104 cross-filtered chains, the IG rescue of Addendum 4 (`ig_top_min_umis`) misses
+them for two reasons. In 34, a light chain is the strongest high-confidence light contig of its barcode with the heavy partner kept,
+but a weaker light contig of the barcode is kept, and any kept chain of the class blocks the rescue. In 31, both the heavy and the
+light chain of the cell are cross-filtered, and the rescue needs a kept partner.
+
+**Change (each default off until the rule is met).** Two filter settings of `filter_contigs`; the assembly is unchanged.
+1. `ig_top_weaker_kept=True`: in the `ig_top_min_umis` rescue, a kept contig of the class (heavy, or light: IGK and IGL together)
+   blocks the candidate only when it has at least as many UMIs.
+2. `ig_pair_rescue=True`: in a barcode with no kept IG contig, the strongest high-confidence productive heavy contig and the
+   strongest high-confidence productive light contig, both removed by the cross filter and each with at least `ig_top_min_umis`
+   (2) UMIs, are kept together; on a UMI tie the contig with more reads is taken.
+No threshold is new: both reuse `ig_top_min_umis` as set in Addendum 4.
+
+**Runs.** Filter-only settings are applied with `refilter.py` to the Addendum 6 runs of the development and confirmation libraries
+(job 804415, `singlet_fwp`), so no library is re-assembled. Three settings are tested: 1 alone, 2 alone, and both.
+
+**Rules.** The dev rule of Addendum 5 applies unchanged, against the Addendum 6 result as baseline (pooled development BCR pairing
+0.9217): pairing +0.003 at least, no library losing more than 0.005 in pairing or contig F1, wrong-lineage rate +0.001 at most,
+clonotype ARI of no library falling by more than 0.02, TCR pairing and contig F1 falling by at most 0.002 (TCR guards: pbmc2_t and
+pbmc10k_t). Wall time is unaffected by a filter setting and is not re-measured. If several settings keep, the one with the highest
+pooled development pairing is taken. Confirmation (pbmc3_b, ngpbmc3_b, melanoma_b) is reported before and after, and a library
+that loses more than 0.005 counts as a failure. The held-out library of Addendum 6 has had its single run and is not used again.
+A setting adopted here is confirmed on a new untouched NextGem BCR library, named in a further note before it is opened and run
+once.
+
+**Result of Addendum 7 (2026-11-08, `refilter.py` on the Addendum 6 runs; with no setting it reproduces their `kept` column
+exactly).** Pooled development BCR pairing (TRUST4 0.9159), against the Addendum 6 baseline of 0.9217:
+- `ig_top_weaker_kept`: 0.9252 (+0.0035). No library loses (chx10k_b 0.9555, pbmc10k_b 0.9792, pbmc2_b 0.9355, nsclc22_b 0.8462,
+  melv11_b 0.9370), contig F1 rises in every library, ARI does not fall, the wrong-lineage rate moves from 0.00306 to 0.00305. It
+  meets the dev rule.
+- `ig_pair_rescue`: 0.9235 (+0.0018), with the wrong-lineage rate up to 0.00515 and the ARI of nsclc22_b down by 0.044. It fails.
+- Both: 0.9270 (+0.0053), with the same wrong-lineage rise (0.00514) and nsclc22_b ARI drop (0.042). It fails.
+The settings change IG contigs only, so the TCR guards are unchanged by construction. `ig_top_weaker_kept` is adopted and on by
+default; `ig_pair_rescue` stays off. Confirmation with `ig_top_weaker_kept`: pooled pairing on pbmc3_b, ngpbmc3_b and melanoma_b
+rises from 0.9123 to 0.9155 (melanoma_b 0.8976 to 0.9019; pbmc3_b and ngpbmc3_b unchanged), and the gap to TRUST4 (0.9198) narrows
+from -0.0075 to -0.0043 (95% interval -0.0090 to 0.0000). The fresh-library confirmation is pending: a new untouched NextGem BCR
+library is still to be named.
+
+## Addendum 8 (2026-11-08, registered before any file of the library is opened): fresh-library confirmation of Addendum 7
+
+**Library.** 10x Genomics "20k Human PBMCs, 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger 6.1.0 `multi`, one male donor;
+dataset prefix `20k_PBMC_5pv2_HT_nextgem_Chromium_X`), short name `pbmc20kht_b`. It comes from another study and donor than every
+library used so far (the Addendum 6 held-out library is a female donor of a vaccination series). Its page lists about 960 B cells,
+so the interval will be wide. A search of both repositories (all branches, commit messages included) and of the cluster's data, job
+and benchmark folders found no earlier use; the only near match is the human-mouse cell-line mixture
+`20k_hgmm_5pv2_HT_nextgem_Chromium_X`, a different dataset. Only the dataset page has been read. Inputs: the BCR FASTQs from the
+dataset's FASTQ tarball, truth from its `vdj_b_filtered_contig_annotations.csv`, called cells from its GEX filtered matrix.
+
+**Run.** One Singlet run at the tip of `fix/vdj-ig-cross-rescue` (Addendum 7 defaults, `ig_top_weaker_kept` on) with the first-Cys
+reference (Cell Ranger >= 5), and one TRUST4 run on the same reads. The Addendum 6 setting (#222) is the same run re-filtered with
+`ig_top_weaker_kept=false` through `refilter.py`, which reproduces a run's own filter exactly; the assembly is shared, so this is one
+run. Barcode whitelist: `737K-august-2016`, unless fewer than 90% of Cell Ranger's cell barcodes are on it, in which case
+`3M-february-2018`; the same list is given to Singlet and TRUST4. The choice is made by the job before either tool runs and is
+printed. Nothing is re-run or tuned afterwards, and the result is reported whichever way it falls.
+
+**Rule for Addendum 7 (#224 against #222).** `ig_top_weaker_kept` stays on only when, on this library, its correct pairing is
+strictly higher than with the setting off, its wrong-lineage rate is at most 0.001 higher and its contig F1 at most 0.005 lower. Equal
+or lower pairing turns it off.
+
+**Rule for Singlet against TRUST4.** That of Addendum 6, applied to the Singlet setting the previous rule selects: the difference
+Singlet minus TRUST4 in correct pairing passes when it is at least the negative half-width of its paired bootstrap 95% interval, with
+the wrong-lineage rate at most Cell Ranger's plus 0.005 and contig F1 above TRUST4's.
+
+
+**Aborted first attempt (2026-11-08).** The first job (Slurm 804607, state FAILED) downloaded the library, found one BCR FASTQ
+folder and chose `737K-august-2016` (all of Cell Ranger's cell barcodes are on it). Singlet then stopped after five seconds on its
+first read with `gzip.BadGzipFile`: the dataset's tarball stores its FASTQs as plain text under `.fastq.gz` names. TRUST4 received the
+same unreadable input. Neither tool produced any output, so no result was produced or seen. The rerun compresses the same reads with
+gzip into a new folder and is otherwise identical: same commit, settings, whitelist, rules and comparator. It counts as this
+addendum's one run.
+
+**Result (2026-11-08, Slurm 804625, commit 9bb0e777).** The rerun read the gzip copies of the same reads. Singlet took 3 minutes and
+TRUST4 24 minutes on 914 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| `ig_top_weaker_kept` on (#224) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+| `ig_top_weaker_kept` off (#222) | 0.9672 (0.9540, 0.9781) | 0.9759 | -0.0088 (-0.0219, +0.0055) | 0.0596 (0.0012) | 0.9803 (0.8790) |
+
+*Addendum 7 rule: fail.* The refilter with the setting off changed none of the 5,427 contigs, so pairing is equal and
+`ig_top_weaker_kept` is turned off (default `False` from this commit on).
+
+*Addendum 6 rule, Singlet against TRUST4: fail.* The pairing difference passes, because -0.0088 is above the negative half-width
+(-0.0110), and contig F1 is above TRUST4's. Wrong-lineage fails: 109 of 1,829 Singlet chains with a known GEX lineage sit in a
+non-B lineage, a rate of 0.0596 against the limit of 0.0062 (Cell Ranger's 0.0012 plus 0.005). The library is not re-run, and the
+rule and comparator stay as registered.
+
+## Addendum 9 (2026-11-08, registered before any file of the library is opened): IG barcode floor, confirmed on King 2021 tonsil
+
+**Failure.** On the Addendum 8 library 6% of Singlet's IG chains sat in GEX T cells, against 0.1% for Cell Ranger. On the
+development libraries those chains carry a median of 1 UMI, 72% of them at most 2, and most are the only IG chain of their
+barcode. Cell Ranger confirms 2% of them, while TRUST4's barcode report holds 72%.
+
+**How the comparators suppress them.** TRUST4 (`trust-barcoderep.pl`) applies no abundance floor. It calls a barcode B
+when its most abundant locus is IG. Its one ambient filter, `scripts/barcoderep-filter.py`, is a cross filter (2% of a
+barcode holding >= 50 of the same CDR3), which `run-trust4` does not call and which our cross filter already covers. No
+TRUST4 code is therefore ported. Cell Ranger's documented V(D)J cell rules are what remove these chains: a barcode needs
+>= 3 UMIs, and a lone productive contig needs more than one UMI over its junction. Singlet reimplements both rules from the
+documentation, for IG chains only (TCR is unchanged): `ig_cell_min_umis=3` and `ig_lone_min_junction_umis=2`, both now
+defaults.
+
+**Development measurement** (an exploratory sweep by refiltering the Addendum 6 runs). Pooled wrong-lineage falls from
+0.0031 to 0.0009 (Cell Ranger 0.0008). Correct pairing is unchanged at 0.9217 (TRUST4 0.9159), and contig F1 is unchanged
+or higher on every library. The confirmation libraries were not scored.
+
+**Library.** King et al. 2021, paediatric tonsil, unsorted immune cells of donors BCP8 and BCP9 ("Total" in the deposit),
+10x 5' v1. The BCR reads and Cell Ranger 3.0.0 `vdj` filtered contigs come from ArrayExpress E-MTAB-9003, and the GEX
+filtered matrices (Cell Ranger 3.0.0 `count`) from E-MTAB-9005. It comes from another study, tissue and donors than every
+library used so far. A search of both repositories (all branches, commit messages included) and of the cluster's data
+folders found no earlier use, only mentions in the launch held-out panel and a literature index. Only the dataset pages
+have been read. The data are staged and hash-locked by the launch held-out panel (`sprint/heldout-launch/MANIFEST.md` in
+the project repository). The run waits for that manifest and uses the files it locks.
+
+**Run.** One Singlet run per donor at the commit that adds this addendum (defaults), with the second-Cys reference (Cell
+Ranger 3), the `737K-august-2016` whitelist, and one TRUST4 run on the same reads. Truth is the deposited Cell Ranger
+filtered contig annotations. Cells and lineage labels come from the deposited GEX matrices. The setting off is reported
+from a refilter with both floors at 0. If the deposit holds no Cell Ranger contig annotations, or its GEX barcodes do not
+match the BCR barcodes, the run stops before either tool starts and this is reported.
+
+**Rule.** The Addendum 6 rule on the two donors pooled, wrong-lineage included. The difference Singlet minus TRUST4 in
+correct pairing must be at least the negative half-width of its paired bootstrap 95% interval. The wrong-lineage rate must
+be at most Cell Ranger's plus 0.005, and contig F1 must be above TRUST4's. A pass meets the B12 endpoint. A fail is
+reported, and the library is not run again.
+
+**Observations, out of scope.** The never-assembled chains (Addendum 6 breakdown: the seed and anchor losses) and other
+pairing gains are recorded only. A port of TRUST4's V motif as a Cys104 fallback was written and then dropped unmeasured.
+
+**Build and input route (2026-11-08, before the run).** The build is the IG cell floor applied to `gpu/frontier` at
+e0a85e20 (which holds the Addendum 6 fix), as branch `fix/vdj-ig-cell-floor-frontier`. The run uses the commit that adds
+this paragraph. The data are the files locked in the held-out manifest (project repository PR #52, manifest commit
+edef45a8). The BCR BAMs are unaligned and hold one 155-bp read per molecule fragment: 10x R1 with the barcode in bases
+1-16, the UMI in 17-26, then the template-switch oligo and the transcript's 5' end. The R2 mate is absent. The job writes
+each record as a pair, with bases 1-26 as the barcode read and bases 27 on as the cDNA read. TRUST4 gets the same reads
+with `--barcode`/`--UMI` on the first file (`bc:0:15,um:16:25`). A format check on the first 2M records of one BAM, which
+compared nothing with truth, found the following. The engine took barcode and UMI from the first 26 bases (91% of reads
+carry a valid barcode), found the forward strand of the cDNA read (94% of reads hit a V(D)J segment), and assembled
+productive IG contigs and no TCR contigs. The cDNA read starts at the 5' end of the transcript, so only about 5% of reads
+reach the junction. Both tools work from this same sparse input. Cells and lineage come from the deposited GEX
+`filtered_feature_bc_matrix` (all barcodes are cells, and lineage follows `gex_lineage.py`'s marker rule, read from the
+matrix files instead of an h5).
+
+## Addendum 10 (2026-11-09, registered before any file of the library is opened): deciding held-out library for the IG cell floor
+
+**Why this addendum exists.** An owner decision moved the deciding run from King 2021 tonsil to an ordinary paired-end library,
+because of the input format and the compute. The King BCR deposit holds R1 only, so about 5% of reads reach the junction, and
+stock TRUST4 needs more than 96 GB and more than a day per donor on it. The change was made with Singlet's King numbers already
+seen (pairing 0.066, chain recall 13.1%, wrong-lineage 0 of 1,376 chains) and TRUST4's King numbers not yet produced. The King
+run continues as a supplementary result and has no effect on this addendum's verdict.
+
+**Library.** 10x Genomics "20k Bone Marrow Mononuclear Cells (BMMNCs), 5' HT v2.0" (Chromium X, Next GEM 5' HT v2, Cell Ranger
+6.1.0 `multi`, one healthy male donor from StemExpress; dataset prefix `20k_BMMNC_5pv2_HT_nextgem`), short name `bmmnc20kht_b`.
+The cells are unsorted bone marrow, and the page lists 17,645 of them. It has another donor and tissue than every library used so
+far. It is absent from the project's engine-touch table, the launch held-out panel and manifest, the dev and confirmation lists,
+the cluster's data and job folders, and both repositories' main lines; the Alpha sample index holds one unrelated GEO sample
+whose text mentions bone marrow mononuclear cells. Only the dataset page has been read, and the files below were downloaded and
+hashed without being opened.
+
+| File | sha256 |
+|---|---|
+| `20k_BMMNC_5pv2_HT_nextgem_Multiplex_fastqs.tar` | `78037483658208fc47adf5a38121772974569e26383195852b2c5a38625a72f3` |
+| `vdj_b_filtered_contig_annotations.csv` (truth) | `5e1f9ed50e9b0f6c5bdd4f4dea2325150cb77289cc67cfbcea656b2f3421f99a` |
+| `count_sample_feature_bc_matrix.h5` (GEX cells and lineage) | `b6f5b9208cd3c5490b712e8ba214f075f300eac724575f26779ee6e6f593c69d` |
+| `..._vdj_b_S1_L001_R1_001.fastq.gz` | `6a30a1344196e8327783a5f221e83c9deff7aff46db802df534da7d535ee3de7` |
+| `..._vdj_b_S1_L001_R2_001.fastq.gz` | `207df647699b2e5d2f4ee538d83e263fb1164926e3da45a9f1fa89f2d8670944` |
+
+**Run.** One Singlet run at c5ef9032 (the IG cell floor on `gpu/frontier` e0a85e20, defaults) with the first-Cys reference (Cell
+Ranger >= 5), and one stock TRUST4 run on the same reads. The whitelist is `737K-august-2016` unless fewer than 90% of Cell Ranger's
+cell barcodes are on it, in which case `3M-february-2018`; the same list goes to both tools. Lineage labels follow `gex_lineage.py`.
+The floor-off setting is reported from a refilter with both floors at 0. Nothing is tuned or re-run afterwards, and the result is
+reported whichever way it falls.
+
+**Rule.** That of Addendum 6, unchanged, applied to the registered setting (floor on). The difference Singlet minus TRUST4 in
+correct pairing must be at least the negative half-width of its paired bootstrap 95% interval, the wrong-lineage rate at most Cell
+Ranger's plus 0.005, and contig F1 above TRUST4's.
+
+**Result (2026-11-09, Slurm 805795, commit c5ef9032): pass.** The barcode whitelist was `737K-august-2016` (all of Cell Ranger's
+cell barcodes are on it). Singlet took 3 minutes and TRUST4 25 minutes on 1,489 reference-paired cells.
+
+| Setting | Correct pairing (95% CI) | TRUST4 | Difference (95% CI) | Wrong-lineage (Cell Ranger) | Contig F1 (TRUST4) |
+|---|---|---|---|---|---|
+| IG cell floor on (registered) | 0.9765 (0.9684, 0.9839) | 0.9805 | -0.0040 (-0.0114, +0.0040) | 0.0046, 13 of 2,802 (0.0007) | 0.9891 (0.9058) |
+| Floor off | 0.9765 (0.9684, 0.9839) | 0.9805 | -0.0040 (-0.0114, +0.0040) | 0.0096, 27 of 2,817 (0.0007) | 0.9891 (0.9058) |
+
+All three parts of the rule hold for the registered setting. The pairing difference is above the negative half-width (-0.0077),
+wrong-lineage is below its limit of 0.0057, and contig F1 is above TRUST4's. With the floor off, wrong-lineage would have exceeded
+that limit. The library is not run again.

@@ -23,10 +23,14 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <numeric>
 #include <random>
 #include <string>
@@ -66,6 +70,12 @@ struct DonorDemuxConfig {
     double k_select_z = 4.0;           // more donors are accepted only if held-out log-lik improves, paired z above this
     double k_select_min_gain = 200.0;  // ... and by at least this many nats in total (about 10 cells' worth of a donor)
     int   k_select_patience = 3;       // stop after this many consecutive K without more distinct donors
+    // ── Single-donor screen (auto-K only) ──────────────────────────────────
+    // Before the full K search, test K=1 against K=2 on a small subsample. When K=1 wins the
+    // run continues with the K=1 fit and skips the 1..max_donors search (about a fifth of the
+    // host work of a single-donor sample). Switchable by SINGLET_DEMUX_SCREEN=0/1 in export.h (gpu/bold-hostcut f04a64c7, redeveloped).
+    bool  screen_single_donor = false;   // off by default until the truth check (SINGLET_DEMUX_SCREEN=1 turns it on)
+    int   screen_max_cells = 2000;     // called cells used by the screen
     int   min_donor_cells = 15;        // a donor owns at least max(this, min_donor_frac * cells) cells
     float min_donor_frac = 0.004f;
     int   n_ward_inits = 4;            // extra Ward-seeded restarts in the final fit (K >= 2)
@@ -114,6 +124,11 @@ struct DonorAssignment {
     int doublet_b = -1;
     float doublet_llr = 0.0f;       // log-lik(best pair) - log-lik(best single donor), reads only
 };
+
+// lgamma without the global signgam: std::lgamma (glibc lgamma, lgammaf) stores the sign in one global that every thread of the fit
+// writes on every call; lgamma_r / lgammaf_r return the same values and keep the sign local.
+static inline float demux_lgamma(float x) { int sg; return ::lgammaf_r(x, &sg); }
+static inline double demux_lgamma(double x) { int sg; return ::lgamma_r(x, &sg); }
 
 // ============================================================================
 // Digamma approximation — asymptotic series, accurate for x > 0.5
@@ -182,6 +197,45 @@ static void parallel_det_chunks(int n, int nthreads, Fn&& fn) {
 }
 
 // ============================================================================
+// Phase timers (SINGLET_DEMUX_PROFILE=1 prints them at the end of run_demux). Each counter adds the time the calling thread
+// spent in a phase, so concurrent fits add up like core-seconds.
+// ============================================================================
+enum DemuxPhase {
+    kPhM = 0, kPhBeta, kPhDigamma, kPhE, kPhElboData, kPhElboKl, kPhTables, kPhScore, kPhValid, kPhInit, kPhPca,
+    kPhReduce, kPhExtract, kPhFold, kPhSnpMajor, kPhCount
+};
+static const char* const kDemuxPhaseName[kPhCount] = {
+    "vb_mstep", "vb_beta", "vb_digamma", "vb_estep", "vb_elbo_data", "vb_elbo_kl", "allele_tables", "score_cells",
+    "count_valid", "init_pca_seeded", "pca_cache", "reduce_snps", "extract_covered", "ksel_fold_total", "snp_major_build"};
+inline std::atomic<long long>* demux_phase_ns() {
+    static std::atomic<long long> v[kPhCount];
+    return v;
+}
+struct PhaseScope {
+    int id;
+    std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+    explicit PhaseScope(int i) : id(i) {}
+    ~PhaseScope() {
+        demux_phase_ns()[id].fetch_add(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
+            std::memory_order_relaxed);
+    }
+};
+
+struct SnpMajor;   // defined with the VB kernel
+struct SnpMajorCache {
+    std::mutex mu;
+    std::shared_ptr<const SnpMajor> p;
+    SnpMajorCache() = default;
+    SnpMajorCache(const SnpMajorCache&) {}
+    SnpMajorCache& operator=(const SnpMajorCache&) {
+        std::lock_guard<std::mutex> lk(mu);
+        p.reset();
+        return *this;
+    }
+};
+
+// ============================================================================
 // Internal: sparse AD/DP representation for covered SNPs only
 // ============================================================================
 struct CoveredSNPData {
@@ -196,6 +250,9 @@ struct CoveredSNPData {
     int n_covered_snps;
     int n_cells;
     std::vector<int32_t> covered_to_original; // [n_covered_snps] → original SNP index
+    // SNP-major copy of the entries, built on the first VB fit on this object and shared by all later fits. A copy of the
+    // object starts without it; the cells must not change once a fit has run (nothing in this header does that).
+    mutable SnpMajorCache snp_major;
 };
 
 // Extract covered SNPs from CSC AD/DP matrices
@@ -204,6 +261,7 @@ static CoveredSNPData extract_covered_snps(
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
     const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data)
 {
+    PhaseScope ph_extract(kPhExtract);
     // Find SNPs with any coverage
     std::vector<bool> has_coverage(n_features, false);
     for (uint32_t j = 0; j < n_barcodes; ++j) {
@@ -459,9 +517,91 @@ struct VBResult {
 // theta_s2 = (1 - beta_mu) * beta_sum (= beta of Beta)
 // Prior: beta_mu_prior = 0.5, beta_sum_prior = 2.0 → s1_prior = 1.0, s2_prior = 1.0
 
+// ── SNP-major copy of the cell/SNP entries ──────────────────────────────────
+// The cell-major lists make every pass of a VB iteration jump around the ns*K-sized tables (the M-step scatters into them, the
+// E-step and the ELBO gather from them). Here the entries are regrouped by SNP inside blocks of cells, so the M-step reads the
+// small cell posterior table (nc*K floats, resident in the L2 cache) and writes each SNP's K sums once, and the E-step streams
+// the digamma table once per block while accumulating into a block-sized buffer. Within one (block, SNP) the entries keep the
+// cell order, and a cell's entries are visited in SNP order, so every float sum is formed in the same order as in the
+// cell-major loops. Blocks never straddle the kDetChunks boundaries of the reductions.
+struct SnpMajor {
+    struct Entry { uint16_t c, ad, dp; };      // c: cell index inside its block
+    int ns = 0, nblocks = 0;
+    std::vector<int> cell0;                    // [nblocks + 1]: first cell of each block
+    int chunk_b0[kDetChunks + 1] = {0};        // first block of each deterministic chunk
+    std::vector<std::vector<uint32_t>> off;    // [nblocks][ns + 1]
+    std::vector<std::vector<Entry>> ent;       // [nblocks]
+};
+
+static std::shared_ptr<const SnpMajor> get_snp_major(const CoveredSNPData& d, int nthreads)
+{
+    std::lock_guard<std::mutex> lk(d.snp_major.mu);
+    if (d.snp_major.p) return d.snp_major.p;
+    PhaseScope ph(kPhSnpMajor);
+    auto sm = std::make_shared<SnpMajor>();
+    const int nc = d.n_cells, ns = d.n_covered_snps;
+    sm->ns = ns;
+    size_t max_cells = 2048;
+    auto count_blocks = [&](size_t mc) {
+        size_t nb = 0;
+        for (int t = 0; t < kDetChunks; ++t) {
+            const int b = static_cast<int>(static_cast<int64_t>(t) * nc / kDetChunks);
+            const int e = static_cast<int>(static_cast<int64_t>(t + 1) * nc / kDetChunks);
+            nb += std::max<size_t>(1, (static_cast<size_t>(e - b) + mc - 1) / mc);
+        }
+        return nb;
+    };
+    while (max_cells < 32768 && count_blocks(max_cells) * (static_cast<size_t>(ns) + 1) * 4 > 1500000000ULL) max_cells *= 2;
+    for (int t = 0; t < kDetChunks; ++t) {
+        const int b = static_cast<int>(static_cast<int64_t>(t) * nc / kDetChunks);
+        const int e = static_cast<int>(static_cast<int64_t>(t + 1) * nc / kDetChunks);
+        const int nsub = static_cast<int>(std::max<size_t>(1, (static_cast<size_t>(e - b) + max_cells - 1) / max_cells));
+        sm->chunk_b0[t] = static_cast<int>(sm->cell0.size());
+        for (int i = 0; i < nsub; ++i)
+            sm->cell0.push_back(b + static_cast<int>(static_cast<int64_t>(i) * (e - b) / nsub));
+    }
+    sm->chunk_b0[kDetChunks] = static_cast<int>(sm->cell0.size());
+    sm->cell0.push_back(nc);
+    sm->nblocks = static_cast<int>(sm->cell0.size()) - 1;
+    sm->off.resize(sm->nblocks);
+    sm->ent.resize(sm->nblocks);
+    parallel_chunks(sm->nblocks, nthreads, [&](int, int b0, int b1) {
+        std::vector<uint32_t> pos;
+        for (int b = b0; b < b1; ++b) {
+            auto& off = sm->off[b];
+            off.assign(static_cast<size_t>(ns) + 1, 0u);
+            const int c0 = sm->cell0[b], c1 = sm->cell0[b + 1];
+            for (int c = c0; c < c1; ++c)
+                for (int32_t j : d.cells[c].snp_idx) ++off[static_cast<size_t>(j) + 1];
+            for (int j = 0; j < ns; ++j) off[j + 1] += off[j];
+            auto& ent = sm->ent[b];
+            ent.resize(off[ns]);
+            pos.assign(off.begin(), off.end() - 1);
+            for (int c = c0; c < c1; ++c) {
+                const auto& cell = d.cells[c];
+                for (size_t si = 0; si < cell.snp_idx.size(); ++si)
+                    ent[pos[cell.snp_idx[si]]++] = SnpMajor::Entry{static_cast<uint16_t>(c - c0), cell.ad[si], cell.dp[si]};
+            }
+        }
+    });
+    d.snp_major.p = sm;
+    return sm;
+}
+
+static inline uint32_t float_bits(float x) { uint32_t u; std::memcpy(&u, &x, 4); return u; }
+
 // ── Core VB iteration on a pre-initialised VBResult (in-place) ──
-// Flat s1[j*K+k] / s2[j*K+k] buffers — no per-iteration heap allocation.
-// Parallel M-step and E-step when nthreads > 1.
+// The arithmetic is that of the cell-major implementation, element for element: every sum is formed in the same order (the
+// M-step adds cells in order inside each of the kDetChunks chunks and the chunks in order; the E-step adds a cell's SNPs in
+// SNP order; the ELBO sums its terms in cell order inside each chunk), so the fit does not depend on the thread count and equals
+// the earlier loops bit for bit. What changed is the memory access pattern and the work that provably repeats:
+//   * M-step, digamma tables and the KL term of the ELBO run in one SNP-parallel pass (any number of threads), off the
+//     SNP-major copy; the digamma values and the KL term of a (SNP, donor) whose Beta parameters did not change since the last
+//     evaluation are reused (they are functions of those two floats only);
+//   * the E-step streams the interleaved [d1 | d2 | d12] row of each SNP once per block of cells;
+//   * the ELBO is evaluated only when its value is read: by the convergence test (iterations >= min_iter) and as the previous
+//     value of that test (the iteration before), and at the last iteration;
+//   * beta_mu / beta_sum, which only the final iteration leaves behind, are written once at the end.
 static void run_vb_inplace(
     const CoveredSNPData& data, int K,
     const DonorDemuxConfig& cfg, VBResult& result,
@@ -471,197 +611,228 @@ static void run_vb_inplace(
     const int ns = data.n_covered_snps;
     const float s1_prior = 1.0f, s2_prior = 1.0f;
     nthreads = std::max(1, nthreads);
+    if (max_iter <= 0) return;
+    const size_t nsK = static_cast<size_t>(ns) * K;
+    const std::shared_ptr<const SnpMajor> smp = get_snp_major(data, nthreads);
+    const SnpMajor& sm = *smp;
 
-    // Pre-allocate flat working buffers (one allocation, reused every iter)
-    std::vector<float> s1(ns * K);
-    std::vector<float> s2(ns * K);
-    // Digamma cache: precomputed once per M-step so the cell loop uses table lookups
-    std::vector<float> d1(ns * K);   // digamma(s1[j*K+k])
-    std::vector<float> d2(ns * K);   // digamma(s2[j*K+k])
-    std::vector<float> d12(ns * K);  // digamma(s1[j*K+k] + s2[j*K+k])
+    // Cell posteriors, flat (the M-step gathers rows of it)
+    std::vector<float> q(static_cast<size_t>(nc) * K);
+    for (int c = 0; c < nc; ++c)
+        std::copy(result.id_prob[c].begin(), result.id_prob[c].begin() + K, q.begin() + static_cast<size_t>(c) * K);
 
-    // Per-chunk M-step accumulators (allocated once, cleared per iter)
-    std::vector<std::vector<float>> s1_tl(kDetChunks, std::vector<float>(ns * K));
-    std::vector<std::vector<float>> s2_tl(kDetChunks, std::vector<float>(ns * K));
+    std::vector<float> s1(nsK), s2(nsK);
+    // interleaved digamma table: row j = [digamma(s1)[K] | digamma(s2)[K] | digamma(s1 + s2)[K]]; mk1/mk2: the bits of the
+    // s1/s2 the row was computed from
+    std::vector<float> D(3 * nsK);
+    std::vector<uint32_t> mk1(nsK, 0xFFFFFFFFu), mk2(nsK, 0xFFFFFFFFu);
+    // KL term of the ELBO per (SNP, donor), with the s1/s2 bits it was computed from
+    std::vector<float> klt;
+    std::vector<uint32_t> kk1, kk2;
 
     float prev_elbo = static_cast<float>(result.elbo);
     const float log_inv_k  = -std::log(static_cast<float>(K));
-    const float lgamma_prior = std::lgamma(s1_prior + s2_prior)
-                             - std::lgamma(s1_prior) - std::lgamma(s2_prior);
+    const float lgamma_prior = demux_lgamma(s1_prior + s2_prior)
+                             - demux_lgamma(s1_prior) - demux_lgamma(s2_prior);
+    const size_t pf = 12;      // prefetch distance (entries) of the ELBO's cell-major gathers
+    int iters_run = 0;
 
     for (int iter = 0; iter < max_iter; ++iter) {
+        const bool need_elbo = (iter + 1 >= cfg.min_iter) || (iter == max_iter - 1);
+        if (need_elbo && klt.empty()) {
+            klt.assign(nsK, 0.0f); kk1.assign(nsK, 0xFFFFFFFFu); kk2.assign(nsK, 0xFFFFFFFFu);
+        }
 
-        // ── M-step ─────────────────────────────────────────────────────────
-        // Each chunk of cells accumulates into its own s1_tl/s2_tl (no mutex); the chunks
-        // are added in order, so the sums are the same for any thread count.
-        parallel_det_chunks(nc, nthreads, [&](int ch, int c_start, int c_end) {
-            float* s1t = s1_tl[ch].data();
-            float* s2t = s2_tl[ch].data();
-            std::fill(s1t, s1t + ns * K, 0.0f);
-            std::fill(s2t, s2t + ns * K, 0.0f);
-            for (int c = c_start; c < c_end; ++c) {
-                const auto& cell = data.cells[c];
-                const float* qc  = result.id_prob[c].data();
-                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
-                    const int   j  = cell.snp_idx[si];
-                    const float ad = static_cast<float>(cell.ad[si]);
-                    const float bd = static_cast<float>(cell.dp[si]) - ad;
-                    float* s1j = s1t + j * K;
-                    float* s2j = s2t + j * K;
+        // ── M-step + digamma tables + KL terms, parallel over SNPs ───────────
+        {
+            PhaseScope ps(kPhM);
+            parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
+                std::vector<float> wa(K), wb(K), wp1(K), wp2(K);
+                float* __restrict a = wa.data();
+                float* __restrict b = wb.data();
+                float* __restrict p1 = wp1.data();
+                float* __restrict p2 = wp2.data();
+                for (int j = j0; j < j1; ++j) {
+                    for (int k = 0; k < K; ++k) { a[k] = s1_prior; b[k] = s2_prior; }
+                    for (int t = 0; t < kDetChunks; ++t) {
+                        bool any = false;
+                        for (int k = 0; k < K; ++k) { p1[k] = 0.0f; p2[k] = 0.0f; }
+                        for (int blk = sm.chunk_b0[t]; blk < sm.chunk_b0[t + 1]; ++blk) {
+                            const uint32_t* off = sm.off[blk].data();
+                            const SnpMajor::Entry* en = sm.ent[blk].data();
+                            const float* qb = q.data() + static_cast<size_t>(sm.cell0[blk]) * K;
+                            for (uint32_t e = off[j]; e < off[j + 1]; ++e) {
+                                any = true;
+                                const float* __restrict qc = qb + static_cast<size_t>(en[e].c) * K;
+                                const float ad = static_cast<float>(en[e].ad);
+                                const float bd = static_cast<float>(en[e].dp) - ad;
+                                for (int k = 0; k < K; ++k) {
+                                    p1[k] += qc[k] * ad;
+                                    p2[k] += qc[k] * bd;
+                                }
+                            }
+                        }
+                        if (any)
+                            for (int k = 0; k < K; ++k) { a[k] += p1[k]; b[k] += p2[k]; }
+                    }
+                    float* Dj = D.data() + static_cast<size_t>(j) * 3 * K;
+                    const size_t o = static_cast<size_t>(j) * K;
                     for (int k = 0; k < K; ++k) {
-                        s1j[k] += qc[k] * ad;
-                        s2j[k] += qc[k] * bd;
+                        s1[o + k] = a[k]; s2[o + k] = b[k];
+                        const uint32_t u1 = float_bits(a[k]), u2 = float_bits(b[k]);
+                        if (u1 != mk1[o + k] || u2 != mk2[o + k]) {
+                            mk1[o + k] = u1; mk2[o + k] = u2;
+                            Dj[k]         = digamma(a[k]);
+                            Dj[K + k]     = digamma(b[k]);
+                            Dj[2 * K + k] = digamma(a[k] + b[k]);
+                        }
+                        if (need_elbo && (u1 != kk1[o + k] || u2 != kk2[o + k])) {
+                            kk1[o + k] = u1; kk2[o + k] = u2;
+                            klt[o + k] = demux_lgamma(a[k] + b[k]) - demux_lgamma(a[k]) - demux_lgamma(b[k])
+                                         - lgamma_prior
+                                         + (a[k] - s1_prior) * Dj[k] + (b[k] - s2_prior) * Dj[K + k]
+                                         - (a[k] + b[k] - s1_prior - s2_prior) * Dj[2 * K + k];
+                        }
                     }
                 }
-            }
-        });
-        // Reduce (parallel over the flat ns*K index; each element sums chunks 0..kDetChunks-1)
-        parallel_chunks(ns * K, nthreads, [&](int, int i0, int i1) {
-            for (int i = i0; i < i1; ++i) {
-                float a = s1_prior, b = s2_prior;
-                for (int t = 0; t < kDetChunks; ++t) { a += s1_tl[t][i]; b += s2_tl[t][i]; }
-                s1[i] = a;  s2[i] = b;
-            }
-        });
+            });
+        }
 
-        // Update beta_mu / beta_sum (stored for output)
+        // ── E-step: per block of cells, accumulate the log-likelihoods SNP by SNP ──
+        {
+            PhaseScope ps(kPhE);
+            const float inv_k = 1.0f / K;
+            parallel_chunks(sm.nblocks, nthreads, [&](int, int b0, int b1) {
+                std::vector<float> llbuf;
+                for (int blk = b0; blk < b1; ++blk) {
+                    const int c0 = sm.cell0[blk], c1 = sm.cell0[blk + 1];
+                    llbuf.assign(static_cast<size_t>(c1 - c0) * K, 0.0f);
+                    float* llb = llbuf.data();
+                    const uint32_t* off = sm.off[blk].data();
+                    const SnpMajor::Entry* en = sm.ent[blk].data();
+                    for (int j = 0; j < ns; ++j) {
+                        const uint32_t lo = off[j], hi = off[j + 1];
+                        if (lo == hi) continue;
+                        const float* __restrict d1j  = D.data() + static_cast<size_t>(j) * 3 * K;
+                        const float* __restrict d2j  = d1j + K;
+                        const float* __restrict d12j = d1j + 2 * K;
+                        for (uint32_t e = lo; e < hi; ++e) {
+                            float* __restrict ll = llb + static_cast<size_t>(en[e].c) * K;
+                            const float ad = static_cast<float>(en[e].ad);
+                            const float dp = static_cast<float>(en[e].dp);
+                            const float bd = dp - ad;
+                            for (int k = 0; k < K; ++k)
+                                ll[k] += ad * d1j[k] + bd * d2j[k] - dp * d12j[k];
+                        }
+                    }
+                    for (int c = c0; c < c1; ++c) {
+                        float* idp = q.data() + static_cast<size_t>(c) * K;
+                        if (data.cells[c].snp_idx.empty()) {
+                            for (int k = 0; k < K; ++k) idp[k] = inv_k;
+                            continue;
+                        }
+                        const float* ll = llb + static_cast<size_t>(c - c0) * K;
+                        float mx = ll[0];
+                        for (int k = 1; k < K; ++k) if (ll[k] > mx) mx = ll[k];
+                        float sm_ = 0.0f;
+                        for (int k = 0; k < K; ++k) { idp[k] = std::exp(ll[k] - mx); sm_ += idp[k]; }
+                        const float inv = 1.0f / sm_;
+                        for (int k = 0; k < K; ++k) idp[k] *= inv;
+                    }
+                }
+            });
+        }
+        ++iters_run;
+        result.n_iter++;
+
+        if (need_elbo) {
+            // ── ELBO ─────────────────────────────────────────────────────────
+            // E[log p(x | z, theta)] - KL[q(z) || p(z)]: cell-major, in the order of the earlier code (a double running sum per
+            // chunk of cells). Donors with a posterior below 1e-10 are skipped, so the SNP loop visits the active ones only.
+            std::vector<double> e_part(kDetChunks, 0.0), e_part2(kDetChunks, 0.0);
+            {
+                PhaseScope ps(kPhElboData);
+                parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
+                    std::vector<int> act(K);
+                    double e = 0.0;
+                    for (int c = c0; c < c1; ++c) {
+                        const auto& cell = data.cells[c];
+                        const float* qc = q.data() + static_cast<size_t>(c) * K;
+                        int na = 0;
+                        for (int k = 0; k < K; ++k) if (!(qc[k] < 1e-10f)) act[na++] = k;
+                        const size_t nsi = cell.snp_idx.size();
+                        if (na > 0)
+                            for (size_t si = 0; si < nsi; ++si) {
+                                if (si + pf < nsi) {
+                                    const float* nxt = D.data() + static_cast<size_t>(cell.snp_idx[si + pf]) * 3 * K;
+                                    __builtin_prefetch(nxt);
+                                    __builtin_prefetch(nxt + 16);
+                                    if (3 * K > 32) __builtin_prefetch(nxt + 32);
+                                }
+                                const float ad = static_cast<float>(cell.ad[si]);
+                                const float dp = static_cast<float>(cell.dp[si]);
+                                const float bd = dp - ad;
+                                const float* d1j  = D.data() + static_cast<size_t>(cell.snp_idx[si]) * 3 * K;
+                                const float* d2j  = d1j + K;
+                                const float* d12j = d1j + 2 * K;
+                                if (na == K) {
+                                    for (int k = 0; k < K; ++k) {
+                                        const float qk = qc[k];
+                                        e += qk * (ad * d1j[k] + bd * d2j[k] - dp * d12j[k]);
+                                    }
+                                } else {
+                                    for (int ai = 0; ai < na; ++ai) {
+                                        const int k = act[ai];
+                                        const float qk = qc[k];
+                                        e += qk * (ad * d1j[k] + bd * d2j[k] - dp * d12j[k]);
+                                    }
+                                }
+                            }
+                        for (int k = 0; k < K; ++k) {
+                            const float qk = qc[k];
+                            if (qk > 1e-10f) e -= qk * (std::log(qk) + log_inv_k);
+                        }
+                    }
+                    e_part[t] += e;
+                });
+            }
+            // -KL[q(theta) || p(theta)]: the per-(SNP, donor) terms were formed in the pass above; add them in SNP order
+            {
+                PhaseScope ps(kPhElboKl);
+                parallel_det_chunks(ns, nthreads, [&](int t, int j0, int j1) {
+                    double e = 0.0;
+                    for (size_t i = static_cast<size_t>(j0) * K, iend = static_cast<size_t>(j1) * K; i < iend; ++i)
+                        e -= klt[i];
+                    e_part2[t] += e;
+                });
+            }
+            double elbo = 0.0;
+            for (double v : e_part) elbo += v;
+            for (double v : e_part2) elbo += v;
+            result.elbo = elbo;
+
+            if (iter >= cfg.min_iter) {
+                if (static_cast<float>(elbo - prev_elbo) < cfg.eps_conv) break;
+            }
+            prev_elbo = static_cast<float>(elbo);
+        }
+    }
+
+    // outputs the last iteration leaves behind
+    for (int c = 0; c < nc; ++c)
+        std::copy(q.begin() + static_cast<size_t>(c) * K, q.begin() + static_cast<size_t>(c + 1) * K, result.id_prob[c].begin());
+    if (iters_run > 0) {
+        PhaseScope ps(kPhBeta);
         parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
             for (int j = j0; j < j1; ++j) {
-                const float* s1j = s1.data() + j * K;
-                const float* s2j = s2.data() + j * K;
+                const float* s1j = s1.data() + static_cast<size_t>(j) * K;
+                const float* s2j = s2.data() + static_cast<size_t>(j) * K;
                 for (int k = 0; k < K; ++k) {
                     result.beta_mu[j][k]  = s1j[k] / (s1j[k] + s2j[k]);
                     result.beta_sum[j][k] = s1j[k] + s2j[k];
                 }
             }
         });
-
-        // ── Precompute digamma cache (KEY OPTIMISATION) ─────────────────────
-        // Costs O(ns × K) digamma calls once per iter instead of O(nc × snps/cell × K).
-        // For ns=5000 K=5: 75K calls vs 67.5M calls in the old inner loop. ~900× speedup.
-        parallel_chunks(ns, nthreads, [&](int, int j0, int j1) {
-            for (int j = j0; j < j1; ++j) {
-                const float* s1j = s1.data() + j * K;
-                const float* s2j = s2.data() + j * K;
-                float* d1j  = d1.data()  + j * K;
-                float* d2j  = d2.data()  + j * K;
-                float* d12j = d12.data() + j * K;
-                for (int k = 0; k < K; ++k) {
-                    d1j[k]  = digamma(s1j[k]);
-                    d2j[k]  = digamma(s2j[k]);
-                    d12j[k] = digamma(s1j[k] + s2j[k]);
-                }
-            }
-        });
-
-        // ── E-step ─────────────────────────────────────────────────────────
-        auto e_worker = [&](int c_start, int c_end) {
-            std::vector<float> ll(K);  // thread-local log-lik buffer; no alloc per cell
-            const float inv_k = 1.0f / K;
-            for (int c = c_start; c < c_end; ++c) {
-                const auto& cell = data.cells[c];
-                if (cell.snp_idx.empty()) {
-                    for (int k = 0; k < K; ++k) result.id_prob[c][k] = inv_k;
-                    continue;
-                }
-                std::fill(ll.begin(), ll.end(), 0.0f);
-                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
-                    const int   j  = cell.snp_idx[si];
-                    const float ad = static_cast<float>(cell.ad[si]);
-                    const float dp = static_cast<float>(cell.dp[si]);
-                    const float bd = dp - ad;
-                    const float* d1j  = d1.data()  + j * K;  // precomputed digamma(s1)
-                    const float* d2j  = d2.data()  + j * K;
-                    const float* d12j = d12.data() + j * K;
-                    for (int k = 0; k < K; ++k) {
-                        ll[k] += ad * d1j[k] + bd * d2j[k] - dp * d12j[k];
-                    }
-                }
-                float mx = ll[0];
-                for (int k = 1; k < K; ++k) if (ll[k] > mx) mx = ll[k];
-                float sm = 0.0f;
-                float* idp = result.id_prob[c].data();
-                for (int k = 0; k < K; ++k) { idp[k] = std::exp(ll[k] - mx); sm += idp[k]; }
-                const float inv = 1.0f / sm;
-                for (int k = 0; k < K; ++k) idp[k] *= inv;
-            }
-        };
-
-        if (nthreads == 1) {
-            e_worker(0, nc);
-        } else {
-            std::vector<std::thread> ts;
-            ts.reserve(nthreads);
-            for (int t = 0; t < nthreads; ++t) {
-                const int cs = t * nc / nthreads;
-                const int ce = (t + 1) * nc / nthreads;
-                ts.emplace_back(e_worker, cs, ce);
-            }
-            for (auto& t : ts) t.join();
-        }
-
-        // ── ELBO ───────────────────────────────────────────────────────────
-        // Partial sums per thread chunk (parallel; summed in a fixed order).
-        std::vector<double> e_part(kDetChunks, 0.0), e_part2(kDetChunks, 0.0);
-
-        // E[log p(x | z, theta)] — uses precomputed d1/d2/d12 (no digamma calls here)
-        // and -KL[q(z) || p(z)]
-        parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
-            double e = 0.0;
-            for (int c = c0; c < c1; ++c) {
-                const auto& cell = data.cells[c];
-                const float* qc = result.id_prob[c].data();
-                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
-                    const int   j  = cell.snp_idx[si];
-                    const float ad = static_cast<float>(cell.ad[si]);
-                    const float dp = static_cast<float>(cell.dp[si]);
-                    const float bd = dp - ad;
-                    const float* d1j  = d1.data()  + j * K;
-                    const float* d2j  = d2.data()  + j * K;
-                    const float* d12j = d12.data() + j * K;
-                    for (int k = 0; k < K; ++k) {
-                        const float qk = qc[k];
-                        if (qk < 1e-10f) continue;
-                        e += qk * (ad * d1j[k] + bd * d2j[k] - dp * d12j[k]);
-                    }
-                }
-                for (int k = 0; k < K; ++k) {
-                    const float qk = qc[k];
-                    if (qk > 1e-10f) e -= qk * (std::log(qk) + log_inv_k);
-                }
-            }
-            e_part[t] += e;
-        });
-        // -KL[q(theta) || p(theta)] — uses precomputed d1/d2 (3 lgamma + d1 + d2 + d12 per j,k)
-        parallel_det_chunks(ns, nthreads, [&](int t, int j0, int j1) {
-            double e = 0.0;
-            for (int j = j0; j < j1; ++j) {
-                const float* s1j  = s1.data()  + j * K;
-                const float* s2j  = s2.data()  + j * K;
-                const float* d1j  = d1.data()  + j * K;
-                const float* d2j  = d2.data()  + j * K;
-                const float* d12j = d12.data() + j * K;
-                for (int k = 0; k < K; ++k) {
-                    const float a = s1j[k], b = s2j[k];
-                    e -= std::lgamma(a + b) - std::lgamma(a) - std::lgamma(b)
-                         - lgamma_prior
-                         + (a - s1_prior) * d1j[k] + (b - s2_prior) * d2j[k]
-                         - (a + b - s1_prior - s2_prior) * d12j[k];
-                }
-            }
-            e_part2[t] += e;
-        });
-        double elbo = 0.0;
-        for (double v : e_part) elbo += v;
-        for (double v : e_part2) elbo += v;
-
-        result.elbo = elbo;
-        result.n_iter++;
-
-        if (iter >= cfg.min_iter) {
-            if (static_cast<float>(elbo - prev_elbo) < cfg.eps_conv) break;
-        }
-        prev_elbo = static_cast<float>(elbo);
     }
 }
 
@@ -967,6 +1138,7 @@ struct PcaCache {
 static PcaCache compute_pca_cache(const CoveredSNPData& data, int n_pcs,
                                   int nthreads, uint64_t seed)
 {
+    PhaseScope ph_pca(kPhPca);
     PcaCache pc;
     // A SNP must be informative in ~1% of the cells (20 for large inputs, >= 5 for small ones).
     pc.inf = find_informative_snps(data, std::max(5, std::min(20, data.n_cells / 100)));
@@ -985,6 +1157,7 @@ static VBResult init_vb_pca_seeded(
     const PcaCache* cache = nullptr, bool quiet = false,
     int mode = 2)   // 1 = legacy (k-means++ on K-1 PCs), 2 = Ward-merged k-means on K+2 PCs
 {
+    PhaseScope ph_init(kPhInit);
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
 
@@ -1068,11 +1241,11 @@ static VBResult init_vb_pca_seeded(
     return result;
 }
 
-// Run VB from scratch (random initialisation), single-threaded.
+// Run VB from scratch (random initialisation) on nthreads threads (the result does not depend on the count: parallel_det_chunks).
 // Called from run_batch() which runs restarts in parallel.
 static VBResult run_vb(
     const CoveredSNPData& data, int K,
-    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter)
+    const DonorDemuxConfig& cfg, uint64_t seed, int max_iter, int nthreads = 1)
 {
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
@@ -1095,7 +1268,7 @@ static VBResult run_vb(
         for (int k = 0; k < K; ++k) result.id_prob[c][k] *= inv;
     }
 
-    run_vb_inplace(data, K, cfg, result, max_iter, /*nthreads=*/1);
+    run_vb_inplace(data, K, cfg, result, max_iter, nthreads);
     return result;
 }
 
@@ -1114,9 +1287,16 @@ static VBResult fit_vb_k(
     const int n_inits = std::max(1, static_cast<int>(kinds.size()));
     std::vector<VBResult> init_results(n_inits);
     const int nw = std::max(1, std::min(threads, n_inits));
+    // Each restart runs on its share of the threads: one restart (every K=1 fit) used to run its pre-iterations on one thread while
+    // the others sat idle. The fit does not depend on the thread count (parallel_det_chunks), so outputs are unchanged.
+    const int per_t = std::max(1, threads / nw);
 
-    auto run_batch = [&](int start, int end) {
-        for (int i = start; i < end; ++i) {
+    get_snp_major(cov, threads);   // built once, with all threads, before the restarts that share it start
+    std::atomic<int> next_restart{0};
+    // Workers claim restarts one at a time (a restart that converges early frees its worker for the next); every result is
+    // stored by its restart index, so nothing depends on which worker ran it.
+    auto run_batch = [&]() {
+        for (int i; (i = next_restart.fetch_add(1)) < n_inits;) {
             const uint64_t init_seed = seed_base
                 + static_cast<uint64_t>(i) * 1000ULL
                 + static_cast<uint64_t>(K) * 100000ULL;
@@ -1124,25 +1304,19 @@ static VBResult fit_vb_k(
             if (K > 1 && kind > 0) {
                 // PCA-seeded restart: prevents symmetric-init cluster collapse
                 init_results[i] = init_vb_pca_seeded(cov, K, cfg, init_seed, pca, quiet || i > 0, kind);
-                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, /*nthreads=*/1);
+                run_vb_inplace(cov, K, cfg, init_results[i], max_iter_pre, per_t);
             } else {
-                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre);
+                init_results[i] = run_vb(cov, K, cfg, init_seed, max_iter_pre, per_t);
             }
         }
     };
 
     if (nw <= 1) {
-        run_batch(0, n_inits);
+        run_batch();
     } else {
         std::vector<std::thread> workers;
         workers.reserve(nw);
-        const int per = n_inits / nw, rem = n_inits % nw;
-        int start = 0;
-        for (int w = 0; w < nw; ++w) {
-            const int cnt = per + (w < rem ? 1 : 0);
-            workers.emplace_back(run_batch, start, start + cnt);
-            start += cnt;
-        }
+        for (int w = 0; w < nw; ++w) workers.emplace_back(run_batch);
         for (auto& t : workers) t.join();
     }
 
@@ -1177,6 +1351,7 @@ struct ReducedSNPs {
 static ReducedSNPs reduce_snps(const CoveredSNPData& src,
                                const std::vector<int>& cells, int min_cells)
 {
+    PhaseScope ph_reduce(kPhReduce);
     std::vector<int32_t> cnt(src.n_covered_snps, 0);
     for (int c : cells)
         for (int32_t j : src.cells[c].snp_idx) ++cnt[j];
@@ -1238,19 +1413,34 @@ static VBResult fit_vb_k_staged(
                   << " SNPs in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
                   << " s; reduced ELBO best " << all_res[order[0]].elbo << " (kind " << kinds[order[0]]
                   << "), median " << all_res[order[order.size() / 2]].elbo << "\n";
-    VBResult best;
-    best.elbo = -std::numeric_limits<double>::infinity();
-    for (int t = 0; t < top; ++t) {
+    // The continued candidates are independent: run them side by side, each on its share of the threads, then pick in order.
+    get_snp_major(cov, cfg.threads);
+    std::vector<VBResult> cand(top);
+    auto run_cand = [&](int t, int th) {
         VBResult r;
         r.elbo = -std::numeric_limits<double>::infinity();
         r.n_iter = 0;
         r.beta_mu.assign(cov.n_covered_snps, std::vector<float>(K, 0.5f));
         r.beta_sum.assign(cov.n_covered_snps, std::vector<float>(K, 2.0f));
         r.id_prob = std::move(all_res[order[t]].id_prob);
-        run_vb_inplace(cov, K, cfg, r, cfg.explore_full_iters, cfg.threads);
+        run_vb_inplace(cov, K, cfg, r, cfg.explore_full_iters, th);
+        cand[t] = std::move(r);
+    };
+    if (top > 1 && cfg.threads >= 2) {
+        const int th = std::max(1, cfg.threads / top);
+        std::vector<std::thread> ts;
+        for (int t = 1; t < top; ++t) ts.emplace_back(run_cand, t, th);
+        run_cand(0, th);
+        for (auto& t : ts) t.join();
+    } else {
+        for (int t = 0; t < top; ++t) run_cand(t, cfg.threads);
+    }
+    VBResult best;
+    best.elbo = -std::numeric_limits<double>::infinity();
+    for (int t = 0; t < top; ++t) {
         if (!quiet)
-            std::cerr << "[demux]   candidate " << t << " (kind " << kinds[order[t]] << "): full ELBO " << r.elbo << "\n";
-        if (r.elbo > best.elbo) best = std::move(r);
+            std::cerr << "[demux]   candidate " << t << " (kind " << kinds[order[t]] << "): full ELBO " << cand[t].elbo << "\n";
+        if (cand[t].elbo > best.elbo) best = std::move(cand[t]);
     }
     run_vb_inplace(cov, K, cfg, best, cfg.max_iter, cfg.threads);
     return best;
@@ -1283,6 +1473,7 @@ static AlleleTables build_allele_tables(
     const std::vector<uint8_t>* use,            // optional mask: cells that contribute counts
     int K, const DonorDemuxConfig& cfg, float eps_fixed = -1.0f)
 {
+    PhaseScope ph_tables(kPhTables);
     const int nc = d.n_cells, ns = d.n_covered_snps;
     const int nthreads = std::max(1, cfg.threads);
     AlleleTables T;
@@ -1331,7 +1522,7 @@ static AlleleTables build_allele_tables(
             a[2] = (1.0 - eps) * c_hom; b[2] = eps * c_hom;
             for (int g = 0; g < 3; ++g) {
                 c[g] = a[g] + b[g];
-                ln[g] = std::lgamma(a[g]) + std::lgamma(b[g]) - std::lgamma(c[g]);
+                ln[g] = demux_lgamma(a[g]) + demux_lgamma(b[g]) - demux_lgamma(c[g]);
             }
         }
     };
@@ -1341,8 +1532,8 @@ static AlleleTables build_allele_tables(
         double l[3] = {lpr0[j], lpr1[j], lpr2[j]};
         if (dpt > 0.0)
             for (int g = 0; g < 3; ++g)
-                l[g] += std::lgamma(st.a[g] + a) + std::lgamma(st.b[g] + bb)
-                      - std::lgamma(st.c[g] + dpt) - st.ln[g];
+                l[g] += demux_lgamma(st.a[g] + a) + demux_lgamma(st.b[g] + bb)
+                      - demux_lgamma(st.c[g] + dpt) - st.ln[g];
         const double mx = std::max(l[0], std::max(l[1], l[2]));
         double sum = 0.0;
         for (int g = 0; g < 3; ++g) { pg[g] = std::exp(l[g] - mx); sum += pg[g]; }
@@ -1451,6 +1642,7 @@ static void score_cells(
     float temper = 1.0f)                     // < 1 flattens the read likelihood (reads of one cell are
                                              // not independent: PCR, bursting) so posteriors are calibrated
 {
+    PhaseScope ph_score(kPhScore);
     const int K = T.K;
     const int npair = K * (K - 1) / 2;
     const int W = K + npair;
@@ -1684,6 +1876,7 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                                   const DonorDemuxConfig& cfg,
                                   std::vector<char>* alive_out = nullptr)
 {
+    PhaseScope ph_valid(kPhValid);
     const int npair = K * (K - 1) / 2;
     const int W = K + npair;
     std::vector<int> pa(npair), pb(npair);
@@ -1809,18 +2002,31 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
     for (int f = 0; f < 2; ++f)
         pca[f] = compute_pca_cache(D[f], n_pcs, cfg.threads, cfg.seed + 17ULL + f);
 
-    DonorDemuxConfig fcfg = cfg;                 // per-fold thread budget (folds run side by side)
-    fcfg.threads = std::max(1, cfg.threads / 2);
+    // The K evaluations are independent of each other (a fit depends on K, the fold and the restart index only, never on what
+    // another K found); only the acceptance chain below is sequential. K values are evaluated in waves of `wave` concurrent
+    // evaluations, each with the thread budget one serial evaluation had at 8 threads, and the chain is then replayed in K
+    // order, so the chosen K, the trace and every number in it are those of the serial loop. Work past the stopping point
+    // (the rest of the wave that stops the search) is discarded. Thread counts above 8 go to the wave size.
+    const int wave = std::max(1, std::min(kmax, cfg.threads / 8));
+    const int kthreads = std::max(1, cfg.threads / wave);   // threads of one K evaluation (its two folds side by side)
+    DonorDemuxConfig fcfg = cfg;                 // per-fold thread budget
+    fcfg.threads = std::max(1, kthreads / 2);
+    for (int f = 0; f < 2; ++f) get_snp_major(D[f], cfg.threads);   // built once, before the fits that share it start
     const double delta = multiplet_prior(cfg, cov.n_cells);
-    std::vector<double> prev_ll;
-    int best_v = 1, stall = 0;
 
-    for (int K = 1; K <= kmax; ++K) {
-        const auto tk = std::chrono::steady_clock::now();
-        std::vector<double> ll(n, 0.0);
+    struct KEval {
+        std::vector<double> ll;
         int valid_f[2] = {1, 1};
+        double seconds = 0.0;
+    };
+    auto eval_k = [&](int K, KEval& out) {
+        const auto tk = std::chrono::steady_clock::now();
+        out.ll.assign(n, 0.0);
+        std::vector<double>& ll = out.ll;
+        int* valid_f = out.valid_f;
 
         auto do_fold = [&](int f) {
+            PhaseScope ph_fold(kPhFold);
             const std::vector<int> kinds = (K == 1) ? std::vector<int>{0}
                                                     : std::vector<int>(cfg.k_select_inits, 2);
             VBResult fit = fit_vb_k(D[f], K, fcfg, kinds, std::min(cfg.max_iter_pre, 30),
@@ -1848,7 +2054,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
-        if (K >= 2 && cfg.threads >= 2) {
+        if (kthreads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
             do_fold(0);
             t1.join();
@@ -1856,46 +2062,79 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             do_fold(0);
             do_fold(1);
         }
+        out.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tk).count();
+    };
 
-        double mean = 0.0;
-        for (double v : ll) mean += v;
-        mean /= n;
-        KSelectRow row;
-        row.K = K; row.ll_per_cell = mean;
-        row.valid = std::min(valid_f[0], valid_f[1]);
-        if (!prev_ll.empty()) {   // paired gain over the best accepted model so far
-            double md = 0.0, m2 = 0.0;
-            for (int i = 0; i < n; ++i) {
-                const double dd = ll[i] - prev_ll[i];
-                md += dd; m2 += dd * dd;
-            }
-            md /= n;
-            const double var = std::max(1e-12, (m2 / n - md * md) * n / (n - 1.0));
-            row.gain = md;
-            row.z = md / std::sqrt(var / n);
-        }
-        if (K == 1) {
-            prev_ll = ll;
-        } else if (row.valid > best_v && row.z > cfg.k_select_z &&
-                   row.gain * n >= cfg.k_select_min_gain) {
-            // more distinct donors AND the held-out likelihood really improved: a component that
-            // only fragments a donor (e.g. by cell type, whose SNP coverage differs) passes the
-            // distinctness test but does not predict held-out cells better.
-            best_v = row.valid; prev_ll = ll; stall = 0; row.accepted = true;
+    std::vector<double> prev_ll;
+    int best_v = 1, stall = 0;
+    bool stopped = false;
+
+    for (int K0 = 1; K0 <= kmax && !stopped; K0 += wave) {
+        const int K1 = std::min(kmax, K0 + wave - 1);
+        std::vector<KEval> ev(K1 - K0 + 1);
+        if (K1 == K0) {
+            eval_k(K0, ev[0]);
         } else {
-            ++stall;
+            std::vector<std::thread> ts;
+            for (int K = K0 + 1; K <= K1; ++K) ts.emplace_back(eval_k, K, std::ref(ev[K - K0]));
+            eval_k(K0, ev[0]);
+            for (auto& t : ts) t.join();
         }
-        row.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tk).count();
-        std::cerr << "[demux] auto-K K=" << K << ": held-out ll/cell=" << mean
-                  << " gain=" << row.gain << " z=" << row.z << " distinct donors=" << valid_f[0]
-                  << "/" << valid_f[1] << (row.accepted ? " *" : "") << " (" << row.seconds << " s)\n";
-        if (trace) trace->push_back(row);
-        if (stall >= cfg.k_select_patience) break;
+        for (int K = K0; K <= K1 && !stopped; ++K) {
+            const std::vector<double>& ll = ev[K - K0].ll;
+            const int* valid_f = ev[K - K0].valid_f;
+            double mean = 0.0;
+            for (double v : ll) mean += v;
+            mean /= n;
+            KSelectRow row;
+            row.K = K; row.ll_per_cell = mean;
+            row.valid = std::min(valid_f[0], valid_f[1]);
+            if (!prev_ll.empty()) {   // paired gain over the best accepted model so far
+                double md = 0.0, m2 = 0.0;
+                for (int i = 0; i < n; ++i) {
+                    const double dd = ll[i] - prev_ll[i];
+                    md += dd; m2 += dd * dd;
+                }
+                md /= n;
+                const double var = std::max(1e-12, (m2 / n - md * md) * n / (n - 1.0));
+                row.gain = md;
+                row.z = md / std::sqrt(var / n);
+            }
+            if (K == 1) {
+                prev_ll = ll;
+            } else if (row.valid > best_v && row.z > cfg.k_select_z &&
+                       row.gain * n >= cfg.k_select_min_gain) {
+                // more distinct donors AND the held-out likelihood really improved: a component that
+                // only fragments a donor (e.g. by cell type, whose SNP coverage differs) passes the
+                // distinctness test but does not predict held-out cells better.
+                best_v = row.valid; prev_ll = ll; stall = 0; row.accepted = true;
+            } else {
+                ++stall;
+            }
+            row.seconds = ev[K - K0].seconds;
+            std::cerr << "[demux] auto-K K=" << K << ": held-out ll/cell=" << mean
+                      << " gain=" << row.gain << " z=" << row.z << " distinct donors=" << valid_f[0]
+                      << "/" << valid_f[1] << (row.accepted ? " *" : "") << " (" << row.seconds << " s)\n";
+            if (trace) trace->push_back(row);
+            if (stall >= cfg.k_select_patience) stopped = true;
+        }
     }
     std::cerr << "[demux] auto-K: selected K=" << best_v << " in "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
               << " s\n";
     return best_v;
+}
+
+// Cheap single-donor screen: held-out K=1 against K=2 only, on at most screen_max_cells called
+// cells and the reduced SNP set. Returns true when K=1 wins (K=2 is not accepted).
+static bool screen_single_donor_k1(const CoveredSNPData& cov, const DonorDemuxConfig& cfg)
+{
+    DonorDemuxConfig scfg = cfg;
+    scfg.max_donors = 2;
+    scfg.k_select_max_cells = cfg.screen_max_cells;
+    scfg.k_select_patience = 1;
+    std::vector<KSelectRow> trace;
+    return select_k_heldout(cov, scfg, &trace) <= 1;
 }
 
 // ============================================================================
@@ -2050,6 +2289,7 @@ struct DemuxResult {
     std::vector<KSelectRow> k_selection;           // auto-K trace (empty when K was given)
     int n_doublets = 0;                            // called cells labelled "doublet"
     float geno_error = 0.0f;                       // fitted per-read genotype error (doublet model)
+    bool screened_single = false;                  // K=1 chosen by the single-donor screen
 };
 
 // ============================================================================
@@ -2066,6 +2306,7 @@ inline DemuxResult run_demux(
 {
     std::cerr << "[demux] Starting donor demultiplexing: "
               << n_snps << " SNPs, " << n_cells << " cells\n";
+    for (int i = 0; i < kPhCount; ++i) demux_phase_ns()[i].store(0);
 
     auto cov = extract_covered_snps(n_snps, n_cells,
         ad_indptr, ad_indices, ad_data,
@@ -2144,6 +2385,11 @@ inline DemuxResult run_demux(
     std::vector<int> k_candidates;
     if (cfg.n_donors > 0) {
         k_candidates.push_back(cfg.n_donors);
+    } else if (cfg.fast_k_select && cfg.screen_single_donor && screen_single_donor_k1(cov_use, cfg)) {
+        // The screen found one donor: fit K=1 directly (same path as an auto-K result of 1)
+        std::cerr << "[demux] single-donor screen: K=1 beats K=2, skipping the full K search\n";
+        k_candidates.push_back(1);
+        demux_result.screened_single = true;
     } else if (cfg.fast_k_select) {
         // Held-out likelihood search (see select_k_heldout)
         k_candidates.push_back(select_k_heldout(cov_use, cfg, &demux_result.k_selection));
@@ -2375,6 +2621,12 @@ inline DemuxResult run_demux(
                   << n_unassigned_ambient << " unassigned\n";
     }
 
+    if (const char* pe = std::getenv("SINGLET_DEMUX_PROFILE"); pe && std::atoi(pe) != 0) {
+        std::cerr << "[demux] profile (thread-seconds):";
+        for (int i = 0; i < kPhCount; ++i)
+            std::cerr << " " << kDemuxPhaseName[i] << "=" << static_cast<double>(demux_phase_ns()[i].load()) * 1e-9;
+        std::cerr << "\n";
+    }
     demux_result.assignments = std::move(assignments);
     // Move beta arrays after back-assignment is complete (d1a/d2a/d12a hold copies)
     demux_result.beta_mu             = std::move(best_result.beta_mu);
@@ -2385,6 +2637,151 @@ inline DemuxResult run_demux(
     demux_result.n_donors_k = best_k;
     demux_result.n_doublets = n_doublet_cells;
     return demux_result;
+}
+
+// ============================================================================
+// Barnyard demux: one model per species.
+//
+// On the human + mouse barnyard reference the SNP panel holds both species (contigs GRCh38___* and GRCm39___*). A human cell
+// covers only human SNPs and a mouse cell only mouse SNPs, so one mixture component can carry a human genotype and a mouse
+// genotype at once and explain a human line and a mouse line together: extra components add no likelihood and the K search
+// cannot see the extra lines (GSM4987148, two human + two mouse lines: 3 donors, each pairing a human with a mouse line).
+// Here each barcode gets a species from its SNP depth, the demux runs once per species on that species' SNPs and called
+// cells, called cells with depth in both species are cross-species doublets, and the donor ids are concatenated (human
+// first). Any other panel goes straight to run_demux, so single-species outputs are unchanged.
+// ============================================================================
+inline int snp_species_of(const std::string& name) {
+    if (name.rfind("GRCh38___", 0) == 0) return 0;
+    if (name.rfind("GRCm39___", 0) == 0) return 1;
+    return -1;
+}
+
+inline DemuxResult make_single_donor_result(
+    uint32_t n_snps, uint32_t n_cells,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data);
+
+inline DemuxResult run_demux_by_species(
+    uint32_t n_snps, uint32_t n_cells,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data, uint64_t ad_nnz,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data, uint64_t dp_nnz,
+    const DonorDemuxConfig& cfg, const std::vector<uint32_t>& cell_indices,
+    const std::vector<std::string>& snp_names,
+    float species_min_share = 0.9f)    // share of a barcode's SNP depth that names its species; below it in both: mixed
+{
+    std::vector<int8_t> sp_of(n_snps, -1);
+    uint32_t n_sp[2] = {0, 0};
+    if (snp_names.size() == n_snps)
+        for (uint32_t i = 0; i < n_snps; ++i) {
+            sp_of[i] = static_cast<int8_t>(snp_species_of(snp_names[i]));
+            if (sp_of[i] >= 0) ++n_sp[sp_of[i]];
+        }
+    if (n_sp[0] == 0 || n_sp[1] == 0)
+        return run_demux(n_snps, n_cells, ad_indptr, ad_indices, ad_data, ad_nnz,
+                         dp_indptr, dp_indices, dp_data, dp_nnz, cfg, cell_indices);
+
+    // species of each barcode from its SNP depth
+    std::vector<uint64_t> dps[2] = {std::vector<uint64_t>(n_cells, 0), std::vector<uint64_t>(n_cells, 0)};
+    for (uint32_t c = 0; c < n_cells; ++c)
+        for (int32_t k = dp_indptr[c]; k < dp_indptr[c + 1]; ++k) {
+            const int s = sp_of[static_cast<uint32_t>(dp_indices[k])];
+            if (s >= 0) dps[s][c] += dp_data[k];
+        }
+    std::vector<int8_t> cell_sp(n_cells, -1);   // 0 human, 1 mouse, 2 mixed, -1 no depth
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        const double h = static_cast<double>(dps[0][c]), m = static_cast<double>(dps[1][c]);
+        if (h + m <= 0) continue;
+        cell_sp[c] = h >= species_min_share * (h + m) ? 0 : (m >= species_min_share * (h + m) ? 1 : 2);
+    }
+    std::vector<uint8_t> is_called(n_cells, cell_indices.empty() ? 1 : 0);
+    for (uint32_t j : cell_indices) if (j < n_cells) is_called[j] = 1;
+    std::vector<uint32_t> called_sp[2];
+    uint32_t n_mixed_called = 0;
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        if (!is_called[c]) continue;
+        if (cell_sp[c] == 0 || cell_sp[c] == 1) called_sp[cell_sp[c]].push_back(c);
+        else if (cell_sp[c] == 2) ++n_mixed_called;
+    }
+    std::cerr << "[demux] barnyard panel (" << n_sp[0] << " human, " << n_sp[1] << " mouse SNPs): called cells human="
+              << called_sp[0].size() << " mouse=" << called_sp[1].size() << " cross-species=" << n_mixed_called
+              << "; one model per species\n";
+
+    // row subset of a CSC (SNP rows x barcode columns)
+    auto subset = [&](int s, const int32_t* ip, const int32_t* ix, const uint16_t* dt, const std::vector<int32_t>& rmap,
+                      std::vector<int32_t>& oip, std::vector<int32_t>& oix, std::vector<uint16_t>& odt) {
+        oip.assign(n_cells + 1, 0);
+        for (uint32_t c = 0; c < n_cells; ++c) {
+            for (int32_t k = ip[c]; k < ip[c + 1]; ++k) {
+                const uint32_t r = static_cast<uint32_t>(ix[k]);
+                if (sp_of[r] == s) { oix.push_back(rmap[r]); odt.push_back(dt[k]); }
+            }
+            oip[c + 1] = static_cast<int32_t>(oix.size());
+        }
+    };
+    DemuxResult part[2];
+    std::vector<int32_t> sub_to_orig[2];
+    for (int s = 0; s < 2; ++s) {
+        std::vector<int32_t> rmap(n_snps, -1);
+        for (uint32_t r = 0; r < n_snps; ++r)
+            if (sp_of[r] == s) { rmap[r] = static_cast<int32_t>(sub_to_orig[s].size()); sub_to_orig[s].push_back(static_cast<int32_t>(r)); }
+        std::vector<int32_t> aip, aix, dip, dix; std::vector<uint16_t> adt, ddt;
+        subset(s, ad_indptr, ad_indices, ad_data, rmap, aip, aix, adt);
+        subset(s, dp_indptr, dp_indices, dp_data, rmap, dip, dix, ddt);
+        const uint32_t ns = static_cast<uint32_t>(sub_to_orig[s].size());
+        const size_t min_fit = static_cast<size_t>(2 * cfg.min_donor_cells);
+        std::cerr << "[demux] species " << (s == 0 ? "human" : "mouse") << ": " << called_sp[s].size() << " called cells\n";
+        if (called_sp[s].empty()) { part[s].n_donors_k = 0; part[s].assignments.assign(n_cells, {-1, 0.0f, 0.0f, "unassigned", "cell"}); continue; }
+        if (called_sp[s].size() < min_fit || cfg.n_donors == 1)
+            part[s] = make_single_donor_result(ns, n_cells, aip.data(), aix.data(), adt.data(), dip.data(), dix.data(), ddt.data());
+        else
+            part[s] = run_demux(ns, n_cells, aip.data(), aix.data(), adt.data(), aix.size(),
+                                dip.data(), dix.data(), ddt.data(), dix.size(), cfg, called_sp[s]);
+    }
+
+    // merge: human donors 0..Kh-1, mouse donors Kh..Kh+Km-1
+    const int Kh = part[0].n_donors_k, Km = part[1].n_donors_k, K = Kh + Km;
+    DemuxResult out;
+    out.n_donors_k = K;
+    out.assignments.resize(n_cells);
+    int n_dbl = 0, n_asg = 0, n_un = 0;
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        DonorAssignment a{K, 0.0f, 0.0f, "unassigned", is_called[c] ? "cell" : "ambient"};
+        if (cell_sp[c] == 2 && is_called[c]) {
+            a.prob_doublet = 1.0f; a.label = "doublet";
+        } else if (cell_sp[c] == 0 || cell_sp[c] == 1) {
+            const int s = cell_sp[c], off = s == 0 ? 0 : Kh;
+            a = part[s].assignments[c];
+            auto sh = [&](int d) { return d >= 0 && d < part[s].n_donors_k ? d + off : (d >= 0 ? K : d); };
+            a.donor_id = sh(a.donor_id);
+            a.best_singlet = a.best_singlet >= 0 ? a.best_singlet + off : -1;
+            a.doublet_a = a.doublet_a >= 0 ? a.doublet_a + off : -1;
+            a.doublet_b = a.doublet_b >= 0 ? a.doublet_b + off : -1;
+            if (a.donor_id >= 0 && a.donor_id < K) a.label = "donor" + std::to_string(a.donor_id);
+            a.cell_status = is_called[c] ? "cell" : "ambient";
+        } else if (cell_sp[c] < 0) {
+            a.donor_id = -1;
+        }
+        if (is_called[c]) { if (a.label == "doublet") ++n_dbl; else if (a.label == "unassigned") ++n_un; else ++n_asg; }
+        out.assignments[c] = std::move(a);
+    }
+    for (int s = 0; s < 2; ++s) {
+        const int off = s == 0 ? 0 : Kh;
+        for (size_t j = 0; j < part[s].covered_to_original.size(); ++j) {
+            out.covered_to_original.push_back(sub_to_orig[s][static_cast<size_t>(part[s].covered_to_original[j])]);
+            std::vector<float> mu(static_cast<size_t>(K), 0.5f), sm(static_cast<size_t>(K), 0.0f);
+            for (int k = 0; k < part[s].n_donors_k; ++k) {
+                if (j < part[s].beta_mu.size() && k < static_cast<int>(part[s].beta_mu[j].size())) mu[static_cast<size_t>(k + off)] = part[s].beta_mu[j][k];
+                if (j < part[s].beta_sum.size() && k < static_cast<int>(part[s].beta_sum[j].size())) sm[static_cast<size_t>(k + off)] = part[s].beta_sum[j][k];
+            }
+            out.beta_mu.push_back(std::move(mu)); out.beta_sum.push_back(std::move(sm));
+        }
+        for (const auto& row : part[s].k_selection) out.k_selection.push_back(row);
+    }
+    out.n_doublets = n_dbl;
+    out.geno_error = part[0].geno_error > 0 ? part[0].geno_error : part[1].geno_error;
+    std::cerr << "[demux] barnyard merge: K=" << K << " (human " << Kh << ", mouse " << Km << "); called cells " << n_asg
+              << " assigned, " << n_dbl << " doublet (" << n_mixed_called << " cross-species), " << n_un << " unassigned\n";
+    return out;
 }
 
 // ============================================================================

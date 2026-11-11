@@ -9,10 +9,12 @@
 // See INTEGRATION_NOTES.md for singlet.cpp wiring instructions.
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -46,6 +48,9 @@ struct ProvenanceConfig {
     bool        cascade_enabled     = false;
     std::string cascade_mode        = "off";       ///< off, on, auto
     std::string te_classify_mode    = "off";       ///< off, on
+    // D-101: the storage rule of the private all-site member and demux's donor count (allsite_store.h); no genotype information
+    std::string allsite_store_rule;                ///< empty: no all-site member
+    int         allsite_n_donors    = 0;
 };
 
 /// Write {out_prefix}/provenance.json.
@@ -193,6 +198,8 @@ inline void write_provenance_json(
       << "  },\n";
 
     f << "  \"cell_caller\": \""       << esc(prov.cell_caller) << "\",\n";
+    if (!prov.allsite_store_rule.empty())
+        f << "  \"allsite_store\": {\"rule\": \"" << esc(prov.allsite_store_rule) << "\", \"n_donors\": " << prov.allsite_n_donors << "},\n";
 
     // output block
     f << "  \"output\": {\n"
@@ -210,6 +217,37 @@ inline void write_provenance_json(
 
     f << "  \"output_schema_version\": \"1.0\"\n"
       << "}\n";
+}
+
+/// provenance.json's "run" block: the run metadata in one place, with a note that it varies between runs of the same input
+/// (timestamp, host, timings, peak RSS, the output inventory with bytes_public). `fields` is the block's members as JSON text
+/// ("\"a\": 1, \"b\": {...}"). The top-level timestamp, host and timings stay where they are for older readers. The block is added
+/// at the end of the run, once the inventory is known. Returns false when provenance.json is missing or not a JSON object.
+inline bool add_provenance_run_block(const std::string& out_prefix, const std::string& fields) {
+    const std::string path = out_prefix + "/provenance.json";
+    std::string s;
+    {
+        std::ifstream in(path);
+        if (!in) return false;
+        s.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    }
+    size_t end = s.find_last_not_of(" \t\r\n");
+    if (end == std::string::npos || s[end] != '}') return false;
+    size_t body = s.find_last_not_of(" \t\r\n", end - 1);
+    if (body == std::string::npos) return false;
+    const bool empty = s[body] == '{';
+    std::string out = s.substr(0, body + 1);
+    out += empty ? "\n" : ",\n";
+    out += "  \"run\": {\"note\": \"run metadata: describes the run that wrote these files and varies between runs of the same input; "
+           "not data\", " + fields + "}\n}\n";
+    const std::string tmp = path + ".tmp";
+    {
+        std::ofstream o(tmp);
+        if (!o) return false;
+        o << out;
+        if (!o.good()) return false;
+    }
+    return std::rename(tmp.c_str(), path.c_str()) == 0;
 }
 
 } // namespace singlet

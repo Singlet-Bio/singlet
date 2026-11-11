@@ -88,13 +88,19 @@ add_pileup_test(test_saturation_curve)
 add_pileup_test(test_splice_psi)
 add_pileup_test(test_sj_unique_only)
 add_pileup_test(test_em_rescue)
+add_pileup_test(test_multimap_record)   # the multi-mapping record: two-gene reads, serial = parallel, the classes x barcodes matrix
 add_pileup_test(test_molecule_labels)
+add_pileup_test(test_rna_editing)      # D-101: REDIportal editing rows ride the SNP pileup and split off before every SNP consumer
+add_pileup_test(test_chimeric_table)
 add_pileup_test(test_csc_add_signed)   # the uint16 cap of the pre-USA exon / intron split (csc_add_signed, mixed molecules past 65535)
 add_pileup_test(test_umi_store_scale)
 add_pileup_test(test_umi_deep_roots)
 add_pileup_test(test_umi_consume)
+add_pileup_test(test_umi_staging)
 add_pileup_test(test_umi_seeds)         # SINGLET_UMI_COLLAPSE=seed: order-free seed-based directional collapse
 add_pileup_test(test_mt_numt_tie)
+add_pileup_test(test_gene_full_set)
+add_pileup_test(test_exon_precedence)   # intron_rule::kExonPrecedence: exonic alignments of a multimapper take precedence; order-free
 add_pileup_test(test_pileup_workers)   # run_parallel: counts independent of the worker count
 # GPU pileup vs CPU pileup (labels, kFlank, legacy_exon_extra) under intron rules 397 and 389. Built in every configuration; it prints SKIP
 # and exits 77 (ctest: skipped) in a CPU-only build or without a usable CUDA device. The GPU engine library exists when the pipeline is built
@@ -105,8 +111,39 @@ if(TARGET singlet_engine_gpu)
     target_link_libraries(test_gpu_pileup_labels PRIVATE singlet_engine_gpu)
     target_compile_definitions(test_gpu_pileup_labels PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
+# TE molecules from the GPU route's host pass against the CPU pileup (te_counts, te_locus_counts, the locus table, the totals). Same
+# conditions as the test above: SKIP (77) without a GPU build, a CUDA device or samtools.
+add_pileup_test(test_gpu_pileup_te)
+set_tests_properties(test_gpu_pileup_te PROPERTIES SKIP_RETURN_CODE 77)
+if(TARGET singlet_engine_gpu)
+    target_link_libraries(test_gpu_pileup_te PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_pileup_te PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
+# Solo's two-pass counting (read chunks, key buckets; e9::soloRunTwoPass) against the one-shot device path on synthetic reads, field by field.
+# Built where the GPU engine library exists (a pipeline build with a CUDA compiler); prints SKIP and exits 77 without a usable CUDA device.
+if(TARGET singlet_engine_gpu)
+    add_pileup_test(test_gpu_solo_twopass)
+    set_tests_properties(test_gpu_solo_twopass PROPERTIES SKIP_RETURN_CODE 77)
+    target_link_libraries(test_gpu_solo_twopass PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_solo_twopass PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
 add_pileup_test(test_strand_detect)
 add_pileup_test(test_stream_strand_restart)
+# Gate 800361: the restart on the sorted path must start from main()'s environment (no GPU hand-off), remove the hand-off files and
+# never list them; a pileup far below STAR's uniquely mapped reads fails the run (run_restart.h).
+add_pileup_test(test_strand_restart_env)
+# The same restart through the singlet binary (SINGLET_TEST_FORCE_STRAND_RESTART=1): CPU engine, and with a GPU build also --engine gpu
+# with SINGLET_GPU_PILEUP=on, compared with the CPU run. Needs SINGLET_E2E_1FQ and SINGLET_E2E_GENOME; skipped (77) without them.
+if(TARGET singlet)
+    if(TARGET singlet_engine_gpu)
+        set(_restart_e2e_mode gpu)
+    else()
+        set(_restart_e2e_mode cpu)
+    endif()
+    add_test(NAME test_strand_restart_e2e
+             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test_strand_restart_e2e.sh $<TARGET_FILE:singlet> ${_restart_e2e_mode})
+    set_tests_properties(test_strand_restart_e2e PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
+endif()
 add_pileup_test(test_run_screen)
 add_pileup_test(test_tpm_fpkm)
 add_pileup_test(test_atac_peaks)
@@ -146,6 +183,7 @@ add_pileup_test(test_txome_aligner)
 add_pileup_test(test_nonhost)
 add_pileup_test(test_min_sketch_mmap)
 add_pileup_test(test_nonhost_aligner)
+add_pileup_test(test_nonhost_calibration)
 add_pileup_test(test_nonhost_cell_matrix)
 add_pileup_test(test_nonhost_confirmed_reads)
 add_pileup_test(test_nonhost_db_build)
@@ -185,6 +223,7 @@ add_pileup_test(test_mirna)
 add_pileup_test(test_slamseq)
 add_pileup_test(test_te_classifier)
 add_pileup_test(test_te_counter)
+add_pileup_test(test_te_counts)
 add_pileup_test(test_vdj_assembly)
 add_pileup_test(test_scdna_cnv)
 add_pileup_test(test_hic_contacts)
@@ -237,11 +276,25 @@ add_pileup_test(test_te_kmer_integration)
 add_pileup_test(test_txome_gene_index)
 add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
+add_pileup_test(test_hla_typing)       # D-101: the HLA prefilter keeps every read T1K counts; donor rule; genotype JSON
 add_pileup_test(test_read_source)   # read_source.h: shared .1fq decoder, STAR chunk source
 add_pileup_test(test_fastq_encoder_r1_101)
+add_pileup_test(test_encode_autodetect_whitelist)
+add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
 add_pileup_test(test_donor_genotype_call)
+add_pileup_test(test_genotype_export)
+add_pileup_test(test_allsite)
+add_pileup_test(test_allsite_store)
+# The all-site pass's device route against the host pass (allsite_device.h); SKIP (77) without a GPU build or a CUDA device.
+add_pileup_test(test_allsite_gpu)
+set_tests_properties(test_allsite_gpu PROPERTIES SKIP_RETURN_CODE 77)
+if(TARGET singlet_engine_gpu)
+    target_link_libraries(test_allsite_gpu PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_allsite_gpu PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
+add_pileup_test(test_allsite_kernel)
 add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
 add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
 add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features
@@ -256,6 +309,7 @@ target_compile_definitions(test_whitelist_integrity PRIVATE
     WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 add_pileup_test(test_ws2_protocol_hardening)
 add_pileup_test(test_protocol_short_barcode_read)
+add_pileup_test(test_protocol_forced_only)
 add_pileup_test(test_protocol_untrimmed_r1)
 add_pileup_test(test_ws4_crash_diagnostics)
 add_pileup_test(test_bam_sort_budget)

@@ -27,7 +27,10 @@ Values must be non-negative integers below 2^32.}
 
 \item{member}{Name of the matrix member.}
 
-\item{gene_pack}{\code{NULL} to store gene ids inline, or the 16-hex-character id of a vocabulary pack that holds them.}
+\item{gene_pack}{\code{NULL} to store gene ids inline, or the id of a vocabulary pack (at least 16 hex characters)
+that holds them, stored as a reference instead. The row names must be the pack's gene table in order (a gene-level
+matrix) or its rows in order (an exon-level matrix); anything else is an error. The pack is read from the cache, or
+downloaded from data.singlet.bio and checked against its sha256.}
 
 \item{threads}{Encoder threads (the output does not depend on it).}
 }

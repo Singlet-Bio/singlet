@@ -2,7 +2,56 @@
 
 All notable changes to the singlet project.
 
-## [Unreleased]
+## [1.3.5] — the Research Beta freeze (date set at the tag)
+
+The launch candidate of the Research Beta engine, on top of `main` at 1.3.4. The client APIs are those of 1.3.4 plus the
+additions below. Every entry derives from a merged change.
+
+- **Engine.** The all-site pass has a device route (discovery and counting on the GPU, with a host fallback), the GPU pool
+  shares one device index by default, and the stream loop stages UMIs in a flat table. New intron rules add chrM
+  precedence, transcript compatibility and STARsolo Gene's gene set (the default set is 61837). Whitelist lookup follows one
+  order for encode, download and run. Chimeric junctions carry transcript-strand names, a canonical call set, the Arriba
+  blacklist and a recurrent flag. TE counts, allele outputs, RNA editing and HLA typing (by chemistry, 3' on the node and
+  5' deferred) are folded in, the B20 confidence policy is applied, and the V(D)J IG barcode floor is added with its
+  preregistered addenda. The nonhost cache copy runs in-process instead of through `cp`.
+- **Clients.** Atlas readers take `io_threads` in Python (#89) and R (#90); `write_s1(gene_pack=)` writes files that read
+  back (#187); cell lines carry their line as cell type; a truncated range body is requested again, `load_sample` falls back
+  to `load`, and `~/.singlet/api_key` is read (issue 73). A `CITATION.cff` and how-to-cite sections are added (#103).
+- **CI.** Python 3.9 runs on `ubuntu-24.04` (#188); `actions/checkout`, `cibuildwheel` and `download-artifact` are updated
+  (#183 to #185).
+- **Removed.** The retired `singlepress` extension, `singlet.derive`, and the unused `singlet.adt.chemistry` and
+  `singlet.adt.gex` modules.
+
+### Also in this release
+
+- **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
+  the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
+  default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and
+  `cell_type_ontology_term_id` = its Cellosaurus id (or `cultured cell` / `CL:0000010` when the GEO record does not name the
+  line); level 0, no score, no path. Python `singlet.s1.sample_facts.relabel_cell_lines`, R `load()` / `singlet_cells()`, as on
+  singlet.bio. `sample_facts=False` keeps the labeller's calls.
+- **Run metadata is kept apart from data** (summary.json schema 1.2). `memory_tier` described the process that ran, bucketed
+  from its peak RSS, so two runs of the same input near a tier boundary wrote different summary.json files. It now lives in
+  `private/run_metadata.json` with the peak RSS and the timings; summary.json keeps `peak_rss_gb` and its timing keys where they
+  were. `provenance.json` gains a `run` block (timestamp, host, timings, peak RSS and the output inventory with `bytes_public`)
+  whose note says these vary between runs. `--memory-tier` still sets the value, now written to the private file.
+- **`read_stats.tsv` uses one set of definitions on every input route.** The align row's `reads_in` is the number of reads
+  given to STAR (the stored reads of the `.1fq` input), and its `reads_out` counts mapped reads without secondary alignments.
+  The CPU FIFO and STAR-ingest routes used to fall back to the number of BAM records, which also counts multimapped
+  secondaries, so the same sample showed a larger `reads_in` there than on the GPU route.
+- **The content probe sees the same reads on every decode route.** The ingest route sampled one read per stride, while the
+  decode routes offered every read to the content-hash sampler; both now offer every read, so the probe's read set (and
+  everything derived from it) matches between routes.
+- **`write_s1(gene_pack=)` writes files that read back, and refuses ids it would lose (Python and R).** The member meta
+  had no `names.rows`, so a reader took a gene-level matrix's rows to be the pack's exon rows. `read_s1` then failed
+  with "vocabulary pack ... is not installed", even with the pack installed. Ids that were not the pack's were accepted
+  and silently replaced by the pack's names.
+  - `write_s1` now resolves the pack: installed, or downloaded from data.singlet.bio. It accepts the ids only if they
+    equal the pack's gene table (`names.rows.member` `"genes"`) or its rows (the pack's member, such as `"exon"`). Any
+    other ids, or a pack it cannot find, raise `ValueError` (an error in R).
+  - `read_s1` reports a row count that does not fit the pack as that, not as a missing pack.
+  - Files written with gene-level ids and a pack by 1.3.3 or earlier have no `names.rows`, so they read only with
+    `genes=`.
 
 ## [1.3.4] — 2026-11-06: the production engine on `main`
 
@@ -72,6 +121,22 @@ and R client APIs are unchanged from 1.3.3.
     eight.
   - `S1Cells(prefetch=1)` reads the next batch ahead on a background thread.
   - `S2Reader`'s request and byte counters are safe to update from several threads.
+- **The atlas readers send their range requests together** (`singlet.load`, `Study.to_anndata` / `Study.cells`,
+  `atlas.gather(via="direct")`, `singlet.torch.AtlasCells`, `download_study`). Every member, chunk run and sample object is
+  addressable on its own, and over HTTP each request mostly waits a round trip (20-100 ms to the first byte on R2 or S3).
+  - New option `io_threads`: requests one read keeps in flight. `"auto"` (default) is 8 over HTTP and 1 for a local directory;
+    1 sends them one at a time. It is separate from the decode `threads`.
+  - One budget covers a read's samples and their chunk runs. Over HTTP a study read handles `io_threads` samples at once
+    (`concurrency` still overrides). `AtlasCells` shares one budget across its `prefetch` readers.
+  - In the two-phase plan, members whose prefix stops short of the chunk index are now topped up together, not one after
+    another.
+  - At most `$SINGLET_MAX_CONNECTIONS` (default 16) HTTP requests are in flight per process. They run on one shared pool, so a
+    `Study` no longer keeps a pool of its own threads.
+  - Measured from Clipper against data.singlet.bio (GSE281106): 1,024 cells from 64 samples (128 range requests) took 11.5 s at
+    `io_threads=1`, 3.0 s at 8 and 3.7 s before this change.
+- **The atlas HTTP transport accepts a range answered with status 200** when the response carries a `Content-Range` that names
+  exactly the requested bytes, as `S1Stream` does. The size and ETag checks still apply. A server that ignores `Range`
+  and sends the whole object is still refused.
 - **Cell lines carry their line as cell type.** The labeller was trained on primary tissue, so on a cultured cell line it gave
   the nearest primary type, often wrong (K-562 cells came out as "transit amplifying cell"). With sample facts on (the
   default), every cell of a cell-line sample now has `cell_type` / `cell_type_deepest` = the line's name and

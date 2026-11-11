@@ -1,0 +1,65 @@
+{
+ "dataset": "neuron1k_v3",
+ "label": "rules-off",
+ "singlet_run": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/runs/neuron1k_v3/mc96off",
+ "n_cells": 1258,
+ "n_genes": 78298,
+ "unspliced_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9822258737143763,
+   "spearman": 0.9693302490470781
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.9610898634894248,
+   "spearman": 0.9293759614702017
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9701957272787828,
+   "spearman": 0.9480841804519191
+  }
+ },
+ "spliced_ambiguous_pooled_gene_r": {
+  "singlet~starsolo": {
+   "pearson_log1p": 0.9169532713272809,
+   "spearman": 0.8537519610674126
+  },
+  "singlet~alevinfry": {
+   "pearson_log1p": 0.97424624768181,
+   "spearman": 0.9505506554438081
+  },
+  "starsolo~alevinfry": {
+   "pearson_log1p": 0.9157368189989699,
+   "spearman": 0.8605725715254366
+  }
+ },
+ "unspliced_cell_median_r": {
+  "singlet~starsolo": 0.9540450156837053,
+  "singlet~alevinfry": 0.9276916164529875,
+  "starsolo~alevinfry": 0.9472474714221573
+ },
+ "layer_shares": {
+  "singlet": {
+   "S": 0.6687085619164871,
+   "U": 0.3213366648531515,
+   "A": 0.009954773230361447,
+   "umi": 21540119.0
+  },
+  "starsolo": {
+   "S": 0.5746121897771622,
+   "U": 0.35886267400473265,
+   "A": 0.06652513621810516,
+   "umi": 20027257.0
+  },
+  "alevinfry": {
+   "S": 0.1461987114870829,
+   "U": 0.35022832374872503,
+   "A": 0.503572964764192,
+   "umi": 20751674.0
+  }
+ },
+ "unspliced_fraction": {
+  "singlet": 0.3213366648531515,
+  "starsolo": 0.35886267400473265,
+  "alevinfry": 0.35022832374872503
+ }
+}

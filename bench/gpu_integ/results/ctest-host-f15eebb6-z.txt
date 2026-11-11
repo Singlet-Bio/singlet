@@ -1,0 +1,322 @@
+host glibc: ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39
+Test project /tmp/debruinz-ct-801022/t
+        Start   1: test_pz_reader
+        Start   2: test_pz_hardening
+        Start   3: test_pz2_api
+        Start   4: test_pz2_edge
+        Start   5: test_pz2_roundtrip
+        Start   6: test_pz2_multi_tu
+        Start   7: test_cell_calling
+        Start   8: test_called_v2
+        Start   9: test_barcode_rank
+        Start  10: test_cell_qc
+        Start  11: test_tiny_dataset_guard
+        Start  12: test_barcode_metrics
+        Start  13: test_mega_sort_params
+        Start  14: test_bus_writer
+        Start  15: test_transcript_compat
+        Start  16: test_barnyard
+        Start  17: test_barnyard_route
+        Start  18: test_doublet_scores
+        Start  19: test_saturation_curve
+        Start  20: test_splice_psi
+        Start  21: test_sj_unique_only
+        Start  22: test_em_rescue
+        Start  23: test_molecule_labels
+        Start  24: test_csc_add_signed
+  1/156 Test   #1: test_pz_reader ......................   Passed    0.04 sec
+  2/156 Test   #3: test_pz2_api ........................   Passed    0.04 sec
+  3/156 Test   #5: test_pz2_roundtrip ..................   Passed    0.04 sec
+  4/156 Test   #6: test_pz2_multi_tu ...................   Passed    0.04 sec
+  5/156 Test   #9: test_barcode_rank ...................   Passed    0.03 sec
+  6/156 Test  #10: test_cell_qc ........................   Passed    0.03 sec
+  7/156 Test  #11: test_tiny_dataset_guard .............   Passed    0.03 sec
+  8/156 Test  #12: test_barcode_metrics ................   Passed    0.03 sec
+  9/156 Test  #13: test_mega_sort_params ...............   Passed    0.02 sec
+ 10/156 Test  #14: test_bus_writer .....................   Passed    0.02 sec
+ 11/156 Test  #15: test_transcript_compat ..............   Passed    0.02 sec
+ 12/156 Test  #16: test_barnyard .......................   Passed    0.02 sec
+ 13/156 Test  #17: test_barnyard_route .................   Passed    0.02 sec
+ 14/156 Test  #18: test_doublet_scores .................   Passed    0.02 sec
+ 15/156 Test  #19: test_saturation_curve ...............   Passed    0.01 sec
+ 16/156 Test  #20: test_splice_psi .....................   Passed    0.01 sec
+ 17/156 Test  #22: test_em_rescue ......................   Passed    0.01 sec
+        Start  25: test_umi_store_scale
+        Start  26: test_umi_deep_roots
+        Start  27: test_umi_consume
+        Start  28: test_umi_seeds
+        Start  29: test_mt_numt_tie
+        Start  30: test_pileup_workers
+        Start  31: test_gpu_pileup_labels
+        Start  32: test_strand_detect
+        Start  33: test_stream_strand_restart
+        Start  34: test_run_screen
+        Start  35: test_tpm_fpkm
+        Start  36: test_atac_peaks
+        Start  37: test_protocol_confidence_override
+        Start  38: test_stall_watchdog
+        Start  39: test_nonhost_sample
+        Start  40: test_atac_fragment
+        Start  41: test_atac_peak_caller
+ 18/156 Test  #21: test_sj_unique_only .................   Passed    0.04 sec
+ 19/156 Test  #23: test_molecule_labels ................   Passed    0.04 sec
+ 20/156 Test  #31: test_gpu_pileup_labels ..............***Skipped   0.02 sec
+ 21/156 Test  #33: test_stream_strand_restart ..........   Passed    0.02 sec
+ 22/156 Test  #35: test_tpm_fpkm .......................   Passed    0.02 sec
+ 23/156 Test  #36: test_atac_peaks .....................   Passed    0.01 sec
+ 24/156 Test  #37: test_protocol_confidence_override ...   Passed    0.01 sec
+        Start  42: test_atac_metrics
+        Start  43: test_atac_bin_counter
+        Start  44: test_atac_qc
+        Start  45: test_atac_cell_caller
+        Start  46: test_atac_donor_demux
+        Start  47: test_atac_ancestry_sex
+        Start  48: test_bulk_atac
+ 25/156 Test  #29: test_mt_numt_tie ....................   Passed    0.04 sec
+ 26/156 Test  #39: test_nonhost_sample .................   Passed    0.02 sec
+ 27/156 Test  #41: test_atac_peak_caller ...............   Passed    0.02 sec
+ 28/156 Test  #42: test_atac_metrics ...................   Passed    0.01 sec
+ 29/156 Test  #43: test_atac_bin_counter ...............   Passed    0.01 sec
+ 30/156 Test  #44: test_atac_qc ........................   Passed    0.01 sec
+ 31/156 Test  #45: test_atac_cell_caller ...............   Passed    0.01 sec
+ 32/156 Test  #46: test_atac_donor_demux ...............   Passed    0.01 sec
+        Start  49: test_chipseq
+        Start  50: test_cuttag
+        Start  51: test_adt_counter
+        Start  52: test_adt_matcher
+        Start  53: test_hto_demux
+        Start  54: test_cellplex
+        Start  55: test_crispr_guide
+        Start  56: test_species_detect
+ 33/156 Test  #47: test_atac_ancestry_sex ..............   Passed    0.02 sec
+ 34/156 Test  #48: test_bulk_atac ......................   Passed    0.02 sec
+ 35/156 Test  #24: test_csc_add_signed .................   Passed    0.07 sec
+ 36/156 Test  #27: test_umi_consume ....................   Passed    0.06 sec
+ 37/156 Test  #49: test_chipseq ........................   Passed    0.02 sec
+ 38/156 Test  #50: test_cuttag .........................   Passed    0.01 sec
+ 39/156 Test  #51: test_adt_counter ....................   Passed    0.01 sec
+ 40/156 Test  #53: test_hto_demux ......................   Passed    0.01 sec
+ 41/156 Test  #54: test_cellplex .......................   Passed    0.01 sec
+        Start  57: test_species_registry
+        Start  58: test_alignment_qc
+        Start  59: test_sex_calling
+        Start  60: test_rrna_detect
+        Start  61: test_txome_aligner
+        Start  62: test_nonhost
+        Start  63: test_min_sketch_mmap
+        Start  64: test_nonhost_aligner
+        Start  65: test_nonhost_cell_matrix
+ 42/156 Test  #55: test_crispr_guide ...................   Passed    0.03 sec
+ 43/156 Test  #56: test_species_detect .................   Passed    0.03 sec
+ 44/156 Test  #52: test_adt_matcher ....................   Passed    0.04 sec
+ 45/156 Test  #40: test_atac_fragment ..................   Passed    0.06 sec
+ 46/156 Test  #57: test_species_registry ...............   Passed    0.02 sec
+ 47/156 Test  #58: test_alignment_qc ...................   Passed    0.02 sec
+ 48/156 Test  #59: test_sex_calling ....................   Passed    0.02 sec
+ 49/156 Test  #60: test_rrna_detect ....................   Passed    0.02 sec
+ 50/156 Test  #61: test_txome_aligner ..................   Passed    0.02 sec
+ 51/156 Test  #64: test_nonhost_aligner ................   Passed    0.01 sec
+        Start  66: test_nonhost_confirmed_reads
+        Start  67: test_nonhost_db_build
+        Start  68: test_nonhost_em
+        Start  69: test_nonhost_host_filter
+        Start  70: test_nonhost_unmapped_capture
+        Start  71: test_mtx_export
+        Start  72: test_velocity_export
+        Start  73: test_fragments_writer
+        Start  74: test_tagged_bam
+        Start  75: test_web_summary
+ 52/156 Test  #71: test_mtx_export .....................   Passed    0.02 sec
+        Start  76: test_summary_json
+ 53/156 Test  #65: test_nonhost_cell_matrix ............   Passed    0.04 sec
+ 54/156 Test  #62: test_nonhost ........................   Passed    0.06 sec
+ 55/156 Test  #26: test_umi_deep_roots .................   Passed    0.13 sec
+ 56/156 Test  #66: test_nonhost_confirmed_reads ........   Passed    0.04 sec
+ 57/156 Test  #67: test_nonhost_db_build ...............   Passed    0.04 sec
+ 58/156 Test  #72: test_velocity_export ................   Passed    0.03 sec
+        Start  77: test_doublet_detect_v2
+        Start  78: test_doublet_calibration
+        Start  79: test_ambient_profile
+        Start  80: test_read_dedup_stats
+        Start  81: test_donor_demux_perf
+        Start  82: test_wl_ambient
+ 59/156 Test  #75: test_web_summary ....................   Passed    0.03 sec
+ 60/156 Test  #25: test_umi_store_scale ................   Passed    0.15 sec
+ 61/156 Test  #68: test_nonhost_em .....................   Passed    0.06 sec
+        Start  83: test_ambient_realistic
+        Start  84: test_ambient_decontx
+        Start  85: test_sparse_accumulator
+ 62/156 Test  #76: test_summary_json ...................   Passed    0.04 sec
+ 63/156 Test  #63: test_min_sketch_mmap ................   Passed    0.09 sec
+ 64/156 Test  #73: test_fragments_writer ...............   Passed    0.05 sec
+ 65/156 Test  #74: test_tagged_bam .....................   Passed    0.05 sec
+ 66/156 Test  #79: test_ambient_profile ................   Passed    0.03 sec
+ 67/156 Test  #80: test_read_dedup_stats ...............   Passed    0.02 sec
+ 68/156 Test  #69: test_nonhost_host_filter ............   Passed    0.07 sec
+        Start  86: test_pseudocount_sensitivity
+        Start  87: test_gray_zone
+        Start  88: test_mc_pvalue_calibration
+        Start  89: test_mt_events
+        Start  90: test_mt_caller
+        Start  91: test_rna_variant_caller
+        Start  92: test_longread
+ 69/156 Test  #70: test_nonhost_unmapped_capture .......   Passed    0.09 sec
+ 70/156 Test  #83: test_ambient_realistic ..............   Passed    0.04 sec
+ 71/156 Test  #89: test_mt_events ......................   Passed    0.01 sec
+        Start  93: test_methyl
+        Start  94: test_mirna
+        Start  95: test_slamseq
+ 72/156 Test  #90: test_mt_caller ......................   Passed    0.02 sec
+        Start  96: test_te_classifier
+ 73/156 Test  #82: test_wl_ambient .....................   Passed    0.05 sec
+ 74/156 Test  #91: test_rna_variant_caller .............   Passed    0.02 sec
+ 75/156 Test  #92: test_longread .......................   Passed    0.01 sec
+ 76/156 Test  #93: test_methyl .........................   Passed    0.01 sec
+ 77/156 Test  #94: test_mirna ..........................   Passed    0.01 sec
+        Start  97: test_te_counter
+        Start  98: test_vdj_assembly
+        Start  99: test_scdna_cnv
+        Start 100: test_hic_contacts
+        Start 101: test_wgs_assembly
+ 78/156 Test  #95: test_slamseq ........................   Passed    0.02 sec
+        Start 102: test_visium_spatial
+ 79/156 Test  #96: test_te_classifier ..................   Passed    0.02 sec
+ 80/156 Test  #34: test_run_screen .....................   Passed    0.20 sec
+ 81/156 Test   #7: test_cell_calling ...................   Passed    0.25 sec
+ 82/156 Test  #97: test_te_counter .....................   Passed    0.01 sec
+ 83/156 Test  #98: test_vdj_assembly ...................   Passed    0.01 sec
+ 84/156 Test  #99: test_scdna_cnv ......................   Passed    0.01 sec
+        Start 103: test_visium_qc
+        Start 104: test_visium_tissue
+        Start 105: test_spatial_barcodes
+        Start 106: test_spatial_multiome
+        Start 107: test_combinatorial_barcode
+        Start 108: test_complex_whitelist
+ 85/156 Test #100: test_hic_contacts ...................   Passed    0.02 sec
+ 86/156 Test #101: test_wgs_assembly ...................   Passed    0.02 sec
+ 87/156 Test #103: test_visium_qc ......................   Passed    0.02 sec
+        Start 109: test_indrop_detect
+        Start 110: test_seqwell_detect
+        Start 111: test_cascade_router
+ 88/156 Test #102: test_visium_spatial .................   Passed    0.02 sec
+ 89/156 Test  #85: test_sparse_accumulator .............   Passed    0.07 sec
+ 90/156 Test #105: test_spatial_barcodes ...............   Passed    0.02 sec
+ 91/156 Test #106: test_spatial_multiome ...............   Passed    0.02 sec
+        Start 112: test_multiome_router
+        Start 113: test_multiome_cell_calling
+        Start 114: test_interop
+        Start 115: test_ref_fetch
+ 92/156 Test #107: test_combinatorial_barcode ..........   Passed    0.02 sec
+ 93/156 Test #108: test_complex_whitelist ..............   Passed    0.02 sec
+ 94/156 Test #109: test_indrop_detect ..................   Passed    0.01 sec
+ 95/156 Test #110: test_seqwell_detect .................   Passed    0.01 sec
+        Start 116: test_logging
+        Start 117: test_interval_tree
+        Start 118: test_benchmark_suite
+        Start 119: test_umi_dedup
+ 96/156 Test #104: test_visium_tissue ..................   Passed    0.04 sec
+ 97/156 Test  #87: test_gray_zone ......................   Passed    0.08 sec
+ 98/156 Test #112: test_multiome_router ................   Passed    0.02 sec
+        Start 120: test_bloom_filter
+        Start 121: test_velocity
+        Start 122: test_saturation
+ 99/156 Test #114: test_interop ........................   Passed    0.02 sec
+100/156 Test #115: test_ref_fetch ......................   Passed    0.02 sec
+101/156 Test #116: test_logging ........................   Passed    0.02 sec
+102/156 Test #117: test_interval_tree ..................   Passed    0.01 sec
+103/156 Test #118: test_benchmark_suite ................   Passed    0.01 sec
+        Start 123: test_read_stats
+        Start 124: test_provenance
+        Start 125: test_minimizer_index
+        Start 126: test_cascade_stats_writer
+        Start 127: test_pz_writer
+104/156 Test #119: test_umi_dedup ......................   Passed    0.02 sec
+105/156 Test #120: test_bloom_filter ...................   Passed    0.02 sec
+106/156 Test #121: test_velocity .......................   Passed    0.01 sec
+107/156 Test #111: test_cascade_router .................   Passed    0.04 sec
+        Start 128: test_ancestry
+        Start 129: test_ase
+        Start 130: test_mtx_writer
+        Start 131: test_te_kmer_index
+108/156 Test #122: test_saturation .....................   Passed    0.02 sec
+109/156 Test #123: test_read_stats .....................   Passed    0.02 sec
+110/156 Test #125: test_minimizer_index ................   Passed    0.02 sec
+        Start 132: test_te_kmer_integration
+        Start 133: test_txome_gene_index
+        Start 134: test_nonhost_sylph
+111/156 Test #128: test_ancestry .......................   Passed    0.02 sec
+112/156 Test #129: test_ase ............................   Passed    0.01 sec
+113/156 Test #130: test_mtx_writer .....................   Passed    0.01 sec
+        Start 135: test_1fq_header
+        Start 136: test_read_source
+        Start 137: test_fastq_encoder_r1_101
+114/156 Test #127: test_pz_writer ......................   Passed    0.03 sec
+115/156 Test #124: test_provenance .....................   Passed    0.04 sec
+116/156 Test #126: test_cascade_stats_writer ...........   Passed    0.03 sec
+        Start 138: test_cascade_stats
+        Start 139: test_donor_k1_workaround
+        Start 140: test_donor_genotype_call
+117/156 Test #134: test_nonhost_sylph ..................   Passed    0.02 sec
+118/156 Test #135: test_1fq_header .....................   Passed    0.02 sec
+        Start 141: test_demux_doublet_autok
+        Start 142: test_prefix_probe
+119/156 Test #139: test_donor_k1_workaround ............   Passed    0.01 sec
+120/156 Test #140: test_donor_genotype_call ............   Passed    0.01 sec
+121/156 Test #113: test_multiome_cell_calling ..........   Passed    0.08 sec
+        Start 143: test_polya_sites
+        Start 144: test_feature_barcode_detect
+        Start 145: test_ram_tier
+122/156 Test #137: test_fastq_encoder_r1_101 ...........   Passed    0.04 sec
+123/156 Test #131: test_te_kmer_index ..................   Passed    0.05 sec
+124/156 Test #138: test_cascade_stats ..................   Passed    0.03 sec
+125/156 Test #143: test_polya_sites ....................   Passed    0.01 sec
+        Start 146: test_species_short_r2
+        Start 147: test_whitelist_integrity
+        Start 148: test_ws2_protocol_hardening
+        Start 149: test_protocol_short_barcode_read
+126/156 Test #145: test_ram_tier .......................   Passed    0.02 sec
+127/156 Test #144: test_feature_barcode_detect .........   Passed    0.02 sec
+128/156 Test #146: test_species_short_r2 ...............   Passed    0.01 sec
+        Start 150: test_protocol_untrimmed_r1
+        Start 151: test_ws4_crash_diagnostics
+        Start 152: test_bam_sort_budget
+129/156 Test #136: test_read_source ....................   Passed    0.06 sec
+130/156 Test #151: test_ws4_crash_diagnostics ..........   Passed    0.01 sec
+        Start 153: test_h5ad_writer
+        Start 154: test_loom_writer
+131/156 Test #152: test_bam_sort_budget ................   Passed    0.01 sec
+        Start 155: test_molecule_info
+132/156 Test #148: test_ws2_protocol_hardening .........   Passed    0.03 sec
+        Start 156: test_metrics_summary
+133/156 Test #154: test_loom_writer ....................   Passed    0.02 sec
+134/156 Test #156: test_metrics_summary ................   Passed    0.01 sec
+135/156 Test #153: test_h5ad_writer ....................   Passed    0.02 sec
+136/156 Test #155: test_molecule_info ..................   Passed    0.03 sec
+137/156 Test #149: test_protocol_short_barcode_read ....   Passed    0.05 sec
+138/156 Test #150: test_protocol_untrimmed_r1 ..........   Passed    0.13 sec
+139/156 Test #142: test_prefix_probe ...................   Passed    0.17 sec
+140/156 Test   #2: test_pz_hardening ...................   Passed    0.59 sec
+141/156 Test #147: test_whitelist_integrity ............   Passed    0.29 sec
+142/156 Test  #84: test_ambient_decontx ................   Passed    0.89 sec
+143/156 Test  #77: test_doublet_detect_v2 ..............   Passed    0.97 sec
+144/156 Test  #32: test_strand_detect ..................   Passed    1.10 sec
+145/156 Test #133: test_txome_gene_index ...............   Passed    0.91 sec
+146/156 Test  #30: test_pileup_workers .................   Passed    1.26 sec
+147/156 Test  #88: test_mc_pvalue_calibration ..........   Passed    1.28 sec
+148/156 Test  #86: test_pseudocount_sensitivity ........   Passed    1.84 sec
+149/156 Test  #38: test_stall_watchdog .................   Passed    2.00 sec
+150/156 Test   #4: test_pz2_edge .......................   Passed    2.13 sec
+151/156 Test  #28: test_umi_seeds ......................   Passed    3.81 sec
+152/156 Test  #78: test_doublet_calibration ............   Passed    7.47 sec
+153/156 Test #132: test_te_kmer_integration ............   Passed    9.53 sec
+154/156 Test   #8: test_called_v2 ......................   Passed   18.56 sec
+155/156 Test #141: test_demux_doublet_autok ............   Passed  131.90 sec
+156/156 Test  #81: test_donor_demux_perf ...............   Passed  138.06 sec
+
+100% tests passed out of 156
+
+Total Test time (real) = 138.25 sec
+
+The following tests did not run:
+	 31 - test_gpu_pileup_labels (Skipped)
+ctest exit 0

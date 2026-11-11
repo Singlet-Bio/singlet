@@ -3052,7 +3052,11 @@ def _post(
     url = _api_base(base) + path
     data = json.dumps(body).encode()
     hdr = {"Content-Type": "application/json", "User-Agent": "singlet-bio-atlas"}
-    key = api_key or os.environ.get("SINGLET_API_KEY")
+    if not api_key:
+        from singlet.find import _api_key  # $SINGLET_API_KEY, then ~/.singlet/api_key
+
+        api_key = _api_key()
+    key = api_key
     if key:
         hdr["Authorization"] = f"Bearer {key}"
     req = urllib.request.Request(url, data=data, headers=hdr, method="POST")
@@ -3065,6 +3069,8 @@ def _post(
         except Exception:  # noqa: BLE001
             pass
         msg = j.get("message") or j.get("error")
+        if e.code == 429 and not key:
+            msg = f"{msg or e.reason} (anonymous allowance; set $SINGLET_API_KEY or save a key in ~/.singlet/api_key, from https://singlet.bio/account)"
         if j.get("plan"):
             raise OverBudget(f"{path}: HTTP {e.code}: {msg}", j["plan"]) from e
         raise IndexError_(f"{path}: HTTP {e.code}: {msg or e.reason}") from e
@@ -3527,26 +3533,30 @@ def read_gather_stream(fh) -> Tuple[dict, Dict[Tuple[int, str], dict], dict]:
     return head, got, trailer
 
 
-def _fetch_direct(idx: Index, plan: dict, threads: int = 8) -> Dict[Tuple[int, str], dict]:
-    """The client-side equivalent of the Worker: one ranged GET per planned read."""
+def _fetch_direct(
+    idx: Index, plan: dict, io_threads: Union[int, str] = "auto"
+) -> Dict[Tuple[int, str], dict]:
+    """The client-side equivalent of the Worker: one ranged GET per planned read, ``io_threads`` in flight at once."""
+    from . import transport as T
+
     got: Dict[Tuple[int, str], dict] = {}
+    budget = T.IOBudget(T.io_threads(io_threads, idx.t))
 
     def one(r):
         return r, _get(idx.t, r["key"], r["start"], r["end"] - r["start"])
 
-    with ThreadPoolExecutor(max(1, threads)) as ex:
-        for r, buf in ex.map(one, plan["reads"]):
-            idx.stats["requests"] += 1
-            idx.stats["bytes"] += len(buf)
-            for nm, kind, off, ln, a in r["pieces"]:
-                body = buf[a - r["start"] : a - r["start"] + ln]
-                ent = got.setdefault((r["sample"], nm), {"runs": {}})
-                if kind == FR_PREFIX:
-                    ent["prefix"] = body
-                elif kind == FR_RUN:
-                    ent["runs"][off] = body
-                else:
-                    ent["whole"] = body
+    for r, buf in budget.map(one, plan["reads"]):
+        idx.stats["requests"] += 1
+        idx.stats["bytes"] += len(buf)
+        for nm, kind, off, ln, a in r["pieces"]:
+            body = buf[a - r["start"] : a - r["start"] + ln]
+            ent = got.setdefault((r["sample"], nm), {"runs": {}})
+            if kind == FR_PREFIX:
+                ent["prefix"] = body
+            elif kind == FR_RUN:
+                ent["runs"][off] = body
+            else:
+                ent["whole"] = body
     return got
 
 
@@ -3661,6 +3671,7 @@ def gather(
     via: str = "auto",
     api_key: Optional[str] = None,
     threads: int = 4,
+    io_threads: Union[int, str] = "auto",
     max_cells: Optional[int] = None,
     batch_cells: Optional[int] = None,
     batch_studies: int = MAX_STUDIES_PER_REQUEST,
@@ -3672,7 +3683,8 @@ def gather(
     ``cells``: a :func:`find_cells` DataFrame, ``[(gsm_or_so, [cols...]), ...]`` or ``{gsm_or_so: cols}``. ``modalities``: the
     ``singlet.s1.client`` vocabulary (default counts + spliced + unspliced; also splice_junctions, mt, vdj -> ``obsm``).
     ``via="worker"`` streams everything from ``POST /s1/cidx/gather`` in one request (the Worker reads R2 in parallel inside
-    Cloudflare); ``via="direct"`` issues the same coalesced range requests from here. Prefixes of matrices already seen are cached on
+    Cloudflare); ``via="direct"`` issues the same coalesced range requests from here, ``io_threads`` at a time (``"auto"``: 8 over
+    HTTP, 1 from a local directory; ``threads`` is the decoders'). Prefixes of matrices already seen are cached on
     disk and not fetched again. The Worker serves at most 10,000 cells from at most 10 studies per request: more are fetched in
     several requests of at most ``batch_cells`` cells and ``batch_studies`` studies (each a request under the rate limits)."""
     import anndata as ad
@@ -3767,7 +3779,7 @@ def gather(
             if [s["so"] for s in head["samples"]] != b_sos:
                 raise IndexError_("the Worker planned other samples than were asked for")
         else:
-            got = _fetch_direct(idx, plan, threads=threads)
+            got = _fetch_direct(idx, plan, io_threads=io_threads)
         totals["seconds_fetch"] += time.time() - t0
         totals["planned_bytes"] += plan["bytes"]
         totals["planned_reads"] += len(plan["reads"])

@@ -125,6 +125,7 @@ _PZ_FILES = [
     "splice_psi.1pz",
     "vdj_gene_usage.1pz",
     "mt_heteroplasmy.1pz",
+    "multimap_counts.1pz",
 ]
 
 _JSON_SIDECARS = [
@@ -193,6 +194,12 @@ MODALITIES: Dict[str, Modality] = {
             "matrix",
             ("intron_counts.1pz",),
             "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
+        ),
+        Modality(
+            "multimap_counts",
+            "matrix",
+            ("multimap_counts.1pz",),
+            "Molecules whose reads fit two genes, per gene set (the multi-mapping record; raw_counts(include_multimappers=True) adds them).",
         ),
         Modality(
             "exon_reads",
@@ -1810,7 +1817,15 @@ class SingletBundle:
         adata.uns["modality"] = name
         return adata
 
-    def raw_counts(self, gsm: str, *, gene_level: bool = True, cells: str = "called"):
+    def raw_counts(
+        self,
+        gsm: str,
+        *,
+        gene_level: bool = True,
+        cells: str = "called",
+        include_multimappers: bool = False,
+        multimappers: str = "EM",
+    ):
         """The raw count matrix for one sample, with spliced/unspliced layers.
 
         This is the matrix a conventional (non-USA) pipeline would hand you:
@@ -1833,6 +1848,18 @@ class SingletBundle:
             empty droplets — the equivalent of a ``raw_feature_bc_matrix``.
             Only meaningful with ``gene_level=False``; the gene-level path is
             always restricted to called cells.
+        include_multimappers
+            ``False`` (default): unique reads only, the stored counts. ``True``
+            adds the molecules whose reads fit two genes from the sample's
+            multi-mapping record (``multimap_counts``), distributed by
+            ``multimappers``; ``X`` becomes float and the added part is kept
+            in ``layers["multimapped"]``. Gene level only. A sample without
+            the record (pipelines before it) keeps its unique counts, with a
+            warning.
+        multimappers
+            ``"EM"`` (default) or ``"Uniform"``, as STARsolo
+            ``--soloMultiMappers``: EM shares each molecule by the cell's
+            unique counts of its genes, Uniform splits it evenly.
 
         Returns
         -------
@@ -1869,7 +1896,15 @@ class SingletBundle:
                 part = self._gene_level_part(gsm, kind, barcodes)
                 if part is not None:
                     adata.layers[layer] = part
+            if include_multimappers:
+                mm = self._multimap_part(gsm, barcodes, adata.X, multimappers)
+                if mm is not None:
+                    adata.layers["multimapped"] = mm
+                    adata.X = (adata.X.astype(np.float32) + mm).tocsr()
+                adata.uns["multimappers"] = multimappers if mm is not None else "none"
         else:
+            if include_multimappers:
+                raise ValueError("include_multimappers needs gene_level=True")
             exon = self.read("exon_counts", gsm) if self.has("exon_counts", gsm) else None
             intron = self.read("intron_counts", gsm) if self.has("intron_counts", gsm) else None
             if exon is None and intron is None:
@@ -1887,6 +1922,29 @@ class SingletBundle:
         adata.var_names_make_unique()
         adata.uns["reference_build"] = self.feature_vocab.get("reference_build", "")
         return adata
+
+    def _multimap_part(self, gsm: str, barcodes: List[str], unique, method: str):
+        """Per-gene multimapper counts (cells x genes, float32 CSR) aligned to ``barcodes``, or None without a record."""
+        from singlet.multimap import METHODS, class_genes, distribute
+
+        if method not in METHODS:
+            raise ValueError(f"multimappers must be one of {METHODS}")
+        from scipy.sparse import csr_matrix, vstack
+
+        if not self.has("multimap_counts", gsm):
+            warnings.warn(f"{gsm} has no multi-mapping record; unique counts only", stacklevel=3)
+            return None
+        if self._is_empty_pz(gsm, "multimap_counts.1pz"):   # a record with no two-gene molecules
+            return csr_matrix(unique.shape, dtype=np.float32)
+        rec = self.read("multimap_counts", gsm)
+        gene_row = {g["gene_id"]: i for i, g in enumerate(self.feature_vocab["genes"])}
+        classes = class_genes(list(rec.var_names), gene_row)
+        bc_row = {bc: i for i, bc in enumerate(rec.obs_names)}
+        idx = np.array([bc_row.get(bc, -1) for bc in barcodes], dtype=np.int64)
+        X = rec.X.tocsr() if hasattr(rec.X, "tocsr") else csr_matrix(rec.X)
+        empty = csr_matrix((1, X.shape[1]), dtype=X.dtype)
+        rows = vstack([X, empty]).tocsr()[np.where(idx >= 0, idx, X.shape[0])]
+        return distribute(unique, rows, classes, method).astype(np.float32)
 
     def _read_cell_calls(self, gsm: str):
         """``cell_calls.tsv`` for one sample with every column read as text.

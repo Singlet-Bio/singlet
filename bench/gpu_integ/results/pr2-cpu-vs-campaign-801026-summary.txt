@@ -1,0 +1,484 @@
+node=c006.clipper.gvsu.edu job=801026 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/0a6de829 commit=0a6de829c75be8e216e2210a1622cc80b87df0de scripts=cd6a630e T=18 samples=pbmc2m pbmc10m pbmc1k_v3 pbmc1k_v2 pbmc1k_cite_v3 pbmc1k_cite_v3_adt pbmc5p_v1 neuron1k_v3 hgmm1k_v3 nuclei2k_v2 pbmc2tvdj modes=cpuN refs=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18 2026-11-06T13:29:37-05:00
+######## pbmc2m (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc2m/pbmc2m.1fq, 56743382 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc2m cpuN: env 
+pbmc2m cpuN: wall 82.9863 s, core-s 182.232, start 1793989777.045006792 end 1793989860.031395646, maxRSS 25.9 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793989777 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc2m/pbmc2m.1fq
+1793989777 [singlet] .1fq: 2000000 reads, 4 blocks, protocol_id=1, confidence=3, codec=0
+1793989779 [singlet] .1fq decoded to temp files
+1793989779 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793989848 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793989856 [cell_qc] STAR CellReads.stats: 64310 rows; no-passlist reads 61414
+1793989856 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc2m/cpuN/out//cell_qc_metrics.tsv (2028 cells)
+  CellReads.stats kept: 64311 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc2m cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc2m/out vs /tmp/debruinz-gdg-801026/pbmc2m/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 140083538 != 140085147
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (135 vs 135 bytes)
+    1 of 3/3 lines differ
+    a: pileup	2186969	2186969		0	0	22.35
+    b: pileup	2186969	2186969		0	0	56.46
+  DIFF star_Log.std.out (1276 vs 1277 bytes)
+files: 64 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 64/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (18316 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 548677817b7678cf 14606)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: c11d495838a9fd8e 116369)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 3b5d06db5004c49e 116369)
+  Gene/CellReads.stats: same rows (sorted; 64310 rows; byte-identical in file order: no)
+VERDICT pbmc2m cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 64/5/4)
+######## pbmc10m (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc10m/pbmc10m.1fq, 279061309 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc10m cpuN: env 
+pbmc10m cpuN: wall 140.246 s, core-s 506.930, start 1793989862.973102517 end 1793990003.219399073, maxRSS 26.8 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793989863 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc10m/pbmc10m.1fq
+1793989863 [singlet] .1fq: 10000000 reads, 20 blocks, protocol_id=1, confidence=3, codec=0
+1793989866 [singlet] .1fq decoded to temp files
+1793989866 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793989981 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793989994 [cell_qc] STAR CellReads.stats: 173482 rows; no-passlist reads 294441
+1793989994 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc10m/cpuN/out//cell_qc_metrics.tsv (23036 cells)
+  CellReads.stats kept: 173483 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc10m cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc10m/out vs /tmp/debruinz-gdg-801026/pbmc10m/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 312148690 != 312150300
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (139 vs 139 bytes)
+    1 of 3/3 lines differ
+    a: pileup	10972755	10972755		0	0	65.25
+    b: pileup	10972755	10972755		0	0	99.39
+  DIFF star_Log.std.out (1277 vs 1278 bytes)
+files: 64 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 64/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (47173 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 4970762095d8cc73 70595)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 0c6ef2073f5b26ea 547775)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: e429b03fceca5f14 547775)
+  Gene/CellReads.stats: same rows (sorted; 173482 rows; byte-identical in file order: no)
+VERDICT pbmc10m cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 64/5/4)
+######## pbmc1k_v3 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq, 1838043689 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc1k_v3 cpuN: env 
+pbmc1k_v3 cpuN: wall 454.627 s, core-s 2569.20, start 1793990007.979394923 end 1793990462.607033452, maxRSS 29.9 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793990008 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc1k_v3/pbmc1k_v3.1fq
+1793990008 [singlet] .1fq: 66601887 reads, 134 blocks, protocol_id=1, confidence=3, codec=0
+1793990014 [singlet] .1fq decoded to temp files
+1793990014 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793990403 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793990420 [cell_qc] STAR CellReads.stats: 323542 rows; no-passlist reads 1784866
+1793990420 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc1k_v3/cpuN/out//cell_qc_metrics.tsv (163720 cells)
+  CellReads.stats kept: 323543 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc1k_v3 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc1k_v3/out vs /tmp/debruinz-gdg-801026/pbmc1k_v3/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1278064636 != 1278066008
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (140 vs 140 bytes)
+    1 of 3/3 lines differ
+    a: pileup	73402628	73402628		0	0	431.65
+    b: pileup	73402628	73402628		0	0	356.45
+  DIFF star_Log.std.out (1279 vs 1280 bytes)
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (126996 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: c115c73474e99993 428468)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 766e191fcc6181a5 3355559)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 31fc9ef1d3d55a89 3355559)
+  Gene/CellReads.stats: same rows (sorted; 323542 rows; byte-identical in file order: no)
+VERDICT pbmc1k_v3 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## pbmc1k_v2 (/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/release/data/pbmc1k_v2/pbmc1k_v2.1fq, users bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc1k_v2 cpuN: env 
+pbmc1k_v2 cpuN: wall 425.767 s, core-s 2749.05, start 1793990481.511584038 end 1793990907.278601270, maxRSS 29.5 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793990481 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/release/data/pbmc1k_v2/pbmc1k_v2.1fq
+1793990481 [singlet] .1fq: 76921082 reads, 154 blocks, protocol_id=2, confidence=3, codec=0
+1793990486 [singlet] .1fq decoded to temp files
+1793990486 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793990883 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793990894 [cell_qc] STAR CellReads.stats: 172315 rows; no-passlist reads 2638767
+1793990895 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc1k_v2/cpuN/out//cell_qc_metrics.tsv (122046 cells)
+  CellReads.stats kept: 172316 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc1k_v2 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc1k_v2/out vs /tmp/debruinz-gdg-801026/pbmc1k_v2/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 2050438717 != 2050439969
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (140 vs 140 bytes)
+    1 of 3/3 lines differ
+    a: pileup	85627734	85627734		0	0	458.07
+    b: pileup	85627734	85627734		0	0	344.41
+  DIFF star_Log.std.out (1279 vs 1280 bytes)
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (92002 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 6accc6619fde6081 1269171)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: c0de01b940133b19 6048253)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 12e76ef487124245 6048253)
+  Gene/CellReads.stats: same rows (sorted; 172315 rows; byte-identical in file order: no)
+VERDICT pbmc1k_v2 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## pbmc1k_cite_v3 (/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/release/data/pbmc1k_cite_v3/pbmc1k_cite_v3.1fq, users bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc1k_cite_v3 cpuN: env 
+pbmc1k_cite_v3 cpuN: wall 309.511 s, core-s 1670.51, start 1793990923.876062441 end 1793991233.387477406, maxRSS 28.4 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793990924 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/release/data/pbmc1k_cite_v3/pbmc1k_cite_v3.1fq
+1793990924 [singlet] .1fq: 45359427 reads, 91 blocks, protocol_id=1, confidence=3, codec=0
+1793990928 [singlet] .1fq decoded to temp files
+1793990928 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793991204 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793991218 [cell_qc] STAR CellReads.stats: 224209 rows; no-passlist reads 1410134
+1793991218 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc1k_cite_v3/cpuN/out//cell_qc_metrics.tsv (125451 cells)
+  CellReads.stats kept: 224210 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc1k_cite_v3 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc1k_cite_v3/out vs /tmp/debruinz-gdg-801026/pbmc1k_cite_v3/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 987810499 != 987811872
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (140 vs 140 bytes)
+    1 of 3/3 lines differ
+    a: pileup	51022724	51022724		0	0	329.28
+    b: pileup	51022724	51022724		0	0	243.38
+  DIFF star_Log.std.out (1284 vs 1285 bytes)
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (109722 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 193cb0c8cebb7591 513976)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 88d939fcbd52213b 2394144)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: c1a8ed6bcef2cbb4 2394144)
+  Gene/CellReads.stats: same rows (sorted; 224209 rows; byte-identical in file order: no)
+VERDICT pbmc1k_cite_v3 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## pbmc1k_cite_v3_adt (/mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/release/data/pbmc1k_cite_v3_adt/pbmc1k_cite_v3_adt.1fq, users bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc1k_cite_v3_adt cpuN: env 
+pbmc1k_cite_v3_adt cpuN: wall 167.109 s, core-s 1216.33, start 1793991242.764175874 end 1793991409.873778580, maxRSS 33.0 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793991243 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/jobs/fable/release/data/pbmc1k_cite_v3_adt/pbmc1k_cite_v3_adt.1fq
+1793991243 [singlet] .1fq: 12606650 reads, 26 blocks, protocol_id=1, confidence=2, codec=0
+1793991246 [singlet] .1fq decoded to temp files
+1793991246 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793991406 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793991406 [cell_qc] STAR CellReads.stats: 60082 rows; no-passlist reads 8586947
+1793991406 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc1k_cite_v3_adt/cpuN/out//cell_qc_metrics.tsv (29481 cells)
+  CellReads.stats kept: 60083 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc1k_cite_v3_adt cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc1k_cite_v3_adt/out vs /tmp/debruinz-gdg-801026/pbmc1k_cite_v3_adt/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 3675972388 != 3675973998
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (127 vs 128 bytes)
+    1 of 3/3 lines differ
+    a: pileup	47734	47734		0	0	85.77
+    b: pileup	47734	47734		0	0	115.85
+  DIFF star_Log.std.out (1288 vs 1289 bytes)
+files: 63 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 63/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (1294 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 6d9ed22df27245da 397478)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 68b411c8a0a320c7 12572515)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: f53b8560ed414762 12572515)
+  Gene/CellReads.stats: same rows (sorted; 60082 rows; byte-identical in file order: no)
+VERDICT pbmc1k_cite_v3_adt cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 63/5/4)
+######## pbmc5p_v1 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc5p_v1/pbmc5p_v1.1fq, 1328123262 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc5p_v1 cpuN: env 
+pbmc5p_v1 cpuN: wall 487.088 s, core-s 2002.61, start 1793991436.281578694 end 1793991923.370555566, maxRSS 32.7 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793991436 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/pbmc5p_v1/pbmc5p_v1.1fq
+1793991436 [singlet] .1fq: 60000000 reads, 120 blocks, protocol_id=5, confidence=5, codec=0
+1793991441 [singlet] .1fq decoded to temp files
+1793991441 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793991860 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793991899 [cell_qc] STAR CellReads.stats: 355639 rows; no-passlist reads 7096568
+1793991899 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc5p_v1/cpuN/out//cell_qc_metrics.tsv (137186 cells)
+  CellReads.stats kept: 355640 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc5p_v1 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc5p_v1/out vs /tmp/debruinz-gdg-801026/pbmc5p_v1/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1796007861 != 1796007837
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (144 vs 144 bytes)
+    1 of 3/3 lines differ
+    a: pileup	106351659	106351659		0	0	574.68
+    b: pileup	106351659	106351659		0	0	361.24
+  DIFF star_Log.std.out (1211 vs 1212 bytes)
+files: 64 identical, 3 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 64/3/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (212575 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 72b1437d82649f59 1335105)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: f6833070e074037e 4818388)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 6c3c33b6b17a40c4 4818388)
+  Gene/CellReads.stats: same rows (sorted; 355639 rows; byte-identical in file order: no)
+VERDICT pbmc5p_v1 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 64/3/4)
+######## neuron1k_v3 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/neuron1k_v3/neuron1k_v3.1fq, 2434477654 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCm39-2024-A)
+neuron1k_v3 cpuN: env 
+neuron1k_v3 cpuN: wall 630.388 s, core-s 2215.10, start 1793991938.560944328 end 1793992568.948966336, maxRSS 35.4 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793991938 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/neuron1k_v3/neuron1k_v3.1fq
+1793991939 [singlet] .1fq: 92902231 reads, 186 blocks, protocol_id=1, confidence=3, codec=0
+1793991946 [singlet] .1fq decoded to temp files
+1793991946 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793992529 [cell_qc] Gene flags: 37 MT genes, 430 ribosomal genes out of 78298 total
+1793992555 [cell_qc] STAR CellReads.stats: 600534 rows; no-passlist reads 2630732
+1793992556 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/neuron1k_v3/cpuN/out//cell_qc_metrics.tsv (208318 cells)
+  CellReads.stats kept: 600535 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== neuron1k_v3 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/neuron1k_v3/out vs /tmp/debruinz-gdg-801026/neuron1k_v3/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 1453483900 != 1453485038
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (144 vs 144 bytes)
+    1 of 3/3 lines differ
+    a: pileup	111408994	111408994		0	0	610.36
+    b: pileup	111408994	111408994		0	0	550.79
+  DIFF star_Log.std.out (1281 vs 1282 bytes)
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (117254 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: b4ddddd14b523255 490605)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 37b1365ae014d9ff 3667707)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 7340516c7041abe0 3667707)
+  Gene/CellReads.stats: same rows (sorted; 600534 rows; byte-identical in file order: no)
+VERDICT neuron1k_v3 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## hgmm1k_v3 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/hgmm1k_v3/hgmm1k_v3.1fq, 1568037361 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-GRCm39-barnyard)
+hgmm1k_v3 cpuN: env 
+hgmm1k_v3 cpuN: wall 581.582 s, core-s 1772.78, start 1793992581.290523961 end 1793993162.872735258, maxRSS 62.3 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793992581 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/hgmm1k_v3/hgmm1k_v3.1fq
+1793992582 [singlet] .1fq: 63105786 reads, 127 blocks, protocol_id=1, confidence=3, codec=0
+1793992587 [singlet] .1fq decoded to temp files
+1793992587 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793993131 [cell_qc] Gene flags: 50 MT genes, 537 ribosomal genes out of 116904 total
+1793993159 [cell_qc] STAR CellReads.stats: 524497 rows; no-passlist reads 1607578
+1793993160 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/hgmm1k_v3/cpuN/out//cell_qc_metrics.tsv (114978 cells)
+  CellReads.stats kept: 524498 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== hgmm1k_v3 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/hgmm1k_v3/out vs /tmp/debruinz-gdg-801026/hgmm1k_v3/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 966103668 != 966105153
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (140 vs 140 bytes)
+    1 of 3/3 lines differ
+    a: pileup	76772328	76772328		0	0	355.32
+    b: pileup	76772328	76772328		0	0	516.52
+  DIFF star_Log.std.out (1288 vs 1289 bytes)
+files: 55 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 55/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (171869 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 2a59a500958c293c 309553)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: dc5f48306cdb8ac3 1812610)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: c50b0bc3be9de637 1812610)
+  Gene/CellReads.stats: same rows (sorted; 524497 rows; byte-identical in file order: no)
+VERDICT hgmm1k_v3 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 55/5/4)
+######## nuclei2k_v2 (/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/nuclei2k_v2/nuclei2k_v2.1fq, 4712611907 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCm39-2024-A)
+nuclei2k_v2 cpuN: env 
+nuclei2k_v2 cpuN: wall 637.812 s, core-s 4425.85, start 1793993171.326562416 end 1793993809.138887588, maxRSS 35.2 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793993171 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/data/nuclei2k_v2/nuclei2k_v2.1fq
+1793993171 [singlet] .1fq: 118742315 reads, 238 blocks, protocol_id=2, confidence=3, codec=0
+1793993178 [singlet] .1fq decoded to temp files
+1793993178 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793993776 [cell_qc] Gene flags: 37 MT genes, 430 ribosomal genes out of 78298 total
+1793993794 [cell_qc] STAR CellReads.stats: 411195 rows; no-passlist reads 3242598
+1793993795 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/nuclei2k_v2/cpuN/out//cell_qc_metrics.tsv (214873 cells)
+  CellReads.stats kept: 411196 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== nuclei2k_v2 cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/nuclei2k_v2/out vs /tmp/debruinz-gdg-801026/nuclei2k_v2/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 7382197250 != 7382198623
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (144 vs 144 bytes)
+    1 of 3/3 lines differ
+    a: pileup	106579378	106579378		0	0	572.21
+    b: pileup	106579378	106579378		0	0	476.57
+  DIFF star_Log.std.out (1281 vs 1282 bytes)
+files: 65 identical, 5 differ only in timings/paths, 4 differ
+RESULT: 4 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 65/5/4 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (100771 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: ff134080b25975e5 2459477)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: 3a14eb3097ccccf3 22811732)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 0e78f5630ec81293 22811732)
+  Gene/CellReads.stats: same rows (sorted; 411195 rows; byte-identical in file order: no)
+VERDICT nuclei2k_v2 cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 65/5/4)
+######## pbmc2tvdj (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/data/pbmc2t_vdj/pbmc2t_vdj.1fq, 1832942440 bytes; genome /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A)
+pbmc2tvdj cpuN: env 
+pbmc2tvdj cpuN: wall 415.954 s, core-s 2499.76, start 1793993879.135952081 end 1793994295.090511126, maxRSS 34.4 GB, device peak 0.0 GB, exit 0
+EXIT STATUS 0
+STREAM PATH: yes
+GPU PILEUP: NOT ON
+LEVEL ?; INGEST no
+FALLBACK LINES: 0
+1793993879 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/data/pbmc2t_vdj/pbmc2t_vdj.1fq
+1793993879 [singlet] .1fq: 33493954 reads, 67 blocks, protocol_id=2, confidence=3, codec=0
+1793993883 [singlet] .1fq decoded to temp files
+1793993883 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+1793993940 [singlet] STREAM STRAND: 94% of 290166 strand-informative nuclear reads are antisense to the protocol orientation (after the first 1M reads); restarting on the sorted path (--sorted-bam)
+1793993940 [singlet] .1fq mode: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-batch1/data/pbmc2t_vdj/pbmc2t_vdj.1fq
+1793993940 [singlet] .1fq: 33493954 reads, 67 blocks, protocol_id=2, confidence=3, codec=0
+1793993944 [singlet] .1fq decoded to temp files
+1793994275 [cell_qc] Gene flags: 13 MT genes, 107 ribosomal genes out of 38606 total
+1793994287 [cell_qc] STAR CellReads.stats: 146845 rows; no-passlist reads 4086294
+1793994288 [cell_qc] Wrote: /tmp/debruinz-gdg-801026/pbmc2tvdj/cpuN/out//cell_qc_metrics.tsv (57887 cells)
+  CellReads.stats kept: 146846 lines
+Traceback (most recent call last):
+  File "/tmp/debruinz-gdg-801026/repo/bench/fable/ingest/s8_stages_e13.py", line 28, in <module>
+    t0, t1 = mon[0][0], mon[-1][0]
+             ~~~^^^
+IndexError: list index out of range
+=== pbmc2tvdj cpu vs cpuN (/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/ref/T18/pbmc2tvdj/out vs /tmp/debruinz-gdg-801026/pbmc2tvdj/cpuN/cmp)
+  DIFF pileup_stats.json: /provenance/outputs/bytes_public: 4376709735 != 4376711360
+  DIFF provenance.json: /references/whitelist/name: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin2/c8849bb2/../wh != /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-pr2/bin
+  DIFF read_stats.tsv (141 vs 141 bytes)
+    2 of 3/3 lines differ
+    a: align	39540743	39540743		0	0	204.04
+    b: align	39540743	39540743		0	0	236.03
+    a: pileup	39540743	39540743		0	0	34.82
+    b: pileup	39540743	39540743		0	0	32.74
+files: 62 identical, 5 differ only in timings/paths, 3 differ
+RESULT: 3 differences
+  provenance.json: the whitelist's path only (the binaries' directories)
+  out_equiv: 62/5/3 (identical/timing-path/differ), every DIFF in E11's run-dependent set
+  star_Solo.out: 10 of 10 files identical
+  star_Log.final.out: mapping statistics identical (timing lines excluded)
+  star_SJ.out.tab: identical (133707 junctions)
+  nonhost_reads.fq: same records (sorted sha256 and reads: 0ff0ceefcc8b112d 1067663)
+  star_Unmapped.out.mate1: same records (sorted sha256 and reads: a2aa0d74f09b6baf 10041314)
+  star_Unmapped.out.mate2: same records (sorted sha256 and reads: 20710df6092eb7d5 10041314)
+  Gene/CellReads.stats: same rows (sorted; 146845 rows; byte-identical in file order: no)
+VERDICT pbmc2tvdj cpu:cpuN IDENTICAL (except E11's run-dependent files; out_equiv 62/5/3)
+######## runs
+sample              mode  exit  wall_s   core_s   maxrss_gb  dev_peak_gb  lanes_peak_gb  level  ingest  fallback_lines  node
+pbmc2m              cpuN  0     82.9863  182.232  25.9       0.0          -              ?      no      0               c006
+pbmc10m             cpuN  0     140.246  506.930  26.8       0.0          -              ?      no      0               c006
+pbmc1k_v3           cpuN  0     454.627  2569.20  29.9       0.0          -              ?      no      0               c006
+pbmc1k_v2           cpuN  0     425.767  2749.05  29.5       0.0          -              ?      no      0               c006
+pbmc1k_cite_v3      cpuN  0     309.511  1670.51  28.4       0.0          -              ?      no      0               c006
+pbmc1k_cite_v3_adt  cpuN  0     167.109  1216.33  33.0       0.0          -              ?      no      0               c006
+pbmc5p_v1           cpuN  0     487.088  2002.61  32.7       0.0          -              ?      no      0               c006
+neuron1k_v3         cpuN  0     630.388  2215.10  35.4       0.0          -              ?      no      0               c006
+hgmm1k_v3           cpuN  0     581.582  1772.78  62.3       0.0          -              ?      no      0               c006
+nuclei2k_v2         cpuN  0     637.812  4425.85  35.2       0.0          -              ?      no      0               c006
+pbmc2tvdj           cpuN  0     415.954  2499.76  34.4       0.0          -              ?      no      0               c006
+######## verdicts
+pbmc2m              cpu:cpuN  IDENTICAL  64/5/4  
+pbmc10m             cpu:cpuN  IDENTICAL  64/5/4  
+pbmc1k_v3           cpu:cpuN  IDENTICAL  65/5/4  
+pbmc1k_v2           cpu:cpuN  IDENTICAL  65/5/4  
+pbmc1k_cite_v3      cpu:cpuN  IDENTICAL  65/5/4  
+pbmc1k_cite_v3_adt  cpu:cpuN  IDENTICAL  63/5/4  
+pbmc5p_v1           cpu:cpuN  IDENTICAL  64/3/4  
+neuron1k_v3         cpu:cpuN  IDENTICAL  65/5/4  
+hgmm1k_v3           cpu:cpuN  IDENTICAL  55/5/4  
+nuclei2k_v2         cpu:cpuN  IDENTICAL  65/5/4  
+pbmc2tvdj           cpu:cpuN  IDENTICAL  62/5/3  
+GATE RUN OK (identity verdicts above)
+done 2026-11-06T14:45:33-05:00

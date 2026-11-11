@@ -15,13 +15,14 @@ engine; alignment is held to the M1-M7 gate separately.
 | #86 grouped nonhost EM | Host code after the pileup, shared; `nonhost_gpu.cu` only does the screen (phases A-C). Nonhost outputs are identical in the gate. |
 | #82 binary read source | Note only (P3): `--engine gpu` still decodes the `.1fq` to FASTQ temp files (file mode); the GPU prefill could take `StarChunkSourceT` blocks instead, which would save the decode and the temp files. Not attempted. The R11 histogram is counted in the file-mode `process_block` on top of #82's `RunSet` decode. |
 
-## Not mirrored: the intron rules of #80 (incl. D2, chrM/NUMT tie)
+## The intron rules of #80 (history; superseded)
 
-`prod/campaign` now defaults to `intron_rules = 389` (read-level kUnique, kNoSplicedIntron, kMtPrefer; molecule-level kUmiGeneCR). They are not
-on the GPU (`k_annotate` / `k_resolve` / the gene reducer). With any rule on, `singlet` ignores `SINGLET_GPU_PILEUP`, says so, and runs the CPU
-pileup on the GPU-mapped reads (counts correct, only the pileup saving is lost). `SINGLET_INTRON_RULES=0` restores the pre-#80 classification,
-and gate (a) below runs with it. The GPU multimapper resolve (`k_resolve`) has the same gap D2 had on the serial path (kMtPrefer); on neuron1k_v3
-(mouse) mt-Atp6 is 16 with rules 0 on both engines and 326 619 with the default rules on both engines (the GPU run is the CPU-pileup fallback). **The Beta cost saving needs #80 on the GPU first** (follow-up).
+This section first recorded that the GPU pileup lacked the rules of #80, so any rule on sent the run to the CPU pileup. The later sections
+of this document record the port ("Intron rules of #80 ... on the GPU", then the 397 default with kFlank). Today the engine default is
+`intron_rules = 7053` (389 + kFlank 8 + kGeneFullSet 512 + kUmiGeneSpliced 2048 + kExonPrecedence 4096, `include/singlet/pileup/pileup_engine.h`), and
+`singlet.cpp` declines the GPU pileup only for bits outside `kGpuRules` (1, 4, 8, 16, 128, 256, 512, 1024, 2048, 4096). The frontier identity
+gates run these defaults with the GPU pileup on: on neuron1k_v3 the records are built on the device, no pileup fallback occurs, and cpu:gpu
+is identical, mt-Atp6 included. `SINGLET_INTRON_RULES=0` restores the pre-#80 classification, as gate (a) below used.
 
 ## Gate (a): CPU engine vs `--engine gpu` + `SINGLET_GPU_PILEUP=on`, `SINGLET_INTRON_RULES=0`
 
@@ -129,3 +130,29 @@ log files); the molecule counters (spliced / unspliced / ambiguous / legacy_doub
 
 Cost, pbmc1k_v3 (one run each): CPU engine 7:28 wall, 2802 core-s, pileup stage 391 s; GPU engine + GPU pileup 4:02 wall, 1001 core-s,
 pileup stage 175 s, of which `pileupRun` 9.6 s (GPU kernels 2.2 s).
+
+## kExonPrecedence on the GPU (2026-11-07)
+
+Branch `gpu/exon-rule`. `intron_rule::kExonPrecedence` (4096) joins the default rules (7053 = 2957 + 4096) and `kGpuRules`. A multimapper with
+an exonic alignment is judged on its exonic alignments only, as STARsolo Gene, Space Ranger and Cell Ranger count it
+(`spatial-exon-multimapper.md`). Rules without the bit reproduce the previous outputs.
+
+| CPU (`pileup_engine.h`) | GPU (`pileup.cu`) |
+|---|---|
+| Each multimapper entry keeps, beside the all-alignment state, the same state over its exonic alignments: `ex_seen`, `ex_first` / `ex_second` / `ex_ambiguous` / `ex_has_nuc` (`note_ex_gene`, order-free like `note_gene`), and R7 over the exonic alignments in `xa_*` (the primary's features when the primary is exonic and kept, else the smallest secondary exon). An exonic alignment has a non-empty same-strand exon overlap list (`GeneHit::exonic` for secondaries). `note_primary_exonic` / `note_secondary_exonic` fill it on the serial and the per-worker paths; `merge_exonic` joins worker entries in the cross-worker merge. `mt_ex` marks an exonic chrM alignment. `mm_verdict` decides the outcome for the serial `resolve_mm`, `resolve_mm_parallel` and the merge: with the bit and an exonic alignment the read is judged on the exonic set, else on all alignments as before | `k_annotate` sets bit 1 of `AA.multi` for an alignment with a same-strand exon overlap (bit 0 stays the multi-gene flag), so `AA` keeps its 48 bytes. `k_resolve` keeps `xs`, `xfg` / `xsec` / `xamb` / `xnuc` and `xg` / `xex` / `xin` / `xfl` (R7 over the exonic alignments) and `mexo` beside the existing state, and applies `mm_verdict`'s order: the chrM tie on the judged set, then ambiguity, then the counted features |
+| The kMtPrefer tie on the exonic set needs an exonic chrM alignment and a nuclear exonic gene | same (`mexo`, `xnuc`) |
+| G-EM pairs of reads ambiguous among exonic genes are the two smallest exonic genes | The GPU pileup produces no G-EM pairs, as before |
+
+`tests/cpp/test_exon_precedence.cpp` pins the serial run over seven record orders and `run_parallel` over five worker splits to one result
+under 2957 and 7053. `test_gpu_pileup_labels` compares the GPU pileup with the CPU pileup under 7053 as well (fixture read `xpi`: intronic primary,
+exonic secondary). The CPU = GPU gate on real data is still to run.
+
+### Within one genome (2026-11-07)
+
+On a joint reference the rule decides only when all alignments of the read lie in one genome. A contig named `<genome>___<contig>`
+(`GRCh38___chr1`, `GRCm39___1`) belongs to `<genome>`, and any other contig to an unnamed genome. Each multimapper entry keeps a bit mask of
+its alignments' genomes (`sp_mask`, every alignment, exonic or not); `mm_verdict` and `k_resolve` (`spm`, from `PileupInput::tidSpecies`)
+fall back to the all-alignment set when the mask names two genomes. On hgmm1k_v3 the rule had added about 7,000 wrong-species exon UMIs, most
+of them human rRNA reads whose only exonic alignment is the mouse 18S pseudogene Rn18s-rs5. A single-genome reference has an empty species
+map, so its outputs do not change. `test_exon_precedence` adds a three-contig joint reference that pins the cross-genome read as ambiguous and
+the one-genome read as counted, over record orders and worker splits.
