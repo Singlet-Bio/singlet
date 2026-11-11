@@ -1,0 +1,123 @@
+{
+ "source_hash": "99f03cb79a05811c3b661760b7386b167178bababc68d272c8b85add90d1aba7",
+ "commit": "f84a90a017b3c48cac5e6a69753022ad9f5671ed",
+ "engine": "cpu",
+ "date": "2026-11-11",
+ "datasets": {
+  "hgmm1k_v3": {
+   "axes": {
+    "barnyard.X": {
+     "singlet": 0.003430287231435173,
+     "starsolo": 0.0032755230947720385,
+     "diff": 0.0001547641366631343,
+     "diff_ci": [
+      0.0001300143005993774,
+      0.0001792996787485753
+     ],
+     "verdict": "FAIL"
+    },
+    "chrY": {
+     "singlet": 7.6630566607761805,
+     "starsolo": 5.2181365803380615,
+     "diff": 2.444920080438119,
+     "diff_ci": [
+      1.058582178571348,
+      3.776963356089113
+     ],
+     "verdict": "FAIL"
+    },
+    "barnyard.exon": {
+     "singlet": 0.003630687089933849,
+     "starsolo": 0.0035819713517794907,
+     "diff": 4.871573815435834e-05,
+     "diff_ci": [
+      3.9795712054065905e-05,
+      5.762447204544748e-05
+     ],
+     "verdict": "FAIL"
+    },
+    "barnyard.intron": {
+     "singlet": 0.002649806951915947,
+     "starsolo": 0.002713391070904497,
+     "diff": -6.358411898855013e-05,
+     "diff_ci": [
+      -7.755804328018202e-05,
+      -4.884074498000307e-05
+     ],
+     "verdict": "PASS_AT_OR_BETTER"
+    }
+   }
+  },
+  "hgmm1k_v2": {
+   "axes": {
+    "barnyard.X": {
+     "singlet": 0.008017001568929661,
+     "starsolo": 0.008428049242690671,
+     "diff": -0.00041104767376101,
+     "diff_ci": [
+      -0.0004747473131353344,
+      -0.00035355967737712453
+     ],
+     "verdict": "PASS_AT_OR_BETTER"
+    },
+    "chrY": {
+     "singlet": 8.7437804511326,
+     "starsolo": 6.255769209381985,
+     "diff": 2.4880112417506153,
+     "diff_ci": [
+      0.8619145529807487,
+      4.130705161696014
+     ],
+     "verdict": "FAIL"
+    },
+    "barnyard.exon": {
+     "singlet": 0.007476247810183297,
+     "starsolo": 0.00754339700314528,
+     "diff": -6.714919296198305e-05,
+     "diff_ci": [
+      -7.975369963983975e-05,
+      -5.512299547754979e-05
+     ],
+     "verdict": "PASS_AT_OR_BETTER"
+    },
+    "barnyard.intron": {
+     "singlet": 0.012213522878696276,
+     "starsolo": 0.01248606593726538,
+     "diff": -0.0002725430585691028,
+     "diff_ci": [
+      -0.00033860603713356936,
+      -0.0002041912933832357
+     ],
+     "verdict": "PASS_AT_OR_BETTER"
+    }
+   }
+  },
+  "pbmc1k_cite_v3": {
+   "axes": {
+    "cite": {
+     "singlet": 0.42766322098191184,
+     "starsolo": 0.4275664642807786,
+     "diff": 9.67567011332382e-05,
+     "diff_ci": [
+      -0.0016714039194319545,
+      0.002431176954354125
+     ],
+     "verdict": "PASS_AT_OR_BETTER"
+    }
+   }
+  }
+ },
+ "gate": "FAIL",
+ "accepted": {
+  "decision": "D-136",
+  "date": "2026-11-11",
+  "by": "owner",
+  "note": "Same four misses the owner accepted for the Beta freeze (D-136, Singlet-Bio/singlet-agents sprint/DECISIONS.md); measured again on v1.3.7 (rel137 gate, commit f84a90a0, CPU engine). The record's own gate field stays FAIL as measured.",
+  "axes": [
+   "hgmm1k_v3:barnyard.X",
+   "hgmm1k_v3:barnyard.exon",
+   "hgmm1k_v3:chrY",
+   "hgmm1k_v2:chrY"
+  ]
+ }
+}
