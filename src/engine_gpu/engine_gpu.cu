@@ -1526,11 +1526,11 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const uint32_t NONE = 0xFFFFFFFFu;
     singlet_engine_gpu::NoInitVector<uint32_t> readRep(n);
     // align-w2 (SINGLET_ENGINE_GPU_NREADS): the sequences with N on the device too (STAR's mapOneRead splits them with qualitySplit and
-    // scores N as neither match nor mismatch; the port, stitch.cuh, does the same). 0: as before, STAR maps them. 1: they get records like
-    // every other sequence. check: the lanes map them and their results go to SINGLET_ENGINE_GPU_NCHECK_OUT (no records: STAR still maps
+    // scores N as neither match nor mismatch; the port, stitch.cuh, does the same). 1 (the default): they get records like every other
+    // sequence (records byte-identical to STAR's on 3 samples, 1.68 M reads at 300 M). 0: as before, STAR maps them. check: the lanes map them and their results go to SINGLET_ENGINE_GPU_NCHECK_OUT (no records: STAR still maps
     // their reads, and SINGLET_STAR_NDUMP writes STAR's results for the comparison). The flag per read: bit 1 N, bit 2 empty (never on the device).
     const char* nrE = std::getenv("SINGLET_ENGINE_GPU_NREADS");
-    const int nreads = !nrE ? 0 : std::string(nrE) == "check" ? 2 : nrE[0] == '1' ? 1 : 0;
+    const int nreads = !nrE ? 1 : std::string(nrE) == "check" ? 2 : nrE[0] == '0' ? 0 : 1;
     const uint8_t repMask = nreads ? 2 : 3, rrMask = nreads == 1 ? 2 : 3;   // the flag bits that keep a sequence out of rep / its reads without a record
     struct NDump { FILE* f = nullptr; std::mutex mu; u64 n = 0; ~NDump() { if (f) fclose(f); } } ndump;   // check: per sequence u32 L, L bases, u32 B, B bytes
     if (nreads == 2) if (const char* np = std::getenv("SINGLET_ENGINE_GPU_NCHECK_OUT")) ndump.f = std::fopen(np, "wb");

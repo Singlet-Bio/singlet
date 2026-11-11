@@ -1743,6 +1743,11 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 if (!keep(i)) continue;
                 const char *s = out.seq.data() + out.seqOff[i];
                 uint64 L = out.seqOff[i + 1] - out.seqOff[i];
+                // align-w2: sequences with N have records too (SINGLET_ENGINE_GPU_NREADS), but the cache's key is 2-bit packed, so
+                // they stay out of it, as STAR's seqCacheable keeps them out
+                bool hasN = false;
+                for (uint64 j = 0; j < L && !hasN; j++) hasN = (uint8) s[j] > 3;
+                if (hasN) continue;
                 cache->insert(SeqCache::hashSeq(s, L), s, L, out.blob.data() + out.blobOff[i], out.blobOff[i + 1] - out.blobOff[i]);
             }
         });
