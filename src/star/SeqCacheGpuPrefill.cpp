@@ -1561,14 +1561,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     auto handoverAgain = [&]() {   // E16 handover: a fallback needs the records it released; the same call without it (not an attempt)
         in.e2eHandover = false;
         P.inOut->logMain << "ENGINE_GPU: E16 handover: the run would fall back and read the released host records; the engine runs again without "
-                            "the handover. Its log:
-" << out.log << flush;
+                            "the handover. Its log:\n" << out.log << flush;
         singlet_tail::mark("prefill: E16 handover: the engine again without it (a fallback reads the host records)");
         in.release(); in.reacquire(1);
         if (e2hSaved) *e2r.hdr() = e2h0;
         out = singlet_engine_gpu::Output{};
-        out.log = "engine_gpu: E16 handover off: the engine again for a fallback that reads the host records
-";
+        out.log = "engine_gpu: E16 handover off: the engine again for a fallback that reads the host records\n";
         ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
     };
     if (!ok && out.handoverRetry) handoverAgain();
@@ -1709,8 +1707,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     auto needHost = [&](const char *what) {   // E16 handover: the host records' pages were released; a path that reads them cannot run
         if (out.hostDropped)
             exitWithError(std::string("EXITING because of FATAL ERROR (singlet --engine gpu, E16): ") + what + " needs the host records, which the records' phase "
-                          "released (level 5 not reached); rerun with SINGLET_E16_OFF=handover
-", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+                          "released (level 5 not reached); rerun with SINGLET_E16_OFF=handover\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
     };
     auto insertRecords = [&](auto keep) {
         needHost("the sequence cache inserts");

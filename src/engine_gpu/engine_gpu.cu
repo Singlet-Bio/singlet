@@ -2417,8 +2417,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             hostBytes = SU.bytes;
             if (in.e2eHandover && singlet_tail::cut("handover") && e10 && in.e10.soloModel != nullptr) {   // E16 handover: read for the last time
                 singlet_engine_gpu::dropPages(out.blob.data(), nB); singlet_engine_gpu::dropPages(out.seq.data(), nS); out.hostDropped = true;
-                out.log += "engine_gpu: E16 handover: the host records' pages released after their upload (" + gbs(nB + nS) + ")
-";
+                out.log += "engine_gpu: E16 handover: the host records' pages released after their upload (" + gbs(nB + nS) + ")\n";
             }
         } else {
         // the gather: per chunk the lanes' packed results (device-resident; the host lane's uploaded), per record its source and sequence
@@ -2748,8 +2747,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             devNote();
         }
         hostMark("records pass 2 done (RC)", nRec);
-        if (out.hostDropped) out.log += "engine_gpu: E16 handover: the host records' pages released as pass 2 uploaded them (" + gbs(out.blob.size() + out.seq.size()) + ")
-";
+        if (out.hostDropped) out.log += "engine_gpu: E16 handover: the host records' pages released as pass 2 uploaded them (" + gbs(out.blob.size() + out.seq.size()) + ")\n";
         singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
         E2H.nRec = nRec; E2H.nAln = nAln; E2H.nOps = nOps; E2H.nSeq = nSeqT;
         E2H.oSigs = oS; E2H.oAlns = oA; E2H.oOps = oO; E2H.oNm = oN; E2H.oSeq = oQ;
