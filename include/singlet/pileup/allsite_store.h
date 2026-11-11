@@ -334,12 +334,15 @@ inline long long write_cells_vcf(const std::string& path, const DeltaStore& s, c
                                  const std::vector<std::string>& barcodes, const std::vector<uint32_t>& cells, const std::vector<int32_t>& donor_of,
                                  const DonorCalls& d, uint64_t max_fields = 4000000000ull) {
     if (d.K <= 0) return 0;
+    // `cells` are the VCF's columns: the first cells.size() columns of the store (the store may hold further, uncalled columns after them)
+    const uint32_t nc = std::min<uint32_t>(s.n_cells(), static_cast<uint32_t>(cells.size()));
+    const uint64_t kend = nc ? s.off[nc] : 0;
     std::vector<int64_t> slot(d.sites, -1); std::vector<uint32_t> rows;
-    for (uint64_t k = 0; k < s.row.size(); ++k) if (d.variant[s.row[k]]) slot[s.row[k]] = 0;
+    for (uint64_t k = 0; k < kend; ++k) if (d.variant[s.row[k]]) slot[s.row[k]] = 0;
     for (uint32_t rw = 0; rw < d.sites; ++rw) if (slot[rw] == 0) { slot[rw] = static_cast<int64_t>(rows.size()); rows.push_back(rw); }
     if (static_cast<uint64_t>(rows.size()) * cells.size() > max_fields) return -2;
     std::vector<std::vector<std::array<uint32_t, 3>>> by_row(rows.size());   // per kept row: (column, ad, dp)
-    for (uint32_t j = 0; j < s.n_cells(); ++j)
+    for (uint32_t j = 0; j < nc; ++j)
         for (uint64_t k = s.off[j]; k < s.off[j + 1]; ++k) if (slot[s.row[k]] >= 0) by_row[static_cast<size_t>(slot[s.row[k]])].push_back({j, s.ad[k], s.dp[k]});
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
     genotype::GzOut f(path);
@@ -384,13 +387,15 @@ inline long long write_cells_vcf(const std::string& path, const DeltaStore& s, c
 
 struct StoreStats {
     uint32_t cells = 0, assigned = 0, sites = 0, sites_variant = 0, sites_differ = 0;
+    uint32_t uncalled_columns = 0;           // columns after the called cells (barcodes that are not called cells, stored against the reference)
     int n_donors = 0;
     uint64_t entries = 0, full_entries = 0, bytes = 0;
     uint64_t coverage_block_bytes_est = 0;   // dropped (concordant) entries, at the measured bytes per kept entry, two of three fields
 };
 
-inline StoreStats store_stats(const DeltaStore& s, const DonorCalls& d, const std::vector<int32_t>& donor_of, const std::vector<uint32_t>& cells, uint64_t bytes) {
-    StoreStats t; t.cells = s.n_cells(); t.sites = s.n_sites; t.n_donors = s.K; t.entries = s.n_entries(); t.full_entries = s.full_entries; t.bytes = bytes;
+inline StoreStats store_stats(const DeltaStore& s, const DonorCalls& d, const std::vector<int32_t>& donor_of, const std::vector<uint32_t>& cells, uint64_t bytes,
+                              uint32_t n_called = UINT32_MAX) {
+    StoreStats t; t.cells = std::min<uint32_t>(s.n_cells(), n_called); t.uncalled_columns = s.n_cells() - t.cells; t.sites = s.n_sites; t.n_donors = s.K; t.entries = s.n_entries(); t.full_entries = s.full_entries; t.bytes = bytes;
     t.sites_variant = static_cast<uint32_t>(d.sites_variant);
     for (uint8_t x : d.differs) t.sites_differ += x;
     for (uint32_t c : cells) if (c < donor_of.size() && donor_of[c] >= 0) ++t.assigned;
@@ -403,6 +408,7 @@ inline bool write_store_json(const std::string& path, const StoreStats& t) {
     std::ofstream f(path);
     if (!f) return false;
     f << "{\n  \"rule\": \"" << kStoreRule << "\",\n  \"n_donors\": " << t.n_donors << ",\n  \"called_cells\": " << t.cells
+      << (t.uncalled_columns ? ",\n  \"uncalled_columns\": " + std::to_string(t.uncalled_columns) : std::string())
       << ",\n  \"cells_assigned_to_a_donor\": " << t.assigned << ",\n  \"sites\": " << t.sites << ",\n  \"sites_donor_variant\": " << t.sites_variant
       << ",\n  \"sites_donors_differ\": " << t.sites_differ << ",\n  \"full_entries\": " << t.full_entries << ",\n  \"stored_entries\": " << t.entries
       << ",\n  \"file_bytes\": " << t.bytes << ",\n  \"bytes_per_cell\": " << (t.cells ? t.bytes / t.cells : 0)

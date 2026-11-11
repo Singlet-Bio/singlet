@@ -31,6 +31,7 @@
 #include "donor_demux.h"
 #include "genotype_export.h"
 #include "allsite_store.h"
+#include "storage_safeguards.h"
 #include "mt_heteroplasmy.h"
 #include "mt_event_caller.h"
 #include "provenance.h"
@@ -1805,34 +1806,48 @@ inline ExportStats export_results(const PileupEngine& engine,
     // Raw per-cell chrM allele counts are genotype-like (they identify donors): PRIVATE, both modes.
     // Layout: features = chrM:<1-based pos>:<A|C|G|T> (pos*4 + base) x barcodes; mt_allele_counts = all reads,
     // mt_allele_counts_rev = the reverse-strand subset (forward-strand count = total - reverse).
-    // Columns of barcodes that are not called cells are written empty (every barcode stays a column, so the barcode
-    // list matches the other members); without a cell call every column is kept.
+    // Every barcode stays a column, so the barcode list matches the other members. Calls are metadata (D-137..D-141): the members hold
+    // the kept universe, not the called cells only (safeguards::uncalled_mode: 0 called cells only, 1 the universe in the same members,
+    // 2 called cells in these members and the uncalled barcodes in mt_allele_counts_uncalled*). The pooled counts of the uncalled
+    // barcodes are always written (mt_allele_counts_uncalled.tsv.gz).
     if (pileup_cfg.count_mt && mt_csc.data.size() > 0) {
         std::filesystem::create_directories(out_prefix + "/private");
-        auto cells_only = [&](const SparseAccumulator<uint16_t>::CSCMatrix& a) {
-            if (cc_result.cell_indices.empty()) return a;
-            std::vector<uint8_t> keep(a.ncols, 0);
-            for (uint32_t c : cc_result.cell_indices) if (c < a.ncols) keep[c] = 1;
-            SparseAccumulator<uint16_t>::CSCMatrix o;
-            o.nrows = a.nrows; o.ncols = a.ncols; o.indptr.assign(static_cast<size_t>(a.ncols) + 1, 0);
-            for (uint32_t j = 0; j < a.ncols; ++j) {
-                if (keep[j])
-                    for (int32_t k = a.indptr[j]; k < a.indptr[j + 1]; ++k) {
-                        o.indices.push_back(a.indices[k]);
-                        o.data.push_back(a.data[k]);
-                    }
-                o.indptr[j + 1] = static_cast<int32_t>(o.indices.size());
-            }
-            return o;
-        };
-        SINGLET_TIMED(write_threads, [&, cells_only]() {
-            auto m = cells_only(mt_csc);
-            write_matrix("private/mt_allele_counts", m, mt_feat_names);
+        const int unc_mode = safeguards::uncalled_mode();
+        // The write threads run until the join below, after this block: they capture their own copies (the mask by shared pointer).
+        auto called_mask = std::make_shared<std::vector<uint8_t>>();   // empty: no cell call ran, every barcode counts as a cell
+        if (!cc_result.cell_indices.empty()) {
+            called_mask->assign(mt_csc.ncols, 0);
+            for (uint32_t c : cc_result.cell_indices) if (c < mt_csc.ncols) (*called_mask)[c] = 1;
+        }
+        const bool has_call = !called_mask->empty();
+        const uint64_t n_called_mt = cc_result.cell_indices.size();
+        const bool whole = unc_mode == 1 || !has_call;
+        SINGLET_TIMED(write_threads, [&, called_mask, whole]() {
+            if (whole) write_matrix("private/mt_allele_counts", mt_csc, mt_feat_names);
+            else { auto m = safeguards::select_columns(mt_csc, *called_mask, 1); write_matrix("private/mt_allele_counts", m, mt_feat_names); }
         });
         if (mt_rev_csc.data.size() > 0)
-            SINGLET_TIMED(write_threads, [&, cells_only]() {
-                auto m = cells_only(mt_rev_csc);
-                write_matrix("private/mt_allele_counts_rev", m, mt_feat_names);
+            SINGLET_TIMED(write_threads, [&, called_mask, whole]() {
+                if (whole) write_matrix("private/mt_allele_counts_rev", mt_rev_csc, mt_feat_names);
+                else { auto m = safeguards::select_columns(mt_rev_csc, *called_mask, 1); write_matrix("private/mt_allele_counts_rev", m, mt_feat_names); }
+            });
+        if (has_call && unc_mode == 2) {
+            SINGLET_TIMED(write_threads, [&, called_mask]() {
+                auto m = safeguards::select_columns(mt_csc, *called_mask, 0);
+                write_matrix("private/mt_allele_counts_uncalled", m, mt_feat_names);
+            });
+            if (mt_rev_csc.data.size() > 0)
+                SINGLET_TIMED(write_threads, [&, called_mask]() {
+                    auto m = safeguards::select_columns(mt_rev_csc, *called_mask, 0);
+                    write_matrix("private/mt_allele_counts_uncalled_rev", m, mt_feat_names);
+                });
+        }
+        if (has_call)
+            SINGLET_TIMED(write_threads, [&, called_mask, n_called_mt]() {
+                const long long n = safeguards::write_mt_uncalled_pooled(out_prefix + "/private/mt_allele_counts_uncalled.tsv.gz", mt_csc,
+                                                                         mt_rev_csc.data.empty() ? nullptr : &mt_rev_csc, *called_mask, n_called_mt);
+                if (n < 0) record_failed_write("private/mt_allele_counts_uncalled.tsv.gz");
+                else std::cerr << "[mt] mt_allele_counts_uncalled.tsv.gz: " << n << " uncalled barcodes pooled\n";
             });
     }
 
@@ -1870,20 +1885,24 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
     const bool demux_thread_ran = demux_thread.joinable();
+    DonorDepths callable_depths;   // kept for the per-donor callable masks (storage_safeguards.h)
+    bool have_callable_depths = false;
     // The all-site member (allsite_store.h): once the cells are called and demux has assigned them, its merged records are prepared for the
     // called cells (every barcode when no cell call ran). The per-cell delta against the donor genotype is built from them below; no CSC
     // matrix with int32 column pointers is built, so a deep library has no entry limit.
     auto build_allsite = [&]() {
         if (!engine.allsite_ready()) return;
         std::vector<uint8_t> keep_cells;
-        if (export_cfg.run_cell_calling) {
+        // Calls are metadata (D-137..D-141): with the default storage mode the member keeps the kept universe, not the called cells only
+        const bool called_only = safeguards::uncalled_mode() == 0;
+        if (export_cfg.run_cell_calling && called_only) {
             keep_cells.assign(barcodes.size(), 0);
             for (uint32_t c : cc_result.cell_indices) if (c < keep_cells.size()) keep_cells[c] = 1;
         }
-        const std::vector<uint8_t>* keep = export_cfg.run_cell_calling ? &keep_cells : nullptr;
+        const std::vector<uint8_t>* keep = (export_cfg.run_cell_calling && called_only) ? &keep_cells : nullptr;
         const auto p0 = std::chrono::steady_clock::now();
         engine.finalize_allsite([&](allsite::Result& r) { r.prepare(keep); return true; });
-        std::cerr << "[allsite] records prepared for the called cells in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - p0).count() << " s\n";
+        std::cerr << "[allsite] records prepared for " << (keep ? "the called cells" : "the kept universe") << " in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - p0).count() << " s\n";
     };
     if (!demux_thread.joinable()) build_allsite();
     if (demux_thread.joinable()) {
@@ -1907,6 +1926,7 @@ inline ExportStats export_results(const PileupEngine& engine,
             std::filesystem::create_directories(out_prefix + "/private/donor");
             write_donor_vcfs(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
             write_donor_coverages(out_prefix + "/private/donor", demux_result, depths, engine.snp_names());
+            callable_depths = std::move(depths); have_callable_depths = true;
         }
         // D-52: one multi-sample VCF per sample (GT:GQ:AD:DP:PL per donor, called cells only), private.
         if (demux_result.n_donors_k > 0) {
@@ -1965,10 +1985,23 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::vector<uint32_t> cells;   // sorted, unique called barcodes (every barcode when no cell call ran)
         if (export_cfg.run_cell_calling) { cells = cc_result.cell_indices; std::sort(cells.begin(), cells.end()); cells.erase(std::unique(cells.begin(), cells.end()), cells.end()); }
         else { cells.resize(nb); for (uint32_t c = 0; c < nb; ++c) cells[c] = c; std::cerr << "[allsite] no cell call ran: every barcode is kept\n"; }
+        // Calls are metadata (D-137..D-141): the barcodes that are not called cells follow the called ones as further columns of the store
+        // (mode 1), or go to a store of their own (mode 2). They have no donor and are stored against the reference genome.
+        const int unc_mode = export_cfg.run_cell_calling ? safeguards::uncalled_mode() : 0;
+        const uint32_t n_called_cols = static_cast<uint32_t>(cells.size());
+        const std::vector<uint32_t> called_cells = cells;   // the columns of cells_allsite.vcf.gz (a dense VCF stays on the called cells)
+        std::vector<uint32_t> uncalled_cells;
+        if (unc_mode > 0) {
+            std::vector<uint8_t> is_called(nb, 0);
+            for (uint32_t c : called_cells) if (c < nb) is_called[c] = 1;
+            for (uint32_t c = 0; c < nb; ++c) if (!is_called[c]) uncalled_cells.push_back(c);
+            if (unc_mode == 1) cells.insert(cells.end(), uncalled_cells.begin(), uncalled_cells.end());
+        }
         const int K = demux_thread_ran ? demux_result.n_donors_k : 0;
         std::vector<int32_t> donor_of(nb, -1);   // the cells that count for the donor genotypes (the rule of donors.vcf.gz)
         std::vector<std::string> assignment(cells.size(), "none");
-        for (size_t j = 0; j < cells.size(); ++j) {
+        for (size_t j = n_called_cols; j < cells.size(); ++j) assignment[j] = "uncalled";
+        for (size_t j = 0; j < n_called_cols; ++j) {
             const uint32_t c = cells[j];
             if (K <= 0 || c >= demux_result.assignments.size()) continue;
             const auto& a = demux_result.assignments[c];
@@ -1995,14 +2028,23 @@ inline ExportStats export_results(const PileupEngine& engine,
         bool ok_ctsv = true; uint64_t bytes = 0;
         std::thread th_ctsv([&] { const auto a = clk::now(); ok_ctsv = allsite::write_cells_tsv(adir + "/cells.tsv.gz", barcodes, cells, assignment, store); t_ctsv = secs(a, clk::now()); });
         std::thread th_cvcf([&] { if (K <= 0) return; const auto a = clk::now();
-            m = allsite::write_cells_vcf(out_prefix + "/private/genotype/cells_allsite.vcf.gz", store, engine.allsite(), engine.contig_names(), barcodes, cells, donor_of, calls);
+            m = allsite::write_cells_vcf(out_prefix + "/private/genotype/cells_allsite.vcf.gz", store, engine.allsite(), engine.contig_names(), barcodes, called_cells, donor_of, calls);
             t_cvcf = secs(a, clk::now()); });
         { const auto a = clk::now(); bytes = allsite::write_store(adir + "/allele_delta.bin", store); t_bin = secs(a, clk::now()); }
         th_ctsv.join(); th_cvcf.join(); th_sites.join(); th_dvcf.join();
         if (bytes == 0) record_failed_write("private/allsite/allele_delta.bin");
         if (!ok_ctsv) record_failed_write("private/allsite/cells.tsv.gz");
         if (!ok_sites) record_failed_write("private/allsite/sites.tsv.gz");
-        const auto stats = allsite::store_stats(store, calls, donor_of, cells, bytes);
+        const auto stats = allsite::store_stats(store, calls, donor_of, cells, bytes, n_called_cols);
+        if (unc_mode == 2 && !uncalled_cells.empty()) {   // the uncalled barcodes in files of their own; the called-cell members above are as before
+            allsite::DeltaStore ustore;
+            const std::vector<std::string> uassign(uncalled_cells.size(), "uncalled");
+            allsite::build_store(engine.allsite(), nb, uncalled_cells, donor_of, calls, ustore);
+            const uint64_t ubytes = allsite::write_store(adir + "/allele_delta_uncalled.bin", ustore);
+            if (ubytes == 0) record_failed_write("private/allsite/allele_delta_uncalled.bin");
+            if (!allsite::write_cells_tsv(adir + "/cells_uncalled.tsv.gz", barcodes, uncalled_cells, uassign, ustore)) record_failed_write("private/allsite/cells_uncalled.tsv.gz");
+            std::cerr << "[allsite] uncalled barcodes: " << uncalled_cells.size() << " columns, " << ustore.n_entries() << " entries, " << ubytes << " bytes\n";
+        }
         if (!allsite::write_store_json(adir + "/store.json", stats)) record_failed_write("private/allsite/store.json");
         if (K > 0) {
             if (n < 0) record_failed_write("private/genotype/donors_allsite.vcf.gz");
@@ -2018,7 +2060,22 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::cerr << "[allsite] stored " << allsite::kStoreRule << ": " << stats.cells << " called cells (" << stats.assigned << " with a donor), " << stats.sites
                   << " sites; entries " << stats.entries << " of " << stats.full_entries << ", " << stats.bytes << " bytes, " << (stats.cells ? stats.bytes / stats.cells : 0)
                   << " bytes per cell; per-cell coverage blocks would add about " << stats.coverage_block_bytes_est << " bytes\n";
+        if (K > 0 && have_callable_depths) {   // per-donor callable masks over the panel and the all-site sites
+            std::vector<uint64_t> n_iv;
+            const long long nm = safeguards::write_callable_masks(out_prefix + "/private/donor", demux_result, callable_depths, engine.snp_names(),
+                                                                  engine.contig_names(), &engine.allsite(), &calls, &n_iv);
+            if (nm < 0) record_failed_write("private/donor/donor0_callable.bed.gz");
+            else std::cerr << "[callable] " << nm << " intervals over " << K << " donors (panel and all-site sites)\n";
+            result.failed_writes = failed_writes;
+        }
         engine.allsite().release();
+        result.failed_writes = failed_writes;
+    }
+    else if (demux_thread_ran && demux_result.n_donors_k > 0 && have_callable_depths) {   // no all-site member: the panel sites only
+        const long long nm = safeguards::write_callable_masks(out_prefix + "/private/donor", demux_result, callable_depths, engine.snp_names(),
+                                                              engine.contig_names(), nullptr, nullptr);
+        if (nm < 0) record_failed_write("private/donor/donor0_callable.bed.gz");
+        else std::cerr << "[callable] " << nm << " intervals over " << demux_result.n_donors_k << " donors (panel sites)\n";
         result.failed_writes = failed_writes;
     }
 
