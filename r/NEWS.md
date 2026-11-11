@@ -1,5 +1,9 @@
 # singlet (R) — NEWS
 
+## Unreleased
+
+- `s1_design()`, `s1_contrasts()` and `s1_sample_status()` read a study's design sidecar (factors, levels, units, contrasts, status). Tier `candidate` means model-curated and unverified. Not released.
+
 ## singlet 1.3.7
 
 Version aligned with the Python package for the Research Beta campaign engine.

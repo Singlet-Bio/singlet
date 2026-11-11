@@ -2,6 +2,10 @@
 
 All notable changes to the singlet project.
 
+## Unreleased
+
+- **Clients.** Design catalog readers: `singlet.design()`, `singlet.contrasts()` and `singlet.sample_status()` in Python and `s1_design()`, `s1_contrasts()` and `s1_sample_status()` in R read a study's `s1/d/<GSE>.design.json` sidecar. Tier `candidate` means model-curated and unverified. Not released.
+
 ## [1.3.7] — the Research Beta campaign engine
 
 The campaign engine: the 1.3.6 storage safeguards (per-barcode uncalled mt counts off by default, run-length coded callable

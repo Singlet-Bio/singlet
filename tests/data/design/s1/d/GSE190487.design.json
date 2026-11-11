@@ -1,0 +1,128 @@
+{
+ "schema": "singlet-design-catalog-0.1",
+ "study": "GSE190487",
+ "tier": "unresolved",
+ "flags": [
+  "pool_unresolved"
+ ],
+ "design_class": "atlas_or_single_condition",
+ "summary": "One NAFLD liver explant; CD45+ cells recombined from HLA-DR- and HLA-DR+ sorts at 70-30 in one library.",
+ "factors": [
+  {
+   "id": "F1",
+   "name": "HLA-DR sorted fraction",
+   "type": "cell_fraction",
+   "unit": "cell",
+   "source": "series_text",
+   "confidence": "medium",
+   "evidence": "FACS-sorted for CD45+ cells, taking a 70-30 HLADR- to HLADR+ split to correct for lymphocyte preponderance",
+   "levels": [
+    {
+     "id": "F1.a",
+     "label": "HLADR-",
+     "standard": "HLA-DR negative CD45+ cells",
+     "role": "other",
+     "ontology": []
+    },
+    {
+     "id": "F1.b",
+     "label": "HLADR+",
+     "standard": "HLA-DR positive CD45+ cells",
+     "role": "other",
+     "ontology": []
+    }
+   ]
+  }
+ ],
+ "units": [
+  {
+   "unit_id": "GSM5724573",
+   "gsm": "GSM5724573",
+   "library": "gex",
+   "biosample_key": "GSM5724573",
+   "donor": null,
+   "pool": {
+    "type": "suspected",
+    "n_members": 2,
+    "mapping": "absent"
+   },
+   "levels": {
+    "F1": [
+     "F1.a",
+     "F1.b"
+    ]
+   },
+   "covariates": {
+    "sex": null,
+    "age": null
+   },
+   "status": "scheduled",
+   "in_campaign_sample_list": true
+  }
+ ],
+ "contrasts": [
+  {
+   "id": "GSE190487.c1",
+   "factor": "HLA-DR sorted fraction",
+   "factor_id": "F1",
+   "factor_type": "cell_fraction",
+   "test": "HLA-DR negative CD45+ cells",
+   "reference": null,
+   "test_level": "F1.a",
+   "reference_level": null,
+   "symmetric": true,
+   "other_arm": "HLA-DR positive CD45+ cells",
+   "ontology": {
+    "test": [],
+    "reference": []
+   },
+   "kind": "derived",
+   "replication_unit": "sample",
+   "n": {
+    "test_units": 0,
+    "test_donors": null,
+    "reference_units": 0,
+    "reference_donors": null
+   },
+   "pairing": "unknown",
+   "shared": {},
+   "differs": [],
+   "notes": [],
+   "confounds": [
+    "pooled_origin_unresolved"
+   ],
+   "grade": "D",
+   "status": "unresolved",
+   "unassigned_units_in_factor": 0,
+   "evidence": [
+    {
+     "source": "design:factor:series_text",
+     "quote": "FACS-sorted for CD45+ cells, taking a 70-30 HLADR- to HLADR+ split to correct for lymphocyte preponderance"
+    }
+   ]
+  }
+ ],
+ "comparisons": [],
+ "conflicts": [],
+ "needs": {
+  "paper": "helpful",
+  "supplementary_file": "none",
+  "why": "Cell-to-fraction mapping is not in the bundle; the paper may state it."
+ },
+ "abstentions": [
+  "Per-cell fraction labels are unknown, so the sample carries both levels."
+ ],
+ "residual": {
+  "GSM5724573": "Both sorted fractions sit in the one library by design; which cells belong to which fraction is not in the bundle."
+ },
+ "provenance": {
+  "model": null,
+  "prompt_version": null,
+  "bundle_hash": "01860220823e4d01",
+  "bundle_mode": "full",
+  "n_samples_shown": 1,
+  "method": "claude-code-subagent",
+  "paper_used": false,
+  "pubmed": []
+ }
+}
