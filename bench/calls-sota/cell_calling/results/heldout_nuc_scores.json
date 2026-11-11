@@ -1,0 +1,33 @@
+{
+ "n_tag_confirmed": 5779,
+ "tools": {
+  "singlet": {
+   "n_called": 118666,
+   "recall_own_call": 1.0,
+   "recall_at_N": 0.4925,
+   "share_calls_outside_authors_set_T": 0.9122,
+   "jaccard_with_authors_set_T": 0.0878
+  },
+  "emptydrops": {
+   "n_called": 14639,
+   "recall_own_call": 0.9765,
+   "recall_at_N": 0.4925,
+   "share_calls_outside_authors_set_T": 0.3092,
+   "jaccard_with_authors_set_T": 0.6769,
+   "recall_own_singlet_minus": [
+    0.0235,
+    [
+     0.0202,
+     0.0276
+    ]
+   ],
+   "recall_at_N_singlet_minus": [
+    0.0,
+    [
+     0.0,
+     0.0
+    ]
+   ]
+  }
+ }
+}
