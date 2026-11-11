@@ -77,7 +77,7 @@ int main() {
     const std::string d0 = slurp_gz("tmp_sg/callable/donor0_callable.rle.gz"), d1 = slurp_gz("tmp_sg/callable/donor1_callable.rle.gz");
     std::remove("tmp_sg/callable/donor0_callable.rle.gz"); std::remove("tmp_sg/callable/donor1_callable.rle.gz"); 
     // donor0: chr1:100, 101, 102 are adjacent (one interval 99-102), chr2:50 has 20 alt reads out of 20 (confident 1/1)
-    CHECK(d0.find(">chr1\n99\t3\n>chr2\n0\t1\n") != std::string::npos, "donor0: adjacent confident positions merged, run-length coded");
+    CHECK(d0.find(">chr1\n99\t3\n>chr2\n49\t1\n") != std::string::npos, "donor0: adjacent confident positions merged, run-length coded");
     // donor1: depth 2 at chr1:101 is not confident, depth 30 all reference at chr2:50 is
     CHECK(d1.find(">chr1") == std::string::npos && d1.find(">chr2\n49\t1\n") != std::string::npos, "donor1 keeps only the deep position");
     CHECK(m == 3 && iv.size() == 2 && iv[0] == 2 && iv[1] == 1, "interval counts");
