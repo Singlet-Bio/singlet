@@ -1,0 +1,131 @@
+{
+ "GSM5130155": {
+  "cells": 231868,
+  "labeled": 8134,
+  "k_found": 3,
+  "counts": {
+   "donor1": 4352,
+   "donor0": 3040,
+   "donor2": 742
+  },
+  "false_split_rate": 0.46496188836980573,
+  "split_declared": [
+   "donor0",
+   "donor2"
+  ],
+  "doublet_frac": 0.00012075836251660427,
+  "status": {
+   "ambient": 223701,
+   "cell": 8167
+  }
+ },
+ "GSM5130163": {
+  "cells": 257619,
+  "labeled": 104091,
+  "k_found": 1,
+  "counts": {
+   "donor0": 104091
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 153528,
+   "cell": 104091
+  }
+ },
+ "GSM5171610": {
+  "cells": 548468,
+  "labeled": 51305,
+  "k_found": 1,
+  "counts": {
+   "donor0": 51305
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 497163,
+   "cell": 51305
+  }
+ },
+ "GSM7064234": {
+  "cells": 2013895,
+  "labeled": 48716,
+  "k_found": 1,
+  "counts": {
+   "donor0": 48716
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 1965179,
+   "cell": 48716
+  }
+ },
+ "GSM7884577": {
+  "cells": 2383957,
+  "labeled": 59826,
+  "k_found": 1,
+  "counts": {
+   "donor0": 59826
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 2324131,
+   "cell": 59826
+  }
+ },
+ "GSM8183378": {
+  "cells": 379986,
+  "labeled": 8088,
+  "k_found": 1,
+  "counts": {
+   "donor0": 8088
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 371898,
+   "cell": 8088
+  }
+ },
+ "GSM8164511": {
+  "cells": 393097,
+  "labeled": 8753,
+  "k_found": 1,
+  "counts": {
+   "donor0": 8753
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 384344,
+   "cell": 8753
+  }
+ },
+ "GSM9038586": {
+  "cells": 158523,
+  "labeled": 8680,
+  "k_found": 1,
+  "counts": {
+   "donor0": 8680
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 149843,
+   "cell": 8680
+  }
+ },
+ "_pooled": {
+  "labeled": 297593,
+  "false_split_rate": 0.012708632259495352
+ }
+}

@@ -1,0 +1,126 @@
+{
+ "kang_d101": {
+  "cells": 155019,
+  "labeled": 858,
+  "k_found": 1,
+  "counts": {
+   "donor0": 858
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 154161,
+   "cell": 858
+  }
+ },
+ "kang_d1015": {
+  "cells": 155019,
+  "labeled": 2738,
+  "k_found": 1,
+  "counts": {
+   "donor0": 2738
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 152281,
+   "cell": 2738
+  }
+ },
+ "kang_d1016": {
+  "cells": 155019,
+  "labeled": 1723,
+  "k_found": 1,
+  "counts": {
+   "donor0": 1723
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 153296,
+   "cell": 1723
+  }
+ },
+ "kang_d1039": {
+  "cells": 155019,
+  "labeled": 461,
+  "k_found": 1,
+  "counts": {
+   "donor0": 461
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 154558,
+   "cell": 461
+  }
+ },
+ "kang_d107": {
+  "cells": 155019,
+  "labeled": 517,
+  "k_found": 1,
+  "counts": {
+   "donor0": 517
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 154502,
+   "cell": 517
+  }
+ },
+ "kang_d1244": {
+  "cells": 155019,
+  "labeled": 1879,
+  "k_found": 1,
+  "counts": {
+   "donor0": 1879
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 153140,
+   "cell": 1879
+  }
+ },
+ "kang_d1256": {
+  "cells": 155019,
+  "labeled": 2108,
+  "k_found": 1,
+  "counts": {
+   "donor0": 2108
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 152911,
+   "cell": 2108
+  }
+ },
+ "kang_d1488": {
+  "cells": 155019,
+  "labeled": 2031,
+  "k_found": 1,
+  "counts": {
+   "donor0": 2031
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 152988,
+   "cell": 2031
+  }
+ },
+ "_pooled": {
+  "labeled": 12315,
+  "false_split_rate": 0.0
+ }
+}

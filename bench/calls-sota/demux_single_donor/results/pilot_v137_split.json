@@ -1,0 +1,71 @@
+{
+ "GSM5130155/v1.3.7": {
+  "cells": 231868,
+  "labeled": 8134,
+  "k_found": 3,
+  "counts": {
+   "donor0": 4352,
+   "donor2": 3040,
+   "donor1": 742
+  },
+  "false_split_rate": 0.46496188836980573,
+  "split_declared": [
+   "donor2",
+   "donor1"
+  ],
+  "doublet_frac": 0.00012075836251660427,
+  "status": {
+   "ambient": 223701,
+   "cell": 8167
+  }
+ },
+ "GSM5130163/v1.3.7": {
+  "cells": 257619,
+  "labeled": 104091,
+  "k_found": 1,
+  "counts": {
+   "donor0": 104091
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 153528,
+   "cell": 104091
+  }
+ },
+ "GSM8183378/v1.3.7": {
+  "cells": 379986,
+  "labeled": 8088,
+  "k_found": 1,
+  "counts": {
+   "donor0": 8088
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 371898,
+   "cell": 8088
+  }
+ },
+ "GSM8164511/v1.3.7": {
+  "cells": 393097,
+  "labeled": 8753,
+  "k_found": 1,
+  "counts": {
+   "donor0": 8753
+  },
+  "false_split_rate": 0.0,
+  "split_declared": [],
+  "doublet_frac": 0.0,
+  "status": {
+   "ambient": 384344,
+   "cell": 8753
+  }
+ },
+ "_pooled": {
+  "labeled": 129066,
+  "false_split_rate": 0.029302837308043946
+ }
+}
