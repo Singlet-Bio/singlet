@@ -4914,6 +4914,9 @@ static int singlet_main(int argc, char* argv[]) {
     bool cb_hist_ready = false;
     // Reads whose CR is not an exact whitelist barcode (1MM / N), by packed 3-bit barcode, weighted by duplicates: the pass-1 input of the corrected barcode universe
     std::unordered_map<uint64_t, uint64_t> cbx_nonexact;
+    // The same input as flat (barcode, reads) runs from the .1fq head scan's R11 counts; a barcode may recur across runs. The universe
+    // resolves every entry on its own and sums integer counts, so the two containers add up to the same universe.
+    std::vector<std::pair<uint64_t, uint64_t>> cbx_flat;
     auto cbx_pack = [](const uint8_t* codes, int n) {
         uint64_t k = 0;
         for (int j = 0; j < n; ++j) k = (k << 3) | std::min<uint8_t>(codes[j], 4);
@@ -5606,7 +5609,7 @@ static int singlet_main(int argc, char* argv[]) {
                 // E8 region, where STAR's prefill wrote them right after its decode, or else (no region, no prefill decode) from the .1fq here
                 const int cb0 = r11_cb0, cbl = r11_cbl, umi0 = r11_umi0, umil = r11_umil;
                 const int nt = std::max(1, star_threads);
-                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, cbx_pack, r11_dict, r11_raws](singlet::CbCorrector& c) {
+                cb_corrector.set_pending([runs, cb0, cbl, umi0, umil, nt, &cbx_nonexact, &cbx_flat, cbx_pack, r11_dict, r11_raws](singlet::CbCorrector& c) {
                     StopWatch sw;
                     std::vector<std::pair<uint64_t, uint64_t>> pairs;
                     uint64_t nwl = 0, tot = 0;
@@ -5646,18 +5649,32 @@ static int singlet_main(int argc, char* argv[]) {
                     uint64_t n_exact = 0;
                     const auto& dflat = runs->bc_dict_flat();
                     const uint16_t dlen = runs->bc_length();
-                    // The whitelist lookups (c.find, const) run on the job's threads into one slot per entry; the counts are then added in the
-                    // serial order, so the histogram and cbx_nonexact (an unordered_map: its insertion order is kept) are the serial loop's.
+                    // The whitelist lookups (c.find, const) and the packing of the other barcodes run on the job's threads, one slot per
+                    // entry; the exact counts are integer sums. SINGLET_R11_FLAT=0: the non-exact barcodes go into cbx_nonexact one by one.
+                    const char* fe = std::getenv("SINGLET_R11_FLAT");
+                    const bool flat = !(fe && fe[0] == '0') && cbl <= 21;
                     auto par_for = [nt](size_t n, auto&& fn) {
                         const int T = static_cast<int>(std::max<size_t>(1, std::min<size_t>(static_cast<size_t>(nt), n / 65536 + 1)));
-                        if (T == 1) { fn(size_t(0), n); return; }
+                        if (T == 1) { fn(size_t(0), n, 0); return T; }
                         std::vector<std::thread> th;
-                        for (int t = 0; t < T; ++t) th.emplace_back([&fn, n, t, T] { fn(n * t / T, n * (t + 1) / T); });
+                        for (int t = 0; t < T; ++t) th.emplace_back([&fn, n, t, T] { fn(n * t / T, n * (t + 1) / T, t); });
                         for (auto& x : th) x.join();
+                        return T;
+                    };
+                    // sorted (barcode, reads) runs of one thread's keys, appended to cbx_flat
+                    auto runs_of = [](std::vector<uint64_t>& keys, std::vector<std::pair<uint64_t, uint64_t>>& out) {
+                        std::sort(keys.begin(), keys.end());
+                        for (size_t a = 0; a < keys.size();) {
+                            size_t b = a + 1;
+                            while (b < keys.size() && keys[b] == keys[a]) ++b;
+                            out.emplace_back(keys[a], static_cast<uint64_t>(b - a));
+                            a = b;
+                        }
+                        std::vector<uint64_t>().swap(keys);
                     };
                     if (dlen == static_cast<uint16_t>(cbl)) {
                         std::vector<int64_t> wk(dict.size(), -1);
-                        par_for(dict.size(), [&](size_t k0, size_t k1) {
+                        par_for(dict.size(), [&](size_t k0, size_t k1, int) {
                             char bcs[32];
                             for (size_t k = k0; k < k1; ++k) {
                                 if (!dict[k]) continue;
@@ -5669,24 +5686,50 @@ static int singlet_main(int argc, char* argv[]) {
                             if (!dict[k]) continue;
                             const int64_t w = wk[k];
                             if (w >= 0) { c.add_exact(w, dict[k]); n_exact += dict[k]; }
+                            else if (flat) cbx_flat.emplace_back(cbx_pack(dflat.data() + k * dlen, cbl), dict[k]);   // distinct dictionary barcodes
                             else if (cbl <= 21) cbx_nonexact[cbx_pack(dflat.data() + k * dlen, cbl)] += dict[k];   // #153: the pass-1 input of the corrected barcode universe
                         }
                     }
                     std::vector<const std::string*> rawp;
                     for (const auto& v : raws) for (const auto& cb : v) rawp.push_back(&cb);
                     std::vector<int64_t> wr(rawp.size(), -1);
-                    par_for(rawp.size(), [&](size_t i0, size_t i1) { for (size_t i = i0; i < i1; ++i) wr[i] = c.find(rawp[i]->c_str()); });
-                    size_t ri = 0;
-                    for (const auto& v : raws)
-                        for (const auto& cb : v) {
-                            const int64_t w = wr[ri++];
-                            if (w >= 0) { c.add_exact(w, 1); ++n_exact; }
-                            else if (cbl <= 21) {
-                                uint8_t cd[32];
-                                for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
-                                cbx_nonexact[cbx_pack(cd, cbl)] += 1;
-                            }
+                    std::vector<std::vector<uint64_t>> tkeys(static_cast<size_t>(nt));
+                    par_for(rawp.size(), [&](size_t i0, size_t i1, int t) {
+                        for (size_t i = i0; i < i1; ++i) {
+                            const std::string& cb = *rawp[i];
+                            wr[i] = c.find(cb.c_str());
+                            if (wr[i] >= 0 || !flat) continue;
+                            uint8_t cd[32];
+                            for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
+                            tkeys[static_cast<size_t>(t)].push_back(cbx_pack(cd, cbl));
                         }
+                    });
+                    if (flat) {
+                        std::vector<std::vector<std::pair<uint64_t, uint64_t>>> truns(tkeys.size());
+                        par_for(tkeys.size() * 65536, [&](size_t a, size_t b, int) {
+                            for (size_t t = a / 65536; t < b / 65536; ++t) runs_of(tkeys[t], truns[t]);
+                        });
+                        for (auto& r : truns) cbx_flat.insert(cbx_flat.end(), r.begin(), r.end());
+                        for (size_t i = 0; i < rawp.size(); ++i)
+                            if (wr[i] >= 0) { c.add_exact(wr[i], 1); ++n_exact; }
+                    } else {
+                        size_t ri = 0;
+                        for (const auto& v : raws)
+                            for (const auto& cb : v) {
+                                const int64_t w = wr[ri++];
+                                if (w >= 0) { c.add_exact(w, 1); ++n_exact; }
+                                else if (cbl <= 21) {
+                                    uint8_t cd[32];
+                                    for (int j = 0; j < cbl; ++j) { const char ch = cb[j]; cd[j] = ch == 'A' ? 0 : ch == 'C' ? 1 : ch == 'G' ? 2 : ch == 'T' ? 3 : 4; }
+                                    cbx_nonexact[cbx_pack(cd, cbl)] += 1;
+                                }
+                            }
+                    }
+                    // the raw barcodes are freed on the job's threads
+                    std::vector<const std::string*>().swap(rawp);
+                    par_for(raws.size() * 65536, [&](size_t a, size_t b, int) {
+                        for (size_t q = a / 65536; q < b / 65536; ++q) std::vector<std::string>().swap(raws[q]);
+                    });
                     std::cerr << "[1fq-ingest] R11 exact CB histogram from the .1fq (STAR's prefill wrote none): " << n_exact << " reads over a "
                               << c.size() << "-barcode whitelist, " << sw.elapsed_s() << "s" << (early ? " (counted by the head scan)" : "") << "\n";
                 });
@@ -6604,26 +6647,30 @@ static int singlet_main(int argc, char* argv[]) {
         std::atomic<uint64_t> n_corrected{0}, n_lost{0};
         {
             const size_t nbk = cbx_nonexact.bucket_count();
-            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk, 1024))));
-            std::atomic<size_t> next_bk{0};
+            const size_t nfl = cbx_flat.size();
+            const int nt_u = std::max(1, std::min<int>(std::max(1, star_threads), static_cast<int>(std::min<size_t>(nbk + nfl / 4096, 1024))));
+            std::atomic<size_t> next_bk{0}, next_fl{0};
             auto work = [&]() {
                 uint64_t corr = 0, lost = 0;
                 char raw[32], fixed_bc[40];
+                auto one = [&](uint64_t k, uint64_t n) {
+                    for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
+                    raw[L] = '\0';
+                    const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
+                    if (st < 0) { lost += n; return; }
+                    fixed_bc[L] = '\0';
+                    const int64_t w = cb_corrector.find(fixed_bc);
+                    if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
+                };
                 constexpr size_t kChunk = 4096;
                 for (size_t b0; (b0 = next_bk.fetch_add(kChunk)) < nbk;) {
                     const size_t b1 = std::min(nbk, b0 + kChunk);
                     for (size_t bk = b0; bk < b1; ++bk)
-                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) {
-                            const uint64_t n = it->second;
-                            uint64_t k = it->first;
-                            for (int j = L - 1; j >= 0; --j) { raw[j] = kNtU[(k & 7) > 4 ? 4 : (k & 7)]; k >>= 3; }
-                            raw[L] = '\0';
-                            const int st = cb_corrector.resolve(raw, nullptr, fixed_bc);
-                            if (st < 0) { lost += n; continue; }
-                            fixed_bc[L] = '\0';
-                            const int64_t w = cb_corrector.find(fixed_bc);
-                            if (w >= 0) { __atomic_fetch_add(&cnt[static_cast<size_t>(w)], n, __ATOMIC_RELAXED); corr += n; }
-                        }
+                        for (auto it = cbx_nonexact.cbegin(bk); it != cbx_nonexact.cend(bk); ++it) one(it->first, it->second);
+                }
+                for (size_t f0; (f0 = next_fl.fetch_add(kChunk)) < nfl;) {
+                    const size_t f1 = std::min(nfl, f0 + kChunk);
+                    for (size_t q = f0; q < f1; ++q) one(cbx_flat[q].first, cbx_flat[q].second);
                 }
                 n_corrected += corr; n_lost += lost;
             };
