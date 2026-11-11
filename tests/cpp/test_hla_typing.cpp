@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -94,7 +95,8 @@ void test_rolling_hits() {
             v = codes(s);
             for (int k = rng() % 6; k > 0; --k) v[rng() % L] = static_cast<uint8_t>(rng() % 5);
         } else {
-            for (auto& b : v) b = static_cast<uint8_t>(rng() % 23 == 0 ? 4 : rng() % 4);
+            const bool with_n = rep % 4 < 2;   // half the random reads hold no N (the fast path of hits)
+            for (auto& b : v) b = static_cast<uint8_t>(with_n && rng() % 23 == 0 ? 4 : rng() % 4);
         }
         // one 19-mer of the allele planted at a random offset in a third of the random reads, sometimes with an N in it
         if (rep % 3 == 1 && L >= 19) {
@@ -107,6 +109,32 @@ void test_rolling_hits() {
         ++n; nhit += a; bad += a != b;
     }
     CHECK(bad == 0 && nhit > 1000, std::to_string(n) + " reads, " + std::to_string(nhit) + " hits, " + std::to_string(bad) + " disagree");
+}
+
+void test_contains_exact() {
+    std::cout << "=== KmerSet::contains is exact (filter in front of the table) ===\n";
+    std::mt19937_64 rng(31);
+    std::string seq(400000, 'A');
+    for (auto& c : seq) c = "ACGT"[rng() % 4];
+    singlet::hla::KmerSet ks; ks.add_sequence(seq); ks.build();
+    std::unordered_set<uint64_t> ref;
+    constexpr uint64_t mask = (1ull << 38) - 1;
+    uint64_t f = 0, r = 0;
+    for (size_t i = 0; i < seq.size(); ++i) {
+        const uint64_t b = uint64_t(singlet::hla::KmerSet::code(seq[i]));
+        f = ((f << 2) | b) & mask; r = (r >> 2) | ((3 - b) << 36);
+        if (i >= 18) ref.insert(std::min(f, r));
+    }
+    long bad = 0;
+    for (uint64_t k : ref) bad += !ks.contains(k);
+    long probes = 0, in = 0;
+    for (int i = 0; i < 4000000; ++i) {
+        const uint64_t k = rng() & mask;
+        const bool a = ks.contains(k), b = ref.count(k) > 0;
+        bad += a != b; in += a; ++probes;
+    }
+    CHECK(bad == 0 && ks.size() == ref.size(), std::to_string(ref.size()) + " k-mers, " + std::to_string(probes) + " random probes, " +
+          std::to_string(in) + " members, " + std::to_string(bad) + " wrong");
 }
 
 void test_donors_and_json() {
@@ -266,6 +294,7 @@ int main() {
     test_kmers();
     test_prefilter_bound();
     test_rolling_hits();
+    test_contains_exact();
     test_donors_and_json();
     test_deferred_route();
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
