@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <numeric>
 #include <string>
@@ -75,7 +76,7 @@ struct PipelineSummary {
 
     // Status
     int         exit_code = 0;
-    std::string status;   ///< "success" | "fail_no_reads" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes"; export_results() may override with "fail_export_matrix"
+    std::string status;   ///< "success" | "fail_no_reads" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes" | "align_bulk_like" (non-10x only); export_results() may override with "fail_export_matrix"
     std::vector<std::string> warnings;
 
     // Donor block (§3.6)
@@ -135,6 +136,41 @@ inline std::string classify_outcome(const PipelineSummary& s,
         return "align_low_genes";
 
     return "success";
+}
+
+/// True for the chemistries whose droplet barcodes the 10x whitelists validate. Only the others get the bulk-like check.
+inline bool is_tenx_protocol_name(const std::string& n) {
+    return n.rfind("10x", 0) == 0 || n.rfind("cite-seq", 0) == 0 || n.empty() || n == "unknown";
+}
+
+/// D-150 bulk-like guard for non-10x droplet libraries (bulk, ribosome-profiling, miRNA or plate libraries parsed as Drop-seq).
+/// Pre-registered bars (bench/non10x/PASS_BARS.md): a library is bulk-like when any of these holds.
+///   no_knee           no 5x UMI drop within a 5x step in rank anywhere on the barcode rank curve (flat curve; independent of the cell caller)
+///   dominant_barcode  one barcode holds more than 5% of all UMIs (low-complexity reads collapse onto one barcode)
+///   barcode_saturated more than half of all UMIs sit in distinct barcodes (every read its own barcode)
+/// @param bc_totals  UMIs per barcode (all barcodes), @param called  barcode indices of the called cells.
+/// @return the failed checks; empty when the library looks like droplet cells.
+inline std::vector<std::string> bulk_like_reasons(const std::vector<uint64_t>& bc_totals,
+                                                  const std::vector<uint32_t>& called) {
+    std::vector<std::string> why;
+    uint64_t all = 0, top = 0, nonzero = 0;
+    for (uint64_t v : bc_totals) {
+        all += v;
+        if (v > top) top = v;
+        if (v > 0) ++nonzero;
+    }
+    if (all == 0 || called.empty()) return why;
+    if (static_cast<double>(top) > 0.05 * static_cast<double>(all)) why.push_back("dominant_barcode");
+    if (static_cast<double>(nonzero) > 0.5 * static_cast<double>(all)) why.push_back("barcode_saturated");
+    // Knee test, independent of the cell caller (which over-calls ambient barcodes on deep Drop-seq libraries): the rank-UMI curve
+    // has a knee when, somewhere on it, the UMIs drop by at least 5x within a 5x step in rank. A flat bulk-like curve never does.
+    std::vector<uint64_t> sorted(bc_totals);
+    std::sort(sorted.begin(), sorted.end(), std::greater<uint64_t>());
+    double best = 0.0;
+    for (size_t k = 10; 5 * k < sorted.size(); k = k + k / 4 + 1)
+        best = std::max(best, static_cast<double>(sorted[k]) / std::max<double>(1.0, static_cast<double>(sorted[5 * k])));
+    if (sorted.size() >= 60 && best < 5.0) why.push_back("no_knee");
+    return why;
 }
 
 /// Escape a string value for embedding inside a JSON double-quoted string.

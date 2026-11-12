@@ -1,0 +1,5 @@
+dropseq_barnyard|SRR1748411|30000000|GRCh38-GRCm39-barnyard|barnyard|https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1544nnn/GSM1544798/suppl/GSM1544798_SpeciesMix_ThousandSTAMPs_HUMAN.digital_expression.txt.gz https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1544nnn/GSM1544798/suppl/GSM1544798_SpeciesMix_ThousandSTAMPs_MOUSE.digital_expression.txt.gz
+dropseq_retina|GSM1626793|30000000|GRCm39-2024-A|dge|https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1626nnn/GSM1626793/suppl/GSM1626793_P14Retina_1.digital_expression.txt.gz
+indrop_human|GSM2230757|40000000|GRCh38-2024-A|umifm|https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2230nnn/GSM2230757/suppl/GSM2230757_human1_umifm_counts.csv.gz
+bd_wta_human|SRR12581863|30000000|GRCh38-2024-A|bdcsv|https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4764nnn/GSM4764685/suppl/GSM4764685_SampleTag_01_SC106_DBEC_MolsPerCell.csv.gz
+bd_sampletag_neg|SRR21291753|4400000|GRCh38-2024-A|-|
