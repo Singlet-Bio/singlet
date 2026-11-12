@@ -73,3 +73,29 @@ data only. The held-out library is then scored once with the final call.
 - Donor bar met, per-cell bar missed against a comparator: ship as metadata, hidden by default.
 - Donor bar missed: withheld.
 - Runtime ceiling: all calls together at most 2 core-minutes per ten thousand cells; the sex call's share is measured and reported.
+
+## Addendum 2026-11-11 (evening): pool check, registered before any rescoring
+
+Context: the first held-out scoring missed the donor bar on one XIST-silent female line. The held-out library has been seen. Everything
+below is a post-hoc rule change, so the held-out rescore is labelled post-hoc and cannot count as a clean pass. A clean test needs a
+library no one has seen; none was available tonight.
+
+cellXY is GPL-3.0, so none of its code or gene list is used. The X-escape set is written from the literature on genes that escape X
+inactivation across tissues (Carrel and Willard 2005; Balaton 2015; Tukiainen 2017): KDM6A DDX3X EIF2S3 ZFX KDM5C EIF1AX RPS4X TXLNG
+SMC1A USP9X UBA1 PRKX STS NLGN4X CA5B CD99L2 PLCXD1 GTPBP6 ZRSR2 HCFC1 BCOR MED14 OFD1 AP1S2 PUDP.
+
+Development finding: the escape fraction of UMIs separates the sexes only inside one library (female about 2 times male in the two
+development pools) and not across libraries (AUC 0.60 over 170 GEO samples). The rule is therefore pool-relative, and it cannot be
+tuned on development data because development holds no pool with 4 or more donors. Constants are fixed here by principle, not fitted.
+
+Rule (applies only when donor groups exist, at least 4 groups have 200 or more cells, and the species is human):
+1. Per group, y_rate = chrY UMIs per total UMI and e_rate = escape UMIs per total UMI.
+2. Reference y_male = median y_rate over groups called male by the existing model; e_f and e_m = median e_rate over groups called
+   female and male.
+3. A group called male with y_rate below 0.1 times y_male (chrY at ambient level) is not male. It becomes female if e_rate is closer to
+   e_f than to e_m, otherwise ambiguous (abstain).
+4. No other call changes. Per-cell labels then use the revised group prior.
+
+Scoring: development again (must be unchanged: no pool qualifies), then the held-out uninfected library (post-hoc), then the infected
+library of the same series as a second check (same lines, so not independent). Unit tests cover the rule. Real XXY, X0 and chrY-loss
+data were searched for; candidates are listed in results.md, none scored.
