@@ -82,3 +82,11 @@ about 92 to 104 s on the same matrices and is not part of the ceiling.
 * CellBender on held-out libraries (GPU) and on the Kang b1 lanes (outputs absent).
 * Cell Ranger filtered lists for CellPlex (the 10x filtered files return 403).
 * Only the main branch of Singlet-Bio/singlet was searched for earlier use of the held-out libraries; the all-branch search timed out.
+
+## Follow-up (2026-11-11 evening), post-hoc diagnostics on hgmm5k v3
+
+Labelled post hoc; the registered bars are unchanged. `diag_hgmm5k*.py`.
+
+* The 311 barcodes EmptyDrops_CR calls and Singlet does not are mostly real cells (282 species-pure) of 500 to 9,000 UMIs. Singlet tests all of them (p-values present) and most get p near 1.
+* Neither the knee retain nor the FDR (0.01 instead of 0.001) explains the gap (F1 0.5240 to 0.5252).
+* The ambient bound is the lever. The plateau rule fits 100 UMIs here (its clip maximum). Fixed bounds of 5, 10, 20, 50, 200 give F1 0.5382, 0.5310, 0.5287, 0.5268, 0.5275 against EmptyDrops_CR 0.5449 and CellBender 0.5345. A bound of 5 closes the gap to -0.0067, but it is also the bound that fails on the singleton-rich nuclei input, so a rank-based ambient pool (EmptyDrops_CR takes ranks 45,000 to 90,000, independent of singletons) is the candidate fix. Not yet implemented or scored on held-out data.
