@@ -241,7 +241,9 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
               << "; device arena " << (o.arena_bytes >> 20) << " MiB (peak " << (o.arena_peak >> 20) << " MiB), " << n_split << " contigs in " << in.contigs.size() << " entries; s: gather " << o.sec_gather << ", upload " << o.sec_upload << ", discovery " << o.sec_disc
               << ", counting " << o.sec_count << " (hits " << o.sec_hits << ", sort " << o.sec_sort << ", entries " << o.sec_entries << ", R9 and vote " << o.sec_r9
               << ", out " << o.sec_out << "); spill " << (spl.bytes >> 20) << " MiB in " << spl.where << ", " << spl.u.size() << " units; device total " << o.sec << ", hook total "
-              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
+              << "; device lock: waited " << o.sec_lock_wait << " s, held " << o.sec_lock_held << " s; gathers beside the device ("
+              << (o.prefetched ? "started before the lock" : "started under the lock") << "), the device waited " << o.sec_gather_wait << " s for them\n";
     return true;
 }
 
