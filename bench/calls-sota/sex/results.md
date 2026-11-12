@@ -65,3 +65,25 @@ Evidence extraction plus the call, one core, 25,899 cells by 38,606 genes: 0.26 
   but no stored donor sex; genotype-derived sex from chrX heterozygosity was not built in the time available.
 - The held-out lines carry no Singlet run; author Cell Ranger counts were used, and the call reads only XIST and chrY genes.
 - XXY, X0 and mosaic loss of chrY remain untested.
+
+## Addendum: pool check with a literature X-escape set (post-hoc, registered in the gate addendum)
+
+cellXY is GPL-3.0, so nothing was ported. The escape set comes from the literature, and the rule is in `python/singlet/celllabels/sex.py`
+(`_pool_check`, constants fixed by principle, not fitted). Development finding: the escape fraction separates the sexes only within one
+library (about 2 times, development pools) and not across libraries (AUC 0.60 over 170 GEO samples), so the rule is pool-relative and
+inactive wherever fewer than 4 donor groups exist.
+
+| Library | Rule | Per-cell acc | Donor acc |
+|---|---|---|---|
+| Development (both pools, GEO samples) | check never fires | unchanged | unchanged |
+| Held-out uninfected pool (post-hoc, seen) | before / after | 0.9742 / 0.9747 | 47 of 48 / 47 of 48 |
+| Infected pool, same lines (not independent) | before / after | 0.9692 / 0.9692 | 46 of 47 / 46 of 47 |
+
+The check fires on the XIST-silent line (chrY at ambient level, correctly identified) but turns it into an abstention, because its
+escape-gene rate is not nearer the pool's female median than the male median. Escape-gene dose from 25 genes is too weak to rescue a
+single group. The verdict is unchanged: withheld by the gate. The check is kept because it converts a confident wrong call into an
+abstention, but it does not meet the donor bar. A clean test needs an unseen mixed-sex pool.
+
+Real XXY, X0 and chrY-loss data found by search, not yet downloaded or scored: GSE136353 (PBMC of one 47,XXY patient with male and
+female controls), GSE169062 (testis, Klinefelter cases, Sertoli cells lacking XIST), PRJNA908831 (isogenic iPSC lines 47,XXY, 46,XX,
+46,XY, 45,X; single-cell content unconfirmed). No labelled Turner single-cell data was found.
