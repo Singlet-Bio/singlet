@@ -2024,6 +2024,19 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     // E17 lean: each chunk's sequences are uploaded with it (gpuPart), from the representatives' (clipped) sequences compacted here on the host in
     // rep order (a chunk is a contiguous range of rep: one slice each)
     singlet_engine_gpu::NoInitVector<char> leanSeq; singlet_engine_gpu::NoInitVector<u64> leanOff;
+    // The copies of the compaction run on a thread, in rep order in blocks, beside the index upload and the lanes of the earlier chunks:
+    // a chunk's upload (gpuPart) waits for its own sequences only, where every sequence was copied here first while the device, held,
+    // had nothing to do (about 9 s of a 300 M sample's 66 s first hold). The bytes and their places are the same.
+    // SINGLET_ENGINE_GPU_LEANFILL=0: all the copies here, as before.
+    struct LeanFill {
+        std::mutex mu; std::condition_variable cv; u64 done = 0; std::thread th;   // done: the sequences copied so far (a prefix of rep)
+        ~LeanFill() { if (th.joinable()) th.join(); }
+    } leanFill;   // after leanSeq and leanOff: joined before they go
+    auto leanWait = [&](u64 need) {   // until the first `need` sequences are in leanSeq
+        const double tw = now();
+        { std::unique_lock<std::mutex> lk(leanFill.mu); leanFill.cv.wait(lk, [&] { return leanFill.done >= need; }); }
+        stepAdd("lean.seq.wait", now() - tw);
+    };
     if (lean) {
         dfree(dSeq); dfree(dOff); dSeq = nullptr; dOff = nullptr;
         const double tu = now();
@@ -2033,7 +2046,24 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         for (u64 k = 0; k < nR; k++) leanOff[k + 1] += leanOff[k];
         leanSeq.resize(leanOff[nR] + 8);
         std::memset(leanSeq.data() + leanOff[nR], 0, 8);
-        parallelFor(nR, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) std::memcpy(leanSeq.data() + leanOff[k], rseq(rep[k]), leanOff[k + 1] - leanOff[k]); });
+        const char* lfE = std::getenv("SINGLET_ENGINE_GPU_LEANFILL");
+        if (lfE && lfE[0] == '0') {
+            parallelFor(nR, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) std::memcpy(leanSeq.data() + leanOff[k], rseq(rep[k]), leanOff[k + 1] - leanOff[k]); });
+            leanFill.done = nR;
+        } else {
+            leanFill.th = std::thread([&, nR]() {
+                singlet::ThreadNameScope tnLf("gpu-leanseq");
+                const u64 BL = 1u << 21;
+                for (u64 a = 0; a < nR; a += BL) {
+                    const u64 b = std::min<u64>(nR, a + BL);
+                    parallelFor(b - a, hostThreads, [&, a](u64 lo, u64 hi) {
+                        for (u64 k = a + lo; k < a + hi; k++) std::memcpy(leanSeq.data() + leanOff[k], rseq(rep[k]), leanOff[k + 1] - leanOff[k]);
+                    });
+                    { std::lock_guard<std::mutex> lk(leanFill.mu); leanFill.done = b; }
+                    leanFill.cv.notify_all();
+                }
+            });
+        }
         stepAdd("lean.seq.host", now() - tu);
     }
     out.secDedup = now() - t0;
@@ -2205,6 +2235,11 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (lean) {
             const double tu = now();
             const u64 m = repc.size(), o0 = leanOff[c0], nb = leanOff[c0 + m] - o0 + 8;   // the bytes after the chunk's last sequence too, as in rep's compaction
+            {   // the chunk's sequences, and the sequences that hold the 8 bytes after them, are copied (LeanFill)
+                u64 need = c0 + m;
+                while (need < nRep && leanOff[need] < leanOff[c0 + m] + 8) need++;
+                leanWait(need);
+            }
             singlet_engine_gpu::NoInitVector<u64> ho(m + 1);
             parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) ho[k] = leanOff[c0 + k] - o0; });
             g_bud.at = "chunk sequences";
@@ -2505,6 +2540,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         }
     }
     if (!drainB()) return fail(err);
+    if (leanFill.th.joinable()) leanFill.th.join();   // done: every chunk waited for its sequences
     if (lean) { decltype(leanSeq)().swap(leanSeq); decltype(leanOff)().swap(leanOff); }   // P3-MEM-03: the lanes are done; the records copy from the reads
     if (bgv.on) {   // align-w2: the read chunks' group check, joined before any result leaves the lanes
         const double tw = now();
