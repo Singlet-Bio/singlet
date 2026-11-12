@@ -16,6 +16,10 @@ export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_R
 export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 SINGLET_ENGINE_GPU_MIN_CC=70
 export SINGLET_GPU_SHARED_INDEX=1 SINGLET_ENGINE_GPU_SLOTS=$SLOTS SINGLET_ENGINE_GPU_MEM_GB=$MEMGB
 for kv in ${XENV:-}; do export "$kv"; done
+# PROD=1: the campaign's pipeline arguments (singlet-agents hpc/clipper/campaign/config.py pipeline_args): the patched T1K and no RNA
+# editing. Without it the runs type HLA with the unpatched T1K of <ref-base>/hla/t1k and write the editing matrices (the arms of
+# 2026-11-12 before job 813019). PARGS adds more pipeline arguments.
+PARGS=${PARGS:-}; [ "${PROD:-0}" = 1 ] && PARGS="--hla-t1k ${T1K:-$W/jobs/gpu-campaign/agents/hla-speed/t1k-p3b} --no-editing $PARGS"
 CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
 mypids() { find $CG -name cgroup.procs -exec cat {} + 2>/dev/null | sort -u; }
 killmine() {  # signal pattern : only processes of this job's cgroup
@@ -26,7 +30,7 @@ stopholders() { local b; killmine TERM gpu-holder; sleep 3; for b in $(buskeys);
 cleanup() { killmine TERM "singlet-gpu"; killmine TERM "nvidia-smi dmon"; stopholders; [ -n "${MPS_ON:-}" ] && echo quit | nvidia-cuda-mps-control > /dev/null 2>&1; sleep 2; rm -rf "${SCR:?}"; }
 trap 'kill $(jobs -p) 2>/dev/null; cleanup' EXIT INT TERM
 
-echo "node=$(hostname) job=$SLURM_JOB_ID cpus=$NCPU tag=$TAG bin=$BIN ($(cat $(dirname $BIN)/commit-gpu 2>/dev/null)) sample=$S K=$K T=$T N=$N slots=$SLOTS memgb=$MEMGB mps=${MPS:-0} numa=${NUMA:-0} xenv='${XENV:-}' $(date -Is)" | tee $R
+echo "node=$(hostname) job=$SLURM_JOB_ID cpus=$NCPU tag=$TAG bin=$BIN ($(cat $(dirname $BIN)/commit-gpu 2>/dev/null)) sample=$S K=$K T=$T N=$N slots=$SLOTS memgb=$MEMGB mps=${MPS:-0} numa=${NUMA:-0} prod=${PROD:-0} pargs='${PARGS:-}' xenv='${XENV:-}' $(date -Is)" | tee $R
 nvidia-smi --query-gpu=index,name,memory.total,memory.used,driver_version --format=csv,noheader | tee -a $R; free -g | head -2 | tee -a $R; df -h /tmp | tail -1 | tee -a $R
 [ -x $BIN ] || { echo "NOBIN $BIN" | tee -a $R; exit 2; }
 if [ "${MPS:-0}" = 1 ]; then   # a user-level CUDA MPS daemon for the job: kernels of the processes sharing a GPU run at the same time instead of time-slicing
@@ -87,7 +91,7 @@ procsnap & PSN=$!
 st=$(date +%s); pids=()
 for d in 0 1; do
   PRE=""; [ "${NUMA:-0}" = 1 ] && PRE="numactl --cpunodebind=$d --preferred=$d"   # NUMA=1: the pool of GPU d and its samples on NUMA node d (cores, and memory by preference)
-  setsid bash -c 'exec '"$PRE"' "$0" gpu-pool --device '$d' --queue '$SCR/run/queue$d' --slots '$SLOTS' --workers '$K' --threads '$T' --report '$A/pool$d' --timeout '$LIM' --args "--ref-base '$REF' --pipeline --output-format 1pz --engine gpu"' "$BIN" > $A/pool$d/stdout.txt 2>&1 &
+  setsid bash -c 'exec '"$PRE"' "$0" gpu-pool --device '$d' --queue '$SCR/run/queue$d' --slots '$SLOTS' --workers '$K' --threads '$T' --report '$A/pool$d' --timeout '$LIM' --args "--ref-base '$REF' --pipeline --output-format 1pz '"$PARGS"' --engine gpu"' "$BIN" > $A/pool$d/stdout.txt 2>&1 &
   pids+=($!)
 done
 fl=ok
