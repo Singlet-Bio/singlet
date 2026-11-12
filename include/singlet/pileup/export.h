@@ -2400,6 +2400,14 @@ inline ExportStats export_results(const PileupEngine& engine,
                           << " called cells); summary.json status=fail_export_matrix\n";
             }
         }
+        if (!is_tenx_protocol_name(summary.protocol_name) && summary.status == "success") {
+            // D-150: non-10x droplet libraries have no whitelist to stop bulk-like input, so the barcode-UMI curve decides.
+            const auto bulk_why = bulk_like_reasons(bc_totals, cc_result.cell_indices);
+            if (!bulk_why.empty()) {
+                summary.status = "align_bulk_like";
+                for (const auto& w : bulk_why) summary.warnings.push_back("bulk_like:" + w);
+            }
+        }
         if (summary.mapping_rate > 0.0 && summary.mapping_rate < 0.50)
             summary.warnings.push_back("low_mapping_rate");
         if (summary.estimated_cells > 0 && summary.estimated_cells < 10)

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <numeric>
 #include <string>
@@ -75,7 +76,7 @@ struct PipelineSummary {
 
     // Status
     int         exit_code = 0;
-    std::string status;   ///< "success" | "fail_no_reads" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes"; export_results() may override with "fail_export_matrix"
+    std::string status;   ///< "success" | "fail_no_reads" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes" | "align_bulk_like" (non-10x only); export_results() may override with "fail_export_matrix"
     std::vector<std::string> warnings;
 
     // Donor block (§3.6)
@@ -135,6 +136,45 @@ inline std::string classify_outcome(const PipelineSummary& s,
         return "align_low_genes";
 
     return "success";
+}
+
+/// True for the chemistries whose droplet barcodes the 10x whitelists validate. Only the others get the bulk-like check.
+inline bool is_tenx_protocol_name(const std::string& n) {
+    return n.rfind("10x", 0) == 0 || n.rfind("cite-seq", 0) == 0 || n.empty() || n == "unknown";
+}
+
+/// D-150 bulk-like guard for non-10x droplet libraries (bulk, ribosome-profiling, miRNA or plate libraries parsed as Drop-seq).
+/// Pre-registered bars (bench/non10x/PASS_BARS.md): a library is bulk-like when any of these holds.
+///   no_knee           median UMIs of called cells < 5x the UMIs of the barcode at rank 5 x n_called (flat rank-UMI curve)
+///   dominant_barcode  one barcode holds more than 5% of all UMIs (low-complexity reads collapse onto one barcode)
+///   barcode_saturated more than half of all UMIs sit in distinct barcodes (every read its own barcode)
+/// @param bc_totals  UMIs per barcode (all barcodes), @param called  barcode indices of the called cells.
+/// @return the failed checks; empty when the library looks like droplet cells.
+inline std::vector<std::string> bulk_like_reasons(const std::vector<uint64_t>& bc_totals,
+                                                  const std::vector<uint32_t>& called) {
+    std::vector<std::string> why;
+    uint64_t all = 0, top = 0, nonzero = 0;
+    for (uint64_t v : bc_totals) {
+        all += v;
+        if (v > top) top = v;
+        if (v > 0) ++nonzero;
+    }
+    if (all == 0 || called.empty()) return why;
+    if (static_cast<double>(top) > 0.05 * static_cast<double>(all)) why.push_back("dominant_barcode");
+    if (static_cast<double>(nonzero) > 0.5 * static_cast<double>(all)) why.push_back("barcode_saturated");
+    std::vector<uint64_t> cell_umis;
+    cell_umis.reserve(called.size());
+    for (uint32_t ci : called)
+        if (ci < bc_totals.size()) cell_umis.push_back(bc_totals[ci]);
+    if (cell_umis.empty()) return why;
+    std::nth_element(cell_umis.begin(), cell_umis.begin() + static_cast<std::ptrdiff_t>(cell_umis.size() / 2), cell_umis.end());
+    const double cell_med = static_cast<double>(cell_umis[cell_umis.size() / 2]);
+    std::vector<uint64_t> sorted(bc_totals);
+    std::sort(sorted.begin(), sorted.end(), std::greater<uint64_t>());
+    const size_t rank = std::min(sorted.size() - 1, static_cast<size_t>(called.size()) * 5);
+    const double bg = std::max<double>(1.0, static_cast<double>(sorted[rank]));
+    if (cell_med < 5.0 * bg) why.push_back("no_knee");
+    return why;
 }
 
 /// Escape a string value for embedding inside a JSON double-quoted string.

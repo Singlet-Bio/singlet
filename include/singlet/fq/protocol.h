@@ -78,6 +78,9 @@ constexpr uint16_t kShortBarcodeReadMinUmi = 8;
 // Below this rate the reads are not this chemistry (or the whitelist is missing) and counts from them would be garbage: an inDrop
 // library hit the 3' v1 list in 8% of reads (SRR10046401).
 constexpr double kProtocolWlRateFloor = 0.10;
+// Whitelists smaller than this match random barcodes often; their protocols need linker evidence (see detect_protocol).
+constexpr size_t kTinyWhitelistSize = 1000;
+constexpr double kTinyWhitelistMinLinkerRate = 0.10;
 
 inline const std::vector<CandidateSpec>& known_protocols() {
     // Protocol specs: tag, id, r1_len, bc_off, bc_len, umi_off, umi_len,
@@ -810,6 +813,12 @@ ProtocolCandidate detect_protocol(
             }
         }
 
+        // ── Tiny-whitelist guard (D-150) ──
+        // A list of a few hundred barcodes (BD 97x9-mer, microwell 96x6-mer) is matched by chance: with one mismatch allowed, a 96 x 6-mer
+        // list covers about 45% of random 6-mers. A tiny-list protocol is therefore chosen only with its linker as independent evidence.
+        // Without it the candidate is dropped, so an inDrop or Drop-seq read can no longer be called microwell-seq at confidence 1.
+        if (has_wl && curr_wl_size < kTinyWhitelistSize && !cand->linker.empty() && linker_rate < kTinyWhitelistMinLinkerRate) continue;
+
         // ── UMI entropy ──
         double umi_entropy = 0.0;
         if (cand->umi_len > 0 && n_test > 100) {
@@ -891,7 +900,10 @@ ProtocolCandidate detect_protocol(
         if (cand->r1_len > 0 && !concat_mode) {
             int32_t diff = static_cast<int32_t>(barcode_read_len) -
                            static_cast<int32_t>(cand->r1_len);
-            if (diff == 0) {
+            // inDrop v3 reads are 44-47 nt of barcode structure (BC1 8-11 + W1 22 + BC2 8 + UMI 6) and are often deposited at 54 nt
+            // (the rest is polyT/cDNA). Without this, microwell-seq (R1 54) took the exact-length bonus from them.
+            const bool indrop_len = (cand->tag == "indrop" && barcode_read_len >= 44 && barcode_read_len <= 60);
+            if (diff == 0 || indrop_len) {
                 geometry_bonus = 0.15;   // exact R1 length match
             } else if (diff >= -2 && diff <= 2) {
                 geometry_bonus = 0.10;   // close match (±2bp trim/pad variance)
