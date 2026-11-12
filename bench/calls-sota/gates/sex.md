@@ -99,3 +99,11 @@ Rule (applies only when donor groups exist, at least 4 groups have 200 or more c
 Scoring: development again (must be unchanged: no pool qualifies), then the held-out uninfected library (post-hoc), then the infected
 library of the same series as a second check (same lines, so not independent). Unit tests cover the rule. Real XXY, X0 and chrY-loss
 data were searched for; candidates are listed in results.md, none scored.
+
+### Addendum 2: scope of step 3 widened (second post-hoc change)
+
+The first run of the pool check on the held-out library did not fire. The line's group call from the existing model was ambiguous
+(male fraction 0.83), not male, so step 3 never applied. Step 3 now applies to every group not called female, so "called male" in
+step 3 reads "called male or ambiguous". Nothing else changes. This edit was made after seeing the held-out outcome of the first
+version, so the held-out rescore is doubly post-hoc. The infected library of the same series is the only further check, and it
+shares the lines.

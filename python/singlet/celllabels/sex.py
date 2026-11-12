@@ -48,6 +48,15 @@ CHRY = {
 }
 XIST = {"human": ("XIST",), "mouse": ("Xist",)}
 
+# Genes that escape X inactivation broadly (Carrel and Willard 2005; Balaton 2015; Tukiainen 2017), used only by the pool check.
+ESCAPE = (
+    "KDM6A DDX3X EIF2S3 ZFX KDM5C EIF1AX RPS4X TXLNG SMC1A USP9X UBA1 PRKX STS NLGN4X CA5B CD99L2 PLCXD1 "
+    "GTPBP6 ZRSR2 HCFC1 BCOR MED14 OFD1 AP1S2 PUDP"
+).split()
+POOL_MIN_GROUPS = 4  # pool check: groups with at least POOL_MIN_CELLS cells needed
+POOL_MIN_CELLS = 200
+POOL_Y_RATIO = 0.1  # a male-called group whose chrY rate is below this fraction of the pool's male median is at ambient level
+
 Q_FEMALE = 0.97  # fraction of sex-informative UMIs that are XIST in a female cell
 Q_MALE = 0.03  # ... in a male cell
 LLR_CAP = 6.0
@@ -100,6 +109,41 @@ def _fit_pi(llr: np.ndarray) -> float:
     return pi
 
 
+def _pool_check(X, gene_names, y, g, out_groups, prior) -> None:
+    """In a pool of several donors, a group not called female whose chrY rate is at the pool's ambient level is a female with silent XIST.
+
+    Chooses female when the group's X-escape rate is nearer the pool's female median than its male median, else ambiguous.
+    Edits ``out_groups`` and ``prior`` in place. Needs POOL_MIN_GROUPS groups of POOL_MIN_CELLS cells; otherwise does nothing.
+    """
+    big = [k for k, v in out_groups.items() if v["n_cells"] >= POOL_MIN_CELLS]
+    if len(big) < POOL_MIN_GROUPS:
+        return
+    X = sps.csr_matrix(X)
+    tot = np.asarray(X.sum(1)).ravel().astype(np.float64)
+    ei = _genes_index(gene_names, ESCAPE)
+    if len(ei) < 5:
+        return
+    esc = np.asarray(X[:, ei].sum(1)).ravel().astype(np.float64)
+    yr, er = {}, {}
+    for k in big:
+        sel = g == k
+        t = tot[sel].sum()
+        if t <= 0:
+            continue
+        yr[k], er[k] = y[sel].sum() / t, esc[sel].sum() / t
+    male = [k for k in yr if out_groups[k]["call"] == "male"]
+    fem = [k for k in yr if out_groups[k]["call"] == "female"]
+    if not male or not fem:
+        return
+    y_male = float(np.median([yr[k] for k in male]))
+    e_f, e_m = float(np.median([er[k] for k in fem])), float(np.median([er[k] for k in male]))
+    for k in [k for k in yr if out_groups[k]["call"] != "female"]:
+        if yr[k] < POOL_Y_RATIO * y_male:
+            call = "female" if abs(er[k] - e_f) < abs(er[k] - e_m) else "ambiguous"
+            out_groups[k].update(call=call, pool_check=True, pi_male=0.02 if call == "female" else 0.5)
+            prior[g == k] = out_groups[k]["pi_male"]
+
+
 def call_sex(
     X,
     gene_names: Sequence[str],
@@ -136,6 +180,8 @@ def call_sex(
             xist_umis=int(x[sel].sum()),
             chry_umis=int(y[sel].sum()),
         )
+    if species == "human" and groups is not None:
+        _pool_check(X, gene_names, y, g, out_groups, prior)
     p = _sigmoid(llr + np.log(prior / (1 - prior)))
     label = np.where(
         p >= MIN_POST, "male", np.where(p <= 1 - MIN_POST, "female", "ambiguous")
