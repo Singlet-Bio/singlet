@@ -70,6 +70,12 @@ if kind == "barnyard":
                median_major=float(np.median(major)), share_major_ge_090=float((major >= 0.9).mean()),
                mixed_rate=float((minor > 0.10).mean()), author_mixed_rate=amixed,
                author_median_major=float(np.median(afrac)), n_called_with_umi=int(ok.sum()))
+    # supplementary (not a bar): mixed-cell rate restricted to the authors' cell set
+    pos = {b: k for k, b in enumerate(called)}
+    ii = [pos[b] for b in inter if ok[pos[b]]]
+    if ii:
+        mi = np.minimum(hum, mus)[ii] / t[ii]
+        res["supp_mixed_rate_author_cells"] = float((mi > 0.10).mean())
     if len(inter) > 10:
         ours = pd.Series(t, index=called).reindex(inter)
         res["umi_spearman"] = float(spearmanr(ours.values, auth.reindex(inter).values)[0])
@@ -86,7 +92,10 @@ else:
         ag = float(np.median((T > 0).sum(0)))
         au = float(np.median(T.sum(0)))
     else:
-        T = pd.read_csv(sys.argv[3], index_col=0, comment="#" if kind == "bdcsv" else None)
+        if kind == "bdcsv":   # union of the per-tag matrices of one cartridge (genes may differ per file: align on columns)
+            T = pd.concat([pd.read_csv(p, index_col=0, comment="#") for p in sys.argv[3:]], axis=0, sort=False).fillna(0)
+        else:
+            T = pd.read_csv(sys.argv[3], index_col=0)
         T = T.select_dtypes("number").drop(columns=["assigned_cluster"], errors="ignore")
         ac = T.shape[0]
         ag = float(np.median((T.values > 0).sum(1)))

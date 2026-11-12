@@ -145,7 +145,7 @@ inline bool is_tenx_protocol_name(const std::string& n) {
 
 /// D-150 bulk-like guard for non-10x droplet libraries (bulk, ribosome-profiling, miRNA or plate libraries parsed as Drop-seq).
 /// Pre-registered bars (bench/non10x/PASS_BARS.md): a library is bulk-like when any of these holds.
-///   no_knee           median UMIs of called cells < 5x the UMIs of the barcode at rank 5 x n_called (flat rank-UMI curve)
+///   no_knee           no 5x UMI drop within a 5x step in rank anywhere on the barcode rank curve (flat curve; independent of the cell caller)
 ///   dominant_barcode  one barcode holds more than 5% of all UMIs (low-complexity reads collapse onto one barcode)
 ///   barcode_saturated more than half of all UMIs sit in distinct barcodes (every read its own barcode)
 /// @param bc_totals  UMIs per barcode (all barcodes), @param called  barcode indices of the called cells.
@@ -162,18 +162,14 @@ inline std::vector<std::string> bulk_like_reasons(const std::vector<uint64_t>& b
     if (all == 0 || called.empty()) return why;
     if (static_cast<double>(top) > 0.05 * static_cast<double>(all)) why.push_back("dominant_barcode");
     if (static_cast<double>(nonzero) > 0.5 * static_cast<double>(all)) why.push_back("barcode_saturated");
-    std::vector<uint64_t> cell_umis;
-    cell_umis.reserve(called.size());
-    for (uint32_t ci : called)
-        if (ci < bc_totals.size()) cell_umis.push_back(bc_totals[ci]);
-    if (cell_umis.empty()) return why;
-    std::nth_element(cell_umis.begin(), cell_umis.begin() + static_cast<std::ptrdiff_t>(cell_umis.size() / 2), cell_umis.end());
-    const double cell_med = static_cast<double>(cell_umis[cell_umis.size() / 2]);
+    // Knee test, independent of the cell caller (which over-calls ambient barcodes on deep Drop-seq libraries): the rank-UMI curve
+    // has a knee when, somewhere on it, the UMIs drop by at least 5x within a 5x step in rank. A flat bulk-like curve never does.
     std::vector<uint64_t> sorted(bc_totals);
     std::sort(sorted.begin(), sorted.end(), std::greater<uint64_t>());
-    const size_t rank = std::min(sorted.size() - 1, static_cast<size_t>(called.size()) * 5);
-    const double bg = std::max<double>(1.0, static_cast<double>(sorted[rank]));
-    if (cell_med < 5.0 * bg) why.push_back("no_knee");
+    double best = 0.0;
+    for (size_t k = 10; 5 * k < sorted.size(); k = k + k / 4 + 1)
+        best = std::max(best, static_cast<double>(sorted[k]) / std::max<double>(1.0, static_cast<double>(sorted[5 * k])));
+    if (sorted.size() >= 60 && best < 5.0) why.push_back("no_knee");
     return why;
 }
 

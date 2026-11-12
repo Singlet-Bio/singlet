@@ -10,6 +10,7 @@
 #   NAME|ACCESSION (GSM, SRS, ERS, SRR or ERR)|SPOTS|GENOME dir name|SCORE kind (barnyard dge umifm bdcsv or -)|truth URL(s) (space separated)
 # Fetches a prefix of the first run (never a full download), encodes it with AUTO protocol detection (the case that matters),
 # runs the patched engine, scores against the authors' matrix (bench/non10x/score.py, bars in PASS_BARS.md) and appends one JSON line to $OUTROOT/results.jsonl.
+# SPOTS=0: full depth, from $W/data/non10x/full/<ACC>/R_[12].fastq (dl_full.sbatch)
 # env: BIN, SCORE (path of score.py) (patched singlet-gpu, used on CPU), LIST, OUTROOT.
 set -uo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; REFB=/mnt/projects/debruinz_project/cellarium/reference
@@ -27,8 +28,12 @@ case $ACC in
   *) RUN=$(curl -s "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=$ACC&result=read_run&fields=run_accession&format=tsv" | sed 1d | head -1 | cut -f1) ;;
 esac
 echo "run=$RUN"; [ -n "$RUN" ] || { emit unresolved "no run for $ACC"; exit 0; }
+if [ "$SPOTS" = 0 ]; then   # full depth: reads staged by dl_full.sbatch under $W/data/non10x/full/$ACC
+  F1=$W/data/non10x/full/$ACC/R_1.fastq; F2=$W/data/non10x/full/$ACC/R_2.fastq
+else
 fastq-dump -X $SPOTS --split-files -O $D $RUN 2>&1 | tail -2
 F1=$D/${RUN}_1.fastq; F2=$D/${RUN}_2.fastq
+fi
 if [ ! -s $F1 ] || [ ! -s $F2 ]; then
   # fall back to the ENA copy (first SPOTS reads)
   for i in 1 2; do U=$(curl -s "https://www.ebi.ac.uk/ena/portal/api/filereport?accession=$RUN&result=read_run&fields=fastq_ftp&format=tsv" | sed 1d | cut -f1 | tr ';' '\n' | sed -n "${i}p")

@@ -41,5 +41,6 @@ PASSES when it is rejected (gate or encoder abort, no output) or flagged (summar
 ends with status success and 10 or more called cells. Prefix: 4 M spots, auto protocol, GRCh38.
 
 ## Bulk-like guard (engine, non-10x protocols only)
-A library is flagged (status align_bulk_like) when the called cells' median UMIs is under 5x the UMIs of the barcode at rank 5 x cells
-(no knee), when one barcode holds more than 5% of all UMIs, or when more than half of all UMIs sit in distinct barcodes.
+A library is flagged (status align_bulk_like) when its barcode rank curve has no knee (no 5x UMI drop within a 5x step in rank), when one barcode
+holds more than 5% of all UMIs, or when more than half of all UMIs sit in distinct barcodes. The first version of the knee test used the called
+cells and flagged the full-depth Macosko barnyard (the cell caller over-calls there); it was replaced by the caller-independent test above.
