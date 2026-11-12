@@ -3566,6 +3566,9 @@ int main(int argc, char* argv[]) {
     return singlet_main(argc, argv);
 }
 
+// D-101 HLA: the prefilter made inside the read ingest's fused pass (hla_typing.h Presift), from there to the HLA sample stage
+static std::shared_ptr<singlet::hla::Presift> g_hla_presift;
+
 static int singlet_main(int argc, char* argv[]) {
     singlet::entry_env().take();   // restart_on_sorted_path re-executes this command with this environment
     g_argc = argc; g_argv = argv;   // and these arguments
@@ -5544,8 +5547,37 @@ static int singlet_main(int argc, char* argv[]) {
                     fpl.runs = runs; fpl.nBlocks = nb; fpl.paths = onefq_files;
                     fpl.r1L = h0f.stream_lengths[0];
                     std::memcpy(fpl.qualPhred, qphred, 4); fpl.qualCodes = qcodes;
+                    // D-101 HLA: the prefilter inside this pass (hla_typing.h Presift). The HLA sample stage would decode every block of the
+                    // .1fq again to find the reads that share a k-mer with the HLA index; this pass has each block decoded already, so
+                    // it scans them here and the sample stage starts from the finished prefilter.fq. The same records in the same
+                    // order. One .1fq with the cDNA in R2 (this pass's own conditions); SINGLET_HLA_PRESIFT=0: the sample stage's own pass.
+                    {
+                        const char* pe = std::getenv("SINGLET_HLA_PRESIFT"); const char* hm = std::getenv("SINGLET_HLA"); const char* bg = std::getenv("SINGLET_HLA_BG");
+                        const bool human = (genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos) &&
+                                           genome_dir.find("GRCm39") == std::string::npos && genome_dir.find("mm39") == std::string::npos;
+                        std::string t1k = hla_t1k_dir;
+                        if (t1k.empty() && pipeline_mode && human) {
+                            std::string rb = ref_base;
+                            if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+                            if (!rb.empty()) t1k = rb + "/hla/t1k";
+                        }
+                        if (!(pe && pe[0] == '0') && !no_hla && !is_atac_mode && !(hm && std::string(hm) == "off") && !(bg && std::string(bg) == "0") &&
+                            onefq_files.size() <= 1 && !reads_inverted && !t1k.empty() && singlet::hla::file_exists(t1k + "/bin/run-t1k")) {
+                            auto ps = std::make_shared<singlet::hla::Presift>();
+                            const std::string tmp = (std::filesystem::temp_directory_path() /
+                                                     ("singlet-hla-" + std::to_string(getpid()) + "-" +
+                                                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
+                            if (ps->open(t1k, tmp, runs, false)) {
+                                g_hla_presift = ps;
+                                fpl.blockHook = [ps](uint32_t b, const singlet::fq::DecodedBlock& B) { ps->block(b, B); };
+                            }
+                        }
+                    }
                     std::string fw;
-                    if (!singlet_engine_gpu::ingest::decodeScan(nt, so, heads, r2fixed, fw)) {
+                    const bool fused_ok = singlet_engine_gpu::ingest::decodeScan(nt, so, heads, r2fixed, fw);
+                    fpl.blockHook = nullptr;
+                    if (g_hla_presift && !g_hla_presift->close()) { g_hla_presift->discard(); g_hla_presift.reset(); }   // a pass that stopped: the sample stage's own prefilter
+                    if (!fused_ok) {
                         std::cerr << "[1fq-ingest] fused scan and decode not used (" << fw << "): the head scan, then the decode\n";
                         fused = false;
                         std::fill(freq.begin(), freq.end(), 0);   // what the fused pass counted before it stopped
@@ -9138,11 +9170,16 @@ static int singlet_main(int argc, char* argv[]) {
                 c.tmp_dir = (std::filesystem::temp_directory_path() /
                              ("singlet-hla-" + std::to_string(getpid()) + "-" +
                               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
+                // the prefilter made inside the read ingest's pass (Presift): its work directory is the sample stage's
+                if (g_hla_presift && g_hla_presift->complete() && g_hla_presift->t1k_dir == t1k && c.onefq.size() == 1 && !c.cdna_is_r1) {
+                    c.tmp_dir = g_hla_presift->tmp;
+                    hla_bg.s.presift = g_hla_presift;
+                } else if (g_hla_presift) g_hla_presift->discard();
                 hla_bg.on = true;
                 hla_bg.sw = StopWatch();
                 hla_bg.th = std::thread([&hla_bg] { singlet::set_thread_name("sg-hla"); singlet::hla::sample_stage(hla_bg.s); });
                 std::cerr << "[hla] sample stage started in the background (" << c.tmp_dir << ")\n";
-            }
+            } else if (g_hla_presift) g_hla_presift->discard();
         }
         if (parallel_pileup == 1) {
             // Parallel path: STAR writes sorted BAM to file; no pipe in parent.
