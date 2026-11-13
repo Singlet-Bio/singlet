@@ -400,6 +400,7 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
                 const double thr = std::max(2.0, 0.1 * double(top) / keff);
                 uint32_t distinct = 0;
                 for (uint32_t c : v) distinct += (c >= thr);
+                if (distinct > 1.5 * K) continue;   // a set larger than the K sequences counted is not a plate of K wells (Drop-seq, Seq-Well bead sets)
                 if (distinct < (on_index ? 48u : 12u)) break;   // a linker or poly(T) run is one or a few sequences; sample indices are few, wells many
                 WindowHit w;
                 w.found = true; w.seg = s; w.off = off; w.len = len; w.k = K; w.distinct = distinct; w.top_share = share; w.random_share = rnd;
