@@ -266,7 +266,7 @@ inline bool head_run(const std::string& src, const std::string& route, size_t n,
 }
 
 /// Layer D: align the head's cDNA reads with the bundled STAR (this binary's `star` subcommand) and read the strand and gene shares.
-inline void map_head(const std::vector<HeadSpot>& spots, int seg, size_t nreads, const std::string& genome_dir, int threads,
+inline void map_head(const std::vector<HeadSpot>& spots, int seg, int seg2, size_t nreads, const std::string& genome_dir, int threads,
                      const std::string& self_exe, MapEvidence& m) {
     namespace fs = std::filesystem;
     if (seg < 0) { m.note = "no cDNA segment"; return; }
@@ -274,25 +274,36 @@ inline void map_head(const std::vector<HeadSpot>& spots, int seg, size_t nreads,
     std::error_code ec;
     const fs::path base = fs::temp_directory_path(ec) / ("identify-" + std::to_string(::getpid()));
     fs::create_directories(base, ec);
-    const std::string fq = (base / "head.fq").string(), pfx = (base / "star.").string();
+    const std::string fq = (base / "head.fq").string(), fq2 = (base / "head2.fq").string(), pfx = (base / "star.").string();
     size_t n = 0;
+    const bool pe = seg2 >= 0;   // two insert reads without a barcode read: map them as a pair for the insert size
     {
-        std::ofstream o(fq);
+        std::ofstream o(fq), o2;
+        if (pe) o2.open(fq2);
         for (const auto& s : spots) {
             if (n >= nreads) break;
             if ((size_t)seg >= s.seg.size() || s.seg[seg].size() < 30) continue;
+            if (pe && ((size_t)seg2 >= s.seg.size() || s.seg[seg2].size() < 30)) continue;
             const std::string q = s.seg[seg].substr(0, 100);
             o << "@r" << n << "\n" << q << "\n+\n" << std::string(q.size(), 'I') << "\n";
+            if (pe) {
+                const std::string q2 = s.seg[seg2].substr(0, 100);
+                o2 << "@r" << n << "\n" << q2 << "\n+\n" << std::string(q2.size(), 'I') << "\n";
+            }
             ++n;
         }
     }
     if (n < 1000) { m.note = "fewer than 1000 usable cDNA reads"; fs::remove_all(base, ec); return; }
     const std::string cmd = cli_detail::sq(self_exe) + " star --runThreadN " + std::to_string(threads) + " --genomeDir " + cli_detail::sq(genome_dir) +
-                            " --readFilesIn " + cli_detail::sq(fq) + " --outFileNamePrefix " + cli_detail::sq(pfx) +
+                            " --readFilesIn " + cli_detail::sq(fq) + (pe ? " " + cli_detail::sq(fq2) : std::string()) + " --outFileNamePrefix " + cli_detail::sq(pfx) +
                             " --outSAMtype SAM --outSAMmode NoQS --outSAMunmapped None --outFilterMultimapNmax 10 --quantMode GeneCounts > " +
                             cli_detail::sq((base / "star.stdout").string()) + " 2>&1";
     const int rc = std::system(cmd.c_str());
-    m = parse_star_outputs(pfx, n);
+    static std::map<std::string, TxAnnot> annots;   // one transcript table per index, kept across the samples of a batch
+    auto it = annots.find(genome_dir);
+    if (it == annots.end()) { TxAnnot a; a.load(genome_dir); it = annots.emplace(genome_dir, std::move(a)).first; }
+    m = parse_star_outputs(pfx, n, &it->second);
+    m.paired = pe && m.paired;
     if (rc != 0 && !m.measured) m.note = "STAR failed (exit " + std::to_string(rc) + ")";
     m.seconds = cli_detail::now_s() - t0;
     fs::remove_all(base, ec);
@@ -304,6 +315,246 @@ inline std::string self_exe_path() {
     return len > 0 ? std::string(buf, static_cast<size_t>(len)) : std::string("singlet");
 }
 
+// â”€â”€ endpoints: where a run's reads can be read from, and which of them carry a barcode read â”€â”€
+
+namespace cli_detail {
+
+/// Minimal JSON reader for the SDL locate answer: strings, numbers, booleans, null, arrays, objects.
+struct J {
+    enum T { Null, Str, Num, Bool, Arr, Obj } t = Null;
+    std::string s;
+    double n = 0;
+    std::vector<J> a;
+    std::vector<std::pair<std::string, J>> o;
+    const J* get(const std::string& k) const {
+        for (const auto& kv : o) if (kv.first == k) return &kv.second;
+        return nullptr;
+    }
+};
+inline void ws(const std::string& s, size_t& i) { while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i; }
+inline J parse_json(const std::string& s, size_t& i) {
+    J v;
+    ws(s, i);
+    if (i >= s.size()) return v;
+    if (s[i] == '"') {
+        v.t = J::Str;
+        ++i;
+        while (i < s.size() && s[i] != '"') {
+            if (s[i] == '\\' && i + 1 < s.size()) { ++i; v.s += s[i] == 'n' ? '\n' : s[i]; }
+            else v.s += s[i];
+            ++i;
+        }
+        ++i;
+    } else if (s[i] == '{') {
+        v.t = J::Obj;
+        ++i;
+        for (;;) {
+            ws(s, i);
+            if (i >= s.size() || s[i] == '}') { ++i; break; }
+            if (s[i] == ',') { ++i; continue; }
+            J k = parse_json(s, i);
+            ws(s, i);
+            if (i < s.size() && s[i] == ':') ++i;
+            v.o.emplace_back(k.s, parse_json(s, i));
+        }
+    } else if (s[i] == '[') {
+        v.t = J::Arr;
+        ++i;
+        for (;;) {
+            ws(s, i);
+            if (i >= s.size() || s[i] == ']') { ++i; break; }
+            if (s[i] == ',') { ++i; continue; }
+            v.a.push_back(parse_json(s, i));
+        }
+    } else {
+        size_t j = i;
+        while (j < s.size() && s[j] != ',' && s[j] != '}' && s[j] != ']') ++j;
+        const std::string tok = s.substr(i, j - i);
+        i = j;
+        if (tok == "true" || tok == "false") { v.t = J::Bool; v.n = tok == "true"; }
+        else if (tok != "null") { v.t = J::Num; v.n = std::atof(tok.c_str()); }
+    }
+    return v;
+}
+inline std::string curl_text(const std::string& url, int max_s = 60) {
+    FILE* fp = popen(("curl -sfL --max-time " + std::to_string(max_s) + " " + sq(url)).c_str(), "r");
+    std::string all;
+    if (!fp) return all;
+    char b[8192];
+    size_t n;
+    while ((n = std::fread(b, 1, sizeof(b), fp)) > 0) all.append(b, n);
+    pclose(fp);
+    return all;
+}
+
+}  // namespace cli_detail
+
+/// BAM by ranged GET (the first 64 MB), through samtools. A truncated final block is expected.
+inline bool head_bam_url(const std::string& url, size_t n, std::vector<HeadSpot>& out, SourceInfo& info) {
+    const std::string cmd = "curl -sfL --max-time 600 -r 0-67108863 " + cli_detail::sq(url) + " | samtools view -F 0x900 - 2>/dev/null";
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (!fp) { info.error = "cannot run curl or samtools"; return false; }
+    std::string line;
+    char buf[1 << 16];
+    while (out.size() < n && std::fgets(buf, sizeof(buf), fp)) {
+        line = buf;
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+        const auto f = cli_detail::split(line, '\t');
+        if (f.size() < 11) continue;
+        std::string cb, ub;
+        for (size_t k = 11; k < f.size(); ++k) {
+            if (f[k].rfind("CR:Z:", 0) == 0 || f[k].rfind("CB:Z:", 0) == 0) cb = f[k].substr(5);
+            if (f[k].rfind("UR:Z:", 0) == 0 || f[k].rfind("UB:Z:", 0) == 0) ub = f[k].substr(5);
+        }
+        std::string seq = f[9];
+        if (std::atoi(f[1].c_str()) & 16) seq = detail_id::revcomp(seq);
+        HeadSpot s;
+        s.seg.push_back(cb + ub);
+        s.seg.push_back(seq);
+        out.push_back(std::move(s));
+    }
+    pclose(fp);
+    info.endpoint = cli_detail::host_of(url);
+    if (out.empty()) info.error = "no records in the first 64 MB of " + url;
+    return !out.empty();
+}
+
+/// ENA submitted_ftp files of a run (the files as the submitter uploaded them), as https links.
+inline std::vector<std::string> ena_submitted(const std::string& acc) {
+    std::vector<std::string> urls;
+    const std::string all = cli_detail::curl_text("https://www.ebi.ac.uk/ena/portal/api/filereport?accession=" + acc + "&result=read_run&fields=submitted_ftp&format=tsv");
+    const auto lines = cli_detail::split(all, '\n');
+    if (lines.size() < 2) return urls;
+    const auto v = cli_detail::split(lines[1], '\t');
+    for (const auto& c : v)
+        for (auto u : cli_detail::split(c, ';'))
+            if (u.size() > 4) urls.push_back("https://" + u);
+    return urls;
+}
+
+/// Original-format objects of a run on NCBI's cloud copy (what the submitter deposited, before the archive normalized it), from the SDL locate service.
+struct OriginalFile { std::string type, name, link; double size = 0; };
+inline std::vector<OriginalFile> sdl_original_files(const std::string& acc) {
+    std::vector<OriginalFile> out;
+    const std::string txt = cli_detail::curl_text("https://locate.ncbi.nlm.nih.gov/sdl/2/retrieve?acc=" + acc + "&location=s3.us-east-1&accept-charges=aws");
+    size_t i = 0;
+    const cli_detail::J j = cli_detail::parse_json(txt, i);
+    const auto* res = j.get("result");
+    if (!res) return out;
+    for (const auto& r : res->a) {
+        const auto* files = r.get("files");
+        if (!files) continue;
+        for (const auto& f : files->a) {
+            const auto* ty = f.get("type");
+            const auto* nm = f.get("name");
+            const auto* loc = f.get("locations");
+            if (!ty || !nm || ty->s == "sra" || !loc) continue;
+            OriginalFile of;
+            of.type = ty->s;
+            of.name = nm->s;
+            if (const auto* sz = f.get("size")) of.size = sz->n;
+            for (const auto& l : loc->a)
+                if (const auto* lk = l.get("link")) { of.link = lk->s; break; }
+            if (!of.link.empty()) out.push_back(of);
+        }
+    }
+    return out;
+}
+
+/// One endpoint's head, measured on its own: layout, whether a barcode read is present, and what the reads call.
+inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, const std::vector<HeadSpot>& spots, const SourceInfo& info,
+                                     std::vector<ScreenWhitelist>& lists, const Options& opt) {
+    EndpointRec e;
+    e.name = name;
+    e.reachable = reachable && !spots.empty();
+    e.bytes = info.bytes;
+    e.seconds = info.seconds;
+    e.note = info.error;
+    if (!e.reachable) return e;
+    Report r;
+    measure(spots, opt, lists, r.ev);
+    rank(r, opt);
+    for (const auto& s : r.ev.segs) e.seg_lens.push_back(s.len_mode);
+    double best = 0;
+    for (const auto& h : r.ev.lists) best = std::max(best, h.one_mm);
+    e.list_rate = best;
+    e.barcode_read = best >= kThr.wl_hit || (r.ev.window.found && !r.ev.window_on_index) || r.ev.prefix_mult >= kThr.prefix_mult;
+    e.verdict = r.verdict;
+    e.protocol = r.verdict_protocol;
+    return e;
+}
+
+/// Survey every endpoint of an accession. Heads are read with the same spot limit as the main head.
+inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t n, std::vector<ScreenWhitelist>& lists, const Options& opt) {
+    std::vector<EndpointRec> out;
+    {   // SRA normalized
+        SourceInfo info;
+        std::vector<HeadSpot> sp;
+        const double t0 = cli_detail::now_s();
+        head_sra(acc, n, sp, info);
+        info.seconds = cli_detail::now_s() - t0;
+        out.push_back(evaluate_endpoint("sra_normalized", !sp.empty(), sp, info, lists, opt));
+    }
+    {   // ENA fastq_ftp
+        SourceInfo info;
+        std::vector<HeadSpot> sp;
+        std::vector<std::string> urls;
+        int64_t rs = -1;
+        const double t0 = cli_detail::now_s();
+        if (ena_urls(acc, urls, rs)) head_fastq_segments(urls, n, sp, info);
+        else info.error = "ENA lists no FASTQ";
+        info.seconds = cli_detail::now_s() - t0;
+        out.push_back(evaluate_endpoint("ena_fastq_ftp", !sp.empty(), sp, info, lists, opt));
+    }
+    {   // ENA submitted_ftp
+        SourceInfo info;
+        std::vector<HeadSpot> sp;
+        const auto urls = ena_submitted(acc);
+        const double t0 = cli_detail::now_s();
+        if (urls.empty()) info.error = "ENA lists no submitted files";
+        else if (urls[0].size() > 4 && urls[0].compare(urls[0].size() - 4, 4, ".bam") == 0) head_bam_url(urls[0], n, sp, info);
+        else { std::vector<std::string> g = urls; std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
+        info.seconds = cli_detail::now_s() - t0;
+        out.push_back(evaluate_endpoint("ena_submitted_ftp", !sp.empty(), sp, info, lists, opt));
+    }
+    {   // SRA original-format objects (SDL locate service)
+        const auto files = sdl_original_files(acc);
+        if (files.empty()) {
+            EndpointRec e;
+            e.name = "sra_original";
+            e.note = "SDL lists no original-format object for this run";
+            out.push_back(e);
+        }
+        std::vector<OriginalFile> fq;
+        for (const auto& f : files) {
+            const bool bam = f.name.size() > 4 && f.name.compare(f.name.size() - 4, 4, ".bam") == 0;
+            if (bam) {
+                SourceInfo info;
+                std::vector<HeadSpot> sp;
+                const double t0 = cli_detail::now_s();
+                head_bam_url(f.link, n, sp, info);
+                info.seconds = cli_detail::now_s() - t0;
+                info.bytes = 67108864;
+                out.push_back(evaluate_endpoint("sra_original:" + f.name, !sp.empty(), sp, info, lists, opt));
+                if (!out.back().note.empty() || out.back().reachable) out.back().note += (out.back().note.empty() ? "" : "; ") + std::string("BAM, ") + std::to_string(static_cast<int64_t>(f.size)) + " bytes";
+            } else if (f.name.find(".fastq") != std::string::npos || f.name.find(".fq") != std::string::npos) fq.push_back(f);
+        }
+        if (!fq.empty()) {   // one lane or file set: names sorted, at most four files, one segment each
+            std::sort(fq.begin(), fq.end(), [](const OriginalFile& a, const OriginalFile& b) { return a.name < b.name; });
+            std::vector<std::string> urls;
+            for (size_t k = 0; k < fq.size() && k < 4; ++k) urls.push_back(fq[k].link);
+            SourceInfo info;
+            std::vector<HeadSpot> sp;
+            const double t0 = cli_detail::now_s();
+            head_fastq_segments(urls, n, sp, info);
+            info.seconds = cli_detail::now_s() - t0;
+            out.push_back(evaluate_endpoint("sra_original:fastq(" + std::to_string(fq.size()) + " files)", !sp.empty(), sp, info, lists, opt));
+        }
+    }
+    return out;
+}
+
+inline bool& want_endpoints() { static bool b = false; return b; }
 inline std::string& dump_dir() { static std::string d; return d; }   // --dump DIR: the first 40 spots of each source, for layout diagnosis
 
 inline Report identify_source(const std::string& source, const std::string& hint_in, const std::string& route, size_t n_reads,
@@ -346,13 +597,20 @@ inline Report identify_source(const std::string& source, const std::string& hint
         std::ofstream d(dump_dir() + "/" + id + ".spots.txt");
         for (size_t i = 0; i < std::min<size_t>(spots.size(), 40); ++i) {
             for (size_t k = 0; k < spots[i].seg.size(); ++k) d << (k ? "|" : "") << spots[i].seg[k];
-            d << "
-";
+            d << std::endl;
         }
     }
     measure(spots, opt, lists, R.ev);
-    if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
+    if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, R.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
+    if (want_endpoints() && cli_detail::is_accession(source)) {
+        R.endpoints = survey_endpoints(source, n_reads, lists, opt);
+        std::string via;
+        for (const auto& e : R.endpoints)
+            if (e.barcode_read && e.name != "sra_normalized") via += (via.empty() ? "" : ", ") + e.name;
+        if (R.verdict == "barcode_read_missing" && !R.ranked.empty())
+            R.ranked[0].reasons.push_back(via.empty() ? "no other endpoint of the run carries a barcode read" : "a barcode read is present in: " + via);
+    }
     return R;
 }
 
@@ -374,6 +632,7 @@ inline int identify_main(int argc, char** argv) {
         else if (a == "--route") route = next();
         else if (a == "--list") list_path = next();
         else if (a == "--dump") dump_dir() = next();
+        else if (a == "--endpoints") want_endpoints() = true;
         else if (a == "--out-dir") out_dir = next();
         else if (a == "-h" || a == "--help") {
             std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena]\n"

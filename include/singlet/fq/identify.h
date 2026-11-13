@@ -70,6 +70,14 @@ struct Thresholds {
     // Barcode sets larger than a plate (Drop-seq, Seq-Well): the first 12 bases of the barcode read repeat at least five times in this share of
     // reads (200000-read heads of 5,000 to 10,000 cells); random cDNA starts repeat in a small share.
     double prefix_mult = 0.60;
+    // cDNA reads starting at repeated 25-mers (probe sites) in at least this share, on reads of 60 bases or fewer: probe-based library.
+    double probe_start = 0.50;
+    // V(D)J enrichment: at least this share of gene-assigned reads on IG or TR genes (5' GEX libraries hold a few percent).
+    double vdj_share = 0.40;
+    // Tag-based single-cell cDNA without its barcode read: at least this share of reads on transcripts of 4000 nt or more lie within 1000 nt of
+    // one transcript end, at least this many times what even coverage gives, with the strand that goes with that end (3': sense, 5': antisense).
+    // Even coverage (bulk, Smart-seq): under even_end_share at either end.
+    double tag_end_share = 0.35, tag_end_enrich = 3.0, even_end_share = 0.15;
     // Verdict margin over the best interpretation of another family.
     double margin = 0.15;
     // Verdict floor on the top support.
@@ -134,6 +142,19 @@ struct MapEvidence {
     double chrm = 0;                              // share of mapped reads on chrM or MT
     bool exonic_measured = false;
     double seconds = 0;
+    // from the alignments and the index's transcript table (TxAnnot); unique alignments on annotated transcripts
+    bool tx_measured = false;
+    uint64_t tx_reads = 0;        // unique reads that overlap a transcript on one orientation
+    double sense_span = -1;       // sense share over those reads (introns included)
+    double end3 = 0, end5 = 0;    // share within 1000 nt of the transcript 3' end, and of the 5' end (transcripts of 4000 nt or more)
+    double end_expected = 0;      // share expected from even coverage on the same transcripts
+    uint64_t end_reads = 0;
+    double profile[10] = {};      // read midpoints along transcripts of 5000 nt or more, 5' to 3', shares per tenth
+    double insert_median = 0;     // median proper-pair insert, 0 when single-end
+    uint64_t insert_n = 0;
+    double vdj = 0;               // share of gene-assigned reads on IG or TR genes
+    double rrna = 0;              // share of gene-assigned reads on annotated rRNA genes
+    bool paired = false;
 };
 
 struct Interp {
@@ -149,6 +170,7 @@ struct Evidence {
     // A
     std::vector<SegStat> segs;
     int bc_seg = -1, cdna_seg = -1, cdna2_seg = -1;
+    int mate_seg = -1;               // second insert read of a pair with no barcode read (mapped as a pair), else -1
     // B
     std::vector<ListHit> lists;      // best (segment, orientation) per list
     WindowHit window;
@@ -156,6 +178,8 @@ struct Evidence {
     bool window_on_index = false;    // the window sits in a separate index read: well indices of a plate with full-length reads
     double prefix_mult = 0;          // share of reads whose first 12 bases repeat (at least 5 times) at the best segment
     int prefix_seg = -1;
+    double cdna_start_repeat = 0;    // share of cDNA reads whose first 25 bases occur at least three times: probe panels repeat, random fragments do not
+    uint32_t cdna_len = 0;
     ProtocolCandidate detected;      // protocol.h detect_protocol on the head
     double repeat_share_bc = 0;      // share of reads whose first 16 bases at the barcode segment repeat another read's
     // C
@@ -170,6 +194,15 @@ struct Evidence {
     MapEvidence map;
 };
 
+struct EndpointRec {
+    std::string name, note, verdict, protocol;
+    bool reachable = false, barcode_read = false;
+    std::vector<uint32_t> seg_lens;
+    double list_rate = 0;
+    int64_t bytes = -1;
+    double seconds = 0;
+};
+
 struct Report {
     int schema = kSchemaVersion;
     SourceInfo src;
@@ -182,6 +215,7 @@ struct Report {
     std::string action;           // process | classify_only | defer | refuse
     std::string action_note;
     std::string hint;             // caller-supplied metadata, shown and never counted as evidence
+    std::vector<EndpointRec> endpoints;   // --endpoints: every endpoint of the run, with whether it carries a barcode read
 };
 
 // ── policy table (separate from the classifier) ──
@@ -207,7 +241,9 @@ inline const std::vector<Policy>& policy_table() {
         {"plate_barcoded", "defer", "single-cell plate protocol with well barcodes: recognized, processing awaits a settled spec"},
         {"smartseq", "defer", "single-cell full-length protocol: recognized, not yet supported"},
         {"smartseq3", "defer", "single-cell full-length protocol with UMI: recognized, not yet supported"},
-        {"rna_no_barcode", "refuse", "full-length RNA without a cell barcode: bulk unless metadata says single cell"},
+        {"rna_no_barcode", "defer", "RNA reads without a barcode read and without mapping evidence that settles tag, Smart-seq or bulk"},
+        {"barcode_read_missing", "defer", "tag-based single-cell cDNA whose barcode read is absent from this endpoint; look for it in another endpoint"},
+        {"flex", "defer", "probe-based single-cell RNA (10x Flex): recognized, not processed"},
         {"bulk_rna", "refuse", "bulk RNA-seq is not single-cell"},
         {"genomic_dna", "refuse", "genomic DNA"},
         {"methylome", "refuse", "bisulfite reads"},
@@ -450,7 +486,140 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
 // ── layer D: bundled-STAR alignment of the head ──
 
 /// Parse the outputs of a STAR run on the cDNA reads: Log.final.out, ReadsPerGene.out.tab and the SAM's reference names.
-inline MapEvidence parse_star_outputs(const std::string& prefix, uint64_t n_reads) {
+/// Transcript table of a STAR index (transcriptInfo.tab, geneInfo.tab, chrStart.txt, chrName.txt), for the strand and end-distance evidence.
+struct TxAnnot {
+    struct Tx { uint64_t s, e, emax; uint8_t str; uint32_t gene; };
+    std::vector<Tx> tx;
+    std::vector<uint64_t> chr_start;
+    std::unordered_map<std::string, size_t> chr_idx;
+    std::vector<std::string> biotype;
+    bool loaded = false;
+    bool load(const std::string& dir) {
+        std::ifstream cn(dir + "/chrName.txt"), cs(dir + "/chrStart.txt"), ti(dir + "/transcriptInfo.tab"), gi(dir + "/geneInfo.tab");
+        if (!cn || !cs || !ti) return false;
+        std::string l;
+        size_t k = 0;
+        while (std::getline(cn, l)) chr_idx[l] = k++;
+        while (std::getline(cs, l)) if (!l.empty()) chr_start.push_back(std::strtoull(l.c_str(), nullptr, 10));
+        std::getline(ti, l);
+        uint64_t mx = 0;
+        while (std::getline(ti, l)) {
+            std::istringstream is(l);
+            std::string id;
+            uint64_t s, e, em;
+            int str;
+            uint32_t exn, exi, gene;
+            if (!(is >> id >> s >> e >> em >> str >> exn >> exi >> gene)) continue;
+            mx = std::max(mx, e);
+            tx.push_back({s, e, mx, static_cast<uint8_t>(str), gene});
+        }
+        if (gi) {
+            std::getline(gi, l);
+            while (std::getline(gi, l)) {
+                std::istringstream is(l);
+                std::string id, name, bt;
+                is >> id >> name >> bt;
+                biotype.push_back(bt);
+            }
+        }
+        loaded = !tx.empty() && !chr_start.empty();
+        return loaded;
+    }
+};
+
+/// Strand, end-distance, coverage, insert, V(D)J and rRNA evidence from the SAM of the head's unique alignments.
+inline void sam_features(const std::string& sam_path, const TxAnnot* ann, MapEvidence& m) {
+    std::ifstream sam(sam_path);
+    if (!sam) return;
+    std::string line;
+    uint64_t n = 0, mt = 0, assigned = 0, sense = 0, vdj = 0, rrna = 0, n3 = 0, n5 = 0, nend = 0;
+    double expect = 0;
+    double prof[10] = {};
+    uint64_t nprof = 0;
+    std::vector<int64_t> ins;
+    std::vector<std::string> f;
+    while (std::getline(sam, line)) {
+        if (line.empty() || line[0] == '@') continue;
+        f.clear();
+        size_t a = 0;
+        for (int k = 0; k < 9; ++k) {
+            size_t b = line.find('\t', a);
+            if (b == std::string::npos) break;
+            f.push_back(line.substr(a, b - a));
+            a = b + 1;
+        }
+        if (f.size() < 9) continue;
+        const int flag = std::atoi(f[1].c_str());
+        const std::string& rname = f[2];
+        ++n;
+        if (rname == "chrM" || rname == "MT" || rname == "M" || rname == "chrMT") ++mt;
+        if (!ann || !ann->loaded) continue;
+        if (line.find("NH:i:1\t") == std::string::npos && (line.size() < 6 || line.compare(line.size() - 6, 6, "NH:i:1") != 0)) continue;   // unique alignments only
+        if ((flag & 0x2) && std::atoll(f[8].c_str()) > 0) ins.push_back(std::atoll(f[8].c_str()));
+        if (flag & 0x80) continue;   // one mate per pair for the transcript statistics
+        auto ci = ann->chr_idx.find(rname);
+        if (ci == ann->chr_idx.end() || ci->second >= ann->chr_start.size()) continue;
+        const uint64_t g0 = ann->chr_start[ci->second] + std::strtoull(f[3].c_str(), nullptr, 10) - 1;
+        uint64_t rl = 0, num = 0;
+        for (char c : f[5]) {
+            if (c >= '0' && c <= '9') num = num * 10 + static_cast<uint64_t>(c - '0');
+            else { if (c == 'M' || c == 'D' || c == 'N' || c == '=' || c == 'X') rl += num; num = 0; }
+        }
+        if (!rl) continue;
+        const uint64_t g1 = g0 + rl - 1;
+        const size_t hi = std::upper_bound(ann->tx.begin(), ann->tx.end(), g1, [](uint64_t v, const TxAnnot::Tx& t) { return v < t.s; }) - ann->tx.begin();
+        const TxAnnot::Tx* best = nullptr;
+        int nsense = 0, nanti = 0;
+        for (size_t i = hi; i-- > 0;) {
+            if (ann->tx[i].emax < g0) break;
+            const auto& t = ann->tx[i];
+            if (t.e < g0 || t.str == 0) continue;
+            const bool sn = (flag & 16) ? t.str == 2 : t.str == 1;
+            (sn ? nsense : nanti)++;
+            if (!best || (t.e - t.s) > (best->e - best->s)) best = &t;
+        }
+        if (!best || (nsense && nanti)) continue;
+        ++assigned;
+        sense += nsense > 0;
+        const std::string bt = best->gene < ann->biotype.size() ? ann->biotype[best->gene] : std::string();
+        if ((bt.rfind("IG_", 0) == 0 || bt.rfind("TR_", 0) == 0) && bt.find("pseudogene") == std::string::npos) ++vdj;
+        if (bt == "rRNA" || bt == "Mt_rRNA") ++rrna;
+        const uint64_t span = best->e - best->s + 1;
+        const bool plus = best->str == 1;
+        if (span >= 4000) {
+            const uint64_t d3 = plus ? (best->e > g1 ? best->e - g1 : 0) : (g0 > best->s ? g0 - best->s : 0);
+            const uint64_t d5 = plus ? (g0 > best->s ? g0 - best->s : 0) : (best->e > g1 ? best->e - g1 : 0);
+            ++nend;
+            n3 += d3 <= 1000;
+            n5 += d5 <= 1000;
+            expect += 1000.0 / static_cast<double>(span);
+        }
+        if (span >= 5000) {
+            const double mid = double((g0 + g1) / 2 - best->s) / static_cast<double>(span);
+            const double pos = plus ? mid : 1.0 - mid;
+            prof[std::min(9, std::max(0, static_cast<int>(pos * 10)))] += 1;
+            ++nprof;
+        }
+    }
+    if (n) m.chrm = double(mt) / n;
+    if (assigned >= 50) {
+        m.tx_measured = true;
+        m.tx_reads = assigned;
+        m.sense_span = double(sense) / assigned;
+        m.vdj = double(vdj) / assigned;
+        m.rrna = double(rrna) / assigned;
+    }
+    if (nend >= 50) { m.end3 = double(n3) / nend; m.end5 = double(n5) / nend; m.end_expected = expect / nend; m.end_reads = nend; }
+    if (nprof >= 50) for (int k = 0; k < 10; ++k) m.profile[k] = prof[k] / nprof;
+    if (ins.size() >= 50) {
+        std::sort(ins.begin(), ins.end());
+        m.insert_median = double(ins[ins.size() / 2]);
+        m.insert_n = ins.size();
+        m.paired = true;
+    }
+}
+
+inline MapEvidence parse_star_outputs(const std::string& prefix, uint64_t n_reads, const TxAnnot* ann = nullptr) {
     MapEvidence m;
     m.reads = n_reads;
     std::ifstream lg(prefix + "Log.final.out");
@@ -489,20 +658,7 @@ inline MapEvidence parse_star_outputs(const std::string& prefix, uint64_t n_read
     } else {
         m.note = "no ReadsPerGene (genome index lacks annotation): exonic and sense not measured";
     }
-    std::ifstream sam(prefix + "Aligned.out.sam");
-    if (sam) {
-        uint64_t n = 0, mt = 0;
-        while (std::getline(sam, line)) {
-            if (line.empty() || line[0] == '@') continue;
-            auto t1 = line.find('\t');
-            for (int k = 0; k < 1 && t1 != std::string::npos; ++k) t1 = line.find('\t', t1 + 1);   // after FLAG
-            auto t2 = line.find('\t', t1 + 1);
-            const std::string rname = line.substr(t1 + 1, t2 - t1 - 1);
-            ++n;
-            if (rname == "chrM" || rname == "MT" || rname == "M" || rname == "chrMT") ++mt;
-        }
-        if (n) m.chrm = double(mt) / n;
-    }
+    sam_features(prefix + "Aligned.out.sam", ann, m);
     return m;
 }
 
@@ -583,6 +739,11 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
     };
     assign_cdna();
 
+    if (ev.bc_seg < 0 && ev.cdna_seg >= 0 && ev.cdna2_seg >= 0) {
+        const double a = ev.segs[ev.cdna_seg].len_mode, b = ev.segs[ev.cdna2_seg].len_mode;
+        if (std::min(a, b) >= 30 && std::min(a, b) >= 0.8 * std::max(a, b)) ev.mate_seg = ev.cdna2_seg;
+    }
+
     // windows on the barcode candidate (or the first segment of a single-read run)
     int wseg = ev.bc_seg >= 0 ? ev.bc_seg : (nseg == 1 ? 0 : -1);
     if (best_rate < kThr.wl_hit) {
@@ -615,7 +776,7 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
                 if (share > ev.prefix_mult) { ev.prefix_mult = share; ev.prefix_seg = (int)t; }
             }
             // the repeating read is the barcode read, whatever its length (Seq-Well runs with two equal-length reads)
-            if (ev.prefix_mult >= kThr.prefix_mult && ev.prefix_seg >= 0 && ev.prefix_seg != ev.bc_seg) { ev.bc_seg = ev.prefix_seg; assign_cdna(); }
+            if (nseg >= 2 && ev.prefix_mult >= kThr.prefix_mult && ev.prefix_seg >= 0 && ev.prefix_seg != ev.bc_seg) { ev.bc_seg = ev.prefix_seg; ev.mate_seg = -1; assign_cdna(); }
         }
     }
 
@@ -632,6 +793,20 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
     }
     const uint16_t r1m = sv.empty() ? 0 : (uint16_t)ev.segs[r1s].len_mode, r2m = (r2s >= 0) ? (uint16_t)ev.segs[r2s].len_mode : 0;
 
+    // probe panels (Visium FFPE and CytAssist, Flex) start every cDNA read at one of a few thousand probe sites
+    if (ev.cdna_seg >= 0) {
+        std::unordered_map<uint64_t, uint32_t> c;
+        uint64_t n = 0, rep = 0;
+        ev.cdna_len = ev.segs[ev.cdna_seg].len_mode;
+        for (size_t i = 0; i < probe_n; ++i) {
+            if ((size_t)ev.cdna_seg >= spots[i].seg.size() || spots[i].seg[ev.cdna_seg].size() < 25) continue;
+            uint64_t h;
+            if (!pack(spots[i].seg[ev.cdna_seg].data(), 25, h)) continue;
+            ++c[h]; ++n;
+        }
+        for (auto& kv : c) if (kv.second >= 3) rep += kv.second;
+        ev.cdna_start_repeat = n ? double(rep) / n : 0;
+    }
     // C: composition and constants on the cDNA read(s)
     AssaySignals<ScreenSpot> sig = AssaySignals<ScreenSpot>::compute(sv, r1m, r2m);
     ev.tn5 = sig.tn5_fraction; ev.polyt = sig.polyt_fraction; ev.adt_cap = sig.adt_fraction;
@@ -798,9 +973,31 @@ inline void rank(Report& R, const Options& opt) {
         g.protocol = tag;
         g.reasons.push_back("barcode list " + gkey + " hit by " + detail::jnum(grate) + " of reads at segment " + std::to_string(ghit ? ghit->seg : -1));
         if (gkey == "v3" || gkey == "v2") g.reasons.push_back("3'/5' call from " + basis);
-        g.support = clamp01(grate * (ev.feature_like && gkey != "visium" ? 0.3 : 1.0));
+        const bool probe_like = ev.cdna_start_repeat >= kThr.probe_start && ev.cdna_len <= 60;
+        if (gkey == "visium") {
+            g.modality = probe_like ? "spatial_gex_probe" : "spatial_gex_polya";
+            g.reasons.push_back(std::string("Visium sub-call ") + (probe_like ? "probe-based" : "poly(A)") + ": read 2 is " + std::to_string(ev.cdna_len) +
+                                " bases and " + detail::jnum(ev.cdna_start_repeat) + " of reads start at a repeated 25-mer");
+        }
+        const bool vdj_like = ev.map.tx_measured && ev.map.vdj >= kThr.vdj_share && gkey != "visium";
+        g.support = clamp01(grate * ((ev.feature_like && gkey != "visium") || probe_like && gkey != "visium" || vdj_like ? 0.3 : 1.0));
         add_usefulness(g, ev, grate);
         H.push_back(g);
+        if (probe_like && gkey != "visium" && !ev.feature_like) {
+            Interp fx;
+            fx.family = "flex"; fx.protocol = tag; fx.modality = "gex_probe";
+            fx.support = clamp01(grate * 0.9);
+            fx.reasons.push_back("barcode list hit and probe-like cDNA reads: " + detail::jnum(ev.cdna_start_repeat) + " of reads start at a repeated 25-mer, read length " +
+                                 std::to_string(ev.cdna_len) + " (probe panel, as in 10x Flex)");
+            H.push_back(fx);
+        }
+        if (vdj_like) {
+            Interp vd;
+            vd.family = "vdj"; vd.protocol = tag; vd.modality = "vdj";
+            vd.support = clamp01(grate * 0.95);
+            vd.reasons.push_back(detail::jnum(ev.map.vdj) + " of gene-assigned reads fall on immunoglobulin or T-cell receptor genes");
+            H.push_back(vd);
+        }
         if (ev.feature_like && gkey != "visium") {
             Interp f;
             f.family = "feature_barcode";
@@ -911,18 +1108,49 @@ inline void rank(Report& R, const Options& opt) {
         uint32_t longest = 0;
         for (const auto& s : ev.segs) longest = std::max(longest, s.len_mode);
         if (sequence_like && no_struct && longest >= 36) {
-            const bool small = opt.run_spots >= 0 && (uint64_t)opt.run_spots <= kThr.smartseq_max_spots;
-            const bool large = opt.run_spots >= 0 && (uint64_t)opt.run_spots > kThr.smartseq_max_spots;
-            Interp s, b;
-            s.family = "smartseq"; s.protocol = "smartseq2-like"; s.modality = "gex";
-            b.family = "bulk_rna"; b.protocol = "bulk"; b.modality = "gex";
-            s.support = small ? 0.62 : (large ? 0.38 : 0.5);
-            b.support = small ? 0.38 : (large ? 0.62 : 0.5);
-            const std::string sz = opt.run_spots >= 0 ? ("run holds " + std::to_string(opt.run_spots) + " spots") : "run size unknown";
-            s.reasons.push_back("no cell barcode, long reads; " + sz + " (full-length single-cell and bulk libraries look alike in reads)");
-            b.reasons = s.reasons;
+            // A run without a barcode-like read is not bulk by default. Bulk and Smart-seq need positive evidence from mapping (cDNA reads spread
+            // along the transcript); tag-based single-cell cDNA piles up at one transcript end on one strand; anything else stays rna_no_barcode.
+            const bool mapped = ev.map.measured && ev.map.tx_measured && ev.map.end_reads >= 200;
+            const double endmax = std::max(ev.map.end3, ev.map.end5);
+            const double enrich = ev.map.end_expected > 0 ? endmax / ev.map.end_expected : 0;
+            const bool tag3 = mapped && ev.map.end3 >= kThr.tag_end_share && ev.map.end3 >= ev.map.end5 && enrich >= kThr.tag_end_enrich && ev.map.sense_span >= kThr.sense_3p;
+            const bool tag5 = mapped && ev.map.end5 >= kThr.tag_end_share && ev.map.end5 > ev.map.end3 && enrich >= kThr.tag_end_enrich && ev.map.sense_span <= kThr.sense_5p;
+            const bool even = mapped && endmax < kThr.even_end_share;
+            const std::string ends = "reads within 1000 nt of the transcript 3' end " + detail::jnum(ev.map.end3) + ", of the 5' end " + detail::jnum(ev.map.end5) +
+                                     " (even coverage would give " + detail::jnum(ev.map.end_expected) + "), sense share " + detail::jnum(ev.map.sense_span);
+            if (tag3 || tag5) {
+                Interp t;
+                t.family = "barcode_read_missing"; t.protocol = tag3 ? "tag-3p" : "tag-5p"; t.modality = "gex";
+                t.support = 0.85;
+                t.reasons.push_back("single-cell style cDNA without its barcode read in this endpoint: " + ends);
+                t.reasons.push_back("try_endpoints: the barcode read may sit in another endpoint of the run (ENA submitted files, SRA original-format objects); run with --endpoints");
+                t.unmeasured.push_back("valid_barcode: no barcode read");
+                H.push_back(t);
+            } else if (even) {
+                const bool small = opt.run_spots >= 0 && (uint64_t)opt.run_spots <= kThr.smartseq_max_spots;
+                const bool large = opt.run_spots >= 0 && (uint64_t)opt.run_spots > kThr.smartseq_max_spots;
+                Interp s, b;
+                s.family = "smartseq"; s.protocol = "smartseq2-like"; s.modality = "gex";
+                b.family = "bulk_rna"; b.protocol = "bulk"; b.modality = "gex";
+                s.support = small ? 0.62 : (large ? 0.38 : 0.5);
+                b.support = small ? 0.38 : (large ? 0.62 : 0.5);
+                const std::string sz = opt.run_spots >= 0 ? ("run holds " + std::to_string(opt.run_spots) + " spots") : "run size unknown";
+                s.reasons.push_back("no cell barcode and even coverage along transcripts (" + ends + "); " + sz);
+                b.reasons = s.reasons;
+                add_usefulness(s, ev, 0.0);
+                s.usefulness = 0;
+                s.unmeasured.push_back("no cell barcode: single-cell usefulness depends on the plate layout");
+                H.push_back(s);
+                H.push_back(b);
+            } else {
+                Interp r;
+                r.family = "rna_no_barcode"; r.protocol = "undetermined"; r.modality = "gex";
+                r.support = 0.6;
+                r.reasons.push_back(mapped ? "no cell barcode; coverage is neither even nor a tag end pile-up (" + ends + ")"
+                                           : "no cell barcode and no mapping evidence: bulk and Smart-seq need positive evidence, so the run is held (pass --genome-dir)");
+                H.push_back(r);
+            }
             if (ev.tn5 >= kThr.tn5) {
-                s.reasons.push_back("Tn5 end in " + detail::jnum(ev.tn5) + " of reads: tagmented, as Smart-seq2 and many bulk kits are");
                 Interp a;
                 a.family = "atac"; a.protocol = "tn5-genomic"; a.modality = "chromatin_accessibility";
                 a.support = 0.45;
@@ -936,11 +1164,6 @@ inline void rank(Report& R, const Options& opt) {
                 g.reasons.push_back("not excluded without mapping evidence");
                 H.push_back(g);
             }
-            add_usefulness(s, ev, 0.0);
-            s.usefulness = 0;
-            s.unmeasured.push_back("no cell barcode: single-cell usefulness depends on the plate layout");
-            H.push_back(s);
-            H.push_back(b);
         }
     }
 
@@ -949,7 +1172,7 @@ inline void rank(Report& R, const Options& opt) {
         for (auto& it : H) {
             const bool rna = it.family == "droplet_3p" || it.family == "droplet_5p" || it.family == "multiome_gex" || it.family == "visium" ||
                              it.family == "droplet_other" || it.family == "combinatorial" || it.family == "plate_barcoded" ||
-                             it.family == "smartseq" || it.family == "smartseq3" || it.family == "bulk_rna";
+                             it.family == "smartseq" || it.family == "smartseq3" || it.family == "bulk_rna" || it.family == "barcode_read_missing" || it.family == "rna_no_barcode";
             const bool dna = it.family == "atac" || it.family == "multiome_atac" || it.family == "genomic_dna";
             if (ev.map.unique < kThr.mapped_min && (rna || dna)) {
                 it.support *= 0.5;
@@ -1041,11 +1264,11 @@ inline std::string report_json(const Report& R) {
     }
     o << "],\n  \"window\": {\"found\": " << (ev.window.found ? "true" : "false") << ", \"segment\": " << ev.window.seg << ", \"offset\": " << ev.window.off
       << ", \"length\": " << ev.window.len << ", \"k\": " << ev.window.k << ", \"top_share\": " << jnum(ev.window.top_share) << ", \"random_share\": " << jnum(ev.window.random_share) << "},\n";
+    o << "  \"probe\": {\"cdna_start_repeat\": " << jnum(ev.cdna_start_repeat) << ", \"cdna_len\": " << ev.cdna_len << "},\n";
     o << "  \"window2\": {\"found\": " << (ev.window2.found ? "true" : "false") << ", \"offset\": " << ev.window2.off << ", \"length\": " << ev.window2.len << ", \"top_share\": " << jnum(ev.window2.top_share)
       << "},
   \"window_on_index\": " << (ev.window_on_index ? "true" : "false") << ",
-  \"prefix\": {\"share\": " << jnum(ev.prefix_mult) << ", \"segment\": " << ev.prefix_seg << "},
-";
+  \"prefix\": {\"share\": " << jnum(ev.prefix_mult) << ", \"segment\": " << ev.prefix_seg << "},\n";
     o << "  \"detector\": {\"tag\": " << q(ev.detected.tag) << ", \"confidence\": " << q(conf_name(ev.detected.confidence)) << ", \"wl_rate\": " << jnum(ev.detected.wl_match_rate) << "},\n";
     o << "  \"insert\": {\"five_prime_called\": " << (ev.five_prime_called ? "true" : "false") << ", \"r1_tso\": " << ev.five_prime.r1_tso << ", \"r1_polyt\": " << ev.five_prime.r1_polyt
       << ", \"r2_smart\": " << ev.five_prime.r2_smart << ", \"r2_polya\": " << ev.five_prime.r2_polya << ", \"r2_polyt\": " << ev.five_prime.r2_polyt << ", \"motif_spots\": " << ev.five_prime.n
@@ -1055,7 +1278,23 @@ inline std::string report_json(const Report& R) {
       << ", \"bc_repeat_share\": " << jnum(ev.repeat_share_bc) << "},\n";
     o << "  \"mapping\": {\"measured\": " << (ev.map.measured ? "true" : "false") << ", \"note\": " << q(ev.map.note) << ", \"reads\": " << ev.map.reads << ", \"unique\": " << jnum(ev.map.unique)
       << ", \"multi\": " << jnum(ev.map.multi) << ", \"unmapped\": " << jnum(ev.map.unmapped) << ", \"gene_assigned\": " << jnum(ev.map.exonic) << ", \"sense\": " << jnum(ev.map.sense)
-      << ", \"chrM\": " << jnum(ev.map.chrm) << ", \"seconds\": " << jnum(ev.map.seconds) << "},\n";
+      << ", \"chrM\": " << jnum(ev.map.chrm) << ", \"seconds\": " << jnum(ev.map.seconds)
+      << ", \"tx_measured\": " << (ev.map.tx_measured ? "true" : "false") << ", \"tx_reads\": " << ev.map.tx_reads << ", \"sense_span\": " << jnum(ev.map.sense_span)
+      << ", \"end3\": " << jnum(ev.map.end3) << ", \"end5\": " << jnum(ev.map.end5) << ", \"end_expected\": " << jnum(ev.map.end_expected) << ", \"end_reads\": " << ev.map.end_reads
+      << ", \"insert_median\": " << jnum(ev.map.insert_median) << ", \"insert_n\": " << ev.map.insert_n << ", \"vdj\": " << jnum(ev.map.vdj) << ", \"rrna\": " << jnum(ev.map.rrna)
+      << ", \"rrna_note\": \"annotated rRNA genes only\", \"profile\": [";
+    for (int k = 0; k < 10; ++k) o << (k ? ", " : "") << jnum(ev.map.profile[k]);
+    o << "]},\n";
+    o << "  \"endpoints\": [";
+    for (size_t i = 0; i < R.endpoints.size(); ++i) {
+        const auto& e = R.endpoints[i];
+        o << (i ? ", " : "") << "{\"endpoint\": " << q(e.name) << ", \"reachable\": " << (e.reachable ? "true" : "false") << ", \"segments\": [";
+        for (size_t k = 0; k < e.seg_lens.size(); ++k) o << (k ? ", " : "") << e.seg_lens[k];
+        o << "], \"barcode_read_present\": " << (e.barcode_read ? "true" : "false") << ", \"best_list_rate\": " << jnum(e.list_rate) << ", \"verdict\": " << q(e.verdict)
+          << ", \"protocol\": " << q(e.protocol) << ", \"bytes\": " << (e.bytes >= 0 ? std::to_string(e.bytes) : std::string("null")) << ", \"seconds\": " << jnum(e.seconds)
+          << ", \"note\": " << q(e.note) << "}";
+    }
+    o << "],\n";
     o << "  \"interpretations\": [";
     for (size_t i = 0; i < R.ranked.size(); ++i) {
         const auto& it = R.ranked[i];
