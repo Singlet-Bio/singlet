@@ -298,7 +298,12 @@ inline RangeGet range_get(const std::string& url, int64_t from, int64_t len) {
 inline bool looks_like_bam_url(const std::string& u) {
     if (!is_url(u)) return false;
     const size_t p = u.find(".bam");
-    return p != std::string::npos && (p + 4 == u.size() || u[p + 4] == '.' || u[p + 4] == '?');
+    if (p == std::string::npos) return false;
+    const std::string rest = u.substr(p + 4);   // "", "?query" or ".1" (the archive's copy suffix); ".bai" is an index, not a BAM
+    if (rest.empty() || rest[0] == '?') return true;
+    if (rest[0] != '.' || rest.size() < 2) return false;
+    for (size_t i = 1; i < rest.size(); ++i) if (!std::isdigit(static_cast<unsigned char>(rest[i]))) return false;
+    return true;
 }
 
 }  // namespace cli_detail
@@ -672,13 +677,14 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
         const double t0 = cli_detail::now_s();
         bool was_bam = false;
         if (urls.empty()) info.error = "ENA lists no submitted files";
-        else if (cli_detail::looks_like_bam_url(urls[0])) {
+        else if (std::any_of(urls.begin(), urls.end(), [](const std::string& u) { return cli_detail::looks_like_bam_url(u); })) {
+            const std::string bu = *std::find_if(urls.begin(), urls.end(), [](const std::string& u) { return cli_detail::looks_like_bam_url(u); });
             auto ev = std::make_shared<bam::Evidence>();
             BamCtx bc{&lists, &opt, ev.get()};
-            head_bam_ranged(urls[0], n, sp, info, &bc);
-            push_bam("ena_submitted_ftp", urls[0], sp, info, ev);
+            head_bam_ranged(bu, n, sp, info, &bc);
+            push_bam("ena_submitted_ftp", bu, sp, info, ev);
             was_bam = true;
-        } else { std::vector<std::string> g = urls; std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
+        } else { std::vector<std::string> g; for (const auto& u : urls) if (u.size() < 4 || u.compare(u.size() - 4, 4, ".bai") != 0) g.push_back(u); std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
         if (!was_bam) {
             info.seconds = cli_detail::now_s() - t0;
             push_ep("ena_submitted_ftp", sp, info);
