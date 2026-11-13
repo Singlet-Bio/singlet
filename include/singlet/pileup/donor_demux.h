@@ -36,6 +36,7 @@
 #include <mutex>
 #include <numeric>
 #include <random>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -317,14 +318,21 @@ inline std::atomic<long long>* demux_phase_ns() {
     static std::atomic<long long> v[kPhCount];
     return v;
 }
+// Per-fit accumulator of the calling thread (set by run_vb_inplace for the span of one fit; phases of the VB loop are timed in
+// the thread that runs the loop, so one fit's table holds its own wall-clock split even while other fits run beside it).
+inline std::array<long long, kPhCount>*& demux_phase_local() {
+    static thread_local std::array<long long, kPhCount>* p = nullptr;
+    return p;
+}
 struct PhaseScope {
     int id;
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     explicit PhaseScope(int i) : id(i) {}
     ~PhaseScope() {
-        demux_phase_ns()[id].fetch_add(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
-            std::memory_order_relaxed);
+        const long long ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+        demux_phase_ns()[id].fetch_add(ns, std::memory_order_relaxed);
+        if (auto* loc = demux_phase_local()) (*loc)[id] += ns;
     }
 };
 
@@ -774,6 +782,37 @@ static int run_vb_inplace_fp(
         result.n_iter += skipped;
         iters_run = total;
     };
+
+    // One summary line per fit with the wall-clock split of the loop (SINGLET_DEMUX_FITLOG=0 silences it). Log only.
+    struct FitPhaseLog {
+        std::array<long long, kPhCount> ns{};
+        std::array<long long, kPhCount>* prev;
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        const int& iters; int K, nc, ns_snps, nthreads, max_iter; bool on;
+        FitPhaseLog(const int& it, int K_, int nc_, int nsn, int nt, int mi)
+            : prev(demux_phase_local()), iters(it), K(K_), nc(nc_), ns_snps(nsn), nthreads(nt), max_iter(mi) {
+            const char* e = std::getenv("SINGLET_DEMUX_FITLOG");
+            on = !(e && std::atoi(e) == 0);
+            if (on) demux_phase_local() = &ns;
+        }
+        ~FitPhaseLog() {
+            if (!on) return;
+            demux_phase_local() = prev;
+            const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            double sum = 0.0;
+            std::ostringstream os;
+            for (int i = 0; i < kPhCount; ++i) {
+                if (ns[i] == 0) continue;
+                sum += static_cast<double>(ns[i]) * 1e-9;
+                os << " " << kDemuxPhaseName[i] << "=" << static_cast<double>(ns[i]) * 1e-9;
+            }
+            std::ostringstream line;
+            line << "[demux] vb fit: K=" << K << " cells=" << nc << " snps=" << ns_snps << " threads=" << nthreads
+                 << " iters=" << iters << "/" << max_iter << " wall=" << wall << " s; phase seconds:" << os.str()
+                 << " other=" << std::max(0.0, wall - sum) << "\n";
+            std::cerr << line.str();
+        }
+    } fit_log(iters_run, K, nc, ns, nthreads, max_iter);
 
     for (int iter = 0; iter < max_iter; ++iter) {
         const bool need_elbo_orig = (iter + 1 >= cfg.min_iter) || (iter == max_iter - 1);
