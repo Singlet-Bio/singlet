@@ -490,10 +490,13 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
                     ++joint[(h1 << 24) | h2];
                 }
                 uint32_t jd = 0;
-                for (auto& kv : joint) jd += (kv.second >= 2);
+                uint64_t jn = 0;
+                for (auto& kv : joint) { jd += (kv.second >= 2); jn += kv.second; }
                 const double prod = double(best.distinct) * double(second->distinct);
-                second->top_share = second->top_share;   // unchanged; the independence test only decides whether the window counts
-                if (prod <= 0 || double(jd) < 0.25 * prod) *second = WindowHit();
+                // under independence the pairs seen twice or more number prod * (1 - e^-l (1 + l)) with l = reads / prod
+                const double lam = prod > 0 ? double(jn) / prod : 0;
+                const double expect_jd = prod * (1.0 - std::exp(-lam) * (1.0 + lam));
+                if (prod <= 0 || expect_jd < 5 || double(jd) < 0.5 * expect_jd) *second = WindowHit();
             }
         }
     }
