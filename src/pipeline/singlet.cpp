@@ -7403,6 +7403,8 @@ static int singlet_main(int argc, char* argv[]) {
                             if (filt_out) {
                                 for (const auto& kv : prescan_counts) {
                                     if (kv.second < min_cnt) continue;
+                                    // reads whose barcode the encoder could not resolve carry N in every barcode slot (inDrop, indrop_anchor.h)
+                                    if (kv.first.find_first_not_of('N') == std::string::npos) continue;
                                     if (use_wl_guard &&
                                         full_wl_set.count(kv.first) == 0) continue;
                                     filt_out << kv.first << '\n';

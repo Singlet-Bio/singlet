@@ -306,6 +306,9 @@ add_pileup_test(test_feature_barcode_detect)
 add_pileup_test(test_ram_tier)
 add_pileup_test(test_species_short_r2)
 add_pileup_test(test_whitelist_integrity)
+add_pileup_test(test_indrop_anchor)   # inDrop W1-anchored barcodes (variable BC1) and R2 adapter trimming on synthetic reads
+target_compile_definitions(test_indrop_anchor PRIVATE
+    WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 # The real barcode whitelist files ship with the Python package, not under a
 # repo-root "whitelists/" dir (the compiled-in fallback the test falls back
 # to when this isn't set).
