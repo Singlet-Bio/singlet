@@ -2,7 +2,7 @@
 // fq/identify_cli.h — head readers and the `singlet identify` subcommand
 //
 //   singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=...] [--json OUT] [--route auto|sra|ena]
-//   singlet identify --list samples.tsv --out-dir DIR [same options]      (rows: id TAB source [TAB hint]; lists stay loaded)
+//   singlet identify --list samples.tsv --out-dir DIR [same options]      (rows: id TAB source [TAB hint [TAB genome-dir]]; lists stay loaded)
 //
 // SOURCE forms (runs of one sample separated by ';')
 //   SRR/ERR/DRR accession   the archive's own spot access through SraReader (libncbi-vdb fetches blocks lazily; row limit stops it)
@@ -395,7 +395,8 @@ inline int identify_main(int argc, char** argv) {
             if (line.empty() || line[0] == '#') continue;
             const auto f = cli_detail::split(line, '\t');
             if (f.size() < 2 || f[0] == "id") continue;
-            const Report r = identify_source(f[1], f.size() > 2 ? f[2] : hint, route, n_reads, lists, opt, genome_dir, map_reads, threads);
+            const std::string row_genome = (f.size() > 3 && f[3] != "-" && !f[3].empty()) ? f[3] : genome_dir;   // optional fourth column: genome per row
+            const Report r = identify_source(f[1], f.size() > 2 && !f[2].empty() ? f[2] : hint, route, n_reads, lists, opt, row_genome, map_reads, threads);
             std::ofstream j((out_dir.empty() ? std::string(".") : out_dir) + "/" + f[0] + ".json");
             j << report_json(r);
             sum << line_of(f[0], r) << "\n";

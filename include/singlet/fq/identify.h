@@ -67,6 +67,9 @@ struct Thresholds {
     double exonic_rna_min = 0.15, exonic_dna_max = 0.10;
     // Uniquely mapped share below this on the right species: the head is not a transcriptome of the given genome.
     double mapped_min = 0.50;
+    // Barcode sets larger than a plate (Drop-seq, Seq-Well): the first 12 bases of the barcode read repeat at least five times in this share of
+    // reads (200000-read heads of 5,000 to 10,000 cells); random cDNA starts repeat in a small share.
+    double prefix_mult = 0.60;
     // Verdict margin over the best interpretation of another family.
     double margin = 0.15;
     // Verdict floor on the top support.
@@ -149,6 +152,10 @@ struct Evidence {
     // B
     std::vector<ListHit> lists;      // best (segment, orientation) per list
     WindowHit window;
+    WindowHit window2;               // a second, disjoint barcode window: split-pool bead barcodes (inDrop, ddSEQ), not a plate
+    bool window_on_index = false;    // the window sits in a separate index read: well indices of a plate with full-length reads
+    double prefix_mult = 0;          // share of reads whose first 12 bases repeat (at least 5 times) at the best segment
+    int prefix_seg = -1;
     ProtocolCandidate detected;      // protocol.h detect_protocol on the head
     double repeat_share_bc = 0;      // share of reads whose first 16 bases at the barcode segment repeat another read's
     // C
@@ -343,7 +350,7 @@ inline SegStat seg_stat(const std::vector<HeadSpot>& spots, size_t s) {
 // ── layer B: well-barcode windows ──
 
 /// Scan windows of one segment for a small set of barcodes that holds most reads (plates have tens to hundreds of wells).
-inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t max_reads = 50000) {
+inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t max_reads = 50000, WindowHit* second = nullptr, bool on_index = false) {
     WindowHit best;
     const uint32_t L = [&] { std::map<size_t, int> m; for (size_t i = 0; i < std::min<size_t>(spots.size(), 2000); ++i) if ((size_t)s < spots[i].seg.size()) ++m[spots[i].seg[s].size()]; size_t b = 0; int c = 0; for (auto& [l, k] : m) if (k > c) { c = k; b = l; } return (uint32_t)b; }();
     if (L < 6) return best;
@@ -393,7 +400,7 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
                 const double thr = std::max(2.0, 0.1 * double(top) / keff);
                 uint32_t distinct = 0;
                 for (uint32_t c : v) distinct += (c >= thr);
-                if (distinct < 12) break;   // a linker or poly(T) run is one or a few sequences, not a barcode set
+                if (distinct < (on_index ? 48u : 12u)) break;   // a linker or poly(T) run is one or a few sequences; sample indices are few, wells many
                 WindowHit w;
                 w.found = true; w.seg = s; w.off = off; w.len = len; w.k = K; w.distinct = distinct; w.top_share = share; w.random_share = rnd;
                 cands.push_back(w);
@@ -423,6 +430,18 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
         uint16_t shift = 0;
         while (best.len - shift > 6 && detail_id::entropy_bits(cnt[shift]) < 0.5) ++shift;
         best.off += shift; best.len -= shift;
+        if (second) {
+            // a second window that does not touch the first, on the same rule
+            std::vector<WindowHit> rest;
+            for (const auto& c : cands)
+                if (c.off >= best.off + best.len + 0u || c.off + c.len <= best.off) rest.push_back(c);
+            uint32_t mind2 = UINT32_MAX;
+            for (const auto& c : rest) mind2 = std::min(mind2, c.distinct);
+            for (const auto& c : rest) {
+                if (c.distinct > 1.3 * mind2) continue;
+                if (!second->found || c.len > second->len || (c.len == second->len && c.off < second->off)) *second = c;
+            }
+        }
     }
     return best;
 }
@@ -560,8 +579,38 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
     if (order.size() > 1) ev.cdna2_seg = order[1];
 
     // windows on the barcode candidate (or the first segment of a single-read run)
-    const int wseg = ev.bc_seg >= 0 ? ev.bc_seg : (nseg == 1 ? 0 : -1);
-    if (wseg >= 0 && best_rate < kThr.wl_hit) ev.window = scan_windows(spots, wseg);
+    int wseg = ev.bc_seg >= 0 ? ev.bc_seg : (nseg == 1 ? 0 : -1);
+    if (best_rate < kThr.wl_hit) {
+        // well barcodes sit on a short read: a long single read has repeated starts (adapters, primers) and is not scanned
+        const bool ok_len = wseg >= 0 && ev.segs[wseg].len_mode <= (nseg == 1 ? 48u : 64u);
+        if (ok_len) ev.window = scan_windows(spots, wseg, 50000, &ev.window2, ev.segs[wseg].index_like);
+        // plate indices in a separate index read (Smart-seq with Nextera well indices)
+        if (!ev.window.found) {
+            for (size_t t = 0; t < nseg; ++t)
+                if (ev.segs[t].index_like && ev.segs[t].len_mode >= 8) {
+                    WindowHit w = scan_windows(spots, (int)t, 50000, nullptr, true);
+                    if (w.found) { ev.window = w; ev.window_on_index = true; break; }
+                }
+        } else ev.window_on_index = ev.segs[ev.window.seg].index_like;
+        // a barcode set larger than a plate (Drop-seq, Seq-Well, microwell bead sets): the first 12 bases repeat across reads
+        if (!ev.window.found) {
+            for (size_t t = 0; t < nseg; ++t) {
+                if (ev.segs[t].index_like || ev.segs[t].len_mode < 12) continue;
+                std::unordered_map<uint64_t, uint32_t> c;
+                uint64_t n = 0;
+                for (size_t i = 0; i < probe_n; ++i) {
+                    if (t >= spots[i].seg.size() || spots[i].seg[t].size() < 12) continue;
+                    uint64_t h;
+                    if (!pack(spots[i].seg[t].data(), 12, h)) continue;
+                    ++c[h]; ++n;
+                }
+                uint64_t rep = 0;
+                for (auto& kv : c) if (kv.second >= 5) rep += kv.second;
+                const double share = n ? double(rep) / n : 0;
+                if (share > ev.prefix_mult) { ev.prefix_mult = share; ev.prefix_seg = (int)t; }
+            }
+        }
+    }
 
     // ScreenSpot view: r1 = barcode segment, r2 = cDNA segment (screen conventions)
     std::vector<ScreenSpot> sv;
@@ -777,21 +826,40 @@ inline void rank(Report& R, const Options& opt) {
     if (!any_list) {
         const std::string tag = ev.detected.tag;
         const std::string fam = family_of_tag(tag);
-        if (!fam.empty() && ev.detected.confidence >= Confidence::LOW) {
+        int nonindex = 0;
+        for (const auto& sg : ev.segs) nonindex += !sg.index_like;
+        if (!fam.empty() && ev.detected.confidence >= Confidence::LOW && nonindex >= 2) {
             Interp d;
             d.family = fam; d.protocol = tag; d.modality = "gex";
             d.support = conf_support(ev.detected.confidence);
             d.reasons.push_back(std::string("protocol detector: ") + tag + " (" + conf_name(ev.detected.confidence) + " confidence)");
             add_usefulness(d, ev, ev.detected.wl_match_rate > 0 ? ev.detected.wl_match_rate : 1.0);
             H.push_back(d);
-        } else if (tag == "agnostic" && ev.detected.confidence >= Confidence::LOW) {
+        } else if (tag == "agnostic" && ev.detected.confidence >= Confidence::LOW && nonindex >= 2) {
             Interp d;
             d.family = "unknown"; d.protocol = "barcoded-unspecified"; d.modality = "gex";
             d.support = 0.7 * conf_support(ev.detected.confidence);
             d.reasons.push_back("layout detector found barcode-like structure without a known protocol");
             H.push_back(d);
         }
-        if (ev.window.found) {
+        if (ev.window.found && ev.window_on_index) {
+            Interp sm;
+            sm.family = "smartseq"; sm.protocol = "smartseq2-like"; sm.modality = "gex";
+            sm.support = clamp01(0.85 * ev.window.top_share);
+            sm.reasons.push_back("index read carries " + std::to_string(ev.window.distinct) + " well indices (top " + std::to_string(ev.window.k) + " hold " +
+                                 detail::jnum(ev.window.top_share) + " of reads) and the insert reads have no barcode: plate-based full-length RNA");
+            H.push_back(sm);
+        } else if (ev.window.found && ev.window2.found) {
+            Interp w;
+            w.family = "droplet_other";
+            w.protocol = family_of_tag(tag) == "droplet_other" ? tag : "barcoded-unspecified";
+            w.modality = "gex";
+            w.support = clamp01(ev.window.top_share * ev.window2.top_share);
+            w.reasons.push_back("two disjoint barcode windows (offsets " + std::to_string(ev.window.off) + " and " + std::to_string(ev.window2.off) + ", " +
+                                std::to_string(ev.window.len) + " and " + std::to_string(ev.window2.len) + " bases) each hold few sequences: split-pool bead barcodes");
+            add_usefulness(w, ev, ev.window.top_share * ev.window2.top_share);
+            H.push_back(w);
+        } else if (ev.window.found) {
             Interp w;
             const uint32_t sl = ev.segs[ev.window.seg].len_mode;
             w.protocol = plate_tag(ev.window, sl);
@@ -801,6 +869,16 @@ inline void rank(Report& R, const Options& opt) {
                                 std::to_string(ev.window.off) + " hold " + detail::jnum(ev.window.top_share) + " of reads (random expectation " +
                                 detail::jnum(ev.window.random_share) + "): well barcodes");
             add_usefulness(w, ev, ev.window.top_share);
+            H.push_back(w);
+        } else if (ev.prefix_mult >= kThr.prefix_mult && ev.smart3_tag < kThr.smart3_tag) {
+            Interp w;
+            w.family = "droplet_other";
+            w.protocol = family_of_tag(tag) == "droplet_other" ? tag : "barcoded-unspecified";
+            w.modality = "gex";
+            w.support = clamp01(0.9 * ev.prefix_mult);
+            w.reasons.push_back("the first 12 bases of segment " + std::to_string(ev.prefix_seg) + " repeat across reads (" + detail::jnum(ev.prefix_mult) +
+                                " of reads): a barcode set larger than a plate");
+            add_usefulness(w, ev, ev.prefix_mult);
             H.push_back(w);
         }
         if (ev.smart3_tag >= kThr.smart3_tag) {
@@ -913,6 +991,10 @@ inline void rank(Report& R, const Options& opt) {
     const Policy& p = policy_for(R.verdict);
     R.action = p.action;
     R.action_note = p.note;
+    if (R.action == "process" && R.verdict_protocol == "barcoded-unspecified") {
+        R.action = "defer";
+        R.action_note = "barcoded single-cell library whose layout has no protocol spec: recognized, deferred";
+    }
     // a metadata hint is shown and never changes the verdict; it only selects the action inside an ambiguous full-length RNA call
     if (R.verdict == "ambiguous" && R.ambiguous_with.find("smartseq") != std::string::npos && R.ambiguous_with.find("bulk_rna") != std::string::npos &&
         opt.hint.find("assay=smartseq") != std::string::npos) {
