@@ -1,8 +1,8 @@
 # singlet identify: development panel
 
 `singlet identify SOURCE` reads the first reads of a dataset and reports the library family, protocol tag, an action and the ranked
-alternatives. This folder holds the development half of the truth panel, the scripts that run it on the cluster and the scored results.
-Real public runs only. The held-out candidates are listed and not scored.
+alternatives. This folder holds both halves of the truth panel (development, held-out), the scripts that run them on the cluster and the scored results.
+Real public runs only. The held-out half was scored once, with the frozen code (git tag `identify-frozen`).
 
 ## Files
 
@@ -12,7 +12,10 @@ Real public runs only. The held-out candidates are listed and not scored.
 - `sources_dev.tsv`: what `singlet identify --list` reads (id, source, hint, genome index). `$DATA` and `$REF` are cluster directories.
 - `make_panel.py`, `build.sbatch`, `run_panel.sbatch`, `score.py`: build the panel, build the binary, run the batch, score it.
 - `results_dev/summary.tsv`, `results_dev/results.md`: the scored run (binary built from the commit named in the PR).
-- `heldout_candidates.tsv`: 15 runs set aside for the held-out half. They were not run through the tool and were not used to set any threshold.
+- `heldout_candidates.tsv`, `build_heldout_panel.py`, `panel_heldout.tsv`, `sources_heldout.tsv`, `results_heldout/`: the held-out half (47 runs from studies outside the development panel), its scoring files and its single scored run. `pass1_job_out_of_memory/` holds a first attempt in which 16 mapping steps were killed by the 24 GB job limit; it was rerun unchanged (same binary, 64 GB) and only the rerun is scored.
+- `endpoints_nobarcode.tsv`, `endpoints_heldout.tsv`, `endpoint_survey.py`: metadata-only survey of other endpoints for runs whose deposit has no barcode read.
+- `results_species/`, `species_filters_check.tsv`, `species_check.sbatch`: species block on real runs and the sha256 check of the filter files.
+- `corpus_share.py`, `corpus_share_result.txt`: share of 10x-labeled Beta corpus runs without a 26 to 28 base read.
 
 ## Head reader, by source type
 
@@ -21,8 +24,8 @@ Real public runs only. The held-out candidates are listed and not scored.
 | SRA accession | archive spot access with a row limit (`SraReader`, libncbi-vdb fetches blocks as the cursor advances) | 200,000 spots in a median of 3.8 s, at most 84 s, over 69 runs; transfer size is not exposed by the reader |
 | ENA FASTQ over HTTPS | ranged GET piped through an in-process gzip reader, closed at the spot limit | 200,000 spots in 17 to 44 s, 8 to 33 MB, on 4 runs |
 | local FASTQ | same reader on files | 0.2 to 0.4 s |
-| BAM | samtools view, CR and UR tags then the read | implemented; not run on a real BAM in this phase |
-| staged `.1fq` | the existing reader | implemented; not run in this phase |
+| BAM | samtools view, CR and UR tags then the read | a real Cell Ranger BAM (200,000 records in 1.0 s): barcode list v3 hit by 0.97 of reads, called 10x 3' v3 |
+| staged `.1fq` | the existing reader | a real staged file (200,000 spots in 0.25 s); the file holds a 36 + 2 base layout and is called not-sequence, refused |
 | submitted FASTQ or BAM on NCBI `sra-pub-src-*` | no head route yet | ENA lists no submitted file for the runs tried; an earlier Python preflight found the S3 range route returned nothing for all of its 77 runs |
 
 SRA spot access keeps every segment of a spot, including index reads, so it shows the real layout. ENA FASTQ drops technical reads for some
@@ -130,3 +133,25 @@ Route: SDL `retrieve` (or the ENA `submitted_ftp` URL) gives an HTTPS object tha
 3. Barcode read: the head reader takes `CR` and `UR` (raw barcode and UMI). These BAMs must be checked once for those tags; the CART files are labeled "split_output_search_scrubbed" and may carry only `CB` and `UB`, in which case the corrected tags serve for the list hit and the barcode read length is taken from the tag. Reads with flag 16 are reverse complemented before they enter the head.
 4. The endpoint record gains the object type and name, the bytes fetched and the tag set found. A `barcode_read_missing` verdict then names the BAM as the endpoint to use.
 Cost: about a day, mostly for the multi-offset sampler and a test on a truncated BAM.
+
+## Phase 2 (record version 2)
+
+JSON record version 2 adds `protocol_tag` (the family ids of `validation/routes.yaml`, one mapping table in `identify.h`; null when the verdict has no id, with `protocol_tag_alternatives` where reads cannot separate two ids, for example Drop-seq and Seq-Well), a `sub_call` object (3'/5', Visium probe, V(D)J; the inDrop version, BD bead and Parse kit are null with the reason "not implemented"), a `species` block (`--species-filters DIR`, optional `--species-hint`), `hints[]` and `policy_source`. `--route-status FILE` makes `process` require a route with status `validated`. `--hint single_cell=1` (archive metadata, never read evidence) turns the refusal of a run without barcode structure into a defer.
+
+Thresholds are in `Thresholds` in `include/singlet/fq/identify.h`, each with its measurement. `even_end_share` stays at 0.15: at 0.25 bulk fell from 3 of 3 to 2 of 3 and four more 10x runs without a barcode read were called bulk.
+
+### Development panel (76 runs, frozen binary, hints applied)
+
+Family correct 51 (phase 1: 51). 10x 3'/5' family precision 12 of 12, recall 12 of 30 (12 of 21 without the nine rows whose original files look like bulk, nanopore or sheared DNA, column `label_doubt`). Version precision 8 of 8, recall 8 of 24 (8 of 15). No ATAC, multiome ATAC, feature-barcode, bulk or genomic run received `process`; no other-protocol run was called 10x 3'/5'; no single-cell run was refused with the hint (seven were refused without it). Of the 14 runs without a barcode read, none is named from reads (7 held as `rna_no_barcode`, 3 bulk, 2 unknown, 2 genomic DNA, all deferred with the hint): 3' end bias does not separate them from bulk or Smart-seq. Five of the 14 have an original-format Cell Ranger-style BAM (`endpoints_nobarcode.tsv`); the other nine have original files named bulk, nanopore or sheared DNA.
+
+### Held-out half (47 runs, scored once)
+
+10x 3'/5' family precision 7 of 7, recall 7 of 12; version precision 4 of 4, recall 4 of 7. No false positive from the other 35 rows (look-alikes included: V(D)J, Flex, Visium, multiome, feature barcodes, bulk). The five not called: four deposits without a barcode read (one 98 or 99 base read) and one 5' run whose reads are 86 percent immunoglobulin or T-cell receptor genes (called V(D)J, which is probably right). `results_heldout/results.md` lists every miss with its evidence.
+
+### Species block on real runs (`results_species/`)
+
+Human 10x: `CLOSE_PAIR` human or chimpanzee (declared close group), 0.35 against 0.27 hit rate. Mouse Visium: `CALL` mouse, 0.81. Human tumor xenograft in mouse: `MIXTURE`, minor species mouse with 22 percent of the species-specific reads. The action stays the family's policy in all three. 14 to 31 s and 0.6 to 0.7 GB with all 38 filters, 7 to 16 s with the hint. All 36 filter files with an index checksum match the index (`species_filters_check.tsv`); human and mouse live in the reference directory and have no index checksum.
+
+### Corpus
+
+Of 53,486 Beta corpus runs labeled 10x by text, 21,637 (40 percent) have no read of 26 to 28 bases in their SRA layout; 50 percent of 25,260 samples have no such run, and 41 percent of read pairs. By labeled chemistry the run share is 31 percent (v2), 39 percent (v3), 45 percent (v1), 54 percent (v4), 42 percent (version unstated). `corpus_share_result.txt` has the table.
