@@ -1673,22 +1673,31 @@ inline void attach_species(Report& R, const std::vector<HeadSpot>& spots, const 
     B.measured = true;
     for (size_t i = 0; i < sc.size() && i < 2; ++i) B.hits.push_back({rows[sc[i].row].tag, rows[sc[i].row].species, rows[sc[i].row].group, sc[i].rate});
     const Scored& A = sc[0];
-    // mixture: the highest-rate filter outside A's close group, split per read between the two
-    const Scored* Bm = nullptr;
-    for (size_t i = 1; i < sc.size(); ++i)
-        if (rows[sc[i].row].group.empty() || rows[sc[i].row].group != rows[A.row].group) { Bm = &sc[i]; break; }
-    if (Bm) {
-        int na = 0, nb = 0;
-        for (size_t i = 0; i < reads.size(); ++i) {
-            const int a = A.hits[i], b = Bm->hits[i];
-            if (a - b >= kThr.species_mix_excess && 2 * b <= a) ++na;
-            else if (b - a >= kThr.species_mix_excess && 2 * a <= b) ++nb;
+    // mixture: split the reads per read between A and each of the eight highest-rate filters outside A's close group (a relative such as another
+    // primate can outrank the true second species by rate); the split with the largest minor share is reported
+    {
+        int tried = 0;
+        double best_share = -1;
+        for (size_t k = 1; k < sc.size() && tried < 8; ++k) {
+            if (!rows[sc[k].row].group.empty() && rows[sc[k].row].group == rows[A.row].group) continue;
+            ++tried;
+            const Scored& Bm = sc[k];
+            int na = 0, nb = 0;
+            for (size_t i = 0; i < reads.size(); ++i) {
+                const int a = A.hits[i], b = Bm.hits[i];
+                if (a - b >= kThr.species_mix_excess && 2 * b <= a) ++na;
+                else if (b - a >= kThr.species_mix_excess && 2 * a <= b) ++nb;
+            }
+            const int minor = std::min(na, nb), n = na + nb;
+            const double share = n ? double(minor) / n : 0;
+            if (share > best_share) {
+                best_share = share;
+                B.minor_reads = minor;
+                B.minor_share = share;
+                B.minor_species = rows[(nb < na ? &Bm : &A)->row].species;
+                B.mixture = n > 0 && minor >= kThr.species_mix_reads && share >= kThr.species_mix_share;
+            }
         }
-        const int minor = std::min(na, nb), n = na + nb;
-        B.minor_reads = minor;
-        B.minor_share = n ? double(minor) / n : 0;
-        B.minor_species = rows[(nb < na ? Bm : &A)->row].species;
-        B.mixture = n > 0 && minor >= kThr.species_mix_reads && B.minor_share >= kThr.species_mix_share;
     }
     const double ra = A.rate, rb = sc.size() > 1 ? sc[1].rate : 0;
     const bool same_group = sc.size() > 1 && !rows[A.row].group.empty() && rows[A.row].group == rows[sc[1].row].group;

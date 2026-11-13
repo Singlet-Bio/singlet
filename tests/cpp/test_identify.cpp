@@ -375,7 +375,11 @@ int main() {
         };
         make("sp1", g1);
         make("sp2", g2);
-        { std::ofstream o(sdir + "/species_filters.tsv"); o << "filter_tag\treference_id\ttaxon_id\tspecies\tclose_group\tbuild_note\tsha256\nsp1\tr1\t1\tSpecies one\tG1\t\t\nsp2\tr2\t2\tSpecies two\tG2\t\t\n"; }
+        // a decoy: a diverged copy of genome one in its own close group, which outranks genome two by hit rate (as another primate does for human)
+        std::string g3 = g1;
+        for (size_t i = 7; i < g3.size(); i += 70) g3[i] = g3[i] == 'A' ? 'C' : 'A';
+        make("sp3", g3);
+        { std::ofstream o(sdir + "/species_filters.tsv"); o << "filter_tag\treference_id\ttaxon_id\tspecies\tclose_group\tbuild_note\tsha256\nsp1\tr1\t1\tSpecies one\tG1\t\t\nsp2\tr2\t2\tSpecies two\tG2\t\t\nsp3\tr3\t3\tSpecies three\tG3\t\t\n"; }
         auto reads_of = [&](const std::string& g, size_t n) {
             std::vector<HeadSpot> v;
             for (size_t i = 0; i < n; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), g.substr((i * 37) % (g.size() - 100), 90)}));
@@ -390,7 +394,8 @@ int main() {
         auto vm = reads_of(g1, 2000);
         for (auto& x : reads_of(g2, 1000)) vm.push_back(x);
         auto rm = identify_spots(vm, o, lists, nullptr);
-        CHECK(rm.species.mixture && rm.species.call == "MIXTURE" && rm.species.minor_species == "Species two", "species: a one-third minor genome is a mixture");
+        CHECK(rm.species.mixture && rm.species.call == "MIXTURE" && rm.species.minor_species == "Species two" && rm.species.hits[1].tag == "sp3",
+              "species: a one-third minor genome is a mixture even when a diverged copy of the major genome outranks it by rate");
         // a 10x library that also carries non-human reads (xenograft, parasite, microbes) keeps the action of its family
         CHECK(rm.verdict == "droplet_3p" && rm.protocol_tag == "10x-3p-v3" && rm.action == "process" && rm.species.hits.size() == 2,
               "species: a mixture sets the flag and lists the second hit without changing the action");
