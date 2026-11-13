@@ -3223,8 +3223,8 @@ static void usage(const char* prog) {
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
         << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default for 3' libraries; for 5' it writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
-        << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default) or defer (env SINGLET_HLA_GPU_3P)\n"
-        << "  --hla-gpu-5p MODE      GPU engine, 5' libraries: defer (default) or type on the node (env SINGLET_HLA_GPU_5P)\n"
+        << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default), defer or off (env SINGLET_HLA_GPU_3P)\n"
+        << "  --hla-gpu-5p MODE      GPU engine, 5' libraries: defer (default), type on the node or off (env SINGLET_HLA_GPU_5P)\n"
         << "  --hla-max-reads N      at most about N HLA candidate reads go to T1K and into the stored candidate file: 1 in c of them in\n"
         << "                         input order (env SINGLET_HLA_MAX_READS; default 0: all). For 5' libraries, whose calls at the main\n"
         << "                         loci do not change with far fewer reads; not for 3' libraries (hla_typing.h Config::max_reads)\n"
@@ -3737,7 +3737,7 @@ static int singlet_main(int argc, char* argv[]) {
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
     bool no_hla = false;                 // --no-hla: no HLA step at all
     bool hla_defer = false;              // prefilter only, private/hla/pending/ for `singlet hla --pending` (the GPU route's default for 5' libraries; see below)
-    std::string hla_gpu_3p, hla_gpu_5p;  // --hla-gpu-3p / --hla-gpu-5p type|defer: the GPU engine's route by chemistry
+    std::string hla_gpu_3p, hla_gpu_5p;  // --hla-gpu-3p / --hla-gpu-5p type|defer|off: the GPU engine's route by chemistry
     bool hla_explicit = false;           // --hla, --no-hla or --hla-defer was given
     unsigned long long hla_max_reads = 0; // --hla-max-reads N: the cap on the HLA candidate reads (0: none, or SINGLET_HLA_MAX_READS)
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
@@ -5577,7 +5577,19 @@ static int singlet_main(int argc, char* argv[]) {
                             if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
                             if (!rb.empty()) t1k = rb + "/hla/t1k";
                         }
-                        if (!(pe && pe[0] == '0') && !no_hla && !is_atac_mode && !(hm && std::string(hm) == "off") && !(bg && std::string(bg) == "0") &&
+                        // The GPU route resolves to off (--hla-gpu-3p/5p off, SINGLET_HLA_GPU_3P/5P=off): the later route block sets no_hla, so no Presift.
+                        bool gpu_route_off = false;
+                        if (!hla_explicit && (!hm || !*hm)) {
+                            const char* eg = std::getenv("SINGLET_ENGINE_GPU");
+                            if (eg && eg[0] == '1') {
+                                const bool fp = config.reverse_strand;
+                                std::string m = fp ? hla_gpu_5p : hla_gpu_3p;
+                                const char* ev = std::getenv(fp ? "SINGLET_HLA_GPU_5P" : "SINGLET_HLA_GPU_3P");
+                                if (m.empty() && ev) m = ev;
+                                gpu_route_off = (m == "off");
+                            }
+                        }
+                        if (!(pe && pe[0] == '0') && !no_hla && !gpu_route_off && !is_atac_mode && !(hm && std::string(hm) == "off") && !(bg && std::string(bg) == "0") &&
                             onefq_files.size() <= 1 && !reads_inverted && !t1k.empty() && singlet::hla::file_exists(t1k + "/bin/run-t1k")) {
                             auto ps = std::make_shared<singlet::hla::Presift>();
                             const std::string tmp = (std::filesystem::temp_directory_path() /
@@ -7772,11 +7784,12 @@ static int singlet_main(int argc, char* argv[]) {
                 std::string m = five_prime ? hla_gpu_5p : hla_gpu_3p;
                 const char* ev = std::getenv(five_prime ? "SINGLET_HLA_GPU_5P" : "SINGLET_HLA_GPU_3P");
                 if (m.empty() && ev) m = ev;
-                if (m != "type" && m != "defer") {
-                    if (!m.empty()) std::cerr << "[hla] ignoring unknown GPU route '" << m << "' (type or defer)\n";
+                if (m != "type" && m != "defer" && m != "off") {
+                    if (!m.empty()) std::cerr << "[hla] ignoring unknown GPU route '" << m << "' (type, defer or off)\n";
                     m = five_prime ? "defer" : "type";
                 }
                 hla_defer = m == "defer";
+                if (m == "off") no_hla = true;
                 std::cerr << "[hla] GPU route: " << (five_prime ? "5'" : "3'") << " library, " << m << "\n";
             }
         }
