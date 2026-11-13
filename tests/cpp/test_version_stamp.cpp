@@ -42,6 +42,10 @@ int main() {
     assert(rp2.engine_commit == "0123456789ab");
     set_env(nullptr);
 
+    // summary.json: a fresh PipelineSummary carries the compiled-in commit (export.h only overrides it from the environment)
+    singlet::PipelineSummary ps;
+    assert(ps.git_sha == c);
+
     std::cout << "test_version_stamp: ok (" << v << " " << c << ")\n";
     return 0;
 }
