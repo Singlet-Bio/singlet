@@ -1266,9 +1266,7 @@ inline std::string report_json(const Report& R) {
       << ", \"length\": " << ev.window.len << ", \"k\": " << ev.window.k << ", \"top_share\": " << jnum(ev.window.top_share) << ", \"random_share\": " << jnum(ev.window.random_share) << "},\n";
     o << "  \"probe\": {\"cdna_start_repeat\": " << jnum(ev.cdna_start_repeat) << ", \"cdna_len\": " << ev.cdna_len << "},\n";
     o << "  \"window2\": {\"found\": " << (ev.window2.found ? "true" : "false") << ", \"offset\": " << ev.window2.off << ", \"length\": " << ev.window2.len << ", \"top_share\": " << jnum(ev.window2.top_share)
-      << "},
-  \"window_on_index\": " << (ev.window_on_index ? "true" : "false") << ",
-  \"prefix\": {\"share\": " << jnum(ev.prefix_mult) << ", \"segment\": " << ev.prefix_seg << "},\n";
+      << "},\n  \"window_on_index\": " << (ev.window_on_index ? "true" : "false") << ",\n  \"prefix\": {\"share\": " << jnum(ev.prefix_mult) << ", \"segment\": " << ev.prefix_seg << "},\n";
     o << "  \"detector\": {\"tag\": " << q(ev.detected.tag) << ", \"confidence\": " << q(conf_name(ev.detected.confidence)) << ", \"wl_rate\": " << jnum(ev.detected.wl_match_rate) << "},\n";
     o << "  \"insert\": {\"five_prime_called\": " << (ev.five_prime_called ? "true" : "false") << ", \"r1_tso\": " << ev.five_prime.r1_tso << ", \"r1_polyt\": " << ev.five_prime.r1_polyt
       << ", \"r2_smart\": " << ev.five_prime.r2_smart << ", \"r2_polya\": " << ev.five_prime.r2_polya << ", \"r2_polyt\": " << ev.five_prime.r2_polyt << ", \"motif_spots\": " << ev.five_prime.n
