@@ -378,6 +378,9 @@ int main() {
         for (auto& x : reads_of(g2, 1000)) vm.push_back(x);
         auto rm = identify_spots(vm, o, lists, nullptr);
         CHECK(rm.species.mixture && rm.species.call == "MIXTURE" && rm.species.minor_species == "Species two", "species: a one-third minor genome is a mixture");
+        // a 10x library that also carries non-human reads (xenograft, parasite, microbes) keeps the action of its family
+        CHECK(rm.verdict == "droplet_3p" && rm.protocol_tag == "10x-3p-v3" && rm.action == "process" && rm.species.hits.size() == 2,
+              "species: a mixture sets the flag and lists the second hit without changing the action");
         o.species_hint = "Species two";
         auto rh = identify_spots(v1, o, lists, nullptr);
         CHECK(rh.species.hits[0].tag == "sp1" && !rh.species.screened_by_hint, "species: a wrong hint loads the rest and still calls the right filter");
