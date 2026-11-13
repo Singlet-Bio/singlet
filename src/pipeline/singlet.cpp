@@ -119,7 +119,7 @@ extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsign
 #include "singlet/fq/fg2_source.h"
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
-#include "singlet/version.h"        // singlet::kVersion
+#include "singlet/version.h"        // singlet::kVersion, singlet::git_commit()
 #include <htslib/bgzf.h>
 #include <htslib/hfile.h>
 
@@ -3562,6 +3562,8 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
 }
 
 int main(int argc, char* argv[]) {
+    if (argc >= 2 && std::string(argv[1]) == "--version") { std::cout << singlet::version_line() << "
+"; return 0; }   // one line: the runner compares it with BUILD.txt
     if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main, &pool_preload_refs);
     return singlet_main(argc, argv);
 }
@@ -4493,13 +4495,13 @@ static int singlet_main(int argc, char* argv[]) {
         {
             std::ofstream sj(out_prefix + "/summary.json");
             if (sj) {
-                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                const std::string env_sha = singlet::git_commit();
                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                 sj << "{\n"
                    << "  \"schema_version\": \"1.2\",\n"
                    << "  \"sample_id\": \"" << fb_sample_id << "\",\n"
                    << "  \"status\": \"feature_barcode_not_gex\",\n"
-                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                   << "  \"git_sha\": \"" << env_sha << "\",\n"
                    << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                    << "  \"protocol_id\": 0,\n"
                    << "  \"protocol_name\": \"CITE_SEQ_ADT\",\n"
@@ -6372,13 +6374,13 @@ static int singlet_main(int argc, char* argv[]) {
                         {
                             std::ofstream sj(out_prefix + "/summary.json");
                             if (sj) {
-                                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                                const std::string env_sha = singlet::git_commit();
                                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 sj << "{\n"
                                    << "  \"schema_version\": \"1.2\",\n"
                                    << "  \"sample_id\": \"" << sample_id << "\",\n"
                                    << "  \"status\": \"data_incomplete\",\n"
-                                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                                   << "  \"git_sha\": \"" << env_sha << "\",\n"
                                    << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                                    << "  \"protocol_id\": 0,\n"
                                    << "  \"protocol_name\": \"\",\n"
@@ -6404,11 +6406,11 @@ static int singlet_main(int argc, char* argv[]) {
                         {
                             std::ofstream pj(out_prefix + "/provenance.json");
                             if (pj) {
-                                const char* prov_sha = std::getenv("SINGLET_GIT_SHA");
+                                const std::string prov_sha = singlet::git_commit();
                                 const char* prov_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 pj << "{\n"
                                    << "  \"schema_version\": \"1.1\",\n"
-                                   << "  \"singlet_git_sha\": \"" << (prov_sha ? prov_sha : "unknown") << "\",\n"
+                                   << "  \"singlet_git_sha\": \"" << prov_sha << "\",\n"
                                    << "  \"reference_manifest_sha256\": \"" << (prov_rms ? prov_rms : "") << "\",\n"
                                    << "  \"build_flags\": \"\",\n"
                                    << "  \"command_line\": \"\",\n"
@@ -10096,6 +10098,7 @@ static int singlet_main(int argc, char* argv[]) {
 
     // ── N8: Populate provenance manifest ──
     export_cfg.provenance.singlet_version      = singlet::kVersion;
+    export_cfg.provenance.singlet_git_sha      = singlet::git_commit();
     {
         std::string in_files;  // every run of a multi-run sample, not a temporary concatenation
         for (const auto& f : onefq_runs_in) in_files += (in_files.empty() ? "" : ",") + f;
@@ -10212,6 +10215,8 @@ static int singlet_main(int argc, char* argv[]) {
             }
             export_cfg.user_meta[key] = value;
         }
+        // The metadata JSON was written by `singlet download` (possibly another build): the version recorded in the .1pz is this binary's.
+        { auto it = export_cfg.user_meta.find("singlet_version"); if (it != export_cfg.user_meta.end()) it->second = singlet::kVersion; }
         std::cerr << "[singlet] Loaded " << export_cfg.user_meta.size()
                   << " metadata fields from " << metadata_json_path << "\n";
     }

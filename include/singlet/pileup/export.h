@@ -36,6 +36,7 @@
 #include "mt_heteroplasmy.h"
 #include "mt_event_caller.h"
 #include "provenance.h"
+#include "../version.h"
 #include "saturation.h"
 #include "saturation_curve.h"
 #include "cell_calling.h"
@@ -2192,9 +2193,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         summary.singlet_version = export_cfg.provenance.singlet_version;
         summary.track            = export_cfg.provenance.cascade_enabled ? "B" : "A";
         summary.cascade_used     = export_cfg.provenance.cascade_enabled;
-        // Schema 1.1 traceability: source-tree git sha + reference-manifest hash from env.
-        if (const char* env_sha = std::getenv("SINGLET_GIT_SHA"))
-            summary.git_sha = env_sha;
+        // Schema 1.1 traceability: build commit + reference-manifest hash from env.
+        summary.git_sha = singlet::git_commit();   // the compiled-in commit; SINGLET_GIT_SHA only overrides it
         if (const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA"))
             summary.reference_manifest_sha256 = env_rms;
         // §3.6 required fields from ExportConfig
