@@ -1525,21 +1525,17 @@ inline std::string bam_json(const bam::Evidence& b) {
     auto sh = [&](uint64_t c) { return jnum(double(c) / N); };
     std::ostringstream o;
     o << "{\"url\": " << q(b.url) << ", \"file_size\": " << (b.file_size >= 0 ? std::to_string(b.file_size) : std::string("null")) << ", \"bytes\": " << b.bytes
-      << ", \"seconds\": " << jnum(b.seconds) << ", \"requests\": " << b.requests << ", \"error\": " << qn(b.error) << ",
-    \"header\": {\"ok\": " << (b.header_ok ? "true" : "false")
+      << ", \"seconds\": " << jnum(b.seconds) << ", \"requests\": " << b.requests << ", \"error\": " << qn(b.error) << ",\n    \"header\": {\"ok\": " << (b.header_ok ? "true" : "false")
       << ", \"sort_order\": " << qn(b.sort_order) << ", \"n_ref\": " << b.n_ref << ", \"refs_head\": " << jlist(b.refs_head) << ", \"cellranger\": " << qn(b.cellranger_version)
-      << ", \"chemistry\": " << qn(b.chemistry) << ", \"reference\": " << qn(b.reference) << ", \"program_lines\": " << jlist(b.program_lines) << ", \"comment_lines\": " << jlist(b.comment_lines) << "},
-";
+      << ", \"chemistry\": " << qn(b.chemistry) << ", \"reference\": " << qn(b.reference) << ", \"program_lines\": " << jlist(b.program_lines) << ", \"comment_lines\": " << jlist(b.comment_lines) << "},\n";
     o << "    \"samples\": [";
     for (size_t i = 0; i < b.samples.size(); ++i) {
         const auto& s = b.samples[i];
         o << (i ? ", " : "") << "{\"where\": " << q(s.where) << ", \"offset\": " << s.offset << ", \"bytes\": " << s.bytes << ", \"blocks\": " << s.blocks << ", \"synced\": " << (s.synced ? "true" : "false")
           << ", \"records\": " << s.c.records << ", \"unmapped\": " << s.c.unmapped << ", \"first_ref\": " << s.c.first_ref << ", \"first_pos\": " << s.c.first_pos << ", \"eof_marker\": " << (s.eof_marker ? "true" : "false") << "}";
     }
-    o << "],
-    \"records\": " << p.records << ", \"tag_share\": {\"CR\": " << sh(p.cr) << ", \"CY\": " << sh(p.cy) << ", \"UR\": " << sh(p.ur) << ", \"UY\": " << sh(p.uy) << ", \"CB\": " << sh(p.cb)
-      << ", \"UB\": " << sh(p.ub) << ", \"CQ\": " << sh(p.cq) << ", \"UQ\": " << sh(p.uq) << ", \"GX\": " << sh(p.gx) << ", \"TX\": " << sh(p.tx) << ", \"AN\": " << sh(p.an) << ", \"RE\": " << sh(p.re) << "},
-";
+    o << "],\n    \"records\": " << p.records << ", \"tag_share\": {\"CR\": " << sh(p.cr) << ", \"CY\": " << sh(p.cy) << ", \"UR\": " << sh(p.ur) << ", \"UY\": " << sh(p.uy) << ", \"CB\": " << sh(p.cb)
+      << ", \"UB\": " << sh(p.ub) << ", \"CQ\": " << sh(p.cq) << ", \"UQ\": " << sh(p.uq) << ", \"GX\": " << sh(p.gx) << ", \"TX\": " << sh(p.tx) << ", \"AN\": " << sh(p.an) << ", \"RE\": " << sh(p.re) << "},\n";
     o << "    \"tags_seen\": [";
     {
         std::vector<std::pair<uint64_t, uint16_t>> v;
@@ -1547,14 +1543,11 @@ inline std::string bam_json(const bam::Evidence& b) {
         std::sort(v.begin(), v.end(), [](const auto& a, const auto& c) { return a.first > c.first; });
         for (size_t i = 0; i < v.size() && i < 24; ++i) o << (i ? ", " : "") << q(bam::tname(v[i].second));
     }
-    o << "], \"tag_length_mode\": {\"CR\": " << bam::mode_len(p.cr_len) << ", \"UR\": " << bam::mode_len(p.ur_len) << ", \"CB\": " << bam::mode_len(p.cb_len) << ", \"UB\": " << bam::mode_len(p.ub_len) << "},
-";
+    o << "], \"tag_length_mode\": {\"CR\": " << bam::mode_len(p.cr_len) << ", \"UR\": " << bam::mode_len(p.ur_len) << ", \"CB\": " << bam::mode_len(p.cb_len) << ", \"UB\": " << bam::mode_len(p.ub_len) << "},\n";
     o << "    \"barcode_tags\": " << q(b.barcode_tags) << ", \"list_rates\": {\"tag\": " << qn(b.list_rate_tag) << ", \"lists\": [";
     for (size_t i = 0; i < b.list_rates.size(); ++i)
         o << (i ? ", " : "") << "{\"file\": " << q(b.list_rates[i].file) << ", \"family\": " << q(b.list_rates[i].family) << ", \"exact\": " << jnum(b.list_rates[i].exact) << ", \"one_mismatch\": " << jnum(b.list_rates[i].one_mm) << "}";
-    o << "]},
-    \"strand\": {\"sense\": " << (b.sense >= 0 ? jnum(b.sense) : std::string("null")) << ", \"reads\": " << b.sense_reads << ", \"basis\": " << q(b.strand_basis) << "},
-";
+    o << "]},\n    \"strand\": {\"sense\": " << (b.sense >= 0 ? jnum(b.sense) : std::string("null")) << ", \"reads\": " << b.sense_reads << ", \"basis\": " << q(b.strand_basis) << "},\n";
     o << "    \"coordinate_sorted\": " << (b.coordinate_sorted ? "true" : "false") << ", \"unmapped\": {\"status\": " << qn(b.unmapped_status) << ", \"note\": " << qn(b.unmapped_note) << "}, \"limits\": " << jlist(b.limits) << "}";
     return o.str();
 }
@@ -1572,10 +1565,7 @@ inline std::string report_json(const Report& R) {
     o << "  \"verdict\": " << q(R.verdict) << ",\n  \"protocol\": " << q(R.verdict_protocol) << ",\n  \"ambiguous_with\": " << q(R.ambiguous_with)
       << ",\n  \"action\": " << q(R.action) << ",\n  \"action_note\": " << q(R.action_note) << ",\n  \"policy_source\": " << q(R.policy_source) << ",\n  \"hint\": " << q(R.hint) << ",\n";
     auto qn = [&](const std::string& v) { return v.empty() ? std::string("null") : q(v); };
-    o << "  \"hint_used\": " << (R.hint_used ? "true" : "false") << ",
-  \"defer_candidates\": " << jlist(R.defer_candidates) << ",
-  \"barcode_source\": " << q(R.barcode_source) << ",
-";
+    o << "  \"hint_used\": " << (R.hint_used ? "true" : "false") << ",\n  \"defer_candidates\": " << jlist(R.defer_candidates) << ",\n  \"barcode_source\": " << q(R.barcode_source) << ",\n";
     o << "  \"hints\": [";
     for (size_t i = 0; i < R.hints.size(); ++i)
         o << (i ? ", " : "") << "{\"key\": " << q(R.hints[i].key) << ", \"value\": " << q(R.hints[i].value) << ", \"effect\": " << qn(R.hints[i].effect) << "}";
@@ -1618,8 +1608,7 @@ inline std::string report_json(const Report& R) {
       << ", \"rrna_note\": \"annotated rRNA genes only\", \"profile\": [";
     for (int k = 0; k < 10; ++k) o << (k ? ", " : "") << jnum(ev.map.profile[k]);
     o << "]},\n";
-    o << "  \"bam\": " << (R.bam.present ? bam_json(R.bam) : std::string("null")) << ",
-";
+    o << "  \"bam\": " << (R.bam.present ? bam_json(R.bam) : std::string("null")) << ",\n";
     o << "  \"species\": ";
     if (!R.species.measured) o << "null";
     else {
