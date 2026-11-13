@@ -24,9 +24,9 @@ from typing import Dict, List, Sequence, Tuple
 import numpy as np
 
 METHODS = ("EM", "Uniform")
-_EM_ZERO = 0.01   # STARsolo: gEMold below this is set to 0 before each step
-_EM_TOL = 0.01    # STARsolo: stop when max |new - old| < this
-_EM_MAX = 100     # STARsolo: stop after iterI > 100
+_EM_ZERO = 0.01  # STARsolo: gEMold below this is set to 0 before each step
+_EM_TOL = 0.01  # STARsolo: stop when max |new - old| < this
+_EM_MAX = 100  # STARsolo: stop after iterI > 100
 
 
 def class_genes(names: Sequence[str], gene_row: Dict[str, int]) -> List[Tuple[int, ...]]:
@@ -69,7 +69,11 @@ def distribute(unique, record, classes: Sequence[Tuple[int, ...]], method: str =
         raise ValueError("unique and record must have the same cells")
     sizes = np.array([len(c) for c in classes], dtype=np.int64)
     keep = (M.data > 0) & (sizes[M.col] > 0)
-    cell, cls, cnt = M.row[keep].astype(np.int64), M.col[keep].astype(np.int64), M.data[keep].astype(np.float64)
+    cell, cls, cnt = (
+        M.row[keep].astype(np.int64),
+        M.col[keep].astype(np.int64),
+        M.data[keep].astype(np.float64),
+    )
     if cell.size == 0:
         return sp.csr_matrix((n_cells, n_genes), dtype=np.float64)
     g1 = np.array([c[0] if c else -1 for c in classes], dtype=np.int64)[cls]
@@ -81,7 +85,7 @@ def distribute(unique, record, classes: Sequence[Tuple[int, ...]], method: str =
     var_keys, inv = np.unique(keys, return_inverse=True)
     v1 = inv[: cell.size]
     v2 = np.full(cell.size, -1, dtype=np.int64)
-    v2[two] = inv[cell.size:]
+    v2[two] = inv[cell.size :]
     var_cell, var_gene = var_keys // n_genes, var_keys % n_genes
     nv = var_keys.size
 
@@ -93,7 +97,9 @@ def distribute(unique, record, classes: Sequence[Tuple[int, ...]], method: str =
         prior = np.asarray(U[var_cell, var_gene]).ravel()
         old = uniform + prior
         result = np.zeros(nv)
-        active = np.ones(n_cells, dtype=bool)   # each cell stops on its own, as STARsolo runs one EM per cell
+        active = np.ones(
+            n_cells, dtype=bool
+        )  # each cell stops on its own, as STARsolo runs one EM per cell
         it = 0
         while True:
             it += 1
@@ -101,7 +107,11 @@ def distribute(unique, record, classes: Sequence[Tuple[int, ...]], method: str =
             norm = o[v1] + np.where(two, o[np.maximum(v2, 0)], 0.0)
             with np.errstate(divide="ignore", invalid="ignore"):
                 f = cnt / norm
-            new = prior + np.bincount(v1, o[v1] * f, nv) + np.bincount(v2[two], (o[v2[two]] * f[two]), nv)
+            new = (
+                prior
+                + np.bincount(v1, o[v1] * f, nv)
+                + np.bincount(v2[two], (o[v2[two]] * f[two]), nv)
+            )
             change = np.zeros(n_cells)
             np.maximum.at(change, var_cell, np.abs(new - o))
             done = active & ((change < _EM_TOL) | (it > _EM_MAX))

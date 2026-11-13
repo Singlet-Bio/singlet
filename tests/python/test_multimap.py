@@ -5,7 +5,6 @@ STARsolo's per-cell loop (SoloFeature_collapseUMIall.cpp, the multi-gene part of
 import numpy as np
 import pytest
 import scipy.sparse as sp
-
 from singlet.multimap import class_genes, distribute
 
 
@@ -41,10 +40,18 @@ def star_cell(gEu_full, umis, method):
 def test_matches_star_loop(method):
     rng = np.random.default_rng(7)
     n_cells, n_genes = 40, 30
-    unique = sp.random(n_cells, n_genes, density=0.3, random_state=3, data_rvs=lambda n: rng.integers(1, 50, n)).tocsr()
+    unique = sp.random(
+        n_cells, n_genes, density=0.3, random_state=3, data_rvs=lambda n: rng.integers(1, 50, n)
+    ).tocsr()
     pairs = [(a, b) for a in range(n_genes) for b in range(a + 1, n_genes) if rng.random() < 0.03]
     classes = pairs + [(g,) for g in range(0, n_genes, 7)]
-    rec = sp.random(n_cells, len(classes), density=0.15, random_state=5, data_rvs=lambda n: rng.integers(1, 6, n)).tocsr()
+    rec = sp.random(
+        n_cells,
+        len(classes),
+        density=0.15,
+        random_state=5,
+        data_rvs=lambda n: rng.integers(1, 6, n),
+    ).tocsr()
     got = distribute(unique, rec, classes, method).toarray()
     for c in range(n_cells):
         umis = []
@@ -57,7 +64,9 @@ def test_matches_star_loop(method):
             for g, v in star_cell(gEu, umis, method).items():
                 want[g] = v
         np.testing.assert_allclose(got[c], want, rtol=1e-9, atol=1e-9)
-        assert got[c].sum() == pytest.approx(row.data.sum())   # every molecule is distributed in full
+        assert got[c].sum() == pytest.approx(
+            row.data.sum()
+        )  # every molecule is distributed in full
 
 
 def test_em_follows_unique_prior():

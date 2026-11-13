@@ -13,7 +13,9 @@ from singlet._restricted import is_restricted_member, is_restricted_path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-spec = importlib.util.spec_from_file_location("hla_pending_batch", ROOT / "docs" / "gpu-engine" / "hla_pending_batch.py")
+spec = importlib.util.spec_from_file_location(
+    "hla_pending_batch", ROOT / "docs" / "gpu-engine" / "hla_pending_batch.py"
+)
 B = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(B)
 
@@ -65,8 +67,16 @@ def test_states(tmp_path):
     assert B.run_state(_run(tmp_path, "a")) == B.PENDING
     assert B.run_state(_run(tmp_path, "b", state=B.LANDED)) == B.LANDED
     assert B.run_state(_run(tmp_path, "c", state=B.MISSING)) == B.MISSING
-    assert B.run_state(_run(tmp_path, "m", genome="/ref/GRCm39-2024-A/star", state=B.MISSING)) == B.NOT_APPLICABLE
-    assert B.run_state(_run(tmp_path, "bn", genome="/ref/GRCh38-GRCm39-barnyard/star", state=B.MISSING)) == B.NOT_APPLICABLE
+    assert (
+        B.run_state(_run(tmp_path, "m", genome="/ref/GRCm39-2024-A/star", state=B.MISSING))
+        == B.NOT_APPLICABLE
+    )
+    assert (
+        B.run_state(
+            _run(tmp_path, "bn", genome="/ref/GRCh38-GRCm39-barnyard/star", state=B.MISSING)
+        )
+        == B.NOT_APPLICABLE
+    )
 
 
 def test_a_summary_beside_a_pending_manifest_has_not_landed(tmp_path):
@@ -88,7 +98,10 @@ def test_check_only_fails_loudly(tmp_path, capsys):
 
 
 def test_all_landed_exits_zero(tmp_path):
-    runs = [_run(tmp_path, "a", state=B.LANDED), _run(tmp_path, "m", genome="/ref/GRCm39/star", state=B.MISSING)]
+    runs = [
+        _run(tmp_path, "a", state=B.LANDED),
+        _run(tmp_path, "m", genome="/ref/GRCm39/star", state=B.MISSING),
+    ]
     assert B.main([_list(tmp_path, runs), "--check-only"]) == 0
 
 
@@ -105,11 +118,11 @@ def test_submits_pending_runs_and_retries_only_the_failures(tmp_path, monkeypatc
     seen = []
 
     def fake(cmd, check):
-        list_file = shlex.split(cmd[cmd.index("--wrap") + 1].split("p\" ")[1].split(")")[0])[0]
+        list_file = shlex.split(cmd[cmd.index("--wrap") + 1].split('p" ')[1].split(")")[0])[0]
         todo = open(list_file).read().split()
         seen.append(todo)
         if len(seen) == 1:
-            _land(todo[0])                    # the first attempt types one run; the other task fails
+            _land(todo[0])  # the first attempt types one run; the other task fails
         else:
             for r in todo:
                 _land(r)
@@ -124,12 +137,27 @@ def test_a_run_that_never_lands_exits_nonzero(tmp_path, monkeypatch, capsys):
     calls = []
     monkeypatch.setattr(B.subprocess, "run", lambda cmd, check: calls.append(cmd))
     assert B.main(_args(tmp_path, runs)) == 1
-    assert len(calls) == 2                    # the first attempt and one retry
+    assert len(calls) == 2  # the first attempt and one retry
     assert f"HLA NOT LANDED (pending): {runs[0]}" in capsys.readouterr().err
 
 
 def test_the_array_runs_singlet_hla_pending_on_cpu_nodes(tmp_path):
-    a = B.argparse.Namespace(singlet="/b/singlet gpu", partition="short-cpu", threads=8, mem="32G", time="03:59:00", nice=0, array_limit=4, log_dir=str(tmp_path), account="debruinz")
+    a = B.argparse.Namespace(
+        singlet="/b/singlet gpu",
+        partition="short-cpu",
+        threads=8,
+        mem="32G",
+        time="03:59:00",
+        nice=0,
+        array_limit=4,
+        log_dir=str(tmp_path),
+        account="debruinz",
+    )
     cmd = B.sbatch_command(a, os.path.join(str(tmp_path), "l st"), 3)
-    assert "--wait" in cmd and "--array=0-2%4" in cmd and "--partition=short-cpu" in cmd and "--account=debruinz" in cmd
+    assert (
+        "--wait" in cmd
+        and "--array=0-2%4" in cmd
+        and "--partition=short-cpu" in cmd
+        and "--account=debruinz" in cmd
+    )
     assert "'/b/singlet gpu' hla --pending \"$RUN/private/hla/pending\"" in cmd[-1]
