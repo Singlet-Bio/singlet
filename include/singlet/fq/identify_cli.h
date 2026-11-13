@@ -489,15 +489,21 @@ inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, co
 }
 
 /// Survey every endpoint of an accession. Heads are read with the same spot limit as the main head.
-inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t n, std::vector<ScreenWhitelist>& lists, const Options& opt) {
+inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t n, std::vector<ScreenWhitelist>& lists, const Options& opt,
+                                                 std::vector<HeadSpot>* best = nullptr, std::string* best_name = nullptr) {
     std::vector<EndpointRec> out;
+    // the first endpoint that carries a barcode read keeps its head, for runs whose normalized copy is empty
+    auto push_ep = [&](const std::string& nm, const std::vector<HeadSpot>& sp, const SourceInfo& info) {
+        push_ep(nm, sp, info);
+        if (best && best_name && best->empty() && out.back().barcode_read) { *best = sp; *best_name = nm; }
+    };
     {   // SRA normalized
         SourceInfo info;
         std::vector<HeadSpot> sp;
         const double t0 = cli_detail::now_s();
         head_sra(acc, n, sp, info);
         info.seconds = cli_detail::now_s() - t0;
-        out.push_back(evaluate_endpoint("sra_normalized", !sp.empty(), sp, info, lists, opt));
+        push_ep("sra_normalized", sp, info);
     }
     {   // ENA fastq_ftp
         SourceInfo info;
@@ -508,7 +514,7 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
         if (ena_urls(acc, urls, rs)) head_fastq_segments(urls, n, sp, info);
         else info.error = "ENA lists no FASTQ";
         info.seconds = cli_detail::now_s() - t0;
-        out.push_back(evaluate_endpoint("ena_fastq_ftp", !sp.empty(), sp, info, lists, opt));
+        push_ep("ena_fastq_ftp", sp, info);
     }
     {   // ENA submitted_ftp
         SourceInfo info;
@@ -519,7 +525,7 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
         else if (urls[0].size() > 4 && urls[0].compare(urls[0].size() - 4, 4, ".bam") == 0) head_bam_url(urls[0], n, sp, info);
         else { std::vector<std::string> g = urls; std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
         info.seconds = cli_detail::now_s() - t0;
-        out.push_back(evaluate_endpoint("ena_submitted_ftp", !sp.empty(), sp, info, lists, opt));
+        push_ep("ena_submitted_ftp", sp, info);
     }
     {   // SRA original-format objects (SDL locate service)
         const auto files = sdl_original_files(acc);
@@ -539,7 +545,7 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
                 head_bam_url(f.link, n, sp, info);
                 info.seconds = cli_detail::now_s() - t0;
                 info.bytes = 67108864;
-                out.push_back(evaluate_endpoint("sra_original:" + f.name, !sp.empty(), sp, info, lists, opt));
+                push_ep("sra_original:" + f.name, sp, info);
                 if (!out.back().note.empty() || out.back().reachable) out.back().note += (out.back().note.empty() ? "" : "; ") + std::string("BAM, ") + std::to_string(static_cast<int64_t>(f.size)) + " bytes";
             } else if (f.name.find(".fastq") != std::string::npos || f.name.find(".fq") != std::string::npos) fq.push_back(f);
         }
@@ -552,7 +558,7 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
             const double t0 = cli_detail::now_s();
             head_fastq_segments(urls, n, sp, info);
             info.seconds = cli_detail::now_s() - t0;
-            out.push_back(evaluate_endpoint("sra_original:fastq(" + std::to_string(fq.size()) + " files)", !sp.empty(), sp, info, lists, opt));
+            push_ep("sra_original:fastq(" + std::to_string(fq.size()) + " files)", sp, info);
         }
     }
     return out;
@@ -587,6 +593,22 @@ inline Report identify_source(const std::string& source, const std::string& hint
     R.src.run_spots = run_total > 0 ? run_total : -1;
     opt.hint = hint_in;
     opt.run_spots = R.src.run_spots;
+    if ((!any || spots.empty()) && want_endpoints() && cli_detail::is_accession(source)) {
+        // the normalized run gave nothing: take the head from another endpoint that carries a barcode read
+        std::vector<HeadSpot> bs;
+        std::string bn;
+        auto eps = survey_endpoints(source, n_reads, lists, opt, &bs, &bn);
+        R.endpoints = eps;
+        if (!bs.empty()) {
+            spots = std::move(bs);
+            R.src.route = "endpoint:" + bn;
+            R.src.endpoint = bn;
+            R.src.spots = spots.size();
+            R.spots = spots.size();
+            R.src.error += std::string(R.src.error.empty() ? "" : "; ") + "normalized run gave no reads; the head comes from " + bn;
+            any = true;
+        }
+    }
     if (!any || spots.empty()) {
         Interp u; u.family = "unknown"; u.protocol = "none"; u.modality = "none"; u.support = 0;
         u.reasons.push_back("no reads could be read: " + R.src.error);
@@ -608,7 +630,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
     if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, R.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
     if (want_endpoints() && cli_detail::is_accession(source)) {
-        R.endpoints = survey_endpoints(source, n_reads, lists, opt);
+        if (R.endpoints.empty()) R.endpoints = survey_endpoints(source, n_reads, lists, opt);
         std::string via;
         for (const auto& e : R.endpoints)
             if (e.barcode_read && e.name != "sra_normalized") via += (via.empty() ? "" : ", ") + e.name;
