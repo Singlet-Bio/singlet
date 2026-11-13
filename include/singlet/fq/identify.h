@@ -1299,6 +1299,10 @@ inline void rank(Report& R, const Options& opt) {
     const Policy& p = policy_for(R.verdict);
     R.action = p.action;
     R.action_note = p.note;
+    if (R.action == "process" && R.verdict_protocol == "dropseq-like") {
+        R.action = "defer";
+        R.action_note = "Drop-seq geometry in a longer first read than the dropseq spec: recognized, deferred until the layout is trimmed to the spec";
+    }
     if (R.action == "process" && R.verdict_protocol == "barcoded-unspecified") {
         R.action = "defer";
         R.action_note = "barcoded single-cell library whose layout has no protocol spec: recognized, deferred";

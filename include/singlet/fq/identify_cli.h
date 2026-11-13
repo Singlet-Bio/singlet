@@ -425,10 +425,11 @@ inline std::vector<std::string> ena_submitted(const std::string& acc) {
     const std::string all = cli_detail::curl_text("https://www.ebi.ac.uk/ena/portal/api/filereport?accession=" + acc + "&result=read_run&fields=submitted_ftp&format=tsv");
     const auto lines = cli_detail::split(all, '\n');
     if (lines.size() < 2) return urls;
-    const auto v = cli_detail::split(lines[1], '\t');
-    for (const auto& c : v)
-        for (auto u : cli_detail::split(c, ';'))
-            if (u.size() > 4) urls.push_back("https://" + u);
+    const auto h = cli_detail::split(lines[0], '\t'), v = cli_detail::split(lines[1], '\t');
+    for (size_t i = 0; i < h.size() && i < v.size(); ++i)
+        if (h[i] == "submitted_ftp")
+            for (auto u : cli_detail::split(v[i], ';'))
+                if (u.size() > 4) urls.push_back("https://" + u);
     return urls;
 }
 
@@ -478,7 +479,10 @@ inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, co
     double best = 0;
     for (const auto& h : r.ev.lists) best = std::max(best, h.one_mm);
     e.list_rate = best;
-    e.barcode_read = best >= kThr.wl_hit || (r.ev.window.found && !r.ev.window_on_index) || r.ev.prefix_mult >= kThr.prefix_mult;
+    int nonindex = 0;
+    for (const auto& s : r.ev.segs) nonindex += !s.index_like;
+    // a barcode read needs a read of its own: a list hit, or a barcode window, repeated prefix or poly(T) geometry on a run with an insert read besides it
+    e.barcode_read = best >= kThr.wl_hit || (nonindex >= 2 && ((r.ev.window.found && !r.ev.window_on_index) || r.ev.prefix_mult >= kThr.prefix_mult || r.ev.polyt_seg >= 0));
     e.verdict = r.verdict;
     e.protocol = r.verdict_protocol;
     return e;
