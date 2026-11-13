@@ -349,9 +349,21 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
     if (L < 6) return best;
     const size_t n = std::min(spots.size(), max_reads);
     static const uint16_t Ks[3] = {96, 384, 1536};
+    // per-position base entropy: a window must start and end on a varying position (a linker or poly(T) run is not part of a barcode)
+    double pe[40] = {};
+    {
+        uint32_t cnt[40][4] = {};
+        for (size_t i = 0; i < n; ++i)
+            for (size_t k = 0; k < 40 && (size_t)s < spots[i].seg.size() && k < spots[i].seg[s].size(); ++k) {
+                const uint8_t b = nuc::ascii_to_num(spots[i].seg[s][k]);
+                if (b < 4) ++cnt[k][b];
+            }
+        for (int k = 0; k < 40; ++k) pe[k] = detail_id::entropy_bits(cnt[k]);
+    }
     std::vector<WindowHit> cands;
     for (uint16_t len = 12; len >= 6; --len) {
         for (uint16_t off = 0; off + len <= std::min<uint32_t>(L, 36); ++off) {
+            if (pe[off] < 0.5 || pe[off + len - 1] < 0.5) continue;
             std::unordered_map<uint64_t, uint32_t> cnt;
             uint64_t tot = 0;
             for (size_t i = 0; i < n; ++i) {
