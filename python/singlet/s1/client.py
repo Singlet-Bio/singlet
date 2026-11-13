@@ -178,7 +178,11 @@ _MODALITY_ALIASES = {
     "hashtag": "hto",
     "guides": "crispr",
 }
-GENE_MEMBERS = (EXON, INTRON, AMBIENT)  # rows on the gene axis (fetched only when a modality names them)
+GENE_MEMBERS = (
+    EXON,
+    INTRON,
+    AMBIENT,
+)  # rows on the gene axis (fetched only when a modality names them)
 
 
 class S1Error(RuntimeError):
@@ -1700,7 +1704,11 @@ def _build_anndata(
     else:
         var = pd.DataFrame(index=pd.Index([], dtype=object, name="gene_id"))
     adata = ad.AnnData(X=X, obs=obs, var=var)
-    for lname, attr in (("spliced", "spliced"), ("unspliced", "unspliced"), ("ambient_corrected", "ambient")):
+    for lname, attr in (
+        ("spliced", "spliced"),
+        ("unspliced", "unspliced"),
+        ("ambient_corrected", "ambient"),
+    ):
         if lname not in mods:
             continue
         plist = [getattr(r, attr) for r in ok]

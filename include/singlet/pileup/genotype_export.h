@@ -21,8 +21,12 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <condition_variable>
+#include <deque>
 #include <filesystem>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -71,11 +75,50 @@ inline size_t secure_private_tree(const std::string& dir)
 struct GzOut {
     gzFile f = nullptr;
     std::string buf;
-    explicit GzOut(const std::string& path) { f = gzopen(path.c_str(), "wb6"); buf.reserve(1 << 20); }
+    // Optional deflate thread (async = true): the full 1 MiB buffers are queued in order and gzwrite'n by one thread beside the thread that
+    // formats the lines, so the gzip stream is the same bytes (deflate does not depend on how the input is cut into writes).
+    bool async = false, done = false;
+    std::thread th;
+    std::mutex mu;
+    std::condition_variable cv_put, cv_get;
+    std::deque<std::string> q;
+    explicit GzOut(const std::string& path, bool async_ = false) : async(async_) {
+        f = gzopen(path.c_str(), "wb6"); buf.reserve(1 << 20);
+        if (async && f) th = std::thread([this] {
+            for (;;) {
+                std::string b;
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv_get.wait(lk, [&] { return !q.empty() || done; });
+                    if (q.empty()) return;
+                    b = std::move(q.front()); q.pop_front();
+                }
+                cv_put.notify_one();
+                gzwrite(f, b.data(), static_cast<unsigned>(b.size()));
+            }
+        });
+    }
     bool ok() const { return f != nullptr; }
     void put(const std::string& s) { buf += s; if (buf.size() >= (1u << 20)) flush(); }
-    void flush() { if (f && !buf.empty()) gzwrite(f, buf.data(), static_cast<unsigned>(buf.size())); buf.clear(); }
-    ~GzOut() { flush(); if (f) gzclose(f); }
+    void flush() {
+        if (!f || buf.empty()) { buf.clear(); return; }
+        if (th.joinable()) {
+            std::unique_lock<std::mutex> lk(mu);
+            cv_put.wait(lk, [&] { return q.size() < 8; });
+            q.push_back(std::move(buf));
+            lk.unlock();
+            cv_get.notify_one();
+            buf = std::string(); buf.reserve(1 << 20);
+        } else {
+            gzwrite(f, buf.data(), static_cast<unsigned>(buf.size()));
+            buf.clear();
+        }
+    }
+    ~GzOut() {
+        flush();
+        if (th.joinable()) { { std::lock_guard<std::mutex> lk(mu); done = true; } cv_get.notify_one(); th.join(); }
+        if (f) gzclose(f);
+    }
 };
 
 /// Genotype fields of one donor at one site: GT, GQ (phred of 1 - P(best), capped at 99) and PL (phred-scaled normalized likelihoods),
@@ -254,7 +297,7 @@ inline long long write_donors_vcf(const std::string& path, const DemuxResult& de
     }
 
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
-    GzOut f(path);
+    GzOut f(path, true);
     if (!f.ok()) return -1;
     f.put("##fileformat=VCFv4.2\n##source=singlet genotype_export\n"
           "##singlet_genotype_model=binomial on donor-summed UMI counts, error 0.01, flat prior; GT when the posterior >= 0.99\n"
@@ -392,7 +435,7 @@ inline long long write_cells_vcf(const std::string& path, const DemuxResult& dem
     }
 
     std::filesystem::create_directories(std::filesystem::path(path).parent_path());
-    GzOut f(path);
+    GzOut f(path, true);   // one gzip stream: the line formatting runs beside the deflate
     if (!f.ok()) return -1;
     f.put("##fileformat=VCFv4.2\n##source=singlet genotype_export (D-101 per-cell VCF)\n"
           "##singlet_genotype_model=donor genotype: binomial on donor-summed UMI counts, error 0.01, flat prior; GT when the posterior >= 0.99\n"

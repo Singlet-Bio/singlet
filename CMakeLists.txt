@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(singlet VERSION 1.3.7 LANGUAGES CXX C)
+project(singlet VERSION 1.3.8 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,9 @@ option(SINGLET_BUILD_GPU      "Build GPU kernels (requires CUDA 12+)" OFF)
 option(SINGLET_BUILD_PIPELINE "Build singlet binary"                 OFF)
 option(SINGLET_BUILD_PYTHON   "Build Python bindings"                 OFF)
 option(SINGLET_BUILD_TESTS    "Build test suite"                      OFF)
+
+# Version and commit stamp: defined and checked once for every target (cmake/BuildInfo.cmake)
+include(cmake/BuildInfo.cmake)
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 find_package(ZLIB REQUIRED)

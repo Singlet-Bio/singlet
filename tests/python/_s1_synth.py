@@ -543,7 +543,9 @@ if __name__ == "__main__":
     with_labels = (
         "--labels" in sys.argv[2:]
     )  # label columns on GSM9000001, and truth_<GSM>_labels.tsv
-    with_ambient = "--ambient" in sys.argv[2:]  # ambient_corrected_counts.1pz on GSM9000001, and truth_<GSM>_ambient.mtx
+    with_ambient = (
+        "--ambient" in sys.argv[2:]
+    )  # ambient_corrected_counts.1pz on GSM9000001, and truth_<GSM>_ambient.mtx
     os.makedirs(out, exist_ok=True)
     s = Synth(out).build(extras=extras, labels=with_labels, ambient=with_ambient)
     with open(os.path.join(out, "genes.txt"), "w") as fh:
@@ -577,5 +579,7 @@ if __name__ == "__main__":
             with open(os.path.join(out, "truth_%s_sj_names.txt" % gsm), "w") as fh:
                 fh.write("\n".join(t["sj_names"]) + "\n")
         if "ambient_g" in t:
-            scipy.io.mmwrite(os.path.join(out, "truth_%s_ambient.mtx" % gsm), t["ambient_g"][:, cols])
+            scipy.io.mmwrite(
+                os.path.join(out, "truth_%s_ambient.mtx" % gsm), t["ambient_g"][:, cols]
+            )
     print(out)

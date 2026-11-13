@@ -1,4 +1,5 @@
 """scripts/atlas_rerun/genotype_keep.py: the campaign keeps every genotype output under a genotypes/ directory, 0700, with a manifest."""
+
 import json
 import os
 import stat
@@ -18,17 +19,32 @@ def _w(p, s="x"):
 
 def test_keep_copies_genotype_files(tmp_path):
     out = tmp_path / "out"
-    for rel in ("private/genotype/donors.vcf.gz", "private/genotype/cellsnp/cellSNP.tag.AD.mtx", "private/donor/donor0.vcf",
-                "private/snp_ad.1pz", "private/snp_dp.1pz", "private/mt_allele_counts.1pz", "donor_assignments.tsv", "cell_calls.tsv",
-                "exon_counts.1pz"):
+    for rel in (
+        "private/genotype/donors.vcf.gz",
+        "private/genotype/cellsnp/cellSNP.tag.AD.mtx",
+        "private/donor/donor0.vcf",
+        "private/snp_ad.1pz",
+        "private/snp_dp.1pz",
+        "private/mt_allele_counts.1pz",
+        "donor_assignments.tsv",
+        "cell_calls.tsv",
+        "exon_counts.1pz",
+    ):
         _w(str(out / rel), rel)
     base = tmp_path / "genotypes" / "beta"
     rec = GK.keep(str(out), "GSE1", "GSM2", str(base))
     dest = base / "GSE1" / "GSM2"
     assert rec["status"] == "ok" and rec["path"] == str(dest)
     man = json.loads((dest / "manifest.json").read_text())
-    assert set(man["files"]) == {"genotype/donors.vcf.gz", "genotype/cellsnp/cellSNP.tag.AD.mtx", "donor/donor0.vcf", "snp_ad.1pz",
-                                 "snp_dp.1pz", "donor_assignments.tsv", "cell_calls.tsv"}
+    assert set(man["files"]) == {
+        "genotype/donors.vcf.gz",
+        "genotype/cellsnp/cellSNP.tag.AD.mtx",
+        "donor/donor0.vcf",
+        "snp_ad.1pz",
+        "snp_dp.1pz",
+        "donor_assignments.tsv",
+        "cell_calls.tsv",
+    }
     if os.name != "nt":
         assert stat.S_IMODE(os.stat(dest).st_mode) == 0o700
         for dp, dns, fns in os.walk(dest):

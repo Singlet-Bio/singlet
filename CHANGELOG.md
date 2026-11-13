@@ -2,6 +2,13 @@
 
 All notable changes to the singlet project.
 
+## [1.3.8] — concurrent end-of-run stages and a bounded pileup host half
+
+Two speed changes on 1.3.7 with byte-identical outputs. The end-of-run stages (cell calling, ambient, doublets, donor
+demultiplexing, TE, editing, donor files and the all-site export) run side by side, with `--tail-threads` /
+`SINGLET_TAIL_THREADS` setting their thread count. The host half of the GPU pileup builds per-partition runs and merges them
+once, which removes the quadratic copy at deep samples. Outputs equal 1.3.7 apart from run metadata.
+
 ## [1.3.7] — the Research Beta campaign engine
 
 The campaign engine: the 1.3.6 storage safeguards (per-barcode uncalled mt counts off by default, run-length coded callable

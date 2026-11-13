@@ -95,6 +95,7 @@
 #include "singlet/pileup/cascade_stats_writer.h"
 #include "singlet/pileup/visium_qc.h"
 #include "singlet/pileup/visium_tissue.h"
+#include "singlet/pileup/self_check.h"
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/nvtx.h"
@@ -119,7 +120,7 @@ extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsign
 #include "singlet/fq/fg2_source.h"
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
-#include "singlet/version.h"        // singlet::kVersion
+#include "singlet/version.h"        // singlet::kVersion, singlet::git_commit()
 #include <htslib/bgzf.h>
 #include <htslib/hfile.h>
 
@@ -3218,6 +3219,8 @@ static void usage(const char* prog) {
         << "  --snps FILE            VCF of SNP positions\n"
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
+        << "  --self-check           At the end of the run decode the editing outputs and recompute their tables; write self_check.json,\n"
+        << "                         exit 12 on a failure (off by default; the output files are never changed)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
         << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default for 3' libraries; for 5' it writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
         << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default) or defer (env SINGLET_HLA_GPU_3P)\n"
@@ -3246,6 +3249,7 @@ static void usage(const char* prog) {
         << "  --txome-index PATH     Transcriptome FASTA for L1 resolve (tx.fa)\n"
         << "  --te-db PATH           TE sketch DB for L2 classify (te_sketch.bin)\n"
         << "  --n-donors N           Number of donors (-1=auto) [-1]\n"
+        << "  --tail-threads N       threads for the export phase (cell calling, ambient, doublets, donor demux) and the HLA donor stage once the mapping is done, when N is above --threads (default SINGLET_TAIL_THREADS, else --threads); results do not depend on it\n"
         << "  --umi-len N            UMI length [12]\n"
         << "  --star-extra 'ARGS'    Extra aligner arguments (quoted)\n"
         << "  --min-mapq N           Minimum MAPQ [20]\n"
@@ -3561,6 +3565,7 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
 }
 
 int main(int argc, char* argv[]) {
+    if (argc >= 2 && std::string(argv[1]) == "--version") { std::cout << singlet::version_line() << "\n"; return 0; }   // one line: the runner compares it with BUILD.txt
     if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main, &pool_preload_refs);
     return singlet_main(argc, argv);
 }
@@ -3671,6 +3676,7 @@ static int singlet_main(int argc, char* argv[]) {
     int parallel_pileup = -1; // -1=auto, 0=off, 1=on
     int stream_unsorted = -1; // -1=auto (default: on for CB_UMI_Simple scRNA), 0=off (--sorted-bam), 1=on (--stream-unsorted). On: no sorted BAM; unsorted STAR output streamed into the serial pileup, CB from CR
     int n_donors = -1;
+    int tail_threads = 0;                // --tail-threads N / SINGLET_TAIL_THREADS: threads of the export phase and the HLA donor stage when above --threads (0 = --threads)
     int umi_len = 12;
     bool umi_len_explicit = false;  // S5-UMI-LEN: true when --umi-len given by user
     bool pipeline_mode = false;
@@ -3721,6 +3727,7 @@ static int singlet_main(int argc, char* argv[]) {
     std::string bam_path_reason = "default";   // why the pileup reads the sorted BAM instead of the STAR stream (provenance: pileup_path_reason)
     bool whitelist_missing = false;      // a 10x-type protocol (CB_UMI_Simple) was detected but no barcode whitelist file was found: the sorted path was taken because of it
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
+    bool self_check = false;             // --self-check: decode and cross-check the editing outputs at the end of the run (off by default)
     bool no_default_editing = false;     // --no-editing: do not use the default RNA editing panel in --pipeline mode (D-101)
     std::string edit_panel_source = "none";
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
@@ -3762,6 +3769,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--allsite-min-alt-cells" && i+1 < argc) config.allsite_min_alt_cells = std::atoi(argv[++i]);
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
+        else if (arg == "--self-check") self_check = true;   // end-of-run check of the editing outputs (self_check.h); exit 12 on a failure
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
         else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
@@ -3789,6 +3797,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--txome-index" && i+1 < argc) txome_index_path = argv[++i];
         else if (arg == "--te-db" && i+1 < argc) te_db_path = argv[++i];
         else if (arg == "--n-donors" && i+1 < argc) n_donors = std::atoi(argv[++i]);
+        else if (arg == "--tail-threads" && i+1 < argc) tail_threads = std::atoi(argv[++i]);
         else if (arg == "--genome-load" && i+1 < argc) genome_load = argv[++i];
         else if (arg == "--genome-shared") {
             // Optional value: auto (default), on, off
@@ -4490,13 +4499,13 @@ static int singlet_main(int argc, char* argv[]) {
         {
             std::ofstream sj(out_prefix + "/summary.json");
             if (sj) {
-                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                const std::string env_sha = singlet::git_commit();
                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                 sj << "{\n"
                    << "  \"schema_version\": \"1.2\",\n"
                    << "  \"sample_id\": \"" << fb_sample_id << "\",\n"
                    << "  \"status\": \"feature_barcode_not_gex\",\n"
-                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                   << "  \"git_sha\": \"" << env_sha << "\",\n"
                    << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                    << "  \"protocol_id\": 0,\n"
                    << "  \"protocol_name\": \"CITE_SEQ_ADT\",\n"
@@ -6369,13 +6378,13 @@ static int singlet_main(int argc, char* argv[]) {
                         {
                             std::ofstream sj(out_prefix + "/summary.json");
                             if (sj) {
-                                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                                const std::string env_sha = singlet::git_commit();
                                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 sj << "{\n"
                                    << "  \"schema_version\": \"1.2\",\n"
                                    << "  \"sample_id\": \"" << sample_id << "\",\n"
                                    << "  \"status\": \"data_incomplete\",\n"
-                                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                                   << "  \"git_sha\": \"" << env_sha << "\",\n"
                                    << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                                    << "  \"protocol_id\": 0,\n"
                                    << "  \"protocol_name\": \"\",\n"
@@ -6401,11 +6410,11 @@ static int singlet_main(int argc, char* argv[]) {
                         {
                             std::ofstream pj(out_prefix + "/provenance.json");
                             if (pj) {
-                                const char* prov_sha = std::getenv("SINGLET_GIT_SHA");
+                                const std::string prov_sha = singlet::git_commit();
                                 const char* prov_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 pj << "{\n"
                                    << "  \"schema_version\": \"1.1\",\n"
-                                   << "  \"singlet_git_sha\": \"" << (prov_sha ? prov_sha : "unknown") << "\",\n"
+                                   << "  \"singlet_git_sha\": \"" << prov_sha << "\",\n"
                                    << "  \"reference_manifest_sha256\": \"" << (prov_rms ? prov_rms : "") << "\",\n"
                                    << "  \"build_flags\": \"\",\n"
                                    << "  \"command_line\": \"\",\n"
@@ -9991,6 +10000,16 @@ static int singlet_main(int argc, char* argv[]) {
     export_cfg.pipeline_mode = pipeline_mode;
     export_cfg.n_donors = n_donors;
     export_cfg.threads = std::max(config.threads, star_threads);   // --threads (the stream path's pileup thread is 1)
+    // The export phase starts after the device phase is over (the mapping and the pileup are done), so it may use more threads than the mapping ran
+    // with: --tail-threads N or SINGLET_TAIL_THREADS=N, taken when above --threads. Every export stage is thread-count independent (fixed chunking,
+    // ordered reductions), so the outputs do not change.
+    if (tail_threads <= 0) if (const char* e = std::getenv("SINGLET_TAIL_THREADS")) tail_threads = std::atoi(e);
+    // SINGLET_TAIL_THREADS_EXACT=1 (measurement only): the value is taken as given, also below --threads, to time the export phase at the thread count of a smaller run.
+    const bool tail_exact = std::getenv("SINGLET_TAIL_THREADS_EXACT") != nullptr && tail_threads > 0;
+    if (tail_threads > export_cfg.threads || (tail_exact && tail_threads != export_cfg.threads)) {
+        std::cerr << "[singlet] tail threads: " << export_cfg.threads << " -> " << tail_threads << " for the export phase and the HLA donor stage" << "\n";
+        export_cfg.threads = tail_threads;
+    }
     export_cfg.genome_dir = genome_dir;
 
     // The counted strand decides 3' against 5' for the 10x pairs that share the barcode read and whitelist: the cDNA read aligns sense
@@ -10083,6 +10102,7 @@ static int singlet_main(int argc, char* argv[]) {
 
     // ── N8: Populate provenance manifest ──
     export_cfg.provenance.singlet_version      = singlet::kVersion;
+    export_cfg.provenance.singlet_git_sha      = singlet::git_commit();
     {
         std::string in_files;  // every run of a multi-run sample, not a temporary concatenation
         for (const auto& f : onefq_runs_in) in_files += (in_files.empty() ? "" : ",") + f;
@@ -10199,6 +10219,8 @@ static int singlet_main(int argc, char* argv[]) {
             }
             export_cfg.user_meta[key] = value;
         }
+        // The metadata JSON was written by `singlet download` (possibly another build): the version recorded in the .1pz is this binary's.
+        { auto it = export_cfg.user_meta.find("singlet_version"); if (it != export_cfg.user_meta.end()) it->second = singlet::kVersion; }
         std::cerr << "[singlet] Loaded " << export_cfg.user_meta.size()
                   << " metadata fields from " << metadata_json_path << "\n";
     }
@@ -10206,10 +10228,12 @@ static int singlet_main(int argc, char* argv[]) {
     if (hla_bg.on) {
         const char* early = std::getenv("SINGLET_HLA_EARLY_DONORS");
         if (!(early && std::string(early) == "0"))
-            export_cfg.on_donor_assignments = [&hla_bg]() {
+            export_cfg.on_donor_assignments = [&hla_bg, tail_n = export_cfg.threads]() {
                 if (hla_bg.donor_th.joinable()) return;
-                hla_bg.donor_th = std::thread([&hla_bg] {
+                hla_bg.donor_th = std::thread([&hla_bg, tail_n] {
                     if (hla_bg.th.joinable()) hla_bg.th.join();
+                    // the sample stage is over: the donors are typed with the tail's thread count (T1K's calls do not depend on it)
+                    if (tail_n > hla_bg.s.cfg.threads || std::getenv("SINGLET_TAIL_THREADS_EXACT")) { hla_bg.s.cfg.threads = tail_n; hla_bg.s.T = std::to_string(tail_n); }
                     singlet::hla::donor_stage(hla_bg.s);
                 });
                 std::cerr << "[hla] donor stage started after demux\n";
@@ -10693,6 +10717,15 @@ static int singlet_main(int argc, char* argv[]) {
                     in.close();
                     std::ofstream(cc) << outbuf;
                 }
+                // The editing tables were summarized at export time over the call made then; a Visium run's called set is the tissue
+                // spots, so editing_sites, editing_cells and editing_summary are recomputed over it (they must agree with cell_calls.tsv).
+                {
+                    std::string ee;
+                    if (!singlet::editing::resummarize(out_prefix, config.edit_path, engine_ptr ? engine_ptr->n_edit_sites() : 0u, called, &ee))
+                        std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "\n";
+                    else if (!config.edit_path.empty())
+                        std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots\n";
+                }
             }
             auto med = [](std::vector<double> v) {
                 if (v.empty()) return 0.0;
@@ -11010,6 +11043,15 @@ static int singlet_main(int argc, char* argv[]) {
         std::cerr << "[singlet] EXIT " << export_stats.exit_code
                   << " (zero_cells: cell calling produced 0 cells)\n";
         return export_stats.exit_code;
+    }
+    if (self_check && star_exit == 0) {   // report-only: self_check.json, and exit 12 when a decode or a table comparison fails
+        const int n_bad = singlet::run_self_check(out_prefix);
+        if (n_bad) {
+            std::cerr << "[self-check] FAILED: " << n_bad << " problem(s), see " << out_prefix << "/self_check.json\n";
+            alarm(0);
+            return singlet::kExitSelfCheck;
+        }
+        std::cerr << "[self-check] ok\n";
     }
     alarm(0);  // disarm watchdog — clean exit
     return star_exit;
