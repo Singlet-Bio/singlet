@@ -177,6 +177,7 @@ struct Evidence {
     WindowHit window2;               // a second, disjoint barcode window: split-pool bead barcodes (inDrop, ddSEQ), not a plate
     bool window_on_index = false;    // the window sits in a separate index read: well indices of a plate with full-length reads
     double prefix_mult = 0;          // share of reads whose first 12 bases repeat (at least 5 times) at the best segment
+    int polyt_seg = -1, polyt_off = 0;   // a poly(T) run that starts at one fixed offset after a varied prefix: bead-barcode read of Drop-seq geometry
     int prefix_seg = -1;
     double cdna_start_repeat = 0;    // share of cDNA reads whose first 25 bases occur at least three times: probe panels repeat, random fragments do not
     uint32_t cdna_len = 0;
@@ -478,6 +479,22 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
                 if (c.distinct > 1.3 * mind2) continue;
                 if (!second->found || c.len > second->len || (c.len == second->len && c.off < second->off)) *second = c;
             }
+            // Split-pool bead barcodes combine independently (96 x 96 sequences); the second window of a plate read is fixed by the first.
+            // The joint distinct count at the sampled depth tells them apart.
+            if (second->found && best.len <= 12 && second->len <= 12) {
+                std::unordered_map<uint64_t, uint32_t> joint;
+                for (size_t i = 0; i < n; ++i) {
+                    if ((size_t)s >= spots[i].seg.size() || spots[i].seg[s].size() < static_cast<size_t>(std::max(best.off + best.len, second->off + second->len))) continue;
+                    uint64_t h1, h2;
+                    if (!detail_id::pack(spots[i].seg[s].data() + best.off, best.len, h1) || !detail_id::pack(spots[i].seg[s].data() + second->off, second->len, h2)) continue;
+                    ++joint[(h1 << 24) | h2];
+                }
+                uint32_t jd = 0;
+                for (auto& kv : joint) jd += (kv.second >= 2);
+                const double prod = double(best.distinct) * double(second->distinct);
+                second->top_share = second->top_share;   // unchanged; the independence test only decides whether the window counts
+                if (prod <= 0 || double(jd) < 0.25 * prod) *second = WindowHit();
+            }
         }
     }
     return best;
@@ -772,11 +789,46 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
                 }
                 uint64_t rep = 0;
                 for (auto& kv : c) if (kv.second >= 5) rep += kv.second;
-                const double share = n ? double(rep) / n : 0;
+                double share = n ? double(rep) / n : 0;
+                {   // the repeating bases must vary across reads (a barcode set); a fixed linker or adapter repeats without being one
+                    uint32_t pc[12][4] = {};
+                    for (size_t i = 0; i < probe_n; ++i) {
+                        if (t >= spots[i].seg.size() || spots[i].seg[t].size() < 12) continue;
+                        for (size_t k = 0; k < 12; ++k) { const uint8_t b = nuc::ascii_to_num(spots[i].seg[t][k]); if (b < 4) ++pc[k][b]; }
+                    }
+                    int varied = 0;
+                    for (int k = 0; k < 12; ++k) varied += (detail_id::entropy_bits(pc[k]) >= 1.5);
+                    if (varied < 10) share = 0;
+                }
                 if (share > ev.prefix_mult) { ev.prefix_mult = share; ev.prefix_seg = (int)t; }
             }
             // the repeating read is the barcode read, whatever its length (Seq-Well runs with two equal-length reads)
             if (nseg >= 2 && ev.prefix_mult >= kThr.prefix_mult && ev.prefix_seg >= 0 && ev.prefix_seg != ev.bc_seg) { ev.bc_seg = ev.prefix_seg; ev.mate_seg = -1; assign_cdna(); }
+        }
+    }
+
+    // bead barcode read with a poly(T) tail: barcode and UMI (a fixed number of varied bases) then poly(T)
+    if (best_rate < kThr.wl_hit && ev.window_on_index == false && !ev.window.found) {
+        for (size_t t = 0; t < nseg; ++t) {
+            if (ev.segs[t].index_like || ev.segs[t].len_mode < 28) continue;
+            const size_t np = std::min<size_t>(spots.size(), 20000);
+            uint32_t cnt[40][4] = {};
+            std::vector<uint32_t> tcount(48, 0);
+            uint64_t nn = 0;
+            for (size_t i = 0; i < np; ++i) {
+                if (t >= spots[i].seg.size() || spots[i].seg[t].size() < 40) continue;
+                const std::string& q = spots[i].seg[t];
+                ++nn;
+                for (size_t k = 0; k < 40; ++k) { const uint8_t b = nuc::ascii_to_num(q[k]); if (b < 4) ++cnt[k][b]; }
+                for (size_t k = 8; k <= 32; ++k) { int tt = 0; for (size_t j = 0; j < 8; ++j) tt += (q[k + j] == 'T'); if (tt >= 7) ++tcount[k]; }
+            }
+            if (nn < 1000) continue;
+            int k0 = -1;
+            for (int k = 8; k <= 32; ++k) if (double(tcount[k]) / nn >= 0.5) { k0 = k; break; }
+            if (k0 < 12) continue;
+            double h = 0;
+            for (int k = 0; k < k0; ++k) h += detail_id::entropy_bits(cnt[k]);
+            if (h / k0 >= 1.7) { ev.polyt_seg = (int)t; ev.polyt_off = k0; if (nseg >= 2 && ev.bc_seg != (int)t) { ev.bc_seg = (int)t; ev.mate_seg = -1; assign_cdna(); } break; }
         }
     }
 
@@ -1074,6 +1126,16 @@ inline void rank(Report& R, const Options& opt) {
                                 detail::jnum(ev.window.random_share) + "): well barcodes");
             add_usefulness(w, ev, ev.window.top_share);
             H.push_back(w);
+        } else if (ev.polyt_seg >= 0 && nonindex >= 2 && ev.polyt_off >= 18 && ev.polyt_off <= 22) {
+            Interp w;
+            w.family = "droplet_other";
+            w.protocol = "dropseq-like";
+            w.modality = "gex";
+            w.support = 0.8;
+            w.reasons.push_back("segment " + std::to_string(ev.polyt_seg) + " holds " + std::to_string(ev.polyt_off) + " varied bases (barcode 12 and UMI 8) and then poly(T): "
+                                "Drop-seq geometry, shared by Seq-Well, DroNc-seq and Drop-seq");
+            add_usefulness(w, ev, 1.0);
+            H.push_back(w);
         } else if (ev.prefix_mult >= kThr.prefix_mult && ev.smart3_tag < kThr.smart3_tag && nonindex >= 2 &&
                    !(ev.detected.confidence >= Confidence::MEDIUM && !fam.empty() && fam != "droplet_other")) {
             Interp w;
@@ -1165,6 +1227,18 @@ inline void rank(Report& R, const Options& opt) {
                 H.push_back(g);
             }
         }
+    }
+
+    // a known plate tag from the protocol detector (medium or high confidence) wins over an unspecified bead layout
+    {
+        Interp* plate = nullptr;
+        for (auto& it : H) if (it.family == "plate_barcoded" && it.reasons.size() && it.reasons[0].rfind("protocol detector", 0) == 0) plate = &it;
+        if (plate && ev.detected.confidence >= Confidence::MEDIUM)
+            for (auto& it : H)
+                if (it.family == "droplet_other" && it.protocol == "barcoded-unspecified" && it.support >= plate->support - 0.001) {
+                    plate->support = std::min(0.99, it.support + 0.05);
+                    plate->reasons.push_back("known plate protocol tag outranks an unspecified bead layout");
+                }
     }
 
     // ── layer D adjusts support ──
