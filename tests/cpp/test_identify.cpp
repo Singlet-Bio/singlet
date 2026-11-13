@@ -128,6 +128,24 @@ int main() {
         CHECK(r.ranked[0].family.rfind("droplet", 0) == 0 || r.verdict == "ambiguous" || r.verdict == "droplet_3p", "single barcode read does not crash");
     }
 
+    {   // Visium sub-call: probe panels repeat their read starts, poly(A) fragments do not; V(D)J enrichment and Flex from the same evidence
+        const auto probes = make_list(2000, 50);
+        std::vector<HeadSpot> pv, fv, gv;
+        for (size_t i = 0; i < 40000; ++i) {
+            pv.push_back(spot({pick(wl_vis) + rand_seq(12), pick(probes)}));
+            fv.push_back(spot({pick(wl_v3) + rand_seq(12), pick(probes)}));
+        }
+        for (size_t i = 0; i < N; ++i) gv.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto rp = run(pv, lists, dir);
+        CHECK(rp.verdict == "visium" && rp.action == "process" && rp.ranked[0].modality == "spatial_gex_probe", "Visium with probe-site read starts -> sub-call probe-based, still processed");
+        auto rpa = run(gv, lists, dir);
+        CHECK(rpa.verdict == "droplet_3p", "random cDNA starts are not a probe panel");
+        auto rf = run(fv, lists, dir);
+        CHECK(rf.verdict == "flex" && rf.action == "defer", "barcode list plus probe-site read starts -> flex, deferred");
+        MapEvidence vd; vd.measured = true; vd.tx_measured = true; vd.unique = 0.9; vd.exonic = 0.7; vd.exonic_measured = true; vd.sense = 0.1; vd.sense_span = 0.1; vd.vdj = 0.62;
+        auto rv = run(gv, lists, dir, -1, &vd);
+        CHECK(rv.verdict == "vdj" && rv.action == "classify_only", "list hit and most reads on IG or TR genes -> vdj, classify only");
+    }
     std::cout << "\n=== ATAC and feature barcodes ===\n";
     {
         std::vector<HeadSpot> v, w;
@@ -213,20 +231,39 @@ int main() {
     {
         std::vector<HeadSpot> v;
         for (size_t i = 0; i < N; ++i) v.push_back(spot({rand_seq(100), rand_seq(100)}));
-        auto big = run(v, lists, dir, 60000000);
-        CHECK(big.verdict == "bulk_rna" && big.action == "refuse", "large run, no barcode -> bulk, refused");
-        auto small = run(v, lists, dir, 2000000);
-        CHECK(small.verdict == "smartseq" && small.action == "defer", "plate-sized run, no barcode -> smartseq, deferred");
-        auto unk = run(v, lists, dir, -1);
-        CHECK(unk.verdict == "ambiguous" && unk.action == "refuse", "run size unknown -> ambiguous, refused");
+        // without mapping evidence a run with no barcode read is held, never called bulk
+        auto none = run(v, lists, dir, 60000000);
+        CHECK(none.verdict == "rna_no_barcode" && none.action == "defer", "no barcode read, no mapping evidence -> rna_no_barcode, deferred");
+        CHECK(none.verdict != "bulk_rna" && none.verdict != "smartseq", "size alone never calls bulk or Smart-seq");
+        MapEvidence even; even.measured = true; even.tx_measured = true; even.unique = 0.9; even.exonic = 0.6; even.exonic_measured = true; even.sense = 0.5;
+        even.sense_span = 0.5; even.end3 = 0.08; even.end5 = 0.07; even.end_expected = 0.06; even.end_reads = 5000; even.tx_reads = 20000;
+        auto big = run(v, lists, dir, 60000000, &even);
+        CHECK(big.verdict == "bulk_rna" && big.action == "refuse", "even coverage, large run -> bulk, refused");
+        auto small = run(v, lists, dir, 2000000, &even);
+        CHECK(small.verdict == "smartseq" && small.action == "defer", "even coverage, plate-sized run -> smartseq, deferred");
+        auto unk = run(v, lists, dir, -1, &even);
+        CHECK(unk.verdict == "ambiguous" && unk.action == "refuse", "even coverage, run size unknown -> ambiguous, refused");
         CHECK(unk.ambiguous_with.find("smartseq") != std::string::npos && unk.ambiguous_with.find("bulk_rna") != std::string::npos, "ambiguity names both");
         Options o; o.whitelist_dirs = {dir}; o.hint = "assay=smartseq2";
-        auto hinted = identify_spots(v, o, lists);
+        auto hinted = identify_spots(v, o, lists, &even);
         CHECK(hinted.verdict == "ambiguous" && hinted.action == "defer" && hinted.hint == "assay=smartseq2", "a hint selects the action and leaves the verdict");
         std::vector<HeadSpot> se;
         for (size_t i = 0; i < N; ++i) se.push_back(spot({rand_seq(75)}));
-        auto r = run(se, lists, dir, 30000000);
-        CHECK(r.verdict == "bulk_rna" && r.action == "refuse", "single-end long reads, no barcode, large run -> bulk refused");
+        auto r = run(se, lists, dir, 30000000, &even);
+        CHECK(r.verdict == "bulk_rna" && r.action == "refuse", "single-end long reads, even coverage, large run -> bulk refused");
+        // tag-based single-cell cDNA whose barcode read is missing: one transcript end, one strand
+        MapEvidence t3 = even; t3.end3 = 0.62; t3.end5 = 0.05; t3.sense_span = 0.95; t3.end_expected = 0.07;
+        auto rt3 = run(v, lists, dir, 20000000, &t3);
+        CHECK(rt3.verdict == "barcode_read_missing" && rt3.verdict_protocol == "tag-3p" && rt3.action == "defer", "3' end pile-up on the sense strand -> barcode_read_missing, 3'");
+        MapEvidence t5 = even; t5.end3 = 0.04; t5.end5 = 0.55; t5.sense_span = 0.06; t5.end_expected = 0.07;
+        auto rt5 = run(v, lists, dir, 20000000, &t5);
+        CHECK(rt5.verdict == "barcode_read_missing" && rt5.verdict_protocol == "tag-5p" && rt5.action == "defer", "5' end pile-up on the antisense strand -> barcode_read_missing, 5'");
+        bool has_try = false;
+        for (const auto& re : rt3.ranked[0].reasons) has_try = has_try || re.find("try_endpoints") != std::string::npos;
+        CHECK(has_try, "barcode_read_missing carries the try_endpoints note");
+        MapEvidence st = even; st.end3 = 0.6; st.sense_span = 0.5;   // end pile-up on both strands is not a tag library
+        auto rst = run(v, lists, dir, 20000000, &st);
+        CHECK(rst.verdict != "barcode_read_missing" && rst.action != "process", "end pile-up without the strand of a tag kit is not barcode_read_missing");
     }
     {
         std::vector<HeadSpot> v;
@@ -243,8 +280,9 @@ int main() {
         auto r = run(v, lists, dir, 2000000, &g);
         CHECK(r.verdict == "genomic_dna" && r.action == "refuse", "reads that map outside genes -> genomic DNA, refused");
         MapEvidence rna; rna.measured = true; rna.unique = 0.9; rna.exonic = 0.6; rna.exonic_measured = true; rna.sense = 0.5;
+        rna.tx_measured = true; rna.sense_span = 0.5; rna.end3 = 0.08; rna.end5 = 0.07; rna.end_expected = 0.06; rna.end_reads = 5000;
         auto r2 = run(v, lists, dir, 2000000, &rna);
-        CHECK(r2.verdict == "smartseq", "reads that map to genes keep the RNA calls");
+        CHECK(r2.verdict == "smartseq", "reads that map to genes evenly keep the RNA calls");
         const std::string p = dir + "/star.";
         { std::ofstream l(p + "Log.final.out"); l << "                          Number of input reads |\t1000\n                   Uniquely mapped reads number |\t900\n"
                                                      "        Number of reads mapped to multiple loci |\t50\n"; }
