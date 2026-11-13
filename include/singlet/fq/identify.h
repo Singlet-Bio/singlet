@@ -572,12 +572,16 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
             }
     }
     // cDNA segments = longest segments that are not the barcode segment
-    std::vector<int> order;
-    for (size_t s = 0; s < nseg; ++s)
-        if ((int)s != ev.bc_seg && !ev.segs[s].index_like) order.push_back((int)s);
-    std::sort(order.begin(), order.end(), [&](int a, int b) { return ev.segs[a].len_mode > ev.segs[b].len_mode; });
-    if (!order.empty()) ev.cdna_seg = order[0];
-    if (order.size() > 1) ev.cdna2_seg = order[1];
+    auto assign_cdna = [&] {
+        std::vector<int> order;
+        ev.cdna_seg = ev.cdna2_seg = -1;
+        for (size_t s = 0; s < nseg; ++s)
+            if ((int)s != ev.bc_seg && !ev.segs[s].index_like) order.push_back((int)s);
+        std::sort(order.begin(), order.end(), [&](int a, int b) { return ev.segs[a].len_mode > ev.segs[b].len_mode; });
+        if (!order.empty()) ev.cdna_seg = order[0];
+        if (order.size() > 1) ev.cdna2_seg = order[1];
+    };
+    assign_cdna();
 
     // windows on the barcode candidate (or the first segment of a single-read run)
     int wseg = ev.bc_seg >= 0 ? ev.bc_seg : (nseg == 1 ? 0 : -1);
@@ -610,6 +614,8 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
                 const double share = n ? double(rep) / n : 0;
                 if (share > ev.prefix_mult) { ev.prefix_mult = share; ev.prefix_seg = (int)t; }
             }
+            // the repeating read is the barcode read, whatever its length (Seq-Well runs with two equal-length reads)
+            if (ev.prefix_mult >= kThr.prefix_mult && ev.prefix_seg >= 0 && ev.prefix_seg != ev.bc_seg) { ev.bc_seg = ev.prefix_seg; assign_cdna(); }
         }
     }
 
@@ -871,7 +877,8 @@ inline void rank(Report& R, const Options& opt) {
                                 detail::jnum(ev.window.random_share) + "): well barcodes");
             add_usefulness(w, ev, ev.window.top_share);
             H.push_back(w);
-        } else if (ev.prefix_mult >= kThr.prefix_mult && ev.smart3_tag < kThr.smart3_tag && nonindex >= 2) {
+        } else if (ev.prefix_mult >= kThr.prefix_mult && ev.smart3_tag < kThr.smart3_tag && nonindex >= 2 &&
+                   !(ev.detected.confidence >= Confidence::LOW && !fam.empty() && fam != "droplet_other")) {
             Interp w;
             w.family = "droplet_other";
             w.protocol = family_of_tag(tag) == "droplet_other" ? tag : "barcoded-unspecified";
@@ -938,7 +945,7 @@ inline void rank(Report& R, const Options& opt) {
     }
 
     // ── layer D adjusts support ──
-    if (ev.map.measured) {
+    if (ev.map.measured && !any_list) {   // a barcode-list hit is stronger evidence than where the cDNA lands; the list families keep their support
         for (auto& it : H) {
             const bool rna = it.family == "droplet_3p" || it.family == "droplet_5p" || it.family == "multiome_gex" || it.family == "visium" ||
                              it.family == "droplet_other" || it.family == "combinatorial" || it.family == "plate_barcoded" ||
@@ -958,7 +965,7 @@ inline void rank(Report& R, const Options& opt) {
                 }
             }
         }
-        if (ev.map.exonic_measured && ev.map.exonic <= kThr.exonic_dna_max && ev.map.unique >= kThr.mapped_min && !any_list &&
+        if (ev.map.exonic_measured && ev.map.exonic <= kThr.exonic_dna_max && ev.map.unique >= kThr.mapped_min &&
             std::none_of(H.begin(), H.end(), [](const Interp& i) { return i.family == "genomic_dna" || i.family == "atac"; })) {
             Interp g;
             g.family = "genomic_dna"; g.protocol = "none"; g.modality = "none";
