@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 // The build stamp: version from the project version, commit compiled in, environment override, and the places that record them.
+#undef NDEBUG   // Release builds define it; this test is nothing but asserts
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
