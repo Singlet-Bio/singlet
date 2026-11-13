@@ -13,7 +13,7 @@ Files are the originals the archive mirrors; each row read 5 ranged pieces (head
 | SRR9644308 | held-out no-barcode | CR+UR | 16/10 | v2 0.972 / 0.981 | 1.00 | 3' v2, process | present | 8.4 M | 3.8 (S3) |
 | SRR7788880 | held-out no-barcode | CR+UR | 16/10 | v2 0.971 / 0.986 | 1.00 | 3' v2, process | present | 8.4 M | 225 |
 | SRR11089986 | held-out no-barcode | CR+UR | 16/10 | v2 0.953 / 0.968 | 0.99 | 3' v2, process | present | 8.4 M | 171 |
-| SRR17209008 | held-out no-barcode | CR+UR | 16/12 | visium 0.940 / 0.963 | 0.97 | Visium, process | unknown (interior and tail pieces not read) | 5.2 M | 85 |
+| SRR17209008 | held-out no-barcode | CR+UR | 16/12 | visium 0.940 / 0.963 | 0.97 | Visium, process | unknown (tail piece not read) | 5.2 M | 85 |
 | Kang A (SRR5398235) | Kang 2018 | CR+UR | 14/10 | v1 0.927 / 0.986 | 1.00 | 3' v1, process | present | 7.3 M | 203 |
 | Kang B (SRR5398236) | Kang 2018 | CR+UR | 14/10 | v1 0.919 / 0.983 | 1.00 | 3' v1, process | present | 7.3 M | 146 |
 | Kang C (SRR5398237) | Kang 2018 | CR+UR | 14/10 | v1 0.921 / 0.983 | 1.00 | 3' v1, process | present | 8.4 M | 325 |
@@ -22,8 +22,8 @@ Files are the originals the archive mirrors; each row read 5 ranged pieces (head
 
 Findings
 
-- All 15 files give a barcode source (`bam_tags`) and a 10x call. None carries a Cell Ranger version line: the five CAR-T files were written by STAR 2.5.1b in a cloud workflow (genome directory `/cromwell_root/genome_dir/star`), with CR, CY, UR, UY, CB, UB, GX, GN, TX, AN and RE tags.
-- The five panel rows labeled 10x 3' v1 read as 3' v2 from the BAM: 16-base CR and 10-base UR, 96 percent of raw CR on the 737K-august-2016 list and 0 to 5 percent on the v1 list. The label looks wrong; the original panel label came from a text statement and was never checked against a barcode read. Kang 2018 reads as v1 (14-base CR, v1 list).
+- All 15 files give a barcode source (`bam_tags`) and a 10x call. None carries a Cell Ranger version line. The header of SRS5091285 (the only one inspected in detail) shows STAR 2.5.1b run in a cloud workflow (genome directory `/cromwell_root/genome_dir/star`); its records carry CR, CY, UR, UY, CB, UB, GX, GN, TX, AN and RE tags.
+- The five panel rows labeled 10x 3' v1 read as 3' v2 from the BAM: 16-base CR and 10-base UR, 93 to 96 percent of raw CR on the 737K-august-2016 list (5 percent on the v1 list for SRS5091285, the one inspected). The label looks wrong; the original panel label came from a text statement and was never checked against a barcode read. Kang 2018 reads as v1 (14-base CR, v1 list).
 - Coordinate sorting matters for one statistic in practice. With the first version, three of the ten rows were called feature-barcode because 56 to 97 percent of read-2 15-mers fell in the top 100 (reads piled on a few loci). The final build does not use the two diversity statistics for a sorted BAM; the rate and tag statistics are unaffected.
-- SRR17209008 returned only two pieces (the interior and tail requests gave nothing); the unmapped-reads status is therefore `unknown`, as designed.
+- SRR17209008 returned the head and one more piece (5.2 MB; the other requests gave nothing); the unmapped-reads status is therefore `unknown`, as designed.
 - Time is dominated by the endpoint: ENA FTP 85 to 325 s for 5 requests, NCBI S3 under 4 s.
