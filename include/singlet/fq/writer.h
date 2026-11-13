@@ -157,6 +157,8 @@ class Writer {
             if (!fp_) throw std::runtime_error("Cannot open for writing: " + std::string(path));
         }
 
+        if (!cfg.r2_adapters.empty() && !cfg.polya_trim)   // adapter trimming makes R2 variable-length, which only the poly(A) mode stores
+            throw std::runtime_error("WriterConfig::r2_adapters needs polya_trim (variable-length R2)");
         // Set up barcode dictionary mode and optional I2 stream
         use_bc_dict_ = !cfg.bc_dict.empty() && cfg.bc_length > 0;
         has_i2_stream_ = cfg.has_i2_stream && cfg.i2_length > 0;

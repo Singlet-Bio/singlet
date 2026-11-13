@@ -119,6 +119,27 @@ elif kind == "dgebc":
     res.update(cell_ratio=r, genes_ratio=g, umi_ratio=res["median_umi"] / max(1.0, au))
     res["bars"] = {"cells_ratio": 0.6 <= r <= 1.6, "genes_ratio_0.4_1.25": 0.4 <= g <= 1.25, "recall>=0.7": res["recall"] >= 0.7,
                    "precision>=0.8": res["precision"] >= 0.8, "status_success": summ.get("status") == "success"}
+    if opts.get("bars") == "ordinary":   # barcodes of the deposit are not comparable (inDrop: padded canonical barcodes): ordinary-library bars only
+        res["bars"].pop("recall>=0.7")
+        res["bars"].pop("precision>=0.8")
+elif kind == "mtx":
+    # a Matrix Market author deposit (genes x cells or cells x genes) with its genes/features and barcodes files; ordinary-library bars
+    paths = sys.argv[3:]
+    mp = [p for p in paths if ".mtx" in os.path.basename(p)][0]
+    n_lines = lambda p: sum(1 for _ in (gzip.open(p, "rt") if p.endswith(".gz") else open(p)))
+    gp = [p for p in paths if "genes" in os.path.basename(p) or "features" in os.path.basename(p)][0]
+    bp = [p for p in paths if "barcodes" in os.path.basename(p)][0]
+    ng, nb = n_lines(gp), n_lines(bp)
+    Mt = scipy.io.mmread(mp).tocsc()
+    X = Mt if Mt.shape == (ng, nb) else Mt.T.tocsc()
+    ac = X.shape[1]
+    ag = float(np.median(np.diff(X.indptr)))
+    au = float(np.median(np.asarray(X.sum(0)).ravel()))
+    res.update(author_cells=int(ac), author_median_genes=ag, author_median_umi=au)
+    r = res["cells_called"] / max(1, ac)
+    g = res["median_genes"] / max(1.0, ag)
+    res.update(cell_ratio=r, genes_ratio=g, umi_ratio=res["median_umi"] / max(1.0, au))
+    res["bars"] = {"cells_ratio": 0.6 <= r <= 1.6, "genes_ratio_0.4_1.25": 0.4 <= g <= 1.25, "status_success": summ.get("status") == "success"}
 else:
     if kind == "dge":
         T = read_dge(sys.argv[3])

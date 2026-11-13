@@ -1729,6 +1729,11 @@ class SraEncoder {
             wcfg.r1_indrop = indrop_anchor;
             // Illumina read-through adapter and the reverse complement of W1 (a cDNA insert shorter than the read runs into them)
             wcfg.r2_adapters.seqs = {AdapterSet::from_string("AGATCGGAAGAGC"), AdapterSet::from_string("AAGGCGTCACAAGCAATCACTC")};
+            // R2 becomes variable-length, which the writer stores through its poly(A) trim mode: the standard 3' setting of the other droplet
+            // protocols (apply_protocol_to_writer returned early for inDrop, so its R2 was the only one never poly(A) trimmed)
+            wcfg.polya_trim = true;
+            wcfg.polya_min_len = 10;
+            wcfg.polya_max_mm = 1;
         }
 
         // ATAC 3-read: enable I2 barcode stream so barcodes survive into the .1fq
@@ -1788,7 +1793,7 @@ class SraEncoder {
             wcfg.r2_maxlen = cfg.r2_maxlen;
         else if (auto_r2_maxlen > 0)
             wcfg.r2_maxlen = auto_r2_maxlen;
-        if (cfg.no_trim) wcfg.polya_trim = false;
+        if (cfg.no_trim) { wcfg.polya_trim = false; wcfg.r2_adapters.seqs.clear(); }
         if (cfg.trim_polya && !cfg.no_trim && is_3prime_protocol(detected_proto.tag)) {   // --trim-polya (10x Visium's pre-1.3.x behavior)
             wcfg.polya_trim = true; wcfg.polya_min_len = 10; wcfg.polya_max_mm = 1;
         }

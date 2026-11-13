@@ -65,9 +65,10 @@ STATUS=$(python3 -I -c "import json;d=json.load(open('$OUT/res/summary.json'));p
 echo "summary: $STATUS"
 SC=""
 if [ "$KIND" != "-" ]; then
-  mkdir -p $W/data/non10x/truth; T=""
-  for u in $TRUTH; do f=$W/data/non10x/truth/$(basename $u); [ -s $f ] || curl -sL -o $f "$u"; T="$T $f"; done
-  SC=$(python3 -I ${SCORE:?} $KIND $OUT/res $T 2>&1 | tail -1 | tr -d "'")
+  TRD2=$W/data/validation-engine/non10x/truth; mkdir -p $TRD2; T=""
+  for u in $TRUTH; do f=$W/data/non10x/truth/$(basename $u); [ -s $f ] || { f=$TRD2/$(basename $u); [ -s $f ] || curl -sL -o $f "$u"; }; T="$T $f"; done
+  KB=${KIND%%:*}; KO=""; case $KIND in *:*) KO=${KIND#*:} ;; esac   # KIND may carry scorer options after a colon (score.py dgebc)
+  SC=$(python3 -I ${SCORE:?} $KB $OUT/res ${KO:+"$KO"} $T 2>&1 | tail -1 | tr -d "'")
 fi
 echo "$SC"
 python3 -I - <<PY >> $OUTROOT/results.jsonl
