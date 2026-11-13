@@ -191,3 +191,26 @@ What is missing or costly:
 8. Cell Ranger 5' BAMs: only the barcode and UMI of read 1 are in the tags, not the rest of read 1. 5' detection that uses read 1 motifs (the TSO tail after the barcode read) has nothing to read; the cDNA read motifs and the TX/AN strand remain.
 
 Total: 3 to 5 working days from the current state, of which items 1, 2, 5 and the idxstats part of 4 (about 3 days) make the first processed sample.
+
+## Action policy for ambiguous verdicts
+
+Only the action changes; the classifier, its scores and the verdict `ambiguous` are untouched (`apply_policy` in `identify.h` reads the verdict and the ranked interpretations and writes only action, note, hints and `defer_candidates`).
+
+| the two interpretations | action | hint |
+|---|---|---|
+| both single-cell (droplet, plate, combinatorial, Smart-seq, multiome, feature barcode, V(D)J, ATAC, Flex, Visium, barcode read missing) | defer, both named as `family/protocol` in `defer_candidates` and in the note | not needed; `hint_used` false |
+| one is not single-cell (bulk, genomic DNA, bisulfite, not sequence, unknown, no-barcode RNA) | refuse | `single_cell=1` selects defer, `hints[]` records the change, `hint_used` true; `assay=smartseq` keeps its earlier rule |
+
+`hint_used` is also true when `single_cell=1` turns a refuse into a defer for a bulk, genomic or unknown verdict (as before, now stated in the record). A hint never changes the verdict.
+
+The two held-out rows that were refused as `ambiguous` (scored once with the frozen binary, not rescored): SRR7827205 (sci-RNA-seq3, ambiguous between plate_barcoded and combinatorial) and SRR13247000 (human-mouse Drop-seq, between droplet_other and plate_barcoded). Both interpretations are single-cell, so the rule gives defer with both candidates named and no hint. The held-out panel is spent: no figure in `results_heldout/` changes.
+
+## Candidates for a later held-out round (studies in neither panel; metadata only, labels still to be assigned from each run's protocol text)
+
+| study | protocol | why |
+|---|---|---|
+| GSE92495 | Seq-Well, human and mouse mixture | Seq-Well against Drop-seq: the two-interpretation case |
+| GSE110688, GSE127005 | inDrop, mouse | inDrop has no sub-call yet; split-pool bead barcodes |
+| GSE100910 | inDrop, zebrafish kidney marrow | a species outside the filter set |
+| GSE114397 | inDrop RNA with ATAC in the same study | RNA and ATAC runs under one study |
+| GSE192708 | Well-paired-seq, human and mouse mixture | a microwell protocol with no spec |
