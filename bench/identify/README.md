@@ -117,3 +117,16 @@ unspecified layout (deferred), and Seq-Well and DroNc-seq runs with two long rea
 V(D)J enrichment, Visium probe sets and 10x Flex (no probe set is staged; Visium FFPE reads are called Visium through the spot list),
 a gene k-mer index route for layer D (the cluster has no built index), run-level duplication for the usefulness score, and the GEM-X 5' list
 (the 3' GEM-X list is staged and hit one run in this panel).
+
+## Wider endpoint survey of the 14 development runs without a barcode read
+
+`endpoints_nobarcode.tsv` holds one line per run and endpoint (SDL original-format objects, ENA submitted files and BAM, GEO supplementary files on the GSM and GSE, sibling runs), collected by metadata lookups only. Result: five of the 14 (the five SRS rows, 10x v1 CAR-T libraries) have an original-format BAM, listed by SDL as type `TenX` with a direct S3 link and by ENA as a submitted BAM with index. The other nine list original FASTQ files whose names are `bulkRNA`, `Bulk_RNAseq`, nanopore `pass_*.fastq`, `B_shear`, `Plko-2_1.fq` and `T_iMK_*`; they need rehydration from cold storage and look like bulk or long-read libraries that the panel label (10x) does not describe. No sibling run holds a separate barcode read, and no GEO supplementary listing offers a BAM or FASTQ for the four GSM records that could be checked (the SRS rows carry no GSM alias in ENA).
+
+### What `identify` needs to read the head of an original-format BAM (not implemented)
+
+Route: SDL `retrieve` (or the ENA `submitted_ftp` URL) gives an HTTPS object that accepts range requests.
+1. Fetch the first 32 MB by ranged GET (200,000 records of a Cell Ranger BAM are about 25 MB compressed), cut the buffer at the last complete BGZF block, and hand it to the existing `bam:` head reader as a local file in node-local scratch. This costs one small function and no new parser.
+2. Cell Ranger BAMs are coordinate sorted, so the first records all come from one chromosome start. Barcode evidence is unaffected. Layer D (end bias, species, strand) needs a spread sample: take four to eight ranged GETs of 4 MB each at evenly spaced offsets, resynchronize on the BGZF block magic (1f 8b 08 04 with the BC subfield) and concatenate the records.
+3. Barcode read: the head reader takes `CR` and `UR` (raw barcode and UMI). These BAMs must be checked once for those tags; the CART files are labeled "split_output_search_scrubbed" and may carry only `CB` and `UB`, in which case the corrected tags serve for the list hit and the barcode read length is taken from the tag. Reads with flag 16 are reverse complemented before they enter the head.
+4. The endpoint record gains the object type and name, the bytes fetched and the tag set found. A `barcode_read_missing` verdict then names the BAM as the endpoint to use.
+Cost: about a day, mostly for the multi-offset sampler and a test on a truncated BAM.
