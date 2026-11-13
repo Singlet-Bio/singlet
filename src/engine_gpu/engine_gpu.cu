@@ -292,6 +292,23 @@ __global__ void k_group_head(const uint32_t* order, const uint32_t* hp, u64 n, u
     if (k >= n) return;
     gh[order[k]] = order[hp[k]];
 }
+// The reads phase's groups on the device (was a host loop over every read). I: partition position -> read; gh: per partition position the
+// position of its group's head (k_group_head); hN: per-read flags (indexed by read). rr[j] = what readRep[I[j]] gets; fl[j]: bit 0 = a head kept
+// as a representative (no repMask bits), bit 1 = a head (distinct), bit 2 = a head with N flags.
+__global__ void k_dedup_groups(const uint32_t* I, const uint32_t* gh, const uint8_t* hN, u64 m, uint8_t rrMask, uint8_t repMask, uint32_t* rr, uint8_t* fl) {
+    const u64 j = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (j >= m) return;
+    const uint32_t h = gh[j], gj = I[j];
+    if (h != j) {
+        const uint32_t gH = I[h];
+        rr[j] = (hN[gH] & rrMask) ? 0xFFFFFFFFu : gH; fl[j] = 0;
+    } else {
+        const uint8_t f = hN[gj];
+        rr[j] = (f & rrMask) ? 0xFFFFFFFFu : gj;
+        fl[j] = (uint8_t) (2 | (f ? 4 : 0) | ((f & repMask) ? 0 : 1));
+    }
+}
+struct FlBit { uint8_t b; __host__ __device__ bool operator()(uint8_t f) const { return (f & b) != 0; } };
 
 // ---- staged lanes (bench/gpu/m5/m5.cu)
 template <class C>
@@ -1900,7 +1917,20 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     std::atomic<u64> coll{0};
     u64 nDist = 0, nWN = 0;
     std::vector<std::vector<uint32_t>> repT(nT);
-    double tSort = 0, tHostD = 0;
+    double tSort = 0, tHostD = 0, tDevG = 0;
+    // The groups' products (readRep, rep, the counts) on the device unless !bgOn (the host's byte check stays there) or
+    // SINGLET_ENGINE_GPU_DEDUP_GROUPS=host (the host loop, as before); =check runs both and fails the mapping if they differ.
+    // hN is on the device for the whole dedup; without room for it the host loop does everything.
+    const char* dgE = std::getenv("SINGLET_ENGINE_GPU_DEDUP_GROUPS");
+    const std::string dgM = dgE ? dgE : "";
+    const bool dgCheck = dgM == "check";
+    bool devGrp = bgOn && dgM != "host";
+    uint8_t* dHN = nullptr;
+    if (devGrp) {
+        if (!al(dHN, n)) devGrp = false;
+        else if (!(staged ? SR.copy(dHN, hN.data(), n) && SR.finish() : cudaMemcpy(dHN, hN.data(), n, cudaMemcpyHostToDevice) == cudaSuccess)) { cudaGetLastError(); devGrp = false; }
+    }
+    singlet_engine_gpu::NoInitVector<uint32_t> rrH(devGrp ? maxP : 0), repD(devGrp ? maxP : 0);
     for (u64 p = 0; p < NP; p++) {
         const u64 m = pBeg[p + 1] - pBeg[p];
         if (m == 0) continue;
@@ -1925,6 +1955,44 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         uint32_t* const gh = bgOn ? bgv.gh.data() + pBeg[p] : ghH.data();
         if (!d2h(gh, pGh, m * 4)) return fail("dedup copy");
         tSort += now() - ta; ta = now();
+        bool devDone = false;
+        if (devGrp) {   // pk1, pk2 are free: I and rr in pk1, the compacted reps and the flags in pk2
+            const double td = now();
+            uint32_t* const dI = (uint32_t*) pk1; uint32_t* const dRR = dI + m; uint32_t* const dOut = (uint32_t*) pk2; uint8_t* const dFl = (uint8_t*) (dOut + m);
+            if (!(staged ? SR.copy(dI, I, m * 4) && SR.finish() : cudaMemcpy(dI, I, m * 4, cudaMemcpyHostToDevice) == cudaSuccess)) return fail("dedup groups upload");
+            u64 nRp = 0, dD = 0, dW = 0;
+            try {
+                k_dedup_groups<<<(unsigned) ((m + 255) / 256), 256>>>(dI, pGh, dHN, m, rrMask, repMask, dRR, dFl);
+                thrust::device_ptr<uint8_t> fl(dFl);
+                nRp = (u64) (thrust::copy_if(TP, thrust::device_ptr<uint32_t>(dI), thrust::device_ptr<uint32_t>(dI + m), fl, thrust::device_ptr<uint32_t>(dOut), FlBit{1})
+                             - thrust::device_ptr<uint32_t>(dOut));
+                dD = (u64) thrust::count_if(TP, fl, fl + m, FlBit{2});
+                dW = (u64) thrust::count_if(TP, fl, fl + m, FlBit{4});
+                devDone = cudaStreamSynchronize(0) == cudaSuccess && d2h(rrH.data(), dRR, m * 4) && d2h(repD.data(), dOut, nRp * 4);
+            } catch (const std::exception&) { devDone = false; }
+            if (!devDone) cudaGetLastError();   // the host loop does this partition
+            tDevG += now() - td;
+            if (devDone) {
+                ta = now();
+                parallelFor(m, hostThreads, [&](u64 lo, u64 hi) { for (u64 j = lo; j < hi; j++) readRep[I[j]] = rrH[j]; });
+                rep.insert(rep.end(), repD.data(), repD.data() + nRp);
+                nDist += dD; nWN += dW;
+                tHostD += now() - ta;
+                if (dgCheck) {   // the host loop's products of this partition, compared with the device's
+                    std::vector<uint32_t> repR; u64 dR = 0, wR = 0; bool bad = false;
+                    for (u64 j = 0; j < m; j++) {
+                        const uint32_t h = gh[j], gj = I[j], gH = I[h];
+                        uint32_t v;
+                        if (h != j) v = (hN[gH] & rrMask) ? NONE : gH;
+                        else { dR++; if (hN[gj]) wR++; v = (hN[gj] & rrMask) ? NONE : gj; if (!(hN[gj] & repMask)) repR.push_back(gj); }
+                        if (readRep[gj] != v) bad = true;
+                    }
+                    if (bad || dR != dD || wR != dW || repR.size() != nRp || (nRp && std::memcmp(repR.data(), repD.data(), nRp * 4) != 0))
+                        return fail("dedup groups check: the device's readRep / rep / counts differ from the host loop's in hash partition " + std::to_string(p));
+                }
+                continue;
+            }
+        }
         std::vector<u64> dT(nT, 0), nT1(nT, 0), cT(nT, 0);
         std::vector<std::thread> th;
         for (u64 t = 0; t < nT; t++) th.emplace_back([&, t]() {
@@ -2012,10 +2080,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     }
     decltype(pkey)().swap(pkey);
     {
-        char l[600];
+        char l[700];
         snprintf(l, sizeof l, "engine_gpu: P3-MEM-03 reads phase in %llu read chunks of %llu: upload %.2f s, kernels %.2f s, to the host %.2f s; dedup in %llu hash "
-                 "partitions (largest %llu reads): sort %.2f s, groups on the host %.2f s, %llu distinct (%llu with N), %s; order %.2f s (%s)\n",
-                 (unsigned long long) nRC, (unsigned long long) RCN, tUp, tKer, tD2H, (unsigned long long) NP, (unsigned long long) maxP, tSort, tHostD,
+                 "partitions (largest %llu reads): sort %.2f s, groups on the host %.2f s, groups on the device %.2f s, %llu distinct (%llu with N), %s; order %.2f s (%s)\n",
+                 (unsigned long long) nRC, (unsigned long long) RCN, tUp, tKer, tD2H, (unsigned long long) NP, (unsigned long long) maxP, tSort, tHostD, tDevG,
                  (unsigned long long) nDist, (unsigned long long) nWN, bgOn ? "byte check beside the lanes" : "0 collisions", now() - tO0, sorted || nRep == 0 ? "device" : "host");
         out.log += l;
     }
