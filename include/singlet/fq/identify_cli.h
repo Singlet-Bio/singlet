@@ -304,6 +304,8 @@ inline std::string self_exe_path() {
     return len > 0 ? std::string(buf, static_cast<size_t>(len)) : std::string("singlet");
 }
 
+inline std::string& dump_dir() { static std::string d; return d; }   // --dump DIR: the first 40 spots of each source, for layout diagnosis
+
 inline Report identify_source(const std::string& source, const std::string& hint_in, const std::string& route, size_t n_reads,
                               std::vector<ScreenWhitelist>& lists, Options opt, const std::string& genome_dir, size_t map_reads, int threads) {
     Report R;
@@ -338,6 +340,16 @@ inline Report identify_source(const std::string& source, const std::string& hint
         R.action = "refuse"; R.action_note = "head could not be read";
         return R;
     }
+    if (!dump_dir().empty()) {
+        std::string id = source.substr(0, 40);
+        for (auto& c : id) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
+        std::ofstream d(dump_dir() + "/" + id + ".spots.txt");
+        for (size_t i = 0; i < std::min<size_t>(spots.size(), 40); ++i) {
+            for (size_t k = 0; k < spots[i].seg.size(); ++k) d << (k ? "|" : "") << spots[i].seg[k];
+            d << "
+";
+        }
+    }
     measure(spots, opt, lists, R.ev);
     if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
@@ -361,6 +373,7 @@ inline int identify_main(int argc, char** argv) {
         else if (a == "--json") json_out = next();
         else if (a == "--route") route = next();
         else if (a == "--list") list_path = next();
+        else if (a == "--dump") dump_dir() = next();
         else if (a == "--out-dir") out_dir = next();
         else if (a == "-h" || a == "--help") {
             std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena]\n"
