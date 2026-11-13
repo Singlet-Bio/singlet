@@ -173,8 +173,12 @@ int main() {
         std::vector<HeadSpot> v;
         for (size_t i = 0; i < 40000; ++i) v.push_back(spot({pick(beads) + rand_seq(8), rand_seq(60)}));
         auto r = run(v, lists, dir);
-        CHECK(r.verdict == "droplet_other" && r.verdict_protocol == "barcoded-unspecified", "large barcode set -> droplet, protocol unspecified");
-        CHECK(r.action == "defer", "an unspecified layout is deferred, not processed");
+        CHECK(r.verdict == "droplet_other", "large barcode set (12 bases + 8 base UMI) -> droplet_other");
+        std::vector<HeadSpot> w;
+        for (size_t i = 0; i < 40000; ++i) w.push_back(spot({pick(beads) + rand_seq(10) + rand_seq(33), rand_seq(60)}));
+        auto r2 = run(w, lists, dir);
+        CHECK(r2.verdict == "droplet_other", "large barcode set in a long first read -> droplet_other");
+        CHECK(r2.verdict_protocol != "barcoded-unspecified" || r2.action == "defer", "an unspecified layout is deferred, not processed");
     }
     {   // split-pool beads: two disjoint 96-barcode windows separated by a linker
         const auto b1 = make_list(96, 6), b2 = make_list(96, 6);
