@@ -20,11 +20,14 @@
 #include <cstdio>
 #include <cstring>
 #include <future>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "adapter_trim.h"
 #include "compress.h"
+#include "indrop_anchor.h"
 #include "packing.h"
 #include "types.h"
 
@@ -106,6 +109,12 @@ struct WriterConfig {
     uint8_t polya_min_len = 10;  // Min consecutive A's to trigger trim
     uint8_t polya_max_mm = 1;    // Max mismatches in polyA tail
 
+    // R1 rewriting: when set, every R1 passed to add_read() is first turned into the fixed cfg.r1_length read this object
+    // writes (inDrop's W1-anchored barcodes, indrop_anchor.h). Reads whose barcode cannot be resolved get N in the barcode slots.
+    std::shared_ptr<IndropAnchor> r1_indrop;
+    // 3' adapter trimming of R2 (adapter_trim.h), before the poly(A) trim; empty = off.
+    AdapterSet r2_adapters;
+
     // Dedup mode (Phase 3) — when true, add_read accepts dup_count
     bool deduped = false;
 
@@ -148,6 +157,8 @@ class Writer {
             if (!fp_) throw std::runtime_error("Cannot open for writing: " + std::string(path));
         }
 
+        if (!cfg.r2_adapters.empty() && !cfg.polya_trim)   // adapter trimming makes R2 variable-length, which only the poly(A) mode stores
+            throw std::runtime_error("WriterConfig::r2_adapters needs polya_trim (variable-length R2)");
         // Set up barcode dictionary mode and optional I2 stream
         use_bc_dict_ = !cfg.bc_dict.empty() && cfg.bc_length > 0;
         has_i2_stream_ = cfg.has_i2_stream && cfg.i2_length > 0;
@@ -272,6 +283,31 @@ class Writer {
                   const uint8_t* r1_seq, uint16_t r1_len,
                   const uint8_t* r1_qual,
                   uint32_t dup_count = 1) {
+        uint8_t canon_r1[IndropAnchor::kCanonLen];
+        if (cfg_.r1_indrop) {
+            cfg_.r1_indrop->canonicalize(r1_seq, r1_len, canon_r1);
+            r1_seq = canon_r1;
+            r1_len = IndropAnchor::kCanonLen;
+        }
+        // Adapter read-through on R2 (kept at 20 bases or more, as the poly(A) trim below)
+        if (!cfg_.r2_adapters.empty() && r2_len > 20) {
+            const uint16_t keep = cfg_.r2_adapters.cut(r2_seq, r2_len);
+            r2_len = keep < 20 ? static_cast<uint16_t>(20) : keep;
+        }
+        // inDrop: an insert shorter than the read runs through the poly(A) tail into the reverse complement of the barcode (BC2, W1),
+        // so the poly(A) is internal and the terminal poly(A) trim below does not see it (11.8% of the cDNA reads of the Baron islet
+        // library; 25% of the reads STAR leaves unmapped). Cut at the start of the first run of 10 or more A (kept at 20 bases or more).
+        if (cfg_.r1_indrop && cfg_.polya_trim && r2_len > 20) {
+            uint16_t run = 0;
+            for (uint16_t i = 0; i < r2_len; ++i) {
+                run = (r2_seq[i] == 0) ? static_cast<uint16_t>(run + 1) : 0;
+                if (run >= 10) {
+                    const uint16_t cut = static_cast<uint16_t>(i + 1 - run);
+                    r2_len = cut < 20 ? static_cast<uint16_t>(20) : cut;
+                    break;
+                }
+            }
+        }
         // PolyA trimming on R2 3' end
         uint16_t trim_len = 0;
         uint16_t effective_r2_len = r2_len;

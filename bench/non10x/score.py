@@ -85,6 +85,61 @@ if kind == "barnyard":
                    "share_pure>=0.9": res["share_major_ge_090"] >= 0.9,
                    "mixed_within_3pp": abs(res["mixed_rate"] - amixed) <= 0.03,
                    "spearman>=0.9": res.get("umi_spearman", 0) >= 0.9, "status_success": summ.get("status") == "success"}
+elif kind == "dgebc":
+    # author matrices whose columns carry the cell barcode (Mereu 2020 Drop-seq "Dropseq_N701_ACGT..." in two files, human and mouse, same columns;
+    # Hughes 2020 Seq-Well, comma separated, columns = barcodes). argv[3] = "prefix=<column prefix>;sep=<ws|comma>", argv[4:] = files, summed.
+    # Bars as the ordinary libraries (cells 0.6-1.6x, genes 0.4-1.25x, status success) plus barcode recall >= 0.70 and precision >= 0.80.
+    opts = dict(kv.split("=", 1) for kv in sys.argv[3].split(";") if "=" in kv)
+    prefix, sep = opts.get("prefix", ""), opts.get("sep", "ws")
+    tabs = []
+    for pth in sys.argv[4:]:
+        d = pd.read_csv(pth, sep=("," if sep == "comma" else r"\s+"), index_col=0, engine="python" if sep != "comma" else "c")
+        d = d[[c for c in d.columns if str(c).startswith(prefix)]] if prefix else d
+        d.columns = [str(c)[len(prefix):].split("-")[0] for c in d.columns]
+        tabs.append(d)
+    T = tabs[0]
+    for d in tabs[1:]:
+        T = pd.concat([T, d], axis=0, sort=False)   # different species: rows are different genes, columns the same barcodes
+    T = T.fillna(0)
+    T = T.groupby(level=0).sum() if T.index.has_duplicates else T
+    ac = T.shape[1]
+    aset = set(T.columns.astype(str))
+    ag = float(np.median((T.values > 0).sum(0)))
+    au = float(np.median(T.values.sum(0)))
+    comp = str.maketrans("ACGT", "TGCA")
+    rc = lambda b: b.translate(comp)[::-1]
+    direct = len(set(cells) & aset)
+    flipped = len({rc(b) for b in cells} & aset)
+    orient = "direct" if direct >= flipped else "revcomp"
+    inter = max(direct, flipped)
+    res.update(author_cells=int(ac), author_median_genes=ag, author_median_umi=au, recall=inter / max(1, ac), precision=inter / max(1, len(cells)),
+               barcode_orientation=orient, recall_direct=direct / max(1, ac), recall_revcomp=flipped / max(1, ac))
+    r = res["cells_called"] / max(1, ac)
+    g = res["median_genes"] / max(1.0, ag)
+    res.update(cell_ratio=r, genes_ratio=g, umi_ratio=res["median_umi"] / max(1.0, au))
+    res["bars"] = {"cells_ratio": 0.6 <= r <= 1.6, "genes_ratio_0.4_1.25": 0.4 <= g <= 1.25, "recall>=0.7": res["recall"] >= 0.7,
+                   "precision>=0.8": res["precision"] >= 0.8, "status_success": summ.get("status") == "success"}
+    if opts.get("bars") == "ordinary":   # barcodes of the deposit are not comparable (inDrop: padded canonical barcodes): ordinary-library bars only
+        res["bars"].pop("recall>=0.7")
+        res["bars"].pop("precision>=0.8")
+elif kind == "mtx":
+    # a Matrix Market author deposit (genes x cells or cells x genes) with its genes/features and barcodes files; ordinary-library bars
+    paths = sys.argv[3:]
+    mp = [p for p in paths if ".mtx" in os.path.basename(p)][0]
+    n_lines = lambda p: sum(1 for _ in (gzip.open(p, "rt") if p.endswith(".gz") else open(p)))
+    gp = [p for p in paths if "genes" in os.path.basename(p) or "features" in os.path.basename(p)][0]
+    bp = [p for p in paths if "barcodes" in os.path.basename(p)][0]
+    ng, nb = n_lines(gp), n_lines(bp)
+    Mt = scipy.io.mmread(mp).tocsc()
+    X = Mt if Mt.shape == (ng, nb) else Mt.T.tocsc()
+    ac = X.shape[1]
+    ag = float(np.median(np.diff(X.indptr)))
+    au = float(np.median(np.asarray(X.sum(0)).ravel()))
+    res.update(author_cells=int(ac), author_median_genes=ag, author_median_umi=au)
+    r = res["cells_called"] / max(1, ac)
+    g = res["median_genes"] / max(1.0, ag)
+    res.update(cell_ratio=r, genes_ratio=g, umi_ratio=res["median_umi"] / max(1.0, au))
+    res["bars"] = {"cells_ratio": 0.6 <= r <= 1.6, "genes_ratio_0.4_1.25": 0.4 <= g <= 1.25, "status_success": summ.get("status") == "success"}
 else:
     if kind == "dge":
         T = read_dge(sys.argv[3])

@@ -60,6 +60,7 @@
 #include <filesystem>
 #include "singlet/pileup/stall_watchdog.h"
 #include "singlet/pileup/pileup_engine.h"
+#include "singlet/pileup/barcode_collapse.h"
 #include "singlet/pileup/export.h"
 #include "singlet/pileup/chimeric_table.h"
 #include "singlet/pipeline/hla_typing.h"   // D-101: HLA typing with T1K from the input reads
@@ -6860,6 +6861,41 @@ static int singlet_main(int argc, char* argv[]) {
                           [](const auto& a, const auto& b) { return a.first > b.first; });
             if (cb_universe) corrected_universe(sorted_bcs);
 
+            // Whitelist-free droplet protocols (Drop-seq, Seq-Well): merge error barcodes (one substitution from a larger barcode) into
+            // their parent before the universe is written; the pileup counts the aliases under the parent (barcode_collapse.h).
+            // SINGLET_NO_BC_COLLAPSE=1 turns it off (A/B runs).
+            {
+                std::string wf_tag;
+                for (const auto& sp : singlet::fq::known_protocols())
+                    if (sp.protocol_id == onefq_protocol_id) { wf_tag = sp.tag; break; }
+                if (!meta_json_proto_tag.empty()) wf_tag = meta_json_proto_tag;
+                wf_tag = singlet::fq::normalize_tag(wf_tag);
+                const bool wf_droplet = (whitelist_file == "None" || whitelist_file == "none") && (wf_tag == "dropseq" || wf_tag == "seqwell");
+                const char* no_collapse = std::getenv("SINGLET_NO_BC_COLLAPSE");
+                if (wf_droplet && !(no_collapse && no_collapse[0] == '1') && !sorted_bcs.empty()) {
+                    static constexpr char UNPACK_C[5] = {'A','C','G','T','N'};
+                    std::unordered_map<std::string, uint64_t> all_counts;
+                    for (auto& [key, cnt] : onefq_bc_counts) {
+                        if (cnt < 5) continue;
+                        std::string bc(bc_len, ' ');
+                        uint64_t k = key;
+                        for (int j = bc_len - 1; j >= 0; --j) { bc[j] = UNPACK_C[k & 0x7]; k >>= 3; }
+                        all_counts.emplace(std::move(bc), cnt);
+                    }
+                    constexpr double kCollapseRatio = 3.0;
+                    singlet::BarcodeCollapseResult cr = singlet::collapse_barcodes(sorted_bcs, kCollapseRatio, &all_counts, 5);
+                    const std::string alias_file = out_prefix + "/auto_barcode_aliases.tsv";
+                    std::ofstream al_out(alias_file);
+                    for (const auto& [a, b] : cr.alias) al_out << a << "\t" << b << "\n";
+                    al_out.close();
+                    config.barcode_alias_path = alias_file;
+                    std::cerr << "[singlet] Barcode collapse (" << wf_tag << ", ratio " << kCollapseRatio << "): " << sorted_bcs.size() << " discovered -> "
+                              << cr.kept.size() << " kept; " << cr.n_children_in_universe << " merged into a larger neighbor, "
+                              << cr.n_small_aliases << " smaller neighbors aliased\n";
+                    sorted_bcs = std::move(cr.kept);
+                }
+            }
+
             auto_barcode_file = out_prefix + "/auto_barcodes.tsv";
             std::ofstream bc_out(auto_barcode_file);
             for (auto& [cnt, bc] : sorted_bcs)
@@ -7403,6 +7439,8 @@ static int singlet_main(int argc, char* argv[]) {
                             if (filt_out) {
                                 for (const auto& kv : prescan_counts) {
                                     if (kv.second < min_cnt) continue;
+                                    // reads whose barcode the encoder could not resolve carry N in every barcode slot (inDrop, indrop_anchor.h)
+                                    if (kv.first.find_first_not_of('N') == std::string::npos) continue;
                                     if (use_wl_guard &&
                                         full_wl_set.count(kv.first) == 0) continue;
                                     filt_out << kv.first << '\n';
@@ -9682,6 +9720,22 @@ static int singlet_main(int argc, char* argv[]) {
                 if (cnt >= CB_MIN_READS) cb_sorted.emplace_back(cnt, bc);
             std::sort(cb_sorted.begin(), cb_sorted.end(),
                       [](const auto& a, const auto& b) { return a.first > b.first; });
+            // Whitelist-free droplet protocols (Drop-seq, Seq-Well): the refresh lists every CB tag with 5 or more reads, which puts the
+            // sequencing-error and bead-synthesis-error barcodes back as columns of their own (1.19 M at 268 M reads), so the collapse made
+            // at decode time was undone and the cell caller saw an unmerged rank curve. Collapse the refreshed list the same way.
+            if (!config.barcode_alias_path.empty() && !cb_sorted.empty()) {
+                std::vector<std::pair<uint64_t, std::string>> rs;
+                rs.reserve(cb_sorted.size());
+                for (const auto& [cnt, bc] : cb_sorted) rs.emplace_back(cnt, bc);
+                singlet::BarcodeCollapseResult rcr = singlet::collapse_barcodes(rs, 3.0, nullptr, 5);
+                std::ofstream al_out(config.barcode_alias_path);
+                for (const auto& [x, y] : rcr.alias) al_out << x << "\t" << y << "\n";
+                al_out.close();
+                std::cerr << "[singlet] Barcode collapse after the CB-tag refresh: " << cb_sorted.size() << " -> " << rcr.kept.size()
+                          << " barcodes (" << rcr.n_children_in_universe << " merged into a larger neighbor)\n";
+                cb_sorted.clear();
+                for (auto& [cnt, bc] : rcr.kept) cb_sorted.emplace_back(static_cast<uint32_t>(cnt), std::move(bc));
+            }
             if (!cb_sorted.empty()) {
                 std::ofstream bc_out(auto_barcode_file);
                 for (const auto& [cnt, bc] : cb_sorted) bc_out << bc << "\n";

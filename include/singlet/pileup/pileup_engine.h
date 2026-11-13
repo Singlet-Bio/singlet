@@ -133,6 +133,9 @@ struct PileupConfig {
     std::string edit_path;
     std::string exon_gtf_path;      // GTF/BED for exon intervals (used for GeneModel)
     std::string barcode_path;       // Filtered barcode list
+    // Optional: lines "alias<TAB>barcode" (barcode_collapse.h). Reads whose CB is an alias are counted under that barcode; aliases are
+    // not columns of their own. Only the whitelist-free droplet protocols (Drop-seq, Seq-Well) write one.
+    std::string barcode_alias_path;
     std::string out_chrm_bam;       // Output: chrM BAM
     int threads = 4;
     int finalize_threads = 1;       // end-of-stream finalize (molecule labelling); the result does not depend on it
@@ -4381,6 +4384,24 @@ private:
         }
         bc_index_.build(barcodes_);
         std::cerr << "[singlet-pileup] Loaded " << barcodes_.size() << " barcodes\n";
+        if (!config_.barcode_alias_path.empty()) {
+            LineReader af(config_.barcode_alias_path);
+            uint64_t n_alias = 0, n_orphan = 0;
+            std::string aline;
+            while (af.good() && af.getline(aline)) {
+                const auto tab = aline.find('\t');
+                if (aline.empty() || aline[0] == '#' || tab == std::string::npos) continue;
+                std::string child = aline.substr(0, tab), parent = aline.substr(tab + 1);
+                while (!parent.empty() && (parent.back() == '\r' || parent.back() == '\n' || parent.back() == ' ')) parent.pop_back();
+                const int32_t pi = bc_index_.lookup(parent.c_str());
+                if (pi < 0) { ++n_orphan; continue; }
+                if (bc_index_.lookup(child.c_str()) >= 0) continue;   // a column of its own wins
+                bc_index_.map[hash_cstr(child.c_str(), child.size())] = pi;
+                ++n_alias;
+            }
+            std::cerr << "[singlet-pileup] Barcode aliases (collapsed bead-synthesis and sequencing-error barcodes): " << n_alias << " from "
+                      << config_.barcode_alias_path << (n_orphan ? " (" + std::to_string(n_orphan) + " without a parent)" : std::string()) << "\n";
+        }
         return !barcodes_.empty();
     }
 

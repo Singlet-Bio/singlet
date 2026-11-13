@@ -1168,6 +1168,21 @@ class SraEncoder {
         // ── Re-segment probe spots if protocol R1 < observed R1 ──
         // This handles concatenated reads and over-sequenced R1.
         uint16_t split_r1 = detected_proto.r1_length;
+        // inDrop with a separate barcode read: the writer finds BC1 (8-11 nt) from the W1 linker (indrop_anchor.h), so the barcode
+        // read is passed whole (no cut to 46 nt, which would take the UMI of an 11-nt BC1 read) and written as a fixed 46-nt read.
+        // SINGLET_INDROP_FIXED_WINDOW=1 restores the fixed 10-nt BC1 window, for A/B runs.
+        std::shared_ptr<IndropAnchor> indrop_anchor;
+        if (protocol_tag == "indrop" && r2_len > 0 && r1_len >= 44 && !std::getenv("SINGLET_INDROP_FIXED_WINDOW")) {
+            auto a = std::make_shared<IndropAnchor>();
+            if (a->load(cfg.whitelist_dirs)) {
+                indrop_anchor = a;
+                split_r1 = 0;
+                std::cerr << "[1fq-encode] inDrop: W1-anchored barcodes (BC1 8-11 nt), R1 " << r1_len << " -> " << IndropAnchor::kCanonLen
+                          << " canonical\n";
+            } else {
+                std::cerr << "[1fq-encode] WARNING: inDrop barcode lists not found in the whitelist directories; fixed 10-nt BC1 window\n";
+            }
+        }
         // Offset within concatenated read where barcode starts (0 = beginning, default).
         // Set by WL validation when barcode is found at a non-zero offset within R2.
         int32_t  resegment_r1_off = 0;
@@ -1231,7 +1246,39 @@ class SraEncoder {
         // R1[bc_offset:bc_offset+bc_len] matches the protocol whitelist.
         // If match_rate < 5%, the reads are likely in wrong order; try R2 as barcode.
         // Only fires for whitelisted protocols (10x v1/v2/v3, etc.).
-        if (!probe_spots.empty() && detected_proto.bc_length > 0) {
+        // inDrop with W1-anchored barcodes: the check is "does the read resolve BC1, BC2 and the UMI from its W1 linker", in each
+        // orientation (some deposits hold the cDNA in read 1 and the barcode in read 2).
+        if (indrop_anchor && !probe_spots.empty()) {
+            const uint32_t n_check = std::min<uint32_t>(10000u, static_cast<uint32_t>(probe_spots.size()));
+            uint8_t tmp[IndropAnchor::kCanonLen];
+            uint32_t ok1 = 0, ok2 = 0;
+            for (uint32_t i = 0; i < n_check; ++i) {
+                const auto& sd = probe_spots[i];
+                if (indrop_anchor->canonicalize(sd.r1_seq.data(), sd.r1_len, tmp) == IndropAnchor::kOk) ++ok1;
+                if (sd.r2_len > 0 && indrop_anchor->canonicalize(sd.r2_seq.data(), sd.r2_len, tmp) == IndropAnchor::kOk) ++ok2;
+            }
+            indrop_anchor->reset_stats();
+            const double r1_rate = static_cast<double>(ok1) / n_check, r2_rate = static_cast<double>(ok2) / n_check;
+            std::cerr << "[1fq-encode] inDrop anchored-barcode check: read 1 " << ok1 << "/" << n_check << ", read 2 " << ok2 << "/" << n_check << "\n";
+            if (r2_rate > r1_rate && r2_rate >= 0.05 && !swap_skip) {
+                std::cerr << "[1fq-encode] Read swap detected: using read 2 as the inDrop barcode read\n";
+                wl_orientation_swap = true;
+                for (auto& sd : probe_spots) {
+                    std::swap(sd.r1_seq, sd.r2_seq);
+                    std::swap(sd.r1_qual, sd.r2_qual);
+                    std::swap(sd.r1_len, sd.r2_len);
+                }
+                std::swap(r1_len, r2_len);
+                std::swap(probe_r1_offset, probe_r2_offset);
+                if (r2_len > r1_len) r2_len = 0;   // variable cDNA length: the streaming phase gives the full read
+            } else if (std::max(r1_rate, r2_rate) < 0.05) {
+                std::cerr << "[1fq-encode] ERROR: low inDrop barcode resolution in both orientations (read 1 " << ok1 << "/" << n_check
+                          << ", read 2 " << ok2 << "/" << n_check << "). Data is likely barcode-stripped (data_incomplete). Aborting download.\n";
+                stats.exit_code = 2;
+                return stats;
+            }
+        }
+        if (!probe_spots.empty() && detected_proto.bc_length > 0 && !indrop_anchor) {
             const CandidateSpec* wl_spec = find_protocol_spec(protocol_tag);
             if (wl_spec && !wl_spec->whitelist_file.empty()) {
                 std::unordered_set<uint64_t> wl_hashes;
@@ -1677,6 +1724,17 @@ class SraEncoder {
         wcfg.protocol_id = protocol_id;
         wcfg.confidence = confidence;
         wcfg.assay_type = assay;
+        if (indrop_anchor) {   // the writer rewrites every barcode read to the fixed 46-nt layout and trims adapter read-through off R2
+            wcfg.r1_length = IndropAnchor::kCanonLen;
+            wcfg.r1_indrop = indrop_anchor;
+            // Illumina read-through adapter and the reverse complement of W1 (a cDNA insert shorter than the read runs into them)
+            wcfg.r2_adapters.seqs = {AdapterSet::from_string("AGATCGGAAGAGC"), AdapterSet::from_string("AAGGCGTCACAAGCAATCACTC")};
+            // R2 becomes variable-length, which the writer stores through its poly(A) trim mode: the standard 3' setting of the other droplet
+            // protocols (apply_protocol_to_writer returned early for inDrop, so its R2 was the only one never poly(A) trimmed)
+            wcfg.polya_trim = true;
+            wcfg.polya_min_len = 10;
+            wcfg.polya_max_mm = 1;
+        }
 
         // ATAC 3-read: enable I2 barcode stream so barcodes survive into the .1fq
         // and are injected into QNAMEs during singlet process fragment extraction.
@@ -1735,7 +1793,7 @@ class SraEncoder {
             wcfg.r2_maxlen = cfg.r2_maxlen;
         else if (auto_r2_maxlen > 0)
             wcfg.r2_maxlen = auto_r2_maxlen;
-        if (cfg.no_trim) wcfg.polya_trim = false;
+        if (cfg.no_trim) { wcfg.polya_trim = false; wcfg.r2_adapters.seqs.clear(); }
         if (cfg.trim_polya && !cfg.no_trim && is_3prime_protocol(detected_proto.tag)) {   // --trim-polya (10x Visium's pre-1.3.x behavior)
             wcfg.polya_trim = true; wcfg.polya_min_len = 10; wcfg.polya_max_mm = 1;
         }
@@ -2274,8 +2332,9 @@ class SraEncoder {
         t0 = Clock::now();
         std::string meta = build_metadata_json(
             cfg.source_label.empty() ? sra_path : cfg.source_label, protocol_tag, protocol_id, confidence, assay,
-            stats.wl_match_rate, r1_len, r2_len, count, clip5p_length, cfg,
-            writer.bc_whitelist_exact(), writer.bc_raw());
+            stats.wl_match_rate, indrop_anchor ? static_cast<uint16_t>(IndropAnchor::kCanonLen) : r1_len, r2_len, count, clip5p_length, cfg,
+            writer.bc_whitelist_exact(), writer.bc_raw(), static_cast<bool>(indrop_anchor));
+        if (indrop_anchor) indrop_anchor->report(std::cerr);
         if (writer.bc_whitelist_exact() + writer.bc_raw() > 0)
             std::fprintf(stderr, "[1fq-encode] barcodes: %llu whitelist-exact, %llu raw (%.2f%% exact)\n",
                          static_cast<unsigned long long>(writer.bc_whitelist_exact()),
@@ -2350,7 +2409,8 @@ class SraEncoder {
         uint16_t clip5p_length,
         const EncoderConfig& cfg,
         uint64_t bc_exact = 0,
-        uint64_t bc_raw = 0) {
+        uint64_t bc_raw = 0,
+        bool indrop_anchored = false) {
         // ── Compute processing route ──
         int cb_start = 1, cb_len = 0, umi_start = 1, umi_len = 0;
 
@@ -2577,8 +2637,13 @@ class SraEncoder {
                 j += "      \"soloCBposition\": [\"0_10_0_17\", \"0_48_0_55\", \"0_78_0_85\"],\n";
                 j += "      \"soloUMIposition\": \"0_0_0_9\"\n";
             } else if (canonical_tag == "indrop") {
-                j += "      \"soloCBposition\": [\"0_0_0_9\", \"0_32_0_39\"],\n";
-                j += "      \"soloUMIposition\": \"0_40_0_45\"\n";
+                if (indrop_anchored) {   // canonical read of indrop_anchor.h: BC1 in 11 slots, BC2, UMI
+                    j += "      \"soloCBposition\": [\"0_0_0_10\", \"0_11_0_18\"],\n";
+                    j += "      \"soloUMIposition\": \"0_19_0_24\"\n";
+                } else {
+                    j += "      \"soloCBposition\": [\"0_0_0_9\", \"0_32_0_39\"],\n";
+                    j += "      \"soloUMIposition\": \"0_40_0_45\"\n";
+                }
             } else if (canonical_tag == "ddseq") {
                 j += "      \"soloCBposition\": [\"0_0_0_5\", \"0_9_0_14\", \"0_18_0_23\"],\n";
                 j += "      \"soloUMIposition\": \"0_27_0_34\"\n";

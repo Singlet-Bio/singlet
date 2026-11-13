@@ -44,3 +44,50 @@ ends with status success and 10 or more called cells. Prefix: 4 M spots, auto pr
 A library is flagged (status align_bulk_like) when its barcode rank curve has no knee (no 5x UMI drop within a 5x step in rank), when one barcode
 holds more than 5% of all UMIs, or when more than half of all UMIs sit in distinct barcodes. The first version of the knee test used the called
 cells and flagged the full-depth Macosko barnyard (the cell caller over-calls there); it was replaced by the caller-independent test above.
+
+## Held-out libraries per platform (registered 2026-11-12, in the commit that precedes any run of them; D-152)
+Chosen after the development fixes were designed and before any of these reads were processed. Each is run once, after development ends, with
+auto-detected protocol, on the first 30 M read pairs (the same prefix depth as the development libraries, so the depth fractions are stated
+next to every number), GRCh38 (human) or GRCm39 (mouse) or the human-mouse barnyard reference (Mereu Drop-seq, which mixes species).
+Bars are those of the development libraries of the platform, unchanged; where the truth carries cell barcodes, barcode recall and precision
+(>= 0.70 and >= 0.80) are bars as in the Drop-seq barnyard.
+
+| Platform | Library | Design | Truth |
+|---|---|---|---|
+| Drop-seq | GSM3911759 (GSE133540, Mereu 2020, library Dropseq_N701), run SRR9621741, 106 M pairs, R1 = 76 nt (CB 12 + UMI 8 + poly(T)), R2 = 76 nt cDNA | human-mouse mixture: PBMC 60%, mouse colon 30%, HEK293T 6%, NIH3T3 3%, dog MDCK 1% | authors' per-cell tables GSE133540_Dropseq_human_exp_mat.tsv.gz and ..._mouse_exp_mat.tsv.gz, columns Dropseq_N701_<barcode>: 1,000 cells of this library (862 human, 73 mouse, 49 doublet, 16 dog by the authors' labels) |
+| Seq-Well | GSM4693356 (GSE150672, Hughes 2020, "S3Comp1217" PBMC), run SRR12314741, 443 M pairs, R1 = 20 nt, R2 = 50 nt | healthy human PBMC | authors' GSM4693356_SeqWell.V2.Counts1.csv.gz, 1,968 cells with 12-mer barcodes as column names |
+| inDrop | GSM3911812 (GSE133548, Mereu 2020, 1CellBio inDrop), run SRR9621794, 143 M pairs, R1 = 60 nt cDNA, R2 = 50 nt barcode read (BC1 8, W1 22, BC2 8, UMI 6, poly(T)) | human-mouse reference sample of Mereu 2020 | authors' GSE133548_inDrop_human_exp_mat.tsv.gz (and _mouse_), 2,988 cells; the deposit has no matrix per library beyond these, barcode orientation unverified, so only the ordinary-library bars apply (cells, genes per cell, status) |
+| BD Rhapsody | GSM7177494 (GSE229765, PyMT mammary tumor, fresh, BD Rhapsody WTA), WTA run SRR24175927 (570 M pairs; the sibling run SRR24175928 is the sample-tag library and is not used), R1 = R2 = 76 nt | mouse tumor, WTA | authors' GSM7177494_PyMT_Fresh_BD_3772cells_matrix.mtx.gz with genes and barcodes; barcodes are BD Cell_Index integers, so only the ordinary-library bars apply |
+
+Bulk libraries for the guard (registered 2026-11-12): human RNA-seq read pairs, 4 M spots each, forced through a non-10x tag (dropseq for all;
+indrop for the first, bd-rhapsody for the second as well): SRR1039508 (airway, 2x63), ERR188044 (Geuvadis LCL, 2x76), SRR896663 (SEQC
+sample A, 2x100), SRR12188073 (2x150). Pass rule as in "Bulk check": the run ends rejected, flagged, or with fewer than 10 called cells.
+
+## Dated notes (2026-11-12, D-152). Bars above are unchanged; these are findings and proposals for the owner.
+1. BD Rhapsody, median genes per cell (bar 0.4-1.25x of the authors' median). The deposit GSM4764685 holds 34.2 M WTA read pairs (SRR12581863;
+   SRR12581864 is the sample-tag library). The authors' four matrices hold 127 M molecules over 10,275 cells, more than the reads of the deposit,
+   so the authors counted far more reads than were deposited. Binomial thinning of the authors' matrix to our median UMIs per cell (833) leaves
+   a median of 512 genes per cell; the engine's is 497 (ratio 0.97). The ratio to the unthinned median (3,145 genes at 9,340 UMIs) is 0.16
+   and no counting method reaches the bar at this depth. Barcode extraction was also measured against the vendor layout (linker at 9 and 30
+   in 88% and 78% of reads): fixed positions give 75.8% of reads with all three labels valid within one mismatch, linker-anchored extraction
+   75.6%. Proposed bar for this metric: median genes per cell within 0.8-1.25x of the authors' matrix thinned to the run's median UMIs per
+   cell. The cell-count and status bars are unchanged and pass.
+2. inDrop. python/singlet/data/whitelists/indrop_bc1.txt (8-11 nt, 96 of each length) is the right list; pipeline-benchmark/whitelists/indrop_bc1.txt on
+   Clipper is the stale 8-nt prefix of the published table (md5 differs; the other whitelist files are identical). The validation runs of D-152
+   use the commit's lists (jobs/validation-engine/non10x/whitelists).
+
+## Dated notes (2026-11-13, D-152). Bars above are unchanged; nothing below was scored against a changed bar.
+3. Engine failures at full depth (the "previous build" rows): both were out-of-memory kills at a 64 GB request (Slurm state OUT_OF_MEMORY, jobs
+   812346_0 Drop-seq barnyard, STAR killed by signal 9 at mapping start, and 812345_1 retina, killed in the pileup), not engine faults. The
+   validation-engine runs request 160 GB and finish.
+4. Drop-seq full depth on build 3725a7bbb57f (collapse and cliff caller present): 56,371 cells for 1,020 STAMPs. The post-STAR CB-tag refresh rebuilt the
+   barcode universe from every CB tag with 5 or more reads (1,190,387 columns) and undid the error-barcode collapse made at decode time, so the caller saw
+   an unmerged rank curve and fell back to the 2.1 rule (method whitelistfree_emptydrops_2.1). Fixed by collapsing the refreshed list again (commit
+   81a25dd4); not yet rerun at full depth. At the 30 M prefix on 3725a7bbb57f the Drop-seq barnyard and retina both passed all registered bars.
+5. inDrop: the variable-length R2 fix (d98a6e94) lifts mapping at 500 k reads from 9% to 48% (STAR unique 48.2%, multi 21.2%, too short 29.4%). Of the
+   cDNA reads, 11.8% carry an internal poly(A) run of 10 or more followed by more sequence (the insert read through the tail into the reverse complement
+   of the barcode), 25% of the unmapped reads do, and most of the rest are reads whose insert is empty (W1 reverse complement at the read start). The
+   terminal poly(A) trim does not see either. Commit efb352e7 cuts R2 at the first internal run; its effect on mapping is not yet measured.
+6. BD Rhapsody counting on the called set (8,537 cells, 30 M pairs): exon only 762 UMIs and 440 genes per cell, exon plus intron 833 and 497. The authors'
+   matrix thinned to 833 UMIs per cell gives 512 genes (note 1). Barcodes cannot be matched to the authors' cells because their files carry Cell_Index integers.
+   The gap to the registered bar is the depth of the deposit against the authors' read count; the registered bar is not changed here.
