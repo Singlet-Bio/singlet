@@ -165,8 +165,7 @@ int main() {
         std::vector<HeadSpot> v;
         for (size_t i = 0; i < N; ++i) v.push_back(spot({rand_seq(6) + pick(wells) + std::string(10, 'T') + rand_seq(8), rand_seq(70)}));
         auto r = run(v, lists, dir);
-        std::cout << "  [celseq2 case] verdict " << r.verdict << " protocol " << r.verdict_protocol << " window off " << r.ev.window.off << " len " << r.ev.window.len << " k " << r.ev.window.k << " found " << r.ev.window.found << " bc_seg " << r.ev.bc_seg << " detector " << r.ev.detected.tag << "
-";
+        std::cout << "  [celseq2 case] verdict " << r.verdict << " protocol " << r.verdict_protocol << " window off " << r.ev.window.off << " len " << r.ev.window.len << " k " << r.ev.window.k << " found " << r.ev.window.found << " bc_seg " << r.ev.bc_seg << " detector " << r.ev.detected.tag << std::endl;
         CHECK(r.verdict == "plate_barcoded" && r.verdict_protocol == "celseq2-u6b8", "UMI6 + 8-base well barcode -> CEL-Seq2 layout");
     }
     {
