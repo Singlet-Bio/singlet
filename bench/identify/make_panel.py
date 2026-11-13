@@ -113,6 +113,6 @@ with open(out + "/panel_dev.tsv", "w", newline="") as f:
 with open(out + "/sources_dev.tsv", "w", newline="") as f:
     w = csv.writer(f, delimiter="\t", lineterminator="\n")
     for r in rows:
-        # columns: id, source, hint (none), genome for the mapping layer (human only; no mouse index is staged)
-        w.writerow([r[0], r[1], "", "$DATA/references/parabricks_star_GRCh38-2024-A" if r[4] == "Homo sapiens" else "-"])
+        # columns: id, source, hint (none), genome for the mapping layer (GRCh38 or GRCm39 STAR index; $REF is the reference directory)
+        w.writerow([r[0], r[1], "", "$REF/GRCh38-2024-A/star_2.7.11b" if r[4] == "Homo sapiens" else "$REF/GRCm39-2024-A/star_2.7.11b"])
 print(len(seen), "rows")
