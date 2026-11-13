@@ -3258,7 +3258,29 @@ public:
         singlet_tail::mark("parent: pileupRun returned (%s)", out.log.substr(0, 700).c_str());
         if (!e20ul) std::cerr << "[gpu_pileup] device lock: waited " << sWait << " s, held " << sRun << " s\n";
         if (!ok) { std::cerr << "[gpu_pileup] failed: " << out.log << "\n"; return false; }
-        { singlet::ThreadNameScope tn_as("sg-allsite"); allsite_from_input(in); }   // D-101: host pass over the same records (the input lives until this function returns)
+        // D-101: host pass over the same records (the input lives until this function returns). It reads `in`, config_, tid_to_chrom_, chrm_tid_ and
+        // barcodes_ (all read-only from here to the join) and writes only allsite_, allsite_ok_ and allsite_done_, which applyOut and gpu_host_pass
+        // never touch; so it runs on a thread beside them and is joined before anything consumes allsite_ (SINGLET_ALLSITE_OVERLAP=0: in sequence).
+        // An exception from it is rethrown at the join, as the sequential call would have thrown it.
+        struct AsJoin {
+            std::thread t; std::exception_ptr ep; double sec = 0;
+            void join() { if (t.joinable()) t.join(); }
+            void joinRethrow() { join(); if (ep) { std::exception_ptr e = ep; ep = nullptr; std::rethrow_exception(e); } }
+            ~AsJoin() { join(); }
+        } asj;   // joined on every return
+        const auto tAs0 = std::chrono::steady_clock::now();
+        const char* asOvE = std::getenv("SINGLET_ALLSITE_OVERLAP");
+        const bool asOverlap = !(asOvE != nullptr && std::string(asOvE) == "0") && allsite_on() && !allsite_done_;
+        if (asOverlap) {
+            asj.t = std::thread([this, &in, &asj, tAs0] {
+                singlet::ThreadNameScope tn_as("sg-allsite");
+                try { allsite_from_input(in); } catch (...) { asj.ep = std::current_exception(); }
+                asj.sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - tAs0).count(); });
+        } else {
+            singlet::ThreadNameScope tn_as("sg-allsite"); allsite_from_input(in);
+            asj.sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - tAs0).count();
+        }
+        const auto tHost0 = std::chrono::steady_clock::now();
         // the outputs into the accumulators, junction names, chrM indels, counters and WL-ambient genes; E16 "overlap" (level 5) runs them on a
         // thread beside gpu_host_pass, which reads other parts of `out` and writes other members and counters (strand votes, poly(A), V(D)J)
         auto applyOut = [&]() {
@@ -3331,12 +3353,17 @@ public:
             std::thread tPut(applyOut);
             const bool okHost = gpu_host_pass(in, out, stats);
             tPut.join();
-            if (!okHost) return false;
+            if (!okHost) { asj.joinRethrow(); return false; }
         } else {
             applyOut();
             tA2 = std::chrono::steady_clock::now();
-            if (has_gene_model_ && !gpu_host_pass(in, out, stats)) return false;
+            if (has_gene_model_ && !gpu_host_pass(in, out, stats)) { asj.joinRethrow(); return false; }
         }
+        const double sHostPart = std::chrono::duration<double>(std::chrono::steady_clock::now() - tHost0).count();
+        asj.joinRethrow();   // nothing below reads allsite_ before this point, and the input is freed only after it
+        if (asOverlap)
+            std::cerr << "[gpu_pileup] allsite overlap: allsite pass " << asj.sec << " s, applyOut + host pass " << sHostPart << " s, both together "
+                      << std::chrono::duration<double>(std::chrono::steady_clock::now() - tAs0).count() << " s (sequential would be " << asj.sec + sHostPart << " s)\n";
         singlet_tail::mark("parent: host pass done");
         e16_rrna_join(stats);
         if (e20ul) {   // E20: the hold is pileupRun and the reset (done on its thread long before the host pass ends)
