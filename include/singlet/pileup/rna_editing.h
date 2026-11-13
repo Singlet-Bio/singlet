@@ -276,6 +276,29 @@ inline std::vector<std::string> check_outputs(const std::string& out_prefix) {
         size_t n_called_cols = 0;
         for (uint32_t j = 0; j < a.n; ++j) if (called.count(a.colnames[j])) { is_cell[j] = 1; ++n_called_cols; }
         if (n_called_cols != cell_bc.size()) bad.push_back("editing_cells.tsv names barcodes that are not matrix columns");
+        {   // the tables must describe the run's final called set (cell_calls.tsv is_cell): a Visium run replaces it after export
+            std::ifstream cf(out_prefix + "/cell_calls.tsv");
+            std::string hl;
+            if (cf && std::getline(cf, hl)) {
+                std::vector<std::string> h; { std::stringstream hs(hl); std::string t; while (std::getline(hs, t, '\t')) h.push_back(t); }
+                size_t bi = h.size(), ci = h.size();
+                for (size_t k = 0; k < h.size(); ++k) { if (h[k] == "barcode") bi = k; if (h[k] == "is_cell") ci = k; }
+                if (bi < h.size() && ci < h.size()) {
+                    size_t n_final = 0, n_missing = 0;
+                    std::string ln2;
+                    while (std::getline(cf, ln2)) {
+                        std::vector<std::string> v; std::stringstream ls(ln2); std::string t;
+                        while (std::getline(ls, t, '\t')) v.push_back(t);
+                        if (v.size() <= ci || !(v[ci] == "TRUE" || v[ci] == "True" || v[ci] == "true" || v[ci] == "1")) continue;
+                        ++n_final;
+                        if (!called.count(v[bi])) ++n_missing;
+                    }
+                    if (n_missing || n_final != cell_bc.size())
+                        bad.push_back("editing_cells.tsv has " + std::to_string(cell_bc.size()) + " cells, cell_calls.tsv " + std::to_string(n_final) +
+                                      " (" + std::to_string(n_missing) + " called cells are outside the editing tables)");
+                }
+            }
+        }
         std::vector<uint64_t> alt(a.m, 0), dpc(a.m, 0), dpa(a.m, 0);
         std::vector<uint32_t> cov(a.m, 0), ced(a.m, 0);
         for (uint32_t j = 0; j < d.n; ++j)

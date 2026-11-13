@@ -66,6 +66,14 @@ int main() {
         const auto stale = editing::summarize(alt, dp, {0, 1, 2});
         assert(stale.site[3].alt == 0 && alt.indptr[4] > alt.indptr[3]);   // TTTT has an edited UMI at chr3:7, the table says 0
     }
+    {   // cell_calls.tsv of the final call (tissue spots): the tables of the export-time call are reported against it
+        FILE* f = std::fopen((out + "/cell_calls.tsv").c_str(), "w");
+        std::fputs("barcode\tis_cell\n", f);
+        for (const auto& b : cols) std::fprintf(f, "%s\t%s\n", b.c_str(), final_call.count(b) ? "TRUE" : "FALSE");
+        std::fclose(f);
+        const auto bad = editing::check_outputs(out);
+        assert(!bad.empty() && bad[0].find("cell_calls.tsv") != std::string::npos);
+    }
     assert(editing::resummarize(out, "panel.tsv.gz", 4, final_call, &err));
     assert(editing::check_outputs(out).empty());
     const auto bc = editing::read_editing_cells_tsv_barcodes(out + "/editing_cells.tsv");
