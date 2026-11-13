@@ -25,6 +25,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <unistd.h>
@@ -246,10 +247,167 @@ inline bool ena_urls(const std::string& acc, std::vector<std::string>& urls, int
     return !urls.empty();
 }
 
+// ── BAM head by HTTP range ──
+
+/// What the BAM route needs from the caller: the barcode lists and options (for the list rates of the barcode tags) and where to put the evidence.
+struct BamCtx {
+    std::vector<ScreenWhitelist>* lists = nullptr;
+    const Options* opt = nullptr;
+    bam::Evidence* ev = nullptr;
+};
+
+namespace cli_detail {
+
+struct RangeGet {
+    bool ok = false;
+    long status = 0;
+    int64_t total = -1;       // object size from Content-Range
+    std::vector<uint8_t> data;
+    std::string err;
+};
+
+/// One ranged GET of len bytes at `from`. The transfer is cut at len bytes by the pipe whatever the server does with the Range header.
+inline RangeGet range_get(const std::string& url, int64_t from, int64_t len) {
+    RangeGet g;
+    static int counter = 0;
+    std::error_code ec;
+    const std::string hdr = (std::filesystem::temp_directory_path(ec) / ("identify-hdr-" + std::to_string(::getpid()) + "-" + std::to_string(++counter))).string();
+    const std::string cmd = "curl -sL --max-time 240 -r " + std::to_string(from) + "-" + std::to_string(from + len - 1) + " -D " + sq(hdr) + " " + sq(url) + " 2>/dev/null | head -c " + std::to_string(len);
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (!fp) { g.err = "cannot run curl"; return g; }
+    uint8_t b[1 << 16];
+    size_t n;
+    while ((n = std::fread(b, 1, sizeof(b), fp)) > 0) g.data.insert(g.data.end(), b, b + n);
+    pclose(fp);
+    std::ifstream h(hdr);
+    std::string line;
+    while (std::getline(h, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+        std::string low = line;
+        for (auto& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (low.rfind("http/", 0) == 0) { const size_t sp = low.find(' '); g.status = sp == std::string::npos ? 0 : std::atol(low.c_str() + sp + 1); g.total = -1; }
+        else if (low.rfind("content-range:", 0) == 0) { const size_t sl = low.rfind('/'); if (sl != std::string::npos) g.total = std::atoll(low.c_str() + sl + 1); }
+    }
+    std::filesystem::remove(hdr, ec);
+    if (g.data.empty() || g.status >= 400) { g.err = g.status ? "HTTP " + std::to_string(g.status) + " from " + host_of(url) : "no answer from " + host_of(url); return g; }
+    if (g.status == 206 || (g.status == 200 && from == 0)) g.ok = true;
+    else g.err = "HTTP " + std::to_string(g.status) + " for a range request on " + host_of(url) + (g.status == 200 ? " (the server ignored the range)" : "");
+    return g;
+}
+
+inline bool looks_like_bam_url(const std::string& u) {
+    if (!is_url(u)) return false;
+    const size_t p = u.find(".bam");
+    return p != std::string::npos && (p + 4 == u.size() || u[p + 4] == '.' || u[p + 4] == '?');
+}
+
+}  // namespace cli_detail
+
+/// Barcode list rates of the BAM's barcode tag (raw CR, or corrected CB when CR is absent), over the primary records of every sample.
+inline void bam_list_rates(bam::Evidence& ev, const std::vector<bam::Rec>& recs, std::vector<ScreenWhitelist>& lists, const Options& opt) {
+    const bool use_cr = ev.barcode_tags.rfind("CR", 0) == 0;
+    ev.list_rate_tag = use_cr ? "CR" : (ev.barcode_tags.rfind("CB", 0) == 0 ? "CB" : "");
+    ev.list_rates.clear();
+    if (ev.list_rate_tag.empty()) return;
+    const size_t limit = 50000, stride = recs.size() > limit ? recs.size() / limit : 1;
+    for (auto& wl : lists) {
+        if (!wl.loaded()) detail_id::load_list(wl, opt.whitelist_dirs);
+        bam::Evidence::ListRate lr;
+        lr.file = wl.file;
+        lr.family = wl.family;
+        if (wl.loaded()) {
+            uint64_t n = 0, ex = 0, m1 = 0;
+            for (size_t i = 0; i < recs.size(); i += stride) {
+                const std::string& bc = use_cr ? recs[i].cr : recs[i].cb;
+                if (bc.size() < wl.bc_len) continue;
+                ++n;
+                uint64_t h;
+                if (!detail_id::pack(bc.data(), wl.bc_len, h)) continue;
+                const bool hit = screen_wl_has(wl, h);
+                ex += hit;
+                m1 += hit || screen_wl_match1(wl, h);
+            }
+            if (n) { lr.exact = double(ex) / n; lr.one_mm = double(m1) / n; }
+        }
+        ev.list_rates.push_back(lr);
+    }
+}
+
+/// The head of a BAM by HTTP range: the first 4 MB (header and first records), then three 1 MB samples inside the file and its last MB, so that the
+/// statistics do not rest on one genomic region. The BAM is never downloaded whole. The spots carry the barcode tag and UMI tag as segment 0
+/// and the read, in its original orientation, as segment 1.
+inline bool head_bam_ranged(const std::string& url, size_t n, std::vector<HeadSpot>& out, SourceInfo& info, BamCtx* ctx) {
+    constexpr int64_t kHead = 4ll << 20, kSample = 1ll << 20;
+    constexpr int kInterior = 3;
+    bam::Evidence local;
+    bam::Evidence& ev = ctx && ctx->ev ? *ctx->ev : local;
+    ev = bam::Evidence();
+    ev.url = url;
+    const double t0 = cli_detail::now_s();
+    std::vector<bam::Rec> recs;
+    auto fail = [&](const std::string& e) {
+        ev.error = e;
+        ev.seconds = cli_detail::now_s() - t0;
+        info.error = e;
+        info.bytes = static_cast<int64_t>(ev.bytes);
+        info.seconds = ev.seconds;
+        info.endpoint = cli_detail::host_of(url);
+        return false;
+    };
+    auto g = cli_detail::range_get(url, 0, kHead);
+    ++ev.requests;
+    if (!g.ok) return fail(g.err);
+    ev.bytes += g.data.size();
+    ev.file_size = g.total;
+    if (!bam::ingest_head(ev, g.data.data(), g.data.size(), recs)) return fail(ev.error.empty() ? "not a BAM" : ev.error);
+    if (ev.file_size > 8 * kHead) {
+        std::vector<std::pair<std::string, int64_t>> places;
+        for (int k = 1; k <= kInterior; ++k) places.push_back({"interior", (ev.file_size / (kInterior + 1)) * k});
+        places.push_back({"tail", ev.file_size - kSample});
+        for (const auto& sp : places) {
+            usleep(300000);   // a few requests per second at most
+            auto s = cli_detail::range_get(url, sp.second, kSample);
+            ++ev.requests;
+            if (!s.ok) continue;
+            ev.bytes += s.data.size();
+            bam::ingest_sample(ev, sp.first, static_cast<uint64_t>(sp.second), s.data.data(), s.data.size(), recs);
+        }
+    }
+    bam::finalize(ev);
+    ev.seconds = cli_detail::now_s() - t0;
+    info.endpoint = cli_detail::host_of(url);
+    info.bytes = static_cast<int64_t>(ev.bytes);
+    info.seconds = ev.seconds;
+    if (ev.file_size >= 0) info.bytes_note = std::to_string(ev.requests) + " ranged GETs on a " + std::to_string(ev.file_size) + " byte object";
+    if (ctx && ctx->lists && ctx->opt) bam_list_rates(ev, recs, *ctx->lists, *ctx->opt);
+    if (!ev.usable_barcodes) return fail("the BAM carries no CR or CB tag on half of its records (bam.tags_seen lists the tags)");
+    const bool raw = ev.barcode_tags.rfind("CR", 0) == 0;
+    const size_t stride = recs.size() > n ? recs.size() / n + 1 : 1;
+    for (size_t i = 0; i < recs.size(); i += stride) {
+        const auto& r = recs[i];
+        const std::string& bc = raw ? r.cr : r.cb;
+        if (bc.empty()) continue;
+        std::string seq = r.seq;
+        if (r.flag & 16) seq = bam::revcomp(seq);
+        HeadSpot s;
+        s.seg.push_back(bc + (raw ? r.ur : r.ub));
+        s.seg.push_back(std::move(seq));
+        out.push_back(std::move(s));
+    }
+    if (out.empty()) return fail("no record with a barcode tag in the sampled blocks");
+    return true;
+}
+
 /// The head of one run (all segments), by the route the source names.
-inline bool head_run(const std::string& src, const std::string& route, size_t n, std::vector<HeadSpot>& out, SourceInfo& info) {
+inline bool head_run(const std::string& src, const std::string& route, size_t n, std::vector<HeadSpot>& out, SourceInfo& info, BamCtx* bctx = nullptr) {
     if (src.size() > 4 && src.compare(src.size() - 4, 4, ".1fq") == 0) { info.route = "1fq"; return head_1fq(src, n, out, info); }
-    if (src.rfind("bam:", 0) == 0) { info.route = "bam"; return head_bam(src.substr(4), n, out, info); }
+    if (src.rfind("bam:", 0) == 0) {
+        const std::string rest = src.substr(4);
+        if (cli_detail::is_url(rest)) { info.route = "bam_url"; return head_bam_ranged(rest, n, out, info, bctx); }
+        info.route = "bam";
+        return head_bam(rest, n, out, info);
+    }
+    if (cli_detail::looks_like_bam_url(src)) { info.route = "bam_url"; return head_bam_ranged(src, n, out, info, bctx); }
     if (cli_detail::is_accession(src)) {
         if (route == "ena") {
             info.route = "ena";
@@ -389,36 +547,6 @@ inline std::string curl_text(const std::string& url, int max_s = 60) {
 
 }  // namespace cli_detail
 
-/// BAM by ranged GET (the first 64 MB), through samtools. A truncated final block is expected.
-inline bool head_bam_url(const std::string& url, size_t n, std::vector<HeadSpot>& out, SourceInfo& info) {
-    const std::string cmd = "curl -sfL --max-time 600 -r 0-67108863 " + cli_detail::sq(url) + " | samtools view -F 0x900 - 2>/dev/null";
-    FILE* fp = popen(cmd.c_str(), "r");
-    if (!fp) { info.error = "cannot run curl or samtools"; return false; }
-    std::string line;
-    char buf[1 << 16];
-    while (out.size() < n && std::fgets(buf, sizeof(buf), fp)) {
-        line = buf;
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
-        const auto f = cli_detail::split(line, '\t');
-        if (f.size() < 11) continue;
-        std::string cb, ub;
-        for (size_t k = 11; k < f.size(); ++k) {
-            if (f[k].rfind("CR:Z:", 0) == 0 || f[k].rfind("CB:Z:", 0) == 0) cb = f[k].substr(5);
-            if (f[k].rfind("UR:Z:", 0) == 0 || f[k].rfind("UB:Z:", 0) == 0) ub = f[k].substr(5);
-        }
-        std::string seq = f[9];
-        if (std::atoi(f[1].c_str()) & 16) seq = detail_id::revcomp(seq);
-        HeadSpot s;
-        s.seg.push_back(cb + ub);
-        s.seg.push_back(seq);
-        out.push_back(std::move(s));
-    }
-    pclose(fp);
-    info.endpoint = cli_detail::host_of(url);
-    if (out.empty()) info.error = "no records in the first 64 MB of " + url;
-    return !out.empty();
-}
-
 /// ENA submitted_ftp files of a run (the files as the submitter uploaded them), as https links.
 inline std::vector<std::string> ena_submitted(const std::string& acc) {
     std::vector<std::string> urls;
@@ -464,9 +592,17 @@ inline std::vector<OriginalFile> sdl_original_files(const std::string& acc) {
 
 /// One endpoint's head, measured on its own: layout, whether a barcode read is present, and what the reads call.
 inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, const std::vector<HeadSpot>& spots, const SourceInfo& info,
-                                     std::vector<ScreenWhitelist>& lists, const Options& opt) {
+                                     std::vector<ScreenWhitelist>& lists, const Options& opt, const std::shared_ptr<bam::Evidence>& bam_ev = nullptr,
+                                     const std::string& url = std::string()) {
     EndpointRec e;
     e.name = name;
+    e.url = url;
+    e.barcode_source = "reads";
+    if (bam_ev) {
+        e.bam = bam_ev;
+        e.tags = bam_ev->present ? bam_ev->barcode_tags : std::string();
+        e.barcode_source = bam_ev->usable_barcodes ? "bam_tags" : "";
+    }
     e.reachable = reachable && !spots.empty();
     e.bytes = info.bytes;
     e.seconds = info.seconds;
@@ -474,6 +610,7 @@ inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, co
     if (!e.reachable) return e;
     Report r;
     measure(spots, opt, lists, r.ev);
+    if (bam_ev && bam_ev->present) r.ev.bam_sense = bam_ev->sense;
     rank(r, opt);
     for (const auto& s : r.ev.segs) e.seg_lens.push_back(s.len_mode);
     double best = 0;
@@ -489,9 +626,21 @@ inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, co
 }
 
 /// Survey every endpoint of an accession. Heads are read with the same spot limit as the main head.
+struct BamBest {
+    std::vector<HeadSpot> spots;
+    std::string name, url;
+    std::shared_ptr<bam::Evidence> ev;
+};
+
 inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t n, std::vector<ScreenWhitelist>& lists, const Options& opt,
-                                                 std::vector<HeadSpot>* best = nullptr, std::string* best_name = nullptr) {
+                                                 std::vector<HeadSpot>* best = nullptr, std::string* best_name = nullptr, BamBest* bam_best = nullptr) {
     std::vector<EndpointRec> out;
+    auto push_bam = [&](const std::string& nm, const std::string& url, const std::vector<HeadSpot>& sp, const SourceInfo& info, const std::shared_ptr<bam::Evidence>& ev) {
+        out.push_back(evaluate_endpoint(nm, !sp.empty(), sp, info, lists, opt, ev, url));
+        if (!ev->present && !info.error.empty() && out.back().note.empty()) out.back().note = info.error;
+        if (best && best_name && best->empty() && out.back().barcode_read) { *best = sp; *best_name = nm; }
+        if (bam_best && bam_best->spots.empty() && out.back().barcode_read && ev->usable_barcodes) { bam_best->spots = sp; bam_best->name = nm; bam_best->url = url; bam_best->ev = ev; }
+    };
     // the first endpoint that carries a barcode read keeps its head, for runs whose normalized copy is empty
     auto push_ep = [&](const std::string& nm, const std::vector<HeadSpot>& sp, const SourceInfo& info) {
         out.push_back(evaluate_endpoint(nm, !sp.empty(), sp, info, lists, opt));
@@ -521,11 +670,19 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
         std::vector<HeadSpot> sp;
         const auto urls = ena_submitted(acc);
         const double t0 = cli_detail::now_s();
+        bool was_bam = false;
         if (urls.empty()) info.error = "ENA lists no submitted files";
-        else if (urls[0].size() > 4 && urls[0].compare(urls[0].size() - 4, 4, ".bam") == 0) head_bam_url(urls[0], n, sp, info);
-        else { std::vector<std::string> g = urls; std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
-        info.seconds = cli_detail::now_s() - t0;
-        push_ep("ena_submitted_ftp", sp, info);
+        else if (cli_detail::looks_like_bam_url(urls[0])) {
+            auto ev = std::make_shared<bam::Evidence>();
+            BamCtx bc{&lists, &opt, ev.get()};
+            head_bam_ranged(urls[0], n, sp, info, &bc);
+            push_bam("ena_submitted_ftp", urls[0], sp, info, ev);
+            was_bam = true;
+        } else { std::vector<std::string> g = urls; std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
+        if (!was_bam) {
+            info.seconds = cli_detail::now_s() - t0;
+            push_ep("ena_submitted_ftp", sp, info);
+        }
     }
     {   // SRA original-format objects (SDL locate service)
         const auto files = sdl_original_files(acc);
@@ -541,12 +698,11 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
             if (bam) {
                 SourceInfo info;
                 std::vector<HeadSpot> sp;
-                const double t0 = cli_detail::now_s();
-                head_bam_url(f.link, n, sp, info);
-                info.seconds = cli_detail::now_s() - t0;
-                info.bytes = 67108864;
-                push_ep("sra_original:" + f.name, sp, info);
-                if (!out.back().note.empty() || out.back().reachable) out.back().note += (out.back().note.empty() ? "" : "; ") + std::string("BAM, ") + std::to_string(static_cast<int64_t>(f.size)) + " bytes";
+                auto ev = std::make_shared<bam::Evidence>();
+                BamCtx bc{&lists, &opt, ev.get()};
+                head_bam_ranged(f.link, n, sp, info, &bc);
+                push_bam("sra_original:" + f.name, f.link, sp, info, ev);
+                out.back().note += (out.back().note.empty() ? "" : "; ") + std::string("BAM, ") + std::to_string(static_cast<int64_t>(f.size)) + " bytes";
             } else if (f.name.find(".fastq") != std::string::npos || f.name.find(".fq") != std::string::npos) fq.push_back(f);
         }
         if (!fq.empty()) {   // one lane or file set: names sorted, at most four files, one segment each
@@ -575,10 +731,11 @@ inline Report identify_source(const std::string& source, const std::string& hint
     const double t0 = cli_detail::now_s();
     int64_t run_total = 0;
     bool any = false;
+    BamCtx bctx{&lists, &opt, &R.bam};
     for (const auto& run : cli_detail::split(source, ';')) {
         if (run.empty()) continue;
         SourceInfo one;
-        const bool ok = head_run(run, route, n_reads, spots, one);
+        const bool ok = head_run(run, route, n_reads, spots, one, &bctx);
         if (R.src.route.empty()) R.src.route = one.route;
         R.src.endpoint += (R.src.endpoint.empty() ? "" : "; ") + one.endpoint;
         if (one.bytes >= 0) R.src.bytes = std::max<int64_t>(R.src.bytes, 0) + one.bytes;
@@ -597,12 +754,20 @@ inline Report identify_source(const std::string& source, const std::string& hint
         // the normalized run gave nothing: take the head from another endpoint that carries a barcode read
         std::vector<HeadSpot> bs;
         std::string bn;
-        auto eps = survey_endpoints(source, n_reads, lists, opt, &bs, &bn);
+        BamBest bb;
+        auto eps = survey_endpoints(source, n_reads, lists, opt, &bs, &bn, &bb);
         R.endpoints = eps;
         if (!bs.empty()) {
             spots = std::move(bs);
             R.src.route = "endpoint:" + bn;
             R.src.endpoint = bn;
+            if (bb.ev && bb.name == bn) {   // the head is a BAM's: its tags are the barcode source
+                R.bam = *bb.ev;
+                R.barcode_source = "bam_tags";
+                R.src.endpoint = bb.url;
+                R.src.bytes = static_cast<int64_t>(bb.ev->bytes);
+                R.src.seconds = bb.ev->seconds;
+            }
             R.src.spots = spots.size();
             R.spots = spots.size();
             R.src.error += std::string(R.src.error.empty() ? "" : "; ") + "normalized run gave no reads; the head comes from " + bn;
@@ -626,17 +791,46 @@ inline Report identify_source(const std::string& source, const std::string& hint
             d << std::endl;
         }
     }
+    if (R.bam.present && R.bam.usable_barcodes) R.barcode_source = "bam_tags";
     measure(spots, opt, lists, R.ev);
+    if (R.bam.present) R.ev.bam_sense = R.bam.sense;
     if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, R.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
     attach_species(R, spots, opt);
     if (want_endpoints() && cli_detail::is_accession(source)) {
-        if (R.endpoints.empty()) R.endpoints = survey_endpoints(source, n_reads, lists, opt);
+        BamBest bb;
+        if (R.endpoints.empty()) R.endpoints = survey_endpoints(source, n_reads, lists, opt, nullptr, nullptr, &bb);
         std::string via;
         for (const auto& e : R.endpoints)
             if (e.barcode_read && e.name != "sra_normalized") via += (via.empty() ? "" : ", ") + e.name;
         if (R.verdict == "barcode_read_missing" && !R.ranked.empty())
             R.ranked[0].reasons.push_back(via.empty() ? "no other endpoint of the run carries a barcode read" : "a barcode read is present in: " + via);
+        // the run's own reads hold no barcode read but a BAM of the run does: classify the BAM's tags and reads, with the barcode source named
+        const std::string v0 = R.verdict;
+        const bool no_barcode = v0 == "barcode_read_missing" || v0 == "rna_no_barcode" || v0 == "bulk_rna" || v0 == "unknown" || v0 == "genomic_dna" || v0 == "smartseq" || v0 == "ambiguous";
+        if (no_barcode && !bb.spots.empty() && bb.ev) {
+            Report P;
+            P.src = R.src;
+            P.src.route = "endpoint:bam";
+            P.src.endpoint = bb.url;
+            P.src.bytes = static_cast<int64_t>(bb.ev->bytes);
+            P.src.bytes_note = bb.ev->file_size >= 0 ? std::to_string(bb.ev->requests) + " ranged GETs on a " + std::to_string(bb.ev->file_size) + " byte object" : "";
+            P.src.seconds = bb.ev->seconds;
+            P.src.spots = bb.spots.size();
+            P.spots = bb.spots.size();
+            P.bam = *bb.ev;
+            P.barcode_source = "bam_tags";
+            measure(bb.spots, opt, lists, P.ev);
+            P.ev.bam_sense = P.bam.sense;
+            if (!genome_dir.empty()) map_head(bb.spots, P.ev.cdna_seg, P.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), P.ev.map);
+            rank(P, opt);
+            attach_species(P, bb.spots, opt);
+            P.endpoints = R.endpoints;
+            if (!P.ranked.empty())
+                P.ranked[0].reasons.push_back("barcode read missing from the run's own reads (verdict there: " + v0 + "); cell barcode and UMI taken from the " + P.bam.barcode_tags +
+                                              " tags of " + bb.name + ", a " + std::to_string(P.bam.file_size) + " byte BAM read by " + std::to_string(P.bam.requests) + " ranged GETs");
+            R = std::move(P);
+        }
     }
     return R;
 }
@@ -667,7 +861,8 @@ inline int identify_main(int argc, char** argv) {
         else if (a == "-h" || a == "--help") {
             std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena] [--route-status FILE]\n               [--species-filters DIR [--species-hint ORGANISM]]\n"
                          "       singlet identify --list samples.tsv --out-dir DIR [options]\n"
-                         "SOURCE: SRR accession | URL[,URL] | FASTQ[,FASTQ] | bam:FILE | FILE.1fq ; runs separated by ';'\n";
+                         "SOURCE: SRR accession | URL[,URL] | FASTQ[,FASTQ] | bam:FILE | bam:URL (or a URL ending .bam: head by HTTP range) | FILE.1fq ; runs separated by ';'\n"
+                         "       --endpoints  also read the run's other endpoints; a BAM with CR/UR or CB/UB tags that holds the barcode read replaces a run without one\n";
             return 0;
         } else sources.push_back(a);
     }
@@ -691,7 +886,7 @@ inline int identify_main(int argc, char** argv) {
         std::ostringstream o;
         o << id << "\t" << r.verdict << "\t" << r.verdict_protocol << "\t" << r.protocol_tag << "\t" << r.action << "\t" << top << "\t"
           << (r.ranked.empty() ? 0.0 : r.ranked[0].support) << "\t" << r.src.spots << "\t" << r.src.route << "\t" << r.src.bytes << "\t" << r.src.seconds << "\t"
-          << r.ambiguous_with << "\t" << r.src.error;
+          << r.ambiguous_with << "\t" << r.src.error << "\t" << r.barcode_source << "\t" << (r.hint_used ? 1 : 0);
         return o.str();
     };
     if (!list_path.empty()) {
@@ -699,7 +894,7 @@ inline int identify_main(int argc, char** argv) {
         if (!in) { std::cerr << "cannot read " << list_path << "\n"; return 1; }
         std::filesystem::create_directories(out_dir.empty() ? "." : out_dir);
         std::ofstream sum((out_dir.empty() ? std::string(".") : out_dir) + "/summary.tsv");
-        sum << "id\tverdict\tprotocol\tprotocol_tag\taction\ttop_family\ttop_support\tspots\troute\tbytes\tseconds\tambiguous_with\terror\n";
+        sum << "id\tverdict\tprotocol\tprotocol_tag\taction\ttop_family\ttop_support\tspots\troute\tbytes\tseconds\tambiguous_with\terror\tbarcode_source\thint_used\n";
         std::string line;
         while (std::getline(in, line)) {
             while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();

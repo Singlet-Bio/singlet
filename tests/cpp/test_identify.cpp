@@ -9,11 +9,15 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <random>
 #include <string>
 #include <vector>
+
+#include <zlib.h>
 
 #include "singlet/fq/identify.h"
 #include "test_harness.h"
@@ -60,6 +64,99 @@ Report run(const std::vector<HeadSpot>& spots, std::vector<ScreenWhitelist>& lis
 }
 
 std::vector<std::string> wl_v3, wl_v2, wl_vis, wl_atac;
+
+// ── synthetic BGZF and BAM, built here (no downloaded data) ──
+
+void put32(std::vector<uint8_t>& v, uint32_t x) { for (int i = 0; i < 4; ++i) v.push_back(uint8_t(x >> (8 * i))); }
+void put16(std::vector<uint8_t>& v, uint16_t x) { v.push_back(uint8_t(x)); v.push_back(uint8_t(x >> 8)); }
+
+/// One BGZF block holding `data` (at most 64 KB).
+std::vector<uint8_t> bgzf(const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> comp(data.size() + 1024);
+    z_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+    deflateInit2(&zs, 6, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY);
+    zs.next_in = const_cast<Bytef*>(data.data());
+    zs.avail_in = static_cast<uInt>(data.size());
+    zs.next_out = comp.data();
+    zs.avail_out = static_cast<uInt>(comp.size());
+    deflate(&zs, Z_FINISH);
+    comp.resize(zs.total_out);
+    deflateEnd(&zs);
+    std::vector<uint8_t> b = {0x1f, 0x8b, 8, 4, 0, 0, 0, 0, 0, 0xff, 6, 0, 'B', 'C', 2, 0};
+    put16(b, static_cast<uint16_t>(comp.size() + 25));   // BSIZE = total block size - 1
+    b.insert(b.end(), comp.begin(), comp.end());
+    put32(b, static_cast<uint32_t>(crc32(0, data.data(), static_cast<uInt>(data.size()))));
+    put32(b, static_cast<uint32_t>(data.size()));
+    return b;
+}
+
+std::vector<uint8_t> bgzf_eof() { return bgzf({}); }
+
+std::vector<uint8_t> bam_header(const std::string& text, const std::vector<std::string>& refs) {
+    std::vector<uint8_t> v = {'B', 'A', 'M', 1};
+    put32(v, static_cast<uint32_t>(text.size()));
+    v.insert(v.end(), text.begin(), text.end());
+    put32(v, static_cast<uint32_t>(refs.size()));
+    for (const auto& r : refs) {
+        put32(v, static_cast<uint32_t>(r.size() + 1));
+        v.insert(v.end(), r.begin(), r.end());
+        v.push_back(0);
+        put32(v, 100000000);
+    }
+    return v;
+}
+
+struct Tag { std::string key, val; };
+
+std::vector<uint8_t> bam_record(int32_t ref, int32_t pos, uint16_t flag, const std::string& name, const std::string& seq, const std::vector<Tag>& tags) {
+    std::vector<uint8_t> body;
+    put32(body, static_cast<uint32_t>(ref));
+    put32(body, static_cast<uint32_t>(pos));
+    body.push_back(static_cast<uint8_t>(name.size() + 1));
+    body.push_back(60);   // MAPQ
+    put16(body, 4681);    // bin
+    const bool mapped = !(flag & 4);
+    put16(body, mapped ? 1 : 0);   // one CIGAR operation for mapped reads
+    put16(body, flag);
+    put32(body, static_cast<uint32_t>(seq.size()));
+    put32(body, static_cast<uint32_t>(ref));
+    put32(body, static_cast<uint32_t>(pos));
+    put32(body, 0);
+    body.insert(body.end(), name.begin(), name.end());
+    body.push_back(0);
+    if (mapped) put32(body, uint32_t(seq.size()) << 4);   // nM
+    static const std::string kNt = "=ACMGRSVTWYHKDBN";
+    for (size_t i = 0; i < seq.size(); i += 2) {
+        const uint8_t hi = static_cast<uint8_t>(kNt.find(seq[i]));
+        const uint8_t lo = i + 1 < seq.size() ? static_cast<uint8_t>(kNt.find(seq[i + 1])) : 0;
+        body.push_back(uint8_t(hi << 4 | lo));
+    }
+    body.insert(body.end(), seq.size(), 30);   // qualities
+    for (const auto& t : tags) {
+        body.push_back(uint8_t(t.key[0]));
+        body.push_back(uint8_t(t.key[1]));
+        body.push_back('Z');
+        body.insert(body.end(), t.val.begin(), t.val.end());
+        body.push_back(0);
+    }
+    std::vector<uint8_t> rec;
+    put32(rec, static_cast<uint32_t>(body.size()));
+    rec.insert(rec.end(), body.begin(), body.end());
+    return rec;
+}
+
+/// Cut an inflated BAM stream into BGZF blocks of `chunk` bytes (records span block boundaries) and append the EOF block.
+std::vector<uint8_t> bgzf_stream(const std::vector<uint8_t>& raw, size_t chunk, bool eof = true) {
+    std::vector<uint8_t> out;
+    for (size_t i = 0; i < raw.size(); i += chunk) {
+        const auto b = bgzf(std::vector<uint8_t>(raw.begin() + static_cast<long>(i), raw.begin() + static_cast<long>(std::min(raw.size(), i + chunk))));
+        out.insert(out.end(), b.begin(), b.end());
+    }
+    if (eof) { const auto e = bgzf_eof(); out.insert(out.end(), e.begin(), e.end()); }
+    return out;
+}
+
 
 }  // namespace
 
@@ -250,8 +347,10 @@ int main() {
         // single_cell=1 turns the refusals of runs without barcode structure into defers and leaves the verdict alone
         Options sc; sc.whitelist_dirs = {dir}; sc.hint = "single_cell=1";
         auto sbulk = identify_spots(v, sc, lists, &even);
-        CHECK(sbulk.verdict == "ambiguous" && sbulk.action == "refuse" && sbulk.hints.size() == 1 && sbulk.hints[0].effect.empty(),
-              "single_cell=1 does not touch an ambiguous call");
+        CHECK(sbulk.verdict == "ambiguous" && sbulk.action == "defer" && sbulk.hint_used && sbulk.hints.size() == 1 && sbulk.hints[0].effect == "action refuse -> defer",
+              "single_cell=1 selects defer over refuse when one side of the ambiguity is not single-cell, and the record says so");
+        CHECK(!unk.hint_used && report_json(sbulk).find("\"hint_used\": true") != std::string::npos && report_json(unk).find("\"hint_used\": false") != std::string::npos,
+              "hint_used is false without a hint and true in the JSON when a hint selected the action");
         { std::vector<HeadSpot> w2 = v; Options so = sc; so.run_spots = 60000000;
           auto sb = identify_spots(w2, so, lists, &even);
           CHECK(sb.verdict == "bulk_rna" && sb.action == "defer" && sb.hints[0].effect == "action refuse -> defer", "single_cell=1: bulk verdict stays, refuse becomes defer");
@@ -407,6 +506,212 @@ int main() {
         const std::string js = report_json(r1);
         CHECK(js.find("\"species\": {\"call\": \"CALL\"") != std::string::npos, "species block in the JSON");
         CHECK(report_json(run(v1, lists, dir)).find("\"species\": null") != std::string::npos, "species is null without filters");
+    }
+
+    std::cout << "\n=== BAM head route (synthetic BGZF) ===\n";
+    {
+        const std::string text =
+            "@HD\tVN:1.4\tSO:coordinate\n@SQ\tSN:chr1\tLN:100000000\n@SQ\tSN:chr2\tLN:100000000\n"
+            "@PG\tID:cellranger-7.1.0\tPN:cellranger\tVN:7.1.0\tCL:cellranger count --id=x --chemistry=SC3Pv3 --transcriptome=/ref/refdata-gex-GRCh38-2020-A\n"
+            "@CO\t10x_bam_to_fastq:R1(CR:CY,UR:UY)\n";
+        std::vector<uint8_t> raw = bam_header(text, {"chr1", "chr2"});
+        std::vector<std::string> truth_cr;
+        const int NREC = 6000, NUNM = 700;
+        std::vector<std::string> cdna;
+        for (int i = 0; i < NREC; ++i) {
+            const std::string cr = pick(wl_v3), ur = rand_seq(12), seq = rand_seq(90);
+            const uint16_t flag = (rng() & 1) ? 16 : 0;
+            const bool sense = (rng() % 100) < 95;
+            auto rec = bam_record(i < NREC / 2 ? 0 : 1, 1000 + i * 7, flag, "r" + std::to_string(i), seq,
+                                  {{"CR", cr}, {"CY", std::string(16, 'F')}, {"UR", ur}, {"UY", std::string(12, 'F')}, {"CB", cr + "-1"}, {"UB", ur},
+                                   {"GX", "ENSG0001"}, {"TX", std::string("ENST0001,") + (sense ? "+" : "-") + "100,90M"}});
+            raw.insert(raw.end(), rec.begin(), rec.end());
+        }
+        for (int i = 0; i < NUNM; ++i) {   // coordinate-sorted files put the unmapped reads last
+            auto rec = bam_record(-1, -1, 4, "u" + std::to_string(i), rand_seq(90), {{"CR", pick(wl_v3)}, {"UR", rand_seq(12)}});
+            raw.insert(raw.end(), rec.begin(), rec.end());
+        }
+        const auto file = bgzf_stream(raw, 5000);
+
+        // block level
+        {
+            std::vector<uint8_t> out;
+            size_t cs = 0;
+            CHECK(bam::bgzf_block(file.data(), file.size(), cs, out) == bam::Block::Ok && cs > 18 && out.size() == 5000, "one BGZF block inflates and passes its CRC");
+            CHECK(bam::bgzf_block(file.data(), cs - 3, cs, out) == bam::Block::Truncated, "a block cut short is reported as truncated");
+            auto bad = std::vector<uint8_t>(file.begin(), file.begin() + static_cast<long>(cs));
+            bad[bad.size() - 6] ^= 0xff;
+            CHECK(bam::bgzf_block(bad.data(), bad.size(), cs, out) == bam::Block::Bad, "a corrupted block fails the CRC");
+            std::vector<uint8_t> junk(100);
+            for (auto& b : junk) b = uint8_t(rng() | 1);
+            junk.insert(junk.end(), file.begin(), file.end());
+            CHECK(bam::find_block(junk.data(), junk.size(), 0) == 100, "find_block skips bytes that are not a block");
+            CHECK(bam::has_eof_marker(file.data(), file.size()) && !bam::has_eof_marker(file.data(), file.size() - 1), "the 28-byte EOF marker is recognized");
+            CHECK(bam::revcomp("AACGN") == "NCGTT", "revcomp restores the original orientation of a reverse-strand read");
+        }
+
+        // head: the first 60% of the bytes, cut inside a block
+        bam::Evidence ev;
+        std::vector<bam::Rec> recs;
+        const size_t cut = file.size() * 6 / 10 + 17;
+        CHECK(bam::ingest_head(ev, file.data(), cut, recs), "head buffer: header and records parse");
+        CHECK(ev.header_ok && ev.sort_order == "coordinate" && ev.n_ref == 2 && ev.cellranger_version == "cellranger-7.1.0", "header: sort order, references and Cell Ranger version");
+        CHECK(ev.chemistry == "SC3Pv3" && ev.reference == "/ref/refdata-gex-GRCh38-2020-A", "header: chemistry and reference from the command line");
+        CHECK(recs.size() > 1000 && recs.size() < size_t(NREC), "head: a truncated last block loses only the records after it");
+        CHECK(recs[0].cr.size() == 16 && recs[0].ur.size() == 12 && recs[0].cb.size() == 18 && !recs[0].tx.empty() && recs[0].gx, "records carry CR, UR, CB, TX and GX");
+
+        // a sample from inside the file, starting in the middle of a block
+        const size_t off = file.size() / 3 + 777;
+        bam::ingest_sample(ev, "interior", off, file.data() + off, 60000, recs);
+        CHECK(ev.samples.size() == 2 && ev.samples[1].synced && ev.samples[1].c.records > 100, "interior sample: block and record resynchronized");
+        bool all_valid = true;
+        for (size_t i = recs.size() - ev.samples[1].c.records; i < recs.size(); ++i)
+            all_valid = all_valid && recs[i].cr.size() == 16 && std::find(wl_v3.begin(), wl_v3.end(), recs[i].cr) != wl_v3.end() && recs[i].seq.size() == 90;
+        CHECK(all_valid, "interior sample: every record resynchronized on is a real record");
+
+        // before the tail is read: sorted, unmapped reads unknown
+        {
+            bam::Evidence e2 = ev;
+            bam::finalize(e2);
+            CHECK(e2.coordinate_sorted && e2.unmapped_status == "unknown", "sorted file without its tail: unmapped reads are unknown, not absent");
+        }
+        // the tail
+        const size_t toff = file.size() - 60000;
+        bam::ingest_sample(ev, "tail", toff, file.data() + toff, 60000, recs);
+        bam::finalize(ev);
+        CHECK(ev.samples[2].eof_marker && ev.samples[2].synced, "tail sample: EOF marker seen");
+        CHECK(ev.unmapped_status == "present" && ev.pooled.no_ref > 0, "unmapped reads found in the tail of a coordinate-sorted file");
+        CHECK(ev.coordinate_sorted && ev.barcode_tags == "CR+UR" && ev.usable_barcodes, "barcode tags CR+UR on the records");
+        CHECK(bam::mode_len(ev.pooled.cr_len) == 16 && bam::mode_len(ev.pooled.ur_len) == 12 && bam::mode_len(ev.pooled.cb_len) == 18, "tag lengths");
+        CHECK(ev.sense > 0.92 && ev.sense < 0.98 && ev.sense_reads > 1000, "sense share from the TX tags");
+        CHECK(ev.limits.size() == 3 && ev.limits[0].find("not a random sample") != std::string::npos, "the limits of a sorted head are stated");
+
+        // classification of the pooled records, as head_bam_ranged builds them
+        std::vector<HeadSpot> spots;
+        for (const auto& r : recs) {
+            if (r.cr.empty()) continue;
+            spots.push_back(spot({r.cr + r.ur, (r.flag & 16) ? bam::revcomp(r.seq) : r.seq}));
+        }
+        auto classify = [&](double sense) {
+            Report R;
+            Options o;
+            o.whitelist_dirs = {dir};
+            measure(spots, o, lists, R.ev);
+            R.ev.bam_sense = sense;
+            rank(R, o);
+            return R;
+        };
+        auto r3 = classify(ev.sense);
+        CHECK(r3.verdict == "droplet_3p" && r3.verdict_protocol == "10x-3p-v3" && r3.action == "process", "BAM tags: 10x 3' v3 call from the barcode list");
+        bool shown = false;
+        for (const auto& s : r3.ranked[0].reasons) shown = shown || s.find("TX/AN tags") != std::string::npos;
+        CHECK(shown, "the 3'/5' basis names the BAM's TX/AN tags");
+        auto r5 = classify(0.05);
+        CHECK(r5.verdict == "droplet_5p" && r5.verdict_protocol == "10x-5p-v3", "antisense TX share calls 5'");
+        auto rn = classify(-1);
+        CHECK(rn.verdict == "droplet_3p", "no strand tags: the motif evidence decides, as for reads");
+        r3.bam = ev;
+        r3.bam.list_rate_tag = "CR";
+        r3.barcode_source = "bam_tags";
+        const std::string js = report_json(r3);
+        CHECK(js.find("\"barcode_source\": \"bam_tags\"") != std::string::npos && js.find("\"bam\": {\"url\"") != std::string::npos &&
+              js.find("\"sort_order\": \"coordinate\"") != std::string::npos && js.find("\"unmapped\": {\"status\": \"present\"") != std::string::npos &&
+              js.find("\"barcode_tags\": \"CR+UR\"") != std::string::npos && js.find("\"cellranger\": \"cellranger-7.1.0\"") != std::string::npos,
+              "the JSON record carries the BAM block and barcode_source");
+        CHECK(report_json(classify(-1)).find("\"barcode_source\": \"reads\"") != std::string::npos && report_json(classify(-1)).find("\"bam\": null") != std::string::npos,
+              "a record from reads says barcode_source reads and has no BAM block");
+
+        // corrected tags only
+        {
+            std::vector<uint8_t> raw2 = bam_header(text, {"chr1", "chr2"});
+            for (int i = 0; i < 400; ++i) {
+                auto rec = bam_record(0, 100 + i, 0, "c" + std::to_string(i), rand_seq(80), {{"CB", pick(wl_v3) + "-1"}, {"UB", rand_seq(10)}});
+                raw2.insert(raw2.end(), rec.begin(), rec.end());
+            }
+            const auto f2 = bgzf_stream(raw2, 20000);
+            bam::Evidence e3;
+            std::vector<bam::Rec> r2;
+            CHECK(bam::ingest_head(e3, f2.data(), f2.size(), r2) && r2.size() == 400, "small BAM: all records read");
+            bam::finalize(e3);
+            CHECK(e3.barcode_tags == "CB+UB" && e3.usable_barcodes && e3.sense < 0 && e3.strand_basis.find("no TX/AN") != std::string::npos, "only corrected tags: CB+UB, no strand evidence");
+            CHECK(e3.unmapped_status == "not_seen", "a file read to its end with no flag-4 record: unmapped not seen");
+        }
+        // no barcode tags at all
+        {
+            std::vector<uint8_t> raw3 = bam_header(text, {"chr1", "chr2"});
+            for (int i = 0; i < 300; ++i) {
+                auto rec = bam_record(0, 100 + i, 0, "n" + std::to_string(i), rand_seq(80), {{"RG", "x"}});
+                raw3.insert(raw3.end(), rec.begin(), rec.end());
+            }
+            const auto f3 = bgzf_stream(raw3, 20000);
+            bam::Evidence e4;
+            std::vector<bam::Rec> r4;
+            bam::ingest_head(e4, f3.data(), f3.size(), r4);
+            bam::finalize(e4);
+            CHECK(e4.barcode_tags == "none" && !e4.usable_barcodes, "a BAM without barcode tags is not a barcode source");
+        }
+        // not a BAM
+        {
+            bam::Evidence e5;
+            std::vector<bam::Rec> r5b;
+            std::vector<uint8_t> txt(500, 'x');
+            CHECK(!bam::ingest_head(e5, txt.data(), txt.size(), r5b) && !e5.error.empty(), "bytes that are not BGZF are rejected with a reason");
+        }
+    }
+
+    std::cout << "\n=== action policy for ambiguous verdicts ===\n";
+    {
+        auto mk = [](const std::string& a, const std::string& b) {
+            Report R;
+            R.verdict = "ambiguous";
+            R.ambiguous_with = a + " | " + b;
+            Interp x, y;
+            x.family = a; x.protocol = "p1"; x.support = 0.5;
+            y.family = b; y.protocol = "p2"; y.support = 0.45;
+            R.ranked = {x, y};
+            return R;
+        };
+        Options plain, hinted;
+        hinted.hint = "single_cell=1";
+        for (const auto& pr : std::vector<std::pair<std::string, std::string>>{{"droplet_other", "plate_barcoded"}, {"plate_barcoded", "combinatorial"}, {"droplet_3p", "droplet_5p"}}) {
+            auto a = mk(pr.first, pr.second);
+            apply_policy(a, plain);
+            CHECK(a.action == "defer" && !a.hint_used && a.verdict == "ambiguous", "two single-cell interpretations are deferred without any hint: " + pr.first + " | " + pr.second);
+            CHECK(a.defer_candidates.size() == 2 && a.defer_candidates[0] == pr.first + "/p1" && a.defer_candidates[1] == pr.second + "/p2" &&
+                  a.action_note.find(pr.first + "/p1") != std::string::npos && a.action_note.find(pr.second + "/p2") != std::string::npos,
+                  "the two candidates are named in the record and the note");
+            auto b = mk(pr.first, pr.second);
+            apply_policy(b, hinted);
+            CHECK(b.action == "defer" && !b.hint_used && b.hints.size() == 1 && b.hints[0].effect.empty(), "a hint is not needed and not used for two single-cell interpretations");
+        }
+        {
+            auto a = mk("smartseq", "bulk_rna");
+            apply_policy(a, plain);
+            CHECK(a.action == "refuse" && !a.hint_used && a.defer_candidates.empty(), "single-cell against bulk: refused without a hint");
+            auto b = mk("smartseq", "bulk_rna");
+            apply_policy(b, hinted);
+            CHECK(b.action == "defer" && b.hint_used && b.hints[0].effect == "action refuse -> defer" && b.verdict == "ambiguous" && b.ambiguous_with == "smartseq | bulk_rna",
+                  "single_cell=1 selects defer over refuse and the verdict is untouched");
+            auto c = mk("droplet_other", "genomic_dna");
+            apply_policy(c, hinted);
+            CHECK(c.action == "defer" && c.hint_used, "the same for a droplet library against genomic DNA");
+            Options other; other.hint = "organism=human";
+            auto d = mk("smartseq", "bulk_rna");
+            apply_policy(d, other);
+            CHECK(d.action == "refuse" && !d.hint_used, "another hint changes nothing");
+            const std::string js = report_json(b);
+            CHECK(js.find("\"hint_used\": true") != std::string::npos && js.find("\"defer_candidates\": []") != std::string::npos, "hint_used and defer_candidates in the JSON");
+            auto e = mk("droplet_other", "plate_barcoded");
+            apply_policy(e, plain);
+            CHECK(report_json(e).find("droplet_other/p1") != std::string::npos && report_json(e).find("\"hint_used\": false") != std::string::npos, "candidates of a deferred ambiguity in the JSON");
+        }
+        {
+            Report R;
+            R.verdict = "droplet_3p"; R.verdict_protocol = "10x-3p-v3";
+            Interp x; x.family = "droplet_3p"; x.protocol = "10x-3p-v3"; R.ranked = {x};
+            apply_policy(R, hinted);
+            CHECK(R.action == "process" && !R.hint_used && R.defer_candidates.empty(), "a clear verdict is not touched by the ambiguity rule");
+        }
     }
 
     fs::remove_all(dir);
