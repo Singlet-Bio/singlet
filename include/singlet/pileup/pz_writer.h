@@ -651,8 +651,7 @@ bool write_1pz(
     }
     if (meta_raw.size() > kMaxMetadataBytes) {
         std::cerr << "[pz_writer] Not written: " << path << ": the names and key/values take " << meta_raw.size()
-                  << " bytes, over the reader's limit of " << kMaxMetadataBytes << "
-";
+                  << " bytes, over the reader's limit of " << kMaxMetadataBytes << "\n";
         return false;
     }
     auto meta_z = has_meta ?

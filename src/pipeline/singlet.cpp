@@ -3562,8 +3562,7 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
 }
 
 int main(int argc, char* argv[]) {
-    if (argc >= 2 && std::string(argv[1]) == "--version") { std::cout << singlet::version_line() << "
-"; return 0; }   // one line: the runner compares it with BUILD.txt
+    if (argc >= 2 && std::string(argv[1]) == "--version") { std::cout << singlet::version_line() << "\n"; return 0; }   // one line: the runner compares it with BUILD.txt
     if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main, &pool_preload_refs);
     return singlet_main(argc, argv);
 }
@@ -10718,8 +10717,7 @@ static int singlet_main(int argc, char* argv[]) {
                 {
                     std::string ee;
                     if (!singlet::editing::resummarize(out_prefix, config.edit_path, engine_ptr ? engine_ptr->n_edit_sites() : 0u, called, &ee))
-                        std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "
-";
+                        std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "\n";
                     else if (!config.edit_path.empty())
                         std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots
 ";
