@@ -75,3 +75,19 @@ sample A, 2x100), SRR12188073 (2x150). Pass rule as in "Bulk check": the run end
 2. inDrop. python/singlet/data/whitelists/indrop_bc1.txt (8-11 nt, 96 of each length) is the right list; pipeline-benchmark/whitelists/indrop_bc1.txt on
    Clipper is the stale 8-nt prefix of the published table (md5 differs; the other whitelist files are identical). The validation runs of D-152
    use the commit's lists (jobs/validation-engine/non10x/whitelists).
+
+## Dated notes (2026-11-13, D-152). Bars above are unchanged; nothing below was scored against a changed bar.
+3. Engine failures at full depth (the "previous build" rows): both were out-of-memory kills at a 64 GB request (Slurm state OUT_OF_MEMORY, jobs
+   812346_0 Drop-seq barnyard, STAR killed by signal 9 at mapping start, and 812345_1 retina, killed in the pileup), not engine faults. The
+   validation-engine runs request 160 GB and finish.
+4. Drop-seq full depth on build 3725a7bbb57f (collapse and cliff caller present): 56,371 cells for 1,020 STAMPs. The post-STAR CB-tag refresh rebuilt the
+   barcode universe from every CB tag with 5 or more reads (1,190,387 columns) and undid the error-barcode collapse made at decode time, so the caller saw
+   an unmerged rank curve and fell back to the 2.1 rule (method whitelistfree_emptydrops_2.1). Fixed by collapsing the refreshed list again (commit
+   81a25dd4); not yet rerun at full depth. At the 30 M prefix on 3725a7bbb57f the Drop-seq barnyard and retina both passed all registered bars.
+5. inDrop: the variable-length R2 fix (d98a6e94) lifts mapping at 500 k reads from 9% to 48% (STAR unique 48.2%, multi 21.2%, too short 29.4%). Of the
+   cDNA reads, 11.8% carry an internal poly(A) run of 10 or more followed by more sequence (the insert read through the tail into the reverse complement
+   of the barcode), 25% of the unmapped reads do, and most of the rest are reads whose insert is empty (W1 reverse complement at the read start). The
+   terminal poly(A) trim does not see either. Commit efb352e7 cuts R2 at the first internal run; its effect on mapping is not yet measured.
+6. BD Rhapsody counting on the called set (8,537 cells, 30 M pairs): exon only 762 UMIs and 440 genes per cell, exon plus intron 833 and 497. The authors'
+   matrix thinned to 833 UMIs per cell gives 512 genes (note 1). Barcodes cannot be matched to the authors' cells because their files carry Cell_Index integers.
+   The gap to the registered bar is the depth of the deposit against the authors' read count; the registered bar is not changed here.
