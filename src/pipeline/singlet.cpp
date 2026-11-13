@@ -95,6 +95,7 @@
 #include "singlet/pileup/cascade_stats_writer.h"
 #include "singlet/pileup/visium_qc.h"
 #include "singlet/pileup/visium_tissue.h"
+#include "singlet/pileup/self_check.h"
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/nvtx.h"
@@ -3218,6 +3219,8 @@ static void usage(const char* prog) {
         << "  --snps FILE            VCF of SNP positions\n"
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
+        << "  --self-check           At the end of the run decode the editing outputs and recompute their tables; write self_check.json,\n"
+        << "                         exit 12 on a failure (off by default; the output files are never changed)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
         << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default for 3' libraries; for 5' it writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
         << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default) or defer (env SINGLET_HLA_GPU_3P)\n"
@@ -3724,6 +3727,7 @@ static int singlet_main(int argc, char* argv[]) {
     std::string bam_path_reason = "default";   // why the pileup reads the sorted BAM instead of the STAR stream (provenance: pileup_path_reason)
     bool whitelist_missing = false;      // a 10x-type protocol (CB_UMI_Simple) was detected but no barcode whitelist file was found: the sorted path was taken because of it
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
+    bool self_check = false;             // --self-check: decode and cross-check the editing outputs at the end of the run (off by default)
     bool no_default_editing = false;     // --no-editing: do not use the default RNA editing panel in --pipeline mode (D-101)
     std::string edit_panel_source = "none";
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
@@ -3765,6 +3769,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--allsite-min-alt-cells" && i+1 < argc) config.allsite_min_alt_cells = std::atoi(argv[++i]);
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
+        else if (arg == "--self-check") self_check = true;   // end-of-run check of the editing outputs (self_check.h); exit 12 on a failure
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
         else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
@@ -11038,6 +11043,15 @@ static int singlet_main(int argc, char* argv[]) {
         std::cerr << "[singlet] EXIT " << export_stats.exit_code
                   << " (zero_cells: cell calling produced 0 cells)\n";
         return export_stats.exit_code;
+    }
+    if (self_check && star_exit == 0) {   // report-only: self_check.json, and exit 12 when a decode or a table comparison fails
+        const int n_bad = singlet::run_self_check(out_prefix);
+        if (n_bad) {
+            std::cerr << "[self-check] FAILED: " << n_bad << " problem(s), see " << out_prefix << "/self_check.json\n";
+            alarm(0);
+            return singlet::kExitSelfCheck;
+        }
+        std::cerr << "[self-check] ok\n";
     }
     alarm(0);  // disarm watchdog — clean exit
     return star_exit;

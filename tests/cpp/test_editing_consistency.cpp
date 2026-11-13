@@ -14,7 +14,11 @@
 #include <unordered_set>
 #include <vector>
 
+#include <fstream>
+#include <sstream>
+
 #include "singlet/pileup/rna_editing.h"
+#include "singlet/pileup/self_check.h"
 
 using namespace singlet;
 namespace fs = std::filesystem;
@@ -81,6 +85,15 @@ int main() {
     const auto fresh = editing::summarize(alt, dp, {0, 2, 3, 4});
     assert(fresh.site[3].alt == 3 && fresh.alt_total == 1 + 0 + 1 + 3 + 2);
 
+    // the end-of-run self-check (singlet --self-check): clean directory -> self_check.json ok, 0 problems
+    assert(singlet::run_self_check(out) == 0);
+    {
+        std::ifstream f(out + "/self_check.json");
+        std::stringstream ss; ss << f.rdbuf();
+        assert(ss.str().find("\"ok\": true") != std::string::npos && ss.str().find("\"present\": true") != std::string::npos);
+    }
+    assert(singlet::kExitSelfCheck == 12);
+
     // a table that does not match its matrices is reported
     {
         const auto wrong = editing::summarize(alt, dp, {0, 1, 2});
@@ -93,6 +106,12 @@ int main() {
     // an undecodable file is reported too
     fs::resize_file(out + "/private/editing/editing_dp.1pz", 40);
     assert(!editing::check_outputs(out).empty());
+    assert(singlet::run_self_check(out) > 0);   // the self-check fails, and says so in self_check.json
+    {
+        std::ifstream f(out + "/self_check.json");
+        std::stringstream ss; ss << f.rdbuf();
+        assert(ss.str().find("\"ok\": false") != std::string::npos);
+    }
 
     fs::remove_all(out);
     std::cout << "test_editing_consistency: ok\n";
