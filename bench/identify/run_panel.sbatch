@@ -11,7 +11,7 @@
 # The hint column of the source list (single_cell=1 where the archive record states single-cell) is passed unless NOHINT=1.
 # Run `singlet identify` over a source list (id TAB source), part ARRAY_TASK of N.   sbatch run_panel.sbatch SOURCES.tsv OUTNAME [--genome-dir DIR]
 set -u
-W=/mnt/projects/debruinz_project/debruinz/singlet; J=$W/jobs/identify; ENV=$W/envs/pbench
+W=/mnt/projects/debruinz_project/debruinz/singlet; J=${JOBDIR:-$W/jobs/identify}; ENV=$W/envs/pbench
 SRC=$1; OUT=$J/out/$2; shift 2
 N=$(( ${SLURM_ARRAY_TASK_MAX:-0} + 1 )); I=${SLURM_ARRAY_TASK_ID:-0}
 export LD_LIBRARY_PATH=$ENV/lib PATH=$ENV/bin:$PATH

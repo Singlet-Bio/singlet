@@ -615,7 +615,7 @@ inline EndpointRec evaluate_endpoint(const std::string& name, bool reachable, co
     if (!e.reachable) return e;
     Report r;
     measure(spots, opt, lists, r.ev);
-    if (bam_ev && bam_ev->present) r.ev.bam_sense = bam_ev->sense;
+    if (bam_ev && bam_ev->present) apply_bam_evidence(r.ev, *bam_ev);
     rank(r, opt);
     for (const auto& s : r.ev.segs) e.seg_lens.push_back(s.len_mode);
     double best = 0;
@@ -799,7 +799,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
     }
     if (R.bam.present && R.bam.usable_barcodes) R.barcode_source = "bam_tags";
     measure(spots, opt, lists, R.ev);
-    if (R.bam.present) R.ev.bam_sense = R.bam.sense;
+    if (R.bam.present) apply_bam_evidence(R.ev, R.bam);
     if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, R.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
     attach_species(R, spots, opt);
@@ -827,7 +827,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
             P.bam = *bb.ev;
             P.barcode_source = "bam_tags";
             measure(bb.spots, opt, lists, P.ev);
-            P.ev.bam_sense = P.bam.sense;
+            apply_bam_evidence(P.ev, P.bam);
             if (!genome_dir.empty()) map_head(bb.spots, P.ev.cdna_seg, P.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), P.ev.map);
             rank(P, opt);
             attach_species(P, bb.spots, opt);

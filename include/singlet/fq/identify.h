@@ -1080,6 +1080,18 @@ inline void add_usefulness(Interp& it, const Evidence& ev, double valid_bc) {
 
 }  // namespace detail_id
 
+/// BAM route: hand the BAM's evidence to the classifier. The sense share from TX/AN tags decides 3' against 5'. Reads of a coordinate-sorted head sit
+/// at a few loci and share their k-mers, so the two statistics that read diversity as a signature (top-100 15-mers of read 2 for feature barcodes, repeated
+/// 25-mer starts for probe panels) say nothing and are not used.
+inline void apply_bam_evidence(Evidence& ev, const bam::Evidence& b) {
+    ev.bam_sense = b.sense;
+    if (b.coordinate_sorted) {
+        if (ev.feature_like) ev.feature_reason += " (not used: reads of a position-sorted BAM repeat their k-mers)";
+        ev.feature_like = false;
+        ev.cdna_start_repeat = 0;
+    }
+}
+
 /// Families whose reads are barcoded single-cell or spot libraries. An ambiguous verdict between two of them is deferred, never refused.
 inline bool single_cell_family(const std::string& f) {
     static const char* const k[] = {"droplet_3p", "droplet_5p", "droplet_other", "multiome_gex", "multiome_atac", "atac", "visium", "combinatorial", "plate_barcoded",
