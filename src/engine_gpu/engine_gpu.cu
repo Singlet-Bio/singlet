@@ -2635,6 +2635,24 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         stepAdd("records.prep", now() - tR0);
         return true;
     };
+    // records' parameters (e2eBuildRC's device builds and the host counts below use the same ones)
+    auto makeRP = [&]() -> e6::RecParams {
+        e6::RecParams R;
+        R.outFilterScoreMin = (int) P.outFilterScoreMin; R.outFilterScoreMinOverLread = P.outFilterScoreMinOverLread;
+        R.outFilterMatchNmin = P.outFilterMatchNmin; R.outFilterMatchNminOverLread = P.outFilterMatchNminOverLread;
+        R.outFilterMismatchNmax = P.outFilterMismatchNmax; R.outFilterMismatchNoverLmax = P.outFilterMismatchNoverLmax;
+        R.outFilterMismatchNoverReadLmax = P.outFilterMismatchNoverReadLmax; R.outFilterMultimapNmax = P.outFilterMultimapNmax;
+        R.outSAMmultNmax = P.outSAMmultNmax; R.outSAMmapqUnique = in.outSAMmapqUnique; R.outSAMflagAND = in.outSAMflagAND; R.outSAMflagOR = in.outSAMflagOR;
+        return R;
+    };
+    // SINGLET_ENGINE_GPU_REC2PASS: unset = e2eBuildRC's counts come from the host (counted here, as each record's blob is copied: one device pass);
+    // 1 = the device's counting pass as before; check = both, compared, a difference fails the mapping
+    const char* r2E = std::getenv("SINGLET_ENGINE_GPU_REC2PASS");
+    const int rec2 = !r2E || !r2E[0] || r2E[0] == '0' ? 0 : (std::strcmp(r2E, "check") == 0 ? 2 : 1);
+    const bool hostCnt = e2e && RC && rec2 != 1;
+    // what e6::recordCount gives for the host-assembled records, summed (the device's k_count: Cnt4 totals and the status counters)
+    struct HostCnt { std::atomic<u64> a{0}, o{0}, s{0}, noExon{0}, badBest{0}, mapped{0}, mateGap{0}, ns{0}; } hcnt;
+    const e6::RecParams recRP = hostCnt ? makeRP() : e6::RecParams();
     // a chunk's records copied to their places (s0, b0, r0: the chunk's first sequence byte, blob byte and record)
     auto hostCopy = [&](ChunkRes& cr, u64 s0, u64 b0, u64 r0) {
         const double tC = now();
@@ -2652,6 +2670,28 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                 std::memcpy(out.blob.data() + b0 + cr.bOff[k], p, len); out.blobOff[rec + 1] = b0 + cr.bOff[k] + len;
             }
         });
+        if (hostCnt) {   // the counts of the records just copied (pass 1 of e2eBuildRC, on the host): thread-local sums, added once per range
+            const double tK = now();
+            parallelFor(nK, hostThreads, [&](u64 lo, u64 hi) {
+                u64 a = 0, o = 0, s = 0, nx = 0, bb = 0, mp = 0, mg = 0;
+                for (u64 k = lo; k < hi; k++) {
+                    if (!cr.okv[k]) continue;
+                    const uint8_t* p; u64 len; bool ok;
+                    laneOf(cr, k, p, len, ok);
+                    const u64 L = rlen(repc[k]);
+                    const e6::RecCount rc = e6::recordCount(recRP, p, L);
+                    a += rc.nAln; o += rc.nOps; s += e6::seqBytes(L);
+                    if (rc.nAln > 0) mp++;
+                    if (rc.status & e6::ST_MATEGAP) mg++;
+                    if (rc.status & e6::ST_NOEXON) nx++;
+                    if (rc.status & e6::ST_BADBEST) bb++;
+                }
+                hcnt.a += a; hcnt.o += o; hcnt.s += s; hcnt.noExon += nx; hcnt.badBest += bb; hcnt.mapped += mp; hcnt.mateGap += mg;
+            });
+            const double dK = now() - tK;
+            hcnt.ns += (u64) (dK * 1e9);
+            stepAdd("records.count", dK);
+        }
         nGpuMapped += repc.size() - cr.repH.size();
         chunksDone++;
         if (lean) for (Lane* L : {&cr.A, &cr.M, &cr.B}) {   // P3-MEM-03: lean keeps no result on the device, and out.blob now holds the chunk's results
@@ -3003,12 +3043,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (nRec == 0 || out.readRecord.size() != n) { why = "no records"; return false; }
         if (nRec >= 0xFFFFFFFFull) { why = "more records than 32-bit indices"; return false; }
         g_bud.at = "records";
-        e6::RecParams RP;
-        RP.outFilterScoreMin = (int) P.outFilterScoreMin; RP.outFilterScoreMinOverLread = P.outFilterScoreMinOverLread;
-        RP.outFilterMatchNmin = P.outFilterMatchNmin; RP.outFilterMatchNminOverLread = P.outFilterMatchNminOverLread;
-        RP.outFilterMismatchNmax = P.outFilterMismatchNmax; RP.outFilterMismatchNoverLmax = P.outFilterMismatchNoverLmax;
-        RP.outFilterMismatchNoverReadLmax = P.outFilterMismatchNoverReadLmax; RP.outFilterMultimapNmax = P.outFilterMultimapNmax;
-        RP.outSAMmultNmax = P.outSAMmultNmax; RP.outSAMmapqUnique = in.outSAMmapqUnique; RP.outSAMflagAND = in.outSAMflagAND; RP.outSAMflagOR = in.outSAMflagOR;
+        const e6::RecParams RP = makeRP();
         struct DB { void* p = nullptr; ~DB() { dfree(p); } };
         auto dalc = [&](DB& b, u64 bytes) -> bool { if (dmalv(&b.p, bytes + 64) != cudaSuccess) { cudaGetLastError(); b.p = nullptr; return false; } return true; };
         auto d2hc = [&](void* dst, const void* src, u64 b) -> bool { return g_d2h ? g_d2h->copy(dst, src, b) : cudaMemcpy(dst, src, b, cudaMemcpyDeviceToHost) == cudaSuccess; };
@@ -3075,7 +3110,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         // pass 1: the counts
         std::vector<u64> cAln(nCh), cOps(nCh), cSeq(nCh);
         u64 nAln = 0, nOps = 0, nSeqT = 0, nNoExon = 0, nBadBest = 0, nMapped = 0;
-        for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
+        // rec2 = 0 (default): the counts were made on the host while the records were assembled (hcnt), no device pass; 1: the device's pass as
+        // before; 2 (check): the device's pass, every value compared with the host's (per chunk, recounted here, and in total)
+        const bool devPass1 = rec2 != 0;
+        if (devPass1) for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
             const u64 m = std::min(RRN, nRec - q0);
             if (!upChunk(q0, m)) { why = "records upload"; return false; }
             const double ta = now();
@@ -3083,10 +3121,41 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             struct R6Free { singlet_records_gpu::DeviceRecords& r; ~R6Free() { singlet_records_gpu::release(r); } } r6f{R6};
             if (!singlet_records_gpu::buildRecords(RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const char*) dS.p, (const uint64_t*) dSO.p, m,
                                                    (const uint64_t*) dcs, false, R6, e6err, true)) { why = "buildRecords: " + e6err; return false; }
+            if (rec2 == 2) {   // this chunk's values from the host-assembled records, counted again here
+                std::atomic<u64> ha{0}, ho{0}, hs{0}, hx{0}, hb{0}, hm{0}, hg{0};
+                parallelFor(m, hostThreads, [&](u64 lo, u64 hi) {
+                    u64 a = 0, o = 0, s = 0, nx = 0, bb = 0, mp = 0, mg = 0;
+                    for (u64 k = q0 + lo; k < q0 + hi; k++) {
+                        const u64 L = out.seqOff[k + 1] - out.seqOff[k];
+                        const e6::RecCount rc = e6::recordCount(RP, out.blob.data() + out.blobOff[k], L);
+                        a += rc.nAln; o += rc.nOps; s += e6::seqBytes(L);
+                        if (rc.nAln > 0) mp++;
+                        if (rc.status & e6::ST_MATEGAP) mg++;
+                        if (rc.status & e6::ST_NOEXON) nx++;
+                        if (rc.status & e6::ST_BADBEST) bb++;
+                    }
+                    ha += a; ho += o; hs += s; hx += nx; hb += bb; hm += mp; hg += mg;
+                });
+                if (R6.nAln != ha || R6.nOps != ho || R6.nSeq != hs || R6.nNoExon != hx || R6.nBadBest != hb || R6.nMapped != hm || R6.nMateGap != hg)
+                    return fail("REC2PASS=check: record chunk " + std::to_string(c) + " device counts (alns " + std::to_string(R6.nAln) + ", ops " + std::to_string(R6.nOps)
+                                + ", seq " + std::to_string(R6.nSeq) + ", noExon " + std::to_string(R6.nNoExon) + ", badBest " + std::to_string(R6.nBadBest)
+                                + ", mapped " + std::to_string(R6.nMapped) + ", mateGap " + std::to_string(R6.nMateGap) + ") differ from the host's ("
+                                + std::to_string(ha.load()) + ", " + std::to_string(ho.load()) + ", " + std::to_string(hs.load()) + ", " + std::to_string(hx.load()) + ", "
+                                + std::to_string(hb.load()) + ", " + std::to_string(hm.load()) + ", " + std::to_string(hg.load()) + ")");
+            }
             if (R6.nMateGap) { why = std::to_string(R6.nMateGap) + " records with a mate gap (paired-end; alignBAM's path)"; return false; }
             cAln[c] = R6.nAln; cOps[c] = R6.nOps; cSeq[c] = R6.nSeq;
             nAln += R6.nAln; nOps += R6.nOps; nSeqT += R6.nSeq; nNoExon += R6.nNoExon; nBadBest += R6.nBadBest; nMapped += R6.nMapped;
             tBuild += now() - ta;
+        }
+        if (rec2 == 2 && (nAln != hcnt.a || nOps != hcnt.o || nSeqT != hcnt.s || nNoExon != hcnt.noExon || nBadBest != hcnt.badBest || nMapped != hcnt.mapped || hcnt.mateGap != 0))
+            return fail("REC2PASS=check: device totals (alns " + std::to_string(nAln) + ", ops " + std::to_string(nOps) + ", seq " + std::to_string(nSeqT) + ", noExon "
+                        + std::to_string(nNoExon) + ", badBest " + std::to_string(nBadBest) + ", mapped " + std::to_string(nMapped) + ") differ from the host's assembly counts ("
+                        + std::to_string(hcnt.a.load()) + ", " + std::to_string(hcnt.o.load()) + ", " + std::to_string(hcnt.s.load()) + ", " + std::to_string(hcnt.noExon.load()) + ", "
+                        + std::to_string(hcnt.badBest.load()) + ", " + std::to_string(hcnt.mapped.load()) + ", mateGap " + std::to_string(hcnt.mateGap.load()) + ")");
+        if (rec2 != 1) {   // the host's counts are the ones used (in check they are equal to the device's)
+            if (hcnt.mateGap) { why = std::to_string(hcnt.mateGap.load()) + " records with a mate gap (paired-end; alignBAM's path)"; return false; }
+            nAln = hcnt.a; nOps = hcnt.o; nSeqT = hcnt.s; nNoExon = hcnt.noExon; nBadBest = hcnt.badBest; nMapped = hcnt.mapped;
         }
         if (nAln >= 0xFFFFFFFFull || nOps >= 0xFFFFFFFFull) { why = "the records' alignments or operations exceed 32-bit offsets"; return false; }
         const u64 oS = RG.take(nRec * sizeof(SigRec)), oA = RG.take(nAln * sizeof(AlnRec)), oO = RG.take(nOps * 4), oN = RG.take(nAln * 2), oQ = RG.take(nSeqT);
@@ -3097,7 +3166,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         std::vector<SJ> sjList;
         bool prodOk = e10;
         if (e10) out.e10.recMapped.assign(nRec, 0);
-        u64 aB = 0, oB = 0, sB = 0;
+        u64 aB = 0, oB = 0, sB = 0, p2NoExon = 0, p2BadBest = 0, p2Mapped = 0;
         // E16 handover: the host records are read for the last time by pass 2's upload of each chunk (the level-5 caller reads none after)
         const bool handover = in.e2eHandover && singlet_tail::cut("handover");
         for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
@@ -3113,7 +3182,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             struct R6Free { singlet_records_gpu::DeviceRecords& r; ~R6Free() { singlet_records_gpu::release(r); } } r6f{R6};
             if (!singlet_records_gpu::buildRecords(RP, (const uint8_t*) dB.p, (const uint64_t*) dBO.p, (const char*) dS.p, (const uint64_t*) dSO.p, m,
                                                    (const uint64_t*) dcs, false, R6, e6err, true)) { why = "buildRecords: " + e6err; return false; }
-            if (R6.nAln != cAln[c] || R6.nOps != cOps[c] || R6.nSeq != cSeq[c]) { why = "a record chunk's counts differ between its two builds"; return false; }
+            if (devPass1 && (R6.nAln != cAln[c] || R6.nOps != cOps[c] || R6.nSeq != cSeq[c])) { why = "a record chunk's counts differ between its two builds"; return false; }
+            if (aB + R6.nAln > nAln || oB + R6.nOps > nOps || sB + R6.nSeq > nSeqT) { why = "a record chunk's counts pass the totals counted on the host"; return false; }   // before anything is copied past the region's arrays
+            p2NoExon += R6.nNoExon; p2BadBest += R6.nBadBest; p2Mapped += R6.nMapped;
             k_rebase_recs<<<(unsigned) ((std::max<u64>(m, R6.nAln) + 255) / 256), 256>>>(R6.sigs, m, R6.alns, R6.nAln, (uint32_t) aB, sB, (uint32_t) oB);
             if (cudaDeviceSynchronize() != cudaSuccess) { why = std::string("records rebase: ") + cudaGetErrorString(cudaGetLastError()); return false; }
             tBuild += now() - ta; ta = now();
@@ -3153,6 +3224,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             devNote();
         }
         hostMark("records pass 2 done (RC)", nRec);
+        if (aB != nAln || oB != nOps || sB != nSeqT || p2NoExon != nNoExon || p2BadBest != nBadBest || p2Mapped != nMapped) {
+            why = "the records' counts from the build differ from the counts made before it (alns " + std::to_string(aB) + " vs " + std::to_string(nAln) + ", ops " + std::to_string(oB) + " vs " + std::to_string(nOps) + ", seq " + std::to_string(sB) + " vs " + std::to_string(nSeqT) + ")";
+            return false;
+        }
         if (out.hostDropped) out.log += "engine_gpu: E16 handover: the host records' pages released as pass 2 uploaded them (" + gbs(out.blob.size() + out.seq.size()) + ")\n";
         singlet_engine_gpu::E2EHeader& E2H = *RG.hdr();
         E2H.nRec = nRec; E2H.nAln = nAln; E2H.nOps = nOps; E2H.nSeq = nSeqT;
@@ -3214,11 +3289,14 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             out.e10.log += l3;
             if (!out.e10.soloKept) e9::soloKeepRelease();
         } else if (in.e10.soloModel != nullptr) { e9::soloKeepRelease(); out.e10.soloKept = false; if (e10) out.e10.log += "engine_gpu: E11: Solo inputs not kept\n"; }
-        char l[512];
+        char l[640];
+        char upMsg[96];
+        if (rec2 == 0) snprintf(upMsg, sizeof upMsg, "one pass; counts on the host %.2f s", (double) hcnt.ns.load() * 1e-9);
+        else snprintf(upMsg, sizeof upMsg, rec2 == 2 ? "two passes; checked against the host counts, %.2f s" : "two passes", (double) hcnt.ns.load() * 1e-9);
         snprintf(l, sizeof l, "engine_gpu: E8 records on the device in %llu record chunks of %llu (P3-MEM-03): %llu records, %llu alignments, %llu ops, %llu seq bytes "
-                 "(%llu mapped, no exon %llu, trBest=trInit %llu); upload %.0f ms (two passes), buildRecords %.0f ms, copy to the region %.0f ms, products and keep %.0f ms\n",
+                 "(%llu mapped, no exon %llu, trBest=trInit %llu); upload %.0f ms (%s), buildRecords %.0f ms, copy to the region %.0f ms, products and keep %.0f ms\n",
                  (unsigned long long) nCh, (unsigned long long) RRN, (unsigned long long) nRec, (unsigned long long) nAln, (unsigned long long) nOps,
-                 (unsigned long long) nSeqT, (unsigned long long) nMapped, (unsigned long long) nNoExon, (unsigned long long) nBadBest, tUp * 1e3, tBuild * 1e3,
+                 (unsigned long long) nSeqT, (unsigned long long) nMapped, (unsigned long long) nNoExon, (unsigned long long) nBadBest, tUp * 1e3, upMsg, tBuild * 1e3,
                  tCopy * 1e3, tProd * 1e3);
         out.log += l;
         out.e2eOk = true;
