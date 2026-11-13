@@ -247,6 +247,8 @@ struct Report {
     std::string protocol_tag;                      // registry id (validation/routes.yaml), empty when the verdict has none (JSON null)
     std::vector<std::string> protocol_tag_alternatives;   // ids the reads cannot separate from protocol_tag
     std::string policy_source = "builtin";         // "builtin" | "route-status"
+    struct Hint { std::string key, value, effect; };       // hints[]: caller metadata, with what it changed (empty: nothing)
+    std::vector<Hint> hints;
     // sub_call: version-level calls; an empty value is JSON null
     std::string sub_strand, sub_visium, sub_vdj, sub_indrop_version, sub_bd_bead, sub_parse_kit;
     std::string sub_call_reason;
@@ -1418,6 +1420,32 @@ inline void rank(Report& R, const Options& opt) {
         R.action = "defer";
         R.action_note = "hint assay=smartseq2 (metadata, not read evidence) selects defer; reads alone cannot separate Smart-seq from bulk";
     }
+    // single_cell=1 (archive metadata, not read evidence): a library without barcode structure that the archive calls single-cell is deferred
+    // instead of refused, since reads cannot confirm the metadata. The verdict is unchanged.
+    {
+        std::string h = opt.hint;
+        for (auto& c : h) if (c == ';' || c == ' ') c = ',';
+        size_t i = 0;
+        while (i <= h.size()) {
+            size_t j = h.find(',', i);
+            if (j == std::string::npos) j = h.size();
+            const std::string kv = h.substr(i, j - i);
+            i = j + 1;
+            if (kv.empty()) continue;
+            const size_t eq = kv.find('=');
+            Report::Hint ht;
+            ht.key = kv.substr(0, eq);
+            ht.value = eq == std::string::npos ? "" : kv.substr(eq + 1);
+            if (ht.key == "single_cell" && ht.value == "1" &&
+                (R.verdict == "bulk_rna" || R.verdict == "genomic_dna" || R.verdict == "unknown" || R.verdict == "rna_no_barcode")) {
+                if (R.action != "defer") ht.effect = "action " + R.action + " -> defer";
+                else ht.effect = "action stays defer";
+                R.action = "defer";
+                R.action_note = "hint single_cell=1 (archive metadata, not read evidence): the reads show no barcode structure and cannot confirm it, so the run is deferred, not refused";
+            }
+            R.hints.push_back(ht);
+        }
+    }
     // route status (--route-status): process only for registry ids whose route is validated; refuse, classify_only and defer rows stay as they are
     if (opt.use_route_status) {
         R.policy_source = "route-status";
@@ -1447,6 +1475,10 @@ inline std::string report_json(const Report& R) {
     o << "  \"verdict\": " << q(R.verdict) << ",\n  \"protocol\": " << q(R.verdict_protocol) << ",\n  \"ambiguous_with\": " << q(R.ambiguous_with)
       << ",\n  \"action\": " << q(R.action) << ",\n  \"action_note\": " << q(R.action_note) << ",\n  \"policy_source\": " << q(R.policy_source) << ",\n  \"hint\": " << q(R.hint) << ",\n";
     auto qn = [&](const std::string& v) { return v.empty() ? std::string("null") : q(v); };
+    o << "  \"hints\": [";
+    for (size_t i = 0; i < R.hints.size(); ++i)
+        o << (i ? ", " : "") << "{\"key\": " << q(R.hints[i].key) << ", \"value\": " << q(R.hints[i].value) << ", \"effect\": " << qn(R.hints[i].effect) << "}";
+    o << "],\n";
     o << "  \"protocol_tag\": " << qn(R.protocol_tag) << ",\n  \"protocol_tag_alternatives\": " << jlist(R.protocol_tag_alternatives) << ",\n";
     o << "  \"sub_call\": {\"strand\": " << qn(R.sub_strand) << ", \"visium\": " << qn(R.sub_visium) << ", \"vdj\": " << qn(R.sub_vdj) << ", \"indrop_version\": "
       << qn(R.sub_indrop_version) << ", \"bd_bead\": " << qn(R.sub_bd_bead) << ", \"parse_kit\": " << qn(R.sub_parse_kit) << ", \"sub_call_reason\": " << qn(R.sub_call_reason) << "},\n";

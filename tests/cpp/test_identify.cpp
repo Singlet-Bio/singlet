@@ -247,6 +247,19 @@ int main() {
         Options o; o.whitelist_dirs = {dir}; o.hint = "assay=smartseq2";
         auto hinted = identify_spots(v, o, lists, &even);
         CHECK(hinted.verdict == "ambiguous" && hinted.action == "defer" && hinted.hint == "assay=smartseq2", "a hint selects the action and leaves the verdict");
+        // single_cell=1 turns the refusals of runs without barcode structure into defers and leaves the verdict alone
+        Options sc; sc.whitelist_dirs = {dir}; sc.hint = "single_cell=1";
+        auto sbulk = identify_spots(v, sc, lists, &even);
+        CHECK(sbulk.verdict == "ambiguous" && sbulk.action == "refuse" && sbulk.hints.size() == 1 && sbulk.hints[0].effect.empty(),
+              "single_cell=1 does not touch an ambiguous call");
+        { std::vector<HeadSpot> w2 = v; Options so = sc; so.run_spots = 60000000;
+          auto sb = identify_spots(w2, so, lists, &even);
+          CHECK(sb.verdict == "bulk_rna" && sb.action == "defer" && sb.hints[0].effect == "action refuse -> defer", "single_cell=1: bulk verdict stays, refuse becomes defer");
+          const std::string js = report_json(sb);
+          CHECK(js.find("\"hints\": [{\"key\": \"single_cell\", \"value\": \"1\", \"effect\": \"action refuse -> defer\"}]") != std::string::npos && sb.policy_source == "builtin",
+                "hints[] recorded in the JSON, policy_source unchanged");
+          Options so2 = so; so2.hint.clear();
+          CHECK(identify_spots(w2, so2, lists, &even).action == "refuse", "without the hint the bulk call is still refused"); }
         std::vector<HeadSpot> se;
         for (size_t i = 0; i < N; ++i) se.push_back(spot({rand_seq(75)}));
         auto r = run(se, lists, dir, 30000000, &even);

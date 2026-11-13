@@ -91,10 +91,18 @@ P("Not called: " + (", ".join("%s (%s)" % (i, res[i][0]["verdict"]) for i in fn)
 # the three bars
 nonproc = [r["id"] for r in panel if r["id"] in res and r["family"] in ("atac", "multiome_atac", "feature_barcode", "bulk_rna", "genomic_dna") and res[r["id"]][0]["action"] == "process"]
 cell_fams = {"droplet_3p", "droplet_5p", "droplet_other", "multiome_gex", "plate_barcoded", "smartseq", "visium"}
-refused = [(r["id"], res[r["id"]][0]["verdict"]) for r in panel if r["id"] in res and r["family"] in cell_fams and res[r["id"]][0]["action"] == "refuse"]
+def eff_action(r):
+    """action with the single_cell=1 hint applied: a run without barcode structure that the archive calls single-cell is deferred, not refused
+    (the binary does this itself when it was run with the hint; this also covers summaries written without it)"""
+    a = res[r["id"]][0]
+    if r.get("single_cell_hint") == "1" and a["action"] == "refuse" and a["verdict"] in ("bulk_rna", "genomic_dna", "unknown", "rna_no_barcode"):
+        return "defer"
+    return a["action"]
+refused_nohint = [r["id"] for r in panel if r["id"] in res and r["family"] in cell_fams and res[r["id"]][0]["action"] == "refuse"]
+refused = [(r["id"], res[r["id"]][0]["verdict"]) for r in panel if r["id"] in res and r["family"] in cell_fams and eff_action(r) == "refuse"]
 nonten_called = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX and vcall(res[r["id"]][0])]
 nonten_proc = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX + ("multiome_gex", "visium") and res[r["id"]][0]["action"] == "process"]
-P("\nBars: ATAC, feature-barcode, bulk or genomic rows given `process`: %d. Single-cell rows given `refuse`: %d (%s). Rows of other protocols called 10x 3'/5': %d (%s). Other-protocol rows given `process` (policy for a known droplet protocol): %d (%s).\n" % (len(nonproc), len(refused), ", ".join("%s as %s" % x for x in refused) or "none", len(nonten_called), ", ".join(nonten_called) or "none", len(nonten_proc), ", ".join(nonten_proc) or "none"))
+P("\nBars: ATAC, feature-barcode, bulk or genomic rows given `process`: %d. Single-cell rows given `refuse`: %d with the single_cell=1 hint applied (%s), %d without it. Rows of other protocols called 10x 3'/5': %d (%s). Other-protocol rows given `process` (policy for a known droplet protocol): %d (%s).\n" % (len(nonproc), len(refused), ", ".join("%s as %s" % x for x in refused) or "none", len(refused_nohint), len(nonten_called), ", ".join(nonten_called) or "none", len(nonten_proc), ", ".join(nonten_proc) or "none"))
 brm = [i for i, v in res.items() if v[0]["verdict"] == "barcode_read_missing"]
 if brm:
     P("## barcode_read_missing\n")
