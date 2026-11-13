@@ -19,12 +19,15 @@
 //   4. K-level early stopping when ELBO degrades for 2 consecutive K values.
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <condition_variable>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -152,12 +155,109 @@ static inline float digamma(float x) {
 }
 
 // ============================================================================
+// Persistent worker pool behind parallel_chunks / parallel_det_chunks (SINGLET_DEMUX_POOL=0: spawn threads per call, as before).
+// A call is a job of `n` units; unit u runs fn for chunk (or chunk group) u, exactly as the thread u of the spawning version did, so
+// chunk boundaries, the chunk -> result slot mapping and the order the caller reduces in are unchanged and the floats are
+// bit-identical. Only the threads executing the units are reused. The calling thread works on its own job's units too and returns
+// when all of them are done: a job always completes even if no pool worker is free, so concurrent callers (the K evaluations of
+// the auto-K waves, the folds, the restarts) and nested calls cannot deadlock. Workers are added on demand up to the number of
+// units concurrent jobs can run at once (never fewer than the spawning version had threads, capped at kMaxWorkers), and live
+// until the process exits.
+// ============================================================================
+inline bool demux_pool_enabled() {
+    static const bool on = [] { const char* e = std::getenv("SINGLET_DEMUX_POOL"); return !(e && std::atoi(e) == 0); }();
+    return on;
+}
+
+class DemuxPool {
+public:
+    static DemuxPool& instance() { static DemuxPool p; return p; }
+
+    // Runs unit(0) .. unit(n - 1), possibly concurrently, and returns when all have finished.
+    void run(int n, const std::function<void(int)>& unit) {
+        if (n <= 1) { if (n == 1) unit(0); return; }
+        Job job;
+        job.f = &unit;
+        job.n = n;
+        std::unique_lock<std::mutex> lk(mu_);
+        jobs_.push_back(&job);
+        extra_ += n - 1;
+        while (static_cast<int>(workers_.size()) < std::min(kMaxWorkers, extra_))
+            workers_.emplace_back([this] { worker_loop(); });
+        work_cv_.notify_all();
+        int u;
+        while ((u = claim(&job)) >= 0) {
+            lk.unlock();
+            unit(u);
+            lk.lock();
+            ++job.done;
+        }
+        job.cv.wait(lk, [&] { return job.done == job.n; });
+        extra_ -= n - 1;
+    }
+
+    ~DemuxPool() {
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            stop_ = true;
+        }
+        work_cv_.notify_all();
+        for (auto& t : workers_) t.join();
+    }
+
+private:
+    static constexpr int kMaxWorkers = 256;
+    struct Job {
+        const std::function<void(int)>* f = nullptr;
+        int n = 0, next = 0, done = 0;
+        std::condition_variable cv;
+    };
+
+    // Takes the next unclaimed unit of the job (mu_ held); a job whose units are all claimed leaves the queue. -1: none left.
+    int claim(Job* j) {
+        if (j->next >= j->n) return -1;
+        const int u = j->next++;
+        if (j->next >= j->n) jobs_.erase(std::find(jobs_.begin(), jobs_.end(), j));
+        return u;
+    }
+
+    void worker_loop() {
+        std::unique_lock<std::mutex> lk(mu_);
+        for (;;) {
+            work_cv_.wait(lk, [&] { return stop_ || !jobs_.empty(); });
+            if (jobs_.empty()) { if (stop_) return; continue; }
+            Job* j = jobs_.front();
+            const int u = claim(j);
+            lk.unlock();
+            (*j->f)(u);
+            lk.lock();
+            if (++j->done == j->n) j->cv.notify_all();
+        }
+    }
+
+    std::mutex mu_;
+    std::condition_variable work_cv_;
+    std::deque<Job*> jobs_;
+    std::vector<std::thread> workers_;
+    int extra_ = 0;     // units of the jobs in flight that run beside their caller
+    bool stop_ = false;
+};
+
+// ============================================================================
 // Threading helper: run fn(thread_index, begin, end) over [0, n) in contiguous chunks.
 // ============================================================================
 template <class Fn>
 static void parallel_chunks(int n, int nthreads, Fn&& fn) {
     nthreads = std::max(1, std::min(nthreads, std::max(1, n)));
     if (nthreads == 1) { fn(0, 0, n); return; }
+    if (demux_pool_enabled()) {
+        DemuxPool::instance().run(nthreads, [&fn, n, nthreads](int t) {
+            const int b = static_cast<int>(static_cast<int64_t>(t) * n / nthreads);
+            const int e = static_cast<int>(static_cast<int64_t>(t + 1) * n / nthreads);
+            fn(t, b, e);
+        });
+        return;
+    }
     std::vector<std::thread> ts;
     ts.reserve(nthreads);
     for (int t = 0; t < nthreads; ++t) {
@@ -185,6 +285,12 @@ static void parallel_det_chunks(int n, int nthreads, Fn&& fn) {
     nthreads = std::max(1, std::min(nthreads, kDetChunks));
     if (nthreads == 1) {
         for (int c = 0; c < kDetChunks; ++c) { int b, e; range(c, b, e); fn(c, b, e); }
+        return;
+    }
+    if (demux_pool_enabled()) {
+        DemuxPool::instance().run(nthreads, [&](int t) {
+            for (int c = t; c < kDetChunks; c += nthreads) { int b, e; range(c, b, e); fn(c, b, e); }
+        });
         return;
     }
     std::vector<std::thread> ts;
