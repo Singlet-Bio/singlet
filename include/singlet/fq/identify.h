@@ -819,11 +819,12 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
             std::vector<uint32_t> tcount(48, 0);
             uint64_t nn = 0;
             for (size_t i = 0; i < np; ++i) {
-                if (t >= spots[i].seg.size() || spots[i].seg[t].size() < 40) continue;
+                if (t >= spots[i].seg.size() || spots[i].seg[t].size() < 30) continue;
                 const std::string& q = spots[i].seg[t];
                 ++nn;
-                for (size_t k = 0; k < 40; ++k) { const uint8_t b = nuc::ascii_to_num(q[k]); if (b < 4) ++cnt[k][b]; }
-                for (size_t k = 8; k <= 32; ++k) { int tt = 0; for (size_t j = 0; j < 8; ++j) tt += (q[k + j] == 'T'); if (tt >= 7) ++tcount[k]; }
+                const size_t ql = std::min<size_t>(q.size(), 40);
+                for (size_t k = 0; k < ql; ++k) { const uint8_t b = nuc::ascii_to_num(q[k]); if (b < 4) ++cnt[k][b]; }
+                for (size_t k = 8; k <= 32 && k + 8 <= q.size(); ++k) { int tt = 0; for (size_t j = 0; j < 8; ++j) tt += (q[k + j] == 'T'); if (tt >= 7) ++tcount[k]; }
             }
             if (nn < 1000) continue;
             int k0 = -1;
