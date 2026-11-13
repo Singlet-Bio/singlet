@@ -548,7 +548,7 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
         std::vector<ScreenSpot> v2 = sv;
         std::vector<ScreenWhitelist> one;
         for (const auto& wl : lists) if (wl.file == top->file) one.push_back(wl);
-        auto rep = detail::screen_spots(std::move(v2), one, opt.whitelist_dirs);
+        auto rep = ::singlet::fq::screen_spots(std::move(v2), one, opt.whitelist_dirs);
         ev.five_prime = rep.five_prime;
         ev.five_prime_called = rep.is_5prime;
         ev.top100_off0 = rep.r2_top100_share_off0; ev.top100_off10 = rep.r2_top100_share_off10;
@@ -557,7 +557,7 @@ inline void measure(const std::vector<HeadSpot>& spots, const Options& opt, std:
     } else if (!sv.empty()) {
         // feature-barcode constants without a whitelist hit are reported but do not call a family on their own
         std::vector<ScreenSpot> v2 = sv;
-        auto rep = detail::screen_spots(std::move(v2), {}, opt.whitelist_dirs);
+        auto rep = ::singlet::fq::screen_spots(std::move(v2), {}, opt.whitelist_dirs);
         ev.top100_off0 = rep.r2_top100_share_off0; ev.top100_off10 = rep.r2_top100_share_off10;
         ev.tag_polya = rep.r2_tag_polya_share; ev.capture = rep.r2_capture_share; ev.scaffold = rep.r2_scaffold_share;
         ev.feature_reason = rep.feature_reason; ev.feature_like = rep.feature_barcode_like;
