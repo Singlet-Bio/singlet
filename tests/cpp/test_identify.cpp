@@ -168,6 +168,34 @@ int main() {
         std::cout << "  [celseq2 case] verdict " << r.verdict << " protocol " << r.verdict_protocol << " window off " << r.ev.window.off << " len " << r.ev.window.len << " k " << r.ev.window.k << " found " << r.ev.window.found << " bc_seg " << r.ev.bc_seg << " detector " << r.ev.detected.tag << std::endl;
         CHECK(r.verdict == "plate_barcoded" && r.verdict_protocol == "celseq2-u6b8", "UMI6 + 8-base well barcode -> CEL-Seq2 layout");
     }
+    {   // Drop-seq style: a 12-base barcode from thousands of beads is more than a plate holds; the barcode read repeats at its start
+        const auto beads = make_list(2500, 12);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < 40000; ++i) v.push_back(spot({pick(beads) + rand_seq(8), rand_seq(60)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "droplet_other" && r.verdict_protocol == "barcoded-unspecified", "large barcode set -> droplet, protocol unspecified");
+        CHECK(r.action == "defer", "an unspecified layout is deferred, not processed");
+    }
+    {   // split-pool beads: two disjoint 96-barcode windows separated by a linker
+        const auto b1 = make_list(96, 6), b2 = make_list(96, 6);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(b1) + "ACG" + pick(b2) + "GACTCA" + rand_seq(8), rand_seq(70)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "droplet_other", "two barcode windows -> split-pool droplet beads, not a plate");
+    }
+    {   // plate-based Smart-seq: 96 well indices in index reads, two long insert reads without a barcode
+        const auto idx = make_list(96, 8);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) { const std::string w = pick(idx); v.push_back(spot({rand_seq(76), rand_seq(76), w, w})); }
+        auto r = run(v, lists, dir, 500000);
+        CHECK(r.verdict == "smartseq" && r.action == "defer", "well indices in the index reads -> smartseq, deferred");
+    }
+    {   // a long single read with a repeated start is not a barcoded plate
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({"GATCGGAAGAGC" + rand_seq(70)}));
+        auto r = run(v, lists, dir, 20000000);
+        CHECK(r.verdict != "plate_barcoded" && r.action != "process", "long single read: no plate call, never processed");
+    }
     {
         std::vector<HeadSpot> v;
         for (size_t i = 0; i < N; ++i) {
