@@ -871,7 +871,7 @@ inline void rank(Report& R, const Options& opt) {
                                 detail::jnum(ev.window.random_share) + "): well barcodes");
             add_usefulness(w, ev, ev.window.top_share);
             H.push_back(w);
-        } else if (ev.prefix_mult >= kThr.prefix_mult && ev.smart3_tag < kThr.smart3_tag) {
+        } else if (ev.prefix_mult >= kThr.prefix_mult && ev.smart3_tag < kThr.smart3_tag && nonindex >= 2) {
             Interp w;
             w.family = "droplet_other";
             w.protocol = family_of_tag(tag) == "droplet_other" ? tag : "barcoded-unspecified";

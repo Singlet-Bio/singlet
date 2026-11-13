@@ -198,6 +198,7 @@ int main() {
         std::vector<HeadSpot> v;
         for (size_t i = 0; i < N; ++i) v.push_back(spot({"GATCGGAAGAGC" + rand_seq(70)}));
         auto r = run(v, lists, dir, 20000000);
+        std::cout << "  [long single] verdict " << r.verdict << " " << r.verdict_protocol << " action " << r.action << std::endl;
         CHECK(r.verdict != "plate_barcoded" && r.action != "process", "long single read: no plate call, never processed");
     }
     {
