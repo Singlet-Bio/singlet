@@ -306,6 +306,45 @@ int main() {
         CHECK(js.find("\"interpretations\"") != std::string::npos && js.find("\"components\"") != std::string::npos, "JSON lists interpretations with components");
     }
 
+    std::cout << "\n=== record version 2: registry ids, sub-calls, route status ===\n";
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < 2000; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto r = run(v, lists, dir);
+        const std::string js = report_json(r);
+        CHECK(js.rfind("{\n  \"record_version\": 2,", 0) == 0, "record_version 2 is the first key");
+        CHECK(r.protocol_tag == "10x-3p-v3" && js.find("\"protocol_tag\": \"10x-3p-v3\"") != std::string::npos, "protocol_tag is the registry id");
+        CHECK(js.find("\"strand\": \"3p\"") != std::string::npos && js.find("\"indrop_version\": null") != std::string::npos &&
+              js.find("\"sub_call_reason\": \"indrop_version, bd_bead and parse_kit: not implemented\"") != std::string::npos,
+              "sub_call carries 3p and null version calls with the reason");
+        CHECK(r.action == "process" && r.policy_source == "builtin" && js.find("\"policy_source\": \"builtin\"") != std::string::npos, "built-in policy by default");
+        Options o;
+        o.whitelist_dirs = {dir};
+        o.use_route_status = true;
+        o.route_status["10x-3p-v3"] = "dev_pass";
+        auto r2 = identify_spots(v, o, lists, nullptr);
+        CHECK(r2.verdict == "droplet_3p" && r2.action == "defer" && r2.policy_source == "route-status", "route status other than validated defers a recognized family");
+        o.route_status["10x-3p-v3"] = "validated";
+        auto r3 = identify_spots(v, o, lists, nullptr);
+        CHECK(r3.action == "process", "a validated route is processed");
+        o.route_status.clear();
+        auto r4 = identify_spots(v, o, lists, nullptr);
+        CHECK(r4.action == "defer", "an id missing from the status map counts as unrouted");
+        std::unordered_map<std::string, std::string> m;
+        CHECK(parse_route_status("{\n \"10x-3p-v3\": \"validated\",\n \"bd-rhapsody\": \"failed\"\n}", m) && m.size() == 2 && m["bd-rhapsody"] == "failed",
+              "route status JSON parsed");
+    }
+    {
+        auto t = registry_tag("droplet_other", "dropseq-like", "gex");
+        CHECK(t.id == "dropseq" && t.alternatives.size() == 1 && t.alternatives[0] == "seqwell", "Drop-seq and Seq-Well are listed as alternatives");
+        auto a = registry_tag("feature_barcode", "10x-3p-v3", "feature_totalseq_a_or_hto");
+        CHECK(a.id == "cite-adt" && a.alternatives.size() == 1 && a.alternatives[0] == "cite-hashtag", "ADT against hashtag is listed as an alternative");
+        CHECK(registry_tag("barcode_read_missing", "tag-3p", "gex").id.empty() && registry_tag("unknown", "none", "none").id.empty() &&
+              registry_tag("droplet_other", "barcoded-unspecified", "gex").id.empty(), "no registry id gives null");
+        CHECK(registry_tag("bulk_rna", "bulk", "gex").id == "generic-negative" && registry_tag("plate_barcoded", "celseq2-u6b8", "gex").id == "celseq2" &&
+              registry_tag("multiome_atac", "10x-arc-atac", "chromatin_accessibility").id == "10x-arc-atac", "other registry ids");
+    }
+
     fs::remove_all(dir);
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
     return n_fail == 0 ? 0 : 1;

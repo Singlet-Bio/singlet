@@ -41,6 +41,8 @@
 namespace singlet::fq::identify {
 
 constexpr int kSchemaVersion = 1;
+// Record version of the JSON report (the validation engine reads this); 2 adds protocol_tag, sub_call, species and policy_source.
+constexpr int kRecordVersion = 2;
 
 // ── thresholds (one table; each names the measurement that set it) ──
 struct Thresholds {
@@ -217,6 +219,15 @@ struct Report {
     std::string action_note;
     std::string hint;             // caller-supplied metadata, shown and never counted as evidence
     std::vector<EndpointRec> endpoints;   // --endpoints: every endpoint of the run, with whether it carries a barcode read
+    std::string protocol_tag;                      // registry id (validation/routes.yaml), empty when the verdict has none (JSON null)
+    std::vector<std::string> protocol_tag_alternatives;   // ids the reads cannot separate from protocol_tag
+    std::string policy_source = "builtin";         // "builtin" | "route-status"
+    // sub_call: version-level calls; an empty value is JSON null
+    std::string sub_strand, sub_visium, sub_vdj, sub_indrop_version, sub_bd_bead, sub_parse_kit;
+    std::string sub_call_reason;
+    std::vector<std::pair<std::string, double>> species_hits;   // species block: top hits with shares; empty when not measured
+    bool species_measured = false, species_mixture = false;
+    std::string species_note;
 };
 
 // ── policy table (separate from the classifier) ──
@@ -259,6 +270,57 @@ inline const Policy& policy_for(const std::string& family) {
     for (const auto& p : policy_table())
         if (family == p.family) return p;
     return policy_table().back();
+}
+
+/// Reads a flat JSON map of registry id to status ({"10x-3p-v3": "validated", ...}). Returns false when no pair is found.
+inline bool parse_route_status(const std::string& text, std::unordered_map<std::string, std::string>& out) {
+    std::vector<std::string> strs;
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] != '"') continue;
+        std::string v;
+        for (++i; i < text.size() && text[i] != '"'; ++i) { if (text[i] == '\\' &&i + 1 < text.size()) ++i; v += text[i]; }
+        strs.push_back(v);
+    }
+    for (size_t i = 0; i + 1 < strs.size(); i += 2) out[strs[i]] = strs[i + 1];
+    return !out.empty();
+}
+
+// ── registry ids: one table from the internal protocol tags to the family ids of validation/routes.yaml ──
+
+struct TagCall {
+    std::string id;                      // empty: the verdict has no registry id
+    std::vector<std::string> alternatives;
+};
+
+inline TagCall registry_tag(const std::string& family, const std::string& tag, const std::string& modality) {
+    static const std::unordered_map<std::string, std::string> m = {
+        {"10x-3p-v1", "10x-3p-v1"}, {"10x-3p-v2", "10x-3p-v2"}, {"10x-3p-v3", "10x-3p-v3"}, {"10x-3p-v4", "10x-3p-v4"},
+        {"10x-5p-v1", "10x-5p-v1"}, {"10x-5p-v2", "10x-5p-v2"}, {"10x-5p-v3", "10x-5p-v3"},
+        {"10x-5p-v4", "10x-5p-v3"},   // GEM-X 5' is listed under v3 in the registry
+        {"10x-arc-gex", "10x-arc-gex"}, {"10x-visium", "10x-visium"}, {"10x-atac", "scatac"}, {"10x-arc-atac", "10x-arc-atac"},
+        {"dropseq", "dropseq"}, {"dropseq-like", "dropseq"}, {"seqwell", "seqwell"}, {"indrop", "indrop"}, {"bd-rhapsody", "bd-rhapsody"},
+        {"microwell-seq", "microwell-seq"}, {"dnbelab-c4", "dnbelab-c4"}, {"singleron", "singleron"}, {"pipseq", "pipseq"},
+        {"ddseq", "ddseq"}, {"surecell", "ddseq"}, {"splitseq", "splitseq-parse"}, {"sci-rna-seq3", "sci-rna-seq3"},
+        {"celseq2", "celseq2"}, {"celseq2-u6b8", "celseq2"}, {"marsseq2", "marsseq2"}, {"quartzseq2", "quartzseq2"}, {"strtseq", "strtseq"},
+        {"scrbseq", "scrbseq"}, {"icell8", "icell8"}, {"smartseq2", "smartseq2"}, {"smartseq2-like", "smartseq2"}, {"smartseq3", "smartseq3"},
+    };
+    TagCall t;
+    if (family == "bulk_rna" || family == "genomic_dna" || family == "methylome" || family == "not_sequence") { t.id = "generic-negative"; return t; }
+    if (family == "flex") { t.id = "10x-flex"; return t; }
+    if (family == "vdj") { t.id = "tcr"; t.alternatives = {"bcr"}; return t; }   // TR and IG genes are pooled in the mapping evidence
+    if (family == "feature_barcode") {
+        if (modality == "crispr_guide") t.id = "crispr-guide";
+        else if (modality == "feature_totalseq_bc") t.id = "cite-adt";
+        else { t.id = "cite-adt"; t.alternatives = {"cite-hashtag"}; }   // TotalSeq-A capture: ADT and hashtag libraries share it
+        return t;
+    }
+    if (family == "barcode_read_missing" || family == "rna_no_barcode" || family == "unknown" || family == "ambiguous") return t;
+    const auto it = m.find(tag);
+    if (it == m.end()) return t;
+    t.id = it->second;
+    if (tag == "dropseq" || tag == "dropseq-like") t.alternatives = {"seqwell"};   // the two differ only by text
+    if (tag == "seqwell") t.alternatives = {"dropseq"};
+    return t;
 }
 
 // ── helpers ──
@@ -688,6 +750,9 @@ struct Options {
     std::vector<std::string> whitelist_dirs;
     std::string hint;               // e.g. "assay=smartseq2"; reported, never counted
     int64_t run_spots = -1;         // spots in the whole run when known
+    // --route-status: registry id -> route status. When use_route_status is set, `process` needs status "validated".
+    bool use_route_status = false;
+    std::unordered_map<std::string, std::string> route_status;
 };
 
 inline double clamp01(double x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
@@ -1308,11 +1373,37 @@ inline void rank(Report& R, const Options& opt) {
         R.action = "defer";
         R.action_note = "barcoded single-cell library whose layout has no protocol spec: recognized, deferred";
     }
+    // registry id and sub-calls
+    {
+        std::string modality;
+        for (const auto& it : R.ranked)
+            if (it.family == R.verdict) { modality = it.modality; break; }
+        const TagCall tc = registry_tag(R.verdict, R.verdict_protocol, modality);
+        R.protocol_tag = tc.id;
+        R.protocol_tag_alternatives = tc.alternatives;
+        if (R.verdict == "droplet_3p") R.sub_strand = "3p";
+        else if (R.verdict == "droplet_5p") R.sub_strand = "5p";
+        if (R.verdict == "visium") R.sub_visium = modality == "spatial_gex_probe" ? "probe" : "polya";
+        if (R.verdict == "vdj") R.sub_vdj = "enriched";
+        R.sub_call_reason = "indrop_version, bd_bead and parse_kit: not implemented";
+    }
     // a metadata hint is shown and never changes the verdict; it only selects the action inside an ambiguous full-length RNA call
     if (R.verdict == "ambiguous" && R.ambiguous_with.find("smartseq") != std::string::npos && R.ambiguous_with.find("bulk_rna") != std::string::npos &&
         opt.hint.find("assay=smartseq") != std::string::npos) {
         R.action = "defer";
         R.action_note = "hint assay=smartseq2 (metadata, not read evidence) selects defer; reads alone cannot separate Smart-seq from bulk";
+    }
+    // route status (--route-status): process only for registry ids whose route is validated; refuse, classify_only and defer rows stay as they are
+    if (opt.use_route_status) {
+        R.policy_source = "route-status";
+        if (R.action == "process") {
+            const auto it = opt.route_status.find(R.protocol_tag);
+            const std::string st = R.protocol_tag.empty() ? "no registry id" : (it == opt.route_status.end() ? "unrouted" : it->second);
+            if (st != "validated") {
+                R.action = "defer";
+                R.action_note = "route " + (R.protocol_tag.empty() ? std::string("none") : R.protocol_tag) + " has status " + st + ": recognized, deferred until the route is validated";
+            }
+        }
     }
 }
 
@@ -1323,13 +1414,17 @@ inline std::string report_json(const Report& R) {
     std::ostringstream o;
     auto q = [](const std::string& s) { return "\"" + jesc(s) + "\""; };
     const auto& ev = R.ev;
-    o << "{\n  \"schema_version\": " << R.schema << ",\n";
+    o << "{\n  \"record_version\": " << kRecordVersion << ",\n  \"schema_version\": " << R.schema << ",\n";
     o << "  \"source\": {\"source\": " << q(R.src.source) << ", \"route\": " << q(R.src.route) << ", \"endpoint\": " << q(R.src.endpoint)
       << ", \"bytes\": " << (R.src.bytes >= 0 ? std::to_string(R.src.bytes) : std::string("null")) << ", \"bytes_note\": " << q(R.src.bytes_note)
       << ", \"seconds\": " << jnum(R.src.seconds) << ", \"spots\": " << R.src.spots << ", \"run_spots\": "
       << (R.src.run_spots >= 0 ? std::to_string(R.src.run_spots) : std::string("null")) << ", \"error\": " << q(R.src.error) << "},\n";
     o << "  \"verdict\": " << q(R.verdict) << ",\n  \"protocol\": " << q(R.verdict_protocol) << ",\n  \"ambiguous_with\": " << q(R.ambiguous_with)
-      << ",\n  \"action\": " << q(R.action) << ",\n  \"action_note\": " << q(R.action_note) << ",\n  \"hint\": " << q(R.hint) << ",\n";
+      << ",\n  \"action\": " << q(R.action) << ",\n  \"action_note\": " << q(R.action_note) << ",\n  \"policy_source\": " << q(R.policy_source) << ",\n  \"hint\": " << q(R.hint) << ",\n";
+    auto qn = [&](const std::string& v) { return v.empty() ? std::string("null") : q(v); };
+    o << "  \"protocol_tag\": " << qn(R.protocol_tag) << ",\n  \"protocol_tag_alternatives\": " << jlist(R.protocol_tag_alternatives) << ",\n";
+    o << "  \"sub_call\": {\"strand\": " << qn(R.sub_strand) << ", \"visium\": " << qn(R.sub_visium) << ", \"vdj\": " << qn(R.sub_vdj) << ", \"indrop_version\": "
+      << qn(R.sub_indrop_version) << ", \"bd_bead\": " << qn(R.sub_bd_bead) << ", \"parse_kit\": " << qn(R.sub_parse_kit) << ", \"sub_call_reason\": " << qn(R.sub_call_reason) << "},\n";
     o << "  \"layout\": [";
     for (size_t i = 0; i < ev.segs.size(); ++i) {
         const auto& s = ev.segs[i];

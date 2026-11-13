@@ -642,7 +642,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
 
 inline int identify_main(int argc, char** argv) {
     std::vector<std::string> sources, wl_dirs;
-    std::string json_out, hint, route = "auto", genome_dir, list_path, out_dir;
+    std::string json_out, hint, route = "auto", genome_dir, list_path, out_dir, route_status_path;
     size_t n_reads = 200000, map_reads = 50000;
     int threads = 8;
     for (int i = 0; i < argc; ++i) {
@@ -660,8 +660,9 @@ inline int identify_main(int argc, char** argv) {
         else if (a == "--dump") dump_dir() = next();
         else if (a == "--endpoints") want_endpoints() = true;
         else if (a == "--out-dir") out_dir = next();
+        else if (a == "--route-status") route_status_path = next();
         else if (a == "-h" || a == "--help") {
-            std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena]\n"
+            std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena] [--route-status FILE]\n"
                          "       singlet identify --list samples.tsv --out-dir DIR [options]\n"
                          "SOURCE: SRR accession | URL[,URL] | FASTQ[,FASTQ] | bam:FILE | FILE.1fq ; runs separated by ';'\n";
             return 0;
@@ -671,12 +672,19 @@ inline int identify_main(int argc, char** argv) {
     for (const auto& d : default_whitelist_dirs()) wl_dirs.push_back(d);
     Options opt;
     opt.whitelist_dirs = wl_dirs;
+    if (!route_status_path.empty()) {
+        std::ifstream rs(route_status_path);
+        std::stringstream buf;
+        buf << rs.rdbuf();
+        if (!rs || !parse_route_status(buf.str(), opt.route_status)) { std::cerr << "singlet identify: cannot read route status from " << route_status_path << "\n"; return 2; }
+        opt.use_route_status = true;
+    }
     auto lists = identify_lists();
 
     auto line_of = [](const std::string& id, const Report& r) {
         std::string top = r.ranked.empty() ? "" : r.ranked[0].family;
         std::ostringstream o;
-        o << id << "\t" << r.verdict << "\t" << r.verdict_protocol << "\t" << r.action << "\t" << top << "\t"
+        o << id << "\t" << r.verdict << "\t" << r.verdict_protocol << "\t" << r.protocol_tag << "\t" << r.action << "\t" << top << "\t"
           << (r.ranked.empty() ? 0.0 : r.ranked[0].support) << "\t" << r.src.spots << "\t" << r.src.route << "\t" << r.src.bytes << "\t" << r.src.seconds << "\t"
           << r.ambiguous_with << "\t" << r.src.error;
         return o.str();
@@ -686,7 +694,7 @@ inline int identify_main(int argc, char** argv) {
         if (!in) { std::cerr << "cannot read " << list_path << "\n"; return 1; }
         std::filesystem::create_directories(out_dir.empty() ? "." : out_dir);
         std::ofstream sum((out_dir.empty() ? std::string(".") : out_dir) + "/summary.tsv");
-        sum << "id\tverdict\tprotocol\taction\ttop_family\ttop_support\tspots\troute\tbytes\tseconds\tambiguous_with\terror\n";
+        sum << "id\tverdict\tprotocol\tprotocol_tag\taction\ttop_family\ttop_support\tspots\troute\tbytes\tseconds\tambiguous_with\terror\n";
         std::string line;
         while (std::getline(in, line)) {
             while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
