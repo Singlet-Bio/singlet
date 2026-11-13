@@ -41,6 +41,11 @@ static constexpr uint8_t FLAG_GAP16         = 0x02;
 static constexpr uint8_t FLAG_HAS_METADATA  = 0x04;
 static constexpr uint8_t FLAG_HAS_COLSUMS   = 0x10;
 
+// Largest decoded metadata block (row names, column names, key/values) the writer emits and the reader accepts by default.
+// The names of a 13.4 M-site editing table are 274 MB; the reader's earlier fixed 256 MiB cap refused such a file that the
+// writer had written without complaint. Writer and reader share this constant so that no file is written that cannot be read back.
+static constexpr uint64_t kMaxMetadataBytes = 1ull << 30;  // 1 GiB
+
 // PZHeader.feature_flags
 static constexpr uint32_t FEAT_ZSTD_CHECKSUMS  = 0x01;
 static constexpr uint32_t FEAT_BITPLANE_BITMAP = 0x02;
@@ -643,6 +648,12 @@ bool write_1pz(
         push_strings_tlv(meta_raw, META_TAG_COLNAMES, colnames);
         push_kv_tlv(meta_raw, user_meta);
         meta_raw.push_back(META_TAG_END);
+    }
+    if (meta_raw.size() > kMaxMetadataBytes) {
+        std::cerr << "[pz_writer] Not written: " << path << ": the names and key/values take " << meta_raw.size()
+                  << " bytes, over the reader's limit of " << kMaxMetadataBytes << "
+";
+        return false;
     }
     auto meta_z = has_meta ?
         zstd_compress(cctx.ctx, meta_raw.data(), meta_raw.size(), 3) :

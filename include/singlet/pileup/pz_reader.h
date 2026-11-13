@@ -74,8 +74,16 @@ struct ReadLimits {
     /// A file cannot hold more non-zeros per byte than this: zstd can shrink a run of
     /// zeros about 32,000-fold, so a few KB of header could otherwise "promise" gigabytes.
     uint64_t max_nnz_per_file_byte = 4096;
-    uint64_t max_metadata_bytes    = 256ull << 20;  // decoded names + key/values
+    uint64_t max_metadata_bytes    = kMaxMetadataBytes;  // decoded names + key/values (the writer refuses to exceed it)
     uint64_t max_kv_entries        = 1ull << 20;
+
+    /// Limits for reading files this pipeline wrote itself (campaign tools, end-of-run checks): the panel matrices have up to
+    /// 15.6 M rows and 913 M non-zeros.
+    static ReadLimits trusted() {
+        ReadLimits l;
+        l.max_rows = 1ull << 26; l.max_file_bytes = 1ull << 36; l.max_nnz = 1ull << 32;
+        return l;
+    }
 };
 
 // ============================================================================
