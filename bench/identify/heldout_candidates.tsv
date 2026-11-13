@@ -1,16 +1,48 @@
-accession	family	protocol	label_source
-SRR9167491	smartseq	smartseq2	GSE132044 sample name (Ding 2020)
-SRR9167496	smartseq	smartseq2	GSE132044 sample name (Ding 2020)
-SRR9171186	bulk_rna	bulk	GSE132044 sample name (Mixture1_HEK293_bulk)
-SRR9169445	bulk_rna	bulk	GSE132044 sample name (Mixture1_NIH3T3_bulk)
-SRR9169212	droplet_other	seqwell	GSE132044 sample name (Ding 2020)
-SRR9169214	droplet_other	seqwell	GSE132044 sample name (Ding 2020)
-SRR9169194	droplet_3p	10x-3p-v3	GSE132044 sample name (011719V3_10X_C)
-SRR9169414	droplet_3p	10x-3p-v3	GSE132044 sample name (011719V3_10X_D)
-SRR9621745	droplet_other	dropseq	GSE133549 sample name (Mereu 2020)
-SRR9621770	plate_barcoded	scrbseq	GSE133549 sample name (Mereu 2020)
-SRR9621734	plate_barcoded	celseq2-u6b8	GSE133549 sample name (Mereu 2020)
-SRR9621747	plate_barcoded	icell8	GSE133549 sample name (Mereu 2020)
-SRR9621779	droplet_other	ddseq	GSE133549 sample name (Mereu 2020)
-SRR1039508	bulk_rna	bulk	GSM1275862 untreated airway cells (GSE52778)
-SRR099223	bulk_rna	bulk	GEO series of mouse striatum bulk RNA-seq (SRP004777)
+accession	family	protocol	label_source	note
+SRR25434104	atac	10x-atac	GSE239305 GSM7662984 extract protocol (Chromium Single Cell ATAC kit, Cell Ranger ATAC), PRJNA/, PRJNA998795/, PRJNA998795/, PRJNA998795/, PRJNA998795/SRP451666, PMID 37737269	
+SRR24364777	atac	10x-atac	GSE231367 GSM7265908 series title (10x Genomics scATAC), PRJNA964592/, PRJNA964592/, PRJNA964592/, PRJNA964592/SRP435365, PMID 38330939; DNBSEQ-T7	
+SRR13450126	atac	10x-atac	GSE164978 GSM5024047 extract protocol (Chromium Single Cell ATAC kit v1, cellranger-atac), PRJNA692722/, PRJNA692722/, PRJNA692722/, PRJNA692722/SRP302100, PMID 33891860	
+SRR22561792	visium	10x-visium	GSE220442 GSM6801751 extract protocol (10x Visium Spatial Gene Expression Slide Kit, Space Ranger), PRJNA909771/, PRJNA909771/, PRJNA909771/, PRJNA909771/SRP411846, PMID 36544231	
+SRR18116784	visium	10x-visium	GSE197317 GSM5914539 extract protocol (10x Visium, Space Ranger), PRJNA809732/, PRJNA809732/, PRJNA809732/, PRJNA809732/SRP361192, PMID 36513063	
+SRR17209008	visium	10x-visium	GSE190732 GSM5729897 extract protocol (10x Visium Spatial Gene Expression 3 prime V1 kit), PRJNA788282/, PRJNA788282/, PRJNA788282/, PRJNA788282/SRP350424, PMID 36774347	no barcode read: SINGLE layout, 1 read of 70 nt per spot
+SRR27536879	visium	10x-visium-cytassist-probe	GSE253199 GSM8016272 extract protocol (10x Visium CytAssist Spatial Gene Expression, probe-based), PRJNA1064410/, PRJNA1064410/, PRJNA1064410/, PRJNA1064410/SRP483554, PMID 39919907	
+SRR29202305	visium	10x-visium-ffpe-probe	GSE268427 GSM8291069 (FFPE Visium CytAssist, Visium FFPE probe set v2.0, spaceranger), PRJNA1117355/, PRJNA1117355/, PRJNA1117355/, PRJNA1117355/SRP510222, PMID 39414943	
+SRR29625964	smartseq	smartseq3	GSE270928 GSM8358985 extract protocol (Smart-seq3 per Hagemann-Jensen 2020, zUMIs), PRJNA1129044/, PRJNA1129044/, PRJNA1129044/, PRJNA1129044/SRP516597, PMID 39574011	
+SRR27301081	smartseq	smartseq2	GSE251670 GSM7984904 sample title and protocol (Smart-seq, sorted gd T cells, 96-well plates), PRJNA1055039/, PRJNA1055039/, PRJNA1055039/, PRJNA1055039/SRP479204, PMID 38227652	
+SRR18911820	smartseq	smartseq2	GSE201443 GSM6063839 extract protocol (SMART-Seq Single Cell Kit, down-scaled Smart-seq2, Nextera XT), PRJNA831806/, PRJNA831806/, PRJNA831806/, PRJNA831806/SRP372107	
+SRR29506390	bulk_rna	bulk-truseq-stranded-mrna	GSE270511 GSM8345781 extract protocol (TruSeq Stranded mRNA Kit), PRJNA1127433/, PRJNA1127433/, PRJNA1127433/, PRJNA1127433/SRP515535, PMID 39574011	
+SRR4340391	bulk_rna	bulk-truseq-unstranded-polya	GSE87554 GSM2333698 extract protocol (Illumina TruSeq RNA Sample Prep Kit, FC-122-1001, unstranded poly(A)), PRJNA345173/, PRJNA345173/, PRJNA345173/, PRJNA345173/SRP090747	bulk; single 100 nt read
+SRR14848344	bulk_rna	bulk-total-rna-ribodepletion	GSE178064 GSM5379568 description (ENCODE ENCSR998WNE total RNA-seq, ribo depletion), PRJNA66167/, PRJNA66167/, PRJNA66167/, PRJNA66167/SRP013027	bulk; paired
+SRR23979322	bulk_rna	bulk-quantseq-3prime	GSE228272 GSM7118094 extract protocol (QuantSeq 3 prime mRNA-Seq Library Prep Kit FWD, Lexogen), PRJNA949183/, PRJNA949183/, PRJNA949183/, PRJNA949183/SRP429507	bulk; single 101 nt read
+SRR36176795	bulk_rna	bulk-brb-seq	GSE311169 GSM9320457 extract protocol (HS BRB-seq, STAR solo demultiplexing), PRJNA1368764/, PRJNA1368764/, PRJNA1368764/, PRJNA1368764/SRP648471	bulk; single 90 nt read
+SRR1853178	droplet_other	dropseq	GSE63472 GSM1626793 extract protocol (Drop-Seq, P14 mouse retina; Macosko 2015), PRJNA267857/, PRJNA267857/, PRJNA267857/, PRJNA267857/SRP050054	
+SRR6750041	droplet_other	splitseq	GSE110823 GSM3017260 series title (split-pool barcoding, SPLiT-seq; Rosenberg 2018), PRJNA434658/, PRJNA434658/, PRJNA434658/, PRJNA434658/SRP133097	
+SRR7827205	droplet_other	sci-rna-seq3	GSE119945 GSM3388476 extract protocol and sample title (sci3-me, sci-RNA-seq3; Cao 2019), PRJNA490754/, PRJNA490754/, PRJNA490754/, PRJNA490754/SRP161714	
+SRR19645614	plate_barcoded	celseq2	GSE206052 GSM6241037 extract protocol (CEL-Seq2, 96 vagal neurons per plate), PRJNA848852/, PRJNA848852/, PRJNA848852/, PRJNA848852/SRP380081	
+SRR19100747	plate_barcoded	marsseq	GSE202326 GSM6108389 extract protocol (MARS-Seq, Jaitin 2014, 384-well plates), PRJNA835474/, PRJNA835474/, PRJNA835474/, PRJNA835474/SRP373838	
+SRR21226943	plate_barcoded	scrbseq	GSE211797 GSM6502544 sample description (SCRB-Seq, mouse cortex FFPE comparison), PRJNA872144/, PRJNA872144/, PRJNA872144/, PRJNA872144/SRP394212	plate SCRB-seq on bulk-like input
+SRR13247000	droplet_other	dropseq	GSE163089 GSM4971874 extract protocol (baseline Drop-seq, human/mouse mixture), PRJNA684762/, PRJNA684762/, PRJNA684762/, PRJNA684762/SRP297763	
+SRR18070426	multiome_gex	10x-arc-gex	GSE196988 GSM5906305 extract protocol (Chromium Next GEM Multiome ATAC + GEX, cellranger-arc), PRJNA808248/, PRJNA808248/, PRJNA808248/, PRJNA808248/SRP360500, PMID 37597510	
+SRR18070427	multiome_gex	10x-arc-gex	GSE196988 GSM5906306 extract protocol (Chromium Next GEM Multiome ATAC + GEX, cellranger-arc), PRJNA808248/, PRJNA808248/, PRJNA808248/, PRJNA808248/SRP360500, PMID 37597510	
+SRR18070428	multiome_gex	10x-arc-gex	GSE196988 GSM5906307 extract protocol (Chromium Next GEM Multiome ATAC + GEX, cellranger-arc), PRJNA808248/, PRJNA808248/, PRJNA808248/, PRJNA808248/SRP360500, PMID 37597510	
+SRR18070627	multiome_atac	10x-arc-atac	GSE196987 GSM5906273 extract protocol (Chromium Next GEM Multiome ATAC + GEX, cellranger-arc), PRJNA808249/, PRJNA808249/, PRJNA808249/, PRJNA808249/SRP360505, PMID 37597510	
+SRR18070626	multiome_atac	10x-arc-atac	GSE196987 GSM5906274 extract protocol (Chromium Next GEM Multiome ATAC + GEX, cellranger-arc), PRJNA808249/, PRJNA808249/, PRJNA808249/, PRJNA808249/SRP360505, PMID 37597510	
+SRR18070625	multiome_atac	10x-arc-atac	GSE196987 GSM5906275 extract protocol (Chromium Next GEM Multiome ATAC + GEX, cellranger-arc), PRJNA808249/, PRJNA808249/, PRJNA808249/, PRJNA808249/SRP360505, PMID 37597510	
+SRR10139719	droplet_3p	10x-3p-v2	GSE137672 GSM4083996 extract protocol (Chromium Single Cell 3 prime Library and Gel Bead Kit v2), PRJNA566187/, PRJNA566187/, PRJNA566187/, PRJNA566187/SRP222353	spot layout 26 + 98 nt (barcode read present)
+SRR7722018	droplet_3p	10x-3p-v2	GSE118773 GSM3347396 extract protocol (Chromium 3 prime v2 chemistry), PRJNA486793/, PRJNA486793/, PRJNA486793/, PRJNA486793/SRP158405	no barcode read: SINGLE, 1 read of 99 nt per spot
+SRR9644308	droplet_3p	10x-3p-v2	GSE133832 GSM3928159 extract protocol (Chromium Single Cell 3 prime v2 kit PN-120237), PRJNA552689/, PRJNA552689/, PRJNA552689/, PRJNA552689/SRP213022	no barcode read: 1 read of 98 nt per spot (runinfo says PAIRED, one FASTQ)
+SRR7788880	droplet_3p	10x-3p-v2	GSE119507 GSM3375768 extract protocol (Chromium Single Cell 3 prime v2 Reagent Kit), PRJNA489436/, PRJNA489436/, PRJNA489436/, PRJNA489436/SRP159651	no barcode read: 1 read of 98 nt per spot (runinfo says PAIRED, one FASTQ)
+SRR9004325	droplet_3p	10x-3p-v3	GSE130636 GSM3745992 extract protocol (Chromium System with v3 single cell reagent kit, CellRanger 3.0.1), PRJNA540843/, PRJNA540843/, PRJNA540843/, PRJNA540843/SRP194595	no barcode read: two equal-length mates, 2 x 151 nt per spot
+SRR7791890	droplet_3p	10x-3p-v2	GSE119561 GSM3377671 extract protocol (Chromium Single Cell Library kit V2, Cell Ranger 1.3.1), PRJNA489582/, PRJNA489582/, PRJNA489582/, PRJNA489582/SRP159805	no barcode read: two equal-length mates, 2 x 101 nt per spot
+SRR11089986	droplet_5p	10x-5p	GSE145328 GSM4314854 extract protocol (Chromium Single Cell 5 prime Library and Gel Bead Kit PN-1000006), PRJNA606769/, PRJNA606769/, PRJNA606769/, PRJNA606769/SRP249562	no barcode read: 1 read of 98 nt per spot (runinfo says PAIRED)
+SRR8088290	droplet_5p	10x-5p	GSE121636 GSM3440844 extract protocol (Chromium Single Cell 5-prime kit, Cell Ranger 2.2) and series design (10x 5-prime expression profiling), PRJNA497905/, PRJNA497905/, PRJNA497905/SRP166375	no barcode read: two equal-length mates, 2 x 151 nt per spot
+SRR11260853	droplet_5p	10x-5p	GSE146586 GSM4396048 extract protocol (Chromium Single Cell 5-prime Library and Gel Bead Kit), PRJNA610903/, PRJNA610903/, PRJNA610903/SRP251929	no barcode read: two equal-length mates, 2 x 151 nt per spot
+SRR11067221	droplet_5p	10x-5p	GSE145095 GSM4306442 extract protocol (Chromium Single Cell 5-prime Library and Gel Bead Kit), PRJNA606026/, PRJNA606026/, PRJNA606026/SRP248200	no barcode read: two equal-length mates, 2 x 151 nt per spot
+SRR22031356	feature_barcode	adt	GSE216534 GSM6675893 sample title (CRC, GDT, CITE-seq) and protocol (Chromium Single Cell 5 prime v1), PRJNA894171/, PRJNA894171/SRP404360	
+SRR20989841	feature_barcode	hto	GSE210824 GSM6438842 sample title (Jiang_CD4_HIVdelta6_HTO; 10x GemCode 3 prime), PRJNA867681/, PRJNA867681/SRP390714	
+SRR18214206	feature_barcode	hto	GSE197879 GSM5931623 sample title (WT [HTO]; 10x Chromium 3 prime v3.1), PRJNA812581/, PRJNA812581/SRP362344	
+SRR18214211	droplet_3p	10x-3p-v3.1	GSE197879 GSM5931621 extract protocol (10x Chromium Single Cell 3 prime Kit v3.1 chemistry), PRJNA812581/, PRJNA812581/SRP362344	spot layout 28 + 91 nt (barcode read present)
+SRR15178153	droplet_5p	10x-5p-vdj	GSE180268 GSM5456908 sample title (HPV QVD specific CD8 TILS VDJ; Chromium Single Cell 5 prime), PRJNA747292/, PRJNA747292/SRP328714	V(D)J enrichment library; spot layout 8 + 150 + 150 nt
+SRR15178156	droplet_5p	10x-5p-vdj	GSE180268 GSM5456910 sample title (HPV KSA specific CD8 TILS VDJ; Chromium Single Cell 5 prime), PRJNA747292/, PRJNA747292/SRP328714	V(D)J enrichment library
+SRR15178151	droplet_5p	10x-5p	GSE180268 GSM5456907 sample title (HPV QVD specific CD8 TILS GEX; Chromium Single Cell 5 prime), PRJNA747292/, PRJNA747292/SRP328714	spot layout 8 + 26 + 91 nt (barcode read present)
+SRR31116722	droplet_3p	10x-flex	GSE280311 GSM8594533 extract protocol (Chromium Fixed RNA Profiling, CG000632), PRJNA1177823/SRP540841	probe-based 10x Flex; spot layout 28 + 90 nt
