@@ -286,6 +286,37 @@ __global__ void k_hash_span(const char* seq, const u64* off, const u64* cs, cons
     }
     h1[i] = a; h2[i] = b; hasN[i] = N | (L == 0 ? 2 : 0);   // bit 1: N, bit 2: empty
 }
+// rt/packup: the read chunk's 2-bit bases decoded on the device (what PackedSeq::get writes: one byte per base, codes 0-3, N positions as 0 until
+// k_unpack_runs). pk: the packed bytes of the chunk; tb[0..nblk]: first global base of each block of the chunk (tb[nblk]: end of the last), ty[j]: the
+// byte of block j relative to pk (negative for a first block that starts before the chunk). One thread per read; a read that crosses a block edge
+// is decoded per piece.
+__global__ void k_unpack(const uint8_t* pk, const u64* tb, const int64_t* ty, u64 nblk, u64 b0, const u64* off, u64 m, char* seq) {
+    const u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i >= m) return;
+    const u64 o = off[i];
+    u64 len = off[i + 1] - o, p = b0 + o;
+    char* d = seq + o;
+    while (len > 0) {
+        u64 lo = 0, hi = nblk;
+        while (hi - lo > 1) { const u64 mid = (lo + hi) >> 1; if (tb[mid] <= p) lo = mid; else hi = mid; }
+        const u64 end = tb[lo + 1], n = min(len, end - p), k = p - tb[lo];
+        const uint8_t* s = pk + ty[lo];
+        u64 t = 0;
+        while (t < n) {
+            const u64 x = k + t;
+            const uint32_t byte = s[x >> 2];
+            for (uint32_t sh = (uint32_t)(x & 3); sh < 4 && t < n; sh++, t++) d[t] = (char)((byte >> (2 * sh)) & 3);
+        }
+        d += n; p += n; len -= n;
+    }
+}
+// the N runs (global pos, len; sorted, those intersecting the chunk [b0, b0 + nb)): code 4 over each, clipped to the chunk
+__global__ void k_unpack_runs(const u64* runs, u64 nr, u64 b0, u64 nb, char* seq) {
+    const u64 i = blockIdx.x * (u64)blockDim.x + threadIdx.x;
+    if (i >= nr) return;
+    const u64 a = max(runs[2 * i], b0), z = min(runs[2 * i] + runs[2 * i + 1], b0 + nb);
+    for (u64 q = a; q < z; q++) seq[q - b0] = 4;
+}
 // P3-MEM-03: per read (local index in its hash partition) its group's first read, from the sort's order and the max-scanned heads
 __global__ void k_group_head(const uint32_t* order, const uint32_t* hp, u64 n, uint32_t* gh) {
     const u64 k = blockIdx.x * (u64)blockDim.x + threadIdx.x;
@@ -1680,9 +1711,15 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     // needs on the host what this leaves there: hcs / hoffC (the clipped spans), readRep, rep in sequence order, the entries in the region.
     // The records' order can differ from the whole-sample dedup's (ties of the 32-base keys); each record's content does not.
     const double tR0 = now();
+    // rt/packup: with the 2-bit store, upload the chunk's packed bytes and decode on the device (SINGLET_ENGINE_GPU_PACKUP=0: decode on the host;
+    // =check: device decode, compared byte for byte with the host's)
+    const char* pkE = std::getenv("SINGLET_ENGINE_GPU_PACKUP");
+    const bool packCheck = pkE && std::string(pkE) == "check";
+    bool packUp = in.pseq && !(pkE && pkE[0] == '0');
     const u64 strideAux = e10 ? 2 + (u64) in.e10.nw : 0;
     const u64 perR = (S0 + n - 1) / std::max<u64>(1, n) + 16 + strideAux * 8 + (e10 ? sizeof(e6::ReadEntry) + (in.e10.wantMask ? qmBytes() : 0) : 0)
-                     + (in.clip.on ? 8 * 2 + 5 : 0) + 17;
+                     + (in.clip.on ? 8 * 2 + 5 : 0) + 17
+                     + (packUp ? (S0 + n - 1) / std::max<u64>(1, n) / 4 + 2 : 0);   // rt/packup: the chunk's packed bytes (the block table and N runs are small)
     auto roomRC = [&]() -> u64 {
         u64 r = cap ? g_bud.room() : ~0ull;
         size_t f = 0, t = 0; cudaMemGetInfo(&f, &t);
@@ -1736,14 +1773,51 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     singlet_engine_gpu::NoInitVector<u64> hH1(n), hH2(n); singlet_engine_gpu::NoInitVector<uint8_t> hN(n);
     if (in.clip.on) { hcs.resize(n); hoffC.resize(n + 1); hoffC[0] = 0; }
     u64 nClipped = 0; float msEnt = 0, msR = 0;
-    double tUp = 0, tKer = 0, tD2H = 0;
+    double tUp = 0, tKer = 0, tD2H = 0, tDec = 0;
     // align-w2: two sets of the chunk's inputs (sequences, offsets, aux, clip lengths): the main thread uploads chunk k + 1 while a second host
     // thread runs chunk k's kernels and its copies to the host (and to the region). Every chunk's kernels and copies are the ones before, in
     // chunk order. One set (as before) when the second does not fit or SINGLET_ENGINE_GPU_RCPIPE=0.
-    struct InSet { char* seq = nullptr; u64* off = nullptr; uint64_t* aux = nullptr; uint16_t *p5 = nullptr, *p3 = nullptr; singlet_engine_gpu::NoInitVector<u64> ho; };
+    struct InSet { char* seq = nullptr; u64* off = nullptr; uint64_t* aux = nullptr; uint16_t *p5 = nullptr, *p3 = nullptr; singlet_engine_gpu::NoInitVector<u64> ho;
+                 // rt/packup: the chunk's packed bytes, block table (first bases, then byte offsets) and N runs on the device; their host staging and counts
+                 uint8_t* pk = nullptr; u64 pkNblk = 0, pkNruns = 0; std::vector<u64> hTb, hRun; std::vector<int64_t> hTy; };
     InSet ins[2];
     singlet_engine_gpu::NoInitVector<char> hSeqC;   // the 2-bit store's chunk, decoded
     ins[0].seq = cSeq; ins[0].off = cOff; ins[0].aux = cAux; ins[0].p5 = cP5; ins[0].p3 = cP3; ins[0].ho.resize(RCN + 1);
+    // rt/packup: per chunk the blocks of the 2-bit store it overlaps, the byte range of its bases (blocks are contiguous in w, each starting on a byte)
+    // and the N runs that intersect it; the maxima size the device buffer (packed bytes | first bases | byte offsets | runs, each part 8-aligned)
+    struct PkChunk { u64 byte0 = 0, nbytes = 0, nblk = 0, nruns = 0; uint32_t bf = 0, bl = 0; };
+    auto runRange = [&](uint32_t b, u64 lo0, u64 e, size_t& lo, size_t& hi) {   // the runs of block b that intersect [lo0, e)
+        const std::vector<singlet_engine_gpu::NRun>& R = in.pseq->runs[b];
+        lo = 0; hi = R.size();
+        while (lo < hi) { const size_t mid = (lo + hi) / 2; if (R[mid].pos + R[mid].len <= lo0) lo = mid + 1; else hi = mid; }
+        size_t l2 = lo, h2 = R.size();
+        while (l2 < h2) { const size_t mid = (l2 + h2) / 2; if (R[mid].pos < e) l2 = mid + 1; else h2 = mid; }
+        hi = l2;
+    };
+    auto pkChunk = [&](u64 r0) -> PkChunk {
+        PkChunk c;
+        const singlet_engine_gpu::PackedSeq& P = *in.pseq;
+        const u64 m = std::min(RCN, n - r0), b0 = in.off[r0], e = in.off[r0 + m];
+        if (e <= b0) return c;
+        c.bf = P.blockOf(b0); c.bl = P.blockOf(e - 1);
+        c.byte0 = P.byteAt[c.bf] + (b0 - P.baseAt[c.bf]) / 4;
+        c.nbytes = P.byteAt[c.bl] + (e - 1 - P.baseAt[c.bl]) / 4 - c.byte0 + 1;
+        c.nblk = (u64) c.bl - c.bf + 1;
+        for (uint32_t b = c.bf; b <= c.bl; b++) { size_t lo, hi; runRange(b, b0, e, lo, hi); c.nruns += hi - lo; }
+        return c;
+    };
+    u64 pkMaxBytes = 0, pkMaxBlk = 0, pkMaxRuns = 0, pkTbOff = 0, pkTyOff = 0, pkRunOff = 0, pkTotal = 0;
+    if (packUp) {
+        const singlet_engine_gpu::PackedSeq& P = *in.pseq;
+        if (P.baseAt.size() < 2 || P.byteAt.size() != P.baseAt.size() || P.runs.size() + 1 != P.baseAt.size() || in.off[n] > P.total || P.baseAt.back() < P.total) packUp = false;
+        for (u64 r0 = 0; packUp && r0 < n; r0 += RCN) {
+            const PkChunk c = pkChunk(r0);
+            if (c.nbytes && (c.byte0 + c.nbytes > P.w.size() || P.byteAt[c.bl + 1] < c.byte0 + c.nbytes)) { packUp = false; break; }
+            pkMaxBytes = std::max(pkMaxBytes, c.nbytes); pkMaxBlk = std::max(pkMaxBlk, c.nblk); pkMaxRuns = std::max(pkMaxRuns, c.nruns);
+        }
+        pkTbOff = (pkMaxBytes + 7) & ~7ull; pkTyOff = pkTbOff + (pkMaxBlk + 1) * 8; pkRunOff = pkTyOff + (pkMaxBlk + 1) * 8; pkTotal = pkRunOff + pkMaxRuns * 16;
+        if (packUp && !al(ins[0].pk, pkTotal)) packUp = false;   // no room: the host decode for the whole phase
+    }
     const char* rpipeE = std::getenv("SINGLET_ENGINE_GPU_RCPIPE");
     bool rpipe = n > RCN && !(rpipeE && rpipeE[0] == '0');
     if (rpipe) {
@@ -1751,6 +1825,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         auto al1 = [&](auto*& q, u64 b) -> bool { if (dmal(&q, b + 8) != cudaSuccess) { cudaGetLastError(); q = nullptr; return false; } got.push_back((void*) q); return true; };
         const bool ok = al1(ins[1].seq, maxB) && al1(ins[1].off, (RCN + 1) * 8) && (!cAux || al1(ins[1].aux, RCN * strideAux * 8))
                         && (!cP5 || (al1(ins[1].p5, RCN * 2) && al1(ins[1].p3, RCN * 2)));
+        if (ok && packUp && !al1(ins[1].pk, pkTotal)) packUp = false;   // the second set's packed buffer does not fit: the host decode for the whole phase
         if (ok) { for (void* q : got) rcf.p.push_back(q); ins[1].ho.resize(RCN + 1); }
         else { for (void* q : got) dfree(q); rpipe = false; }
     }
@@ -1762,6 +1837,29 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         const unsigned G = (unsigned) ((m + 255) / 256);
         double ta = now();
         auto lchk = [&](const char* what) -> bool { const cudaError_t e = cudaGetLastError(); if (e != cudaSuccess) { why = std::string(what) + " launch: " + cudaGetErrorString(e); return false; } return true; };
+        if (packUp) {   // rt/packup: the chunk's bases decoded into S.seq (same thread and stream as the kernels below); the 8 bytes after the last base are zeroed
+            const u64 nb = in.off[r0 + m] - b0;
+            if (nb) {
+                const u64* tbP = (const u64*) (S.pk + pkTbOff); const int64_t* tyP = (const int64_t*) (S.pk + pkTyOff); const u64* rnP = (const u64*) (S.pk + pkRunOff);
+                k_unpack<<<G, 256>>>(S.pk, tbP, tyP, S.pkNblk, b0, S.off, m, S.seq);
+                if (S.pkNruns) k_unpack_runs<<<(unsigned) ((S.pkNruns + 255) / 256), 256>>>(rnP, S.pkNruns, b0, nb, S.seq);
+                cudaMemsetAsync(S.seq + nb, 0, 8, 0);
+            }
+            if (!lchk("bases decode kernel")) return;
+            if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("bases decode kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
+            if (packCheck && nb) {
+                std::vector<char> hd(nb), hs(nb);
+                parallelFor(nb, hostThreads, [&](u64 lo, u64 hi) { in.pseq->get(b0 + lo, hi - lo, hd.data() + lo); });
+                if (cudaMemcpy(hs.data(), S.seq, nb, cudaMemcpyDeviceToHost) != cudaSuccess) { why = "PACKUP check: copy of the decoded bases"; return; }
+                if (std::memcmp(hd.data(), hs.data(), nb) != 0) {
+                    u64 k = 0; while (hd[k] == hs[k]) k++;
+                    why = "PACKUP check: the device decode differs from the host decode in the chunk at read " + std::to_string(r0) + ", base " + std::to_string(k) + " of " + std::to_string(nb)
+                          + " (host " + std::to_string((int) hd[k]) + ", device " + std::to_string((int) hs[k]) + ")";
+                    return;
+                }
+            }
+            tDec += now() - ta; ta = now();
+        }
         if (ccr4) {
             const unsigned g4 = (unsigned) ((m + 127) / 128);
             if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo);
@@ -1818,19 +1916,34 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) S.ho[k] = in.off[r0 + k] - b0; });
         const bool upAux = S.aux != nullptr;
         const char* spc = in.seq.data() + b0;
-        if (in.pseq) {   // the 2-bit store's chunk, decoded on the host threads (the main thread alone uploads, so one buffer)
+        PkChunk pc;
+        if (packUp) {   // the packed bytes, the chunk's block table and its N runs go up; the decode runs in rcProcess
+            pc = pkChunk(r0);
+            const singlet_engine_gpu::PackedSeq& P = *in.pseq;
+            S.pkNblk = pc.nblk; S.pkNruns = pc.nruns;
+            S.hTb.resize(pc.nblk + 1); S.hTy.resize(pc.nblk); S.hRun.resize(pc.nruns * 2);
+            if (nb) {
+                for (u64 j = 0; j < pc.nblk; j++) { S.hTb[j] = P.baseAt[pc.bf + j]; S.hTy[j] = (int64_t) P.byteAt[pc.bf + j] - (int64_t) pc.byte0; }
+                S.hTb[pc.nblk] = P.baseAt[pc.bl + 1];
+                u64 q = 0;
+                for (uint32_t b = pc.bf; b <= pc.bl; b++) {
+                    size_t lo, hi; runRange(b, b0, b0 + nb, lo, hi);
+                    for (; lo < hi; lo++) { S.hRun[2 * q] = P.runs[b][lo].pos; S.hRun[2 * q + 1] = P.runs[b][lo].len; q++; }
+                }
+            }
+        } else if (in.pseq) {   // the 2-bit store's chunk, decoded on the host threads (the main thread alone uploads, so one buffer)
             hSeqC.resize(nb);
             parallelFor(nb, hostThreads, [&](u64 lo, u64 hi) { in.pseq->get(b0 + lo, hi - lo, hSeqC.data() + lo); });
             spc = hSeqC.data();
         }
-        const bool up = staged ? SR.copy(S.seq, spc, nb) && SR.copy(S.off, S.ho.data(), (m + 1) * 8)
-                                 && (!upAux || SR.copy(S.aux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8))
-                                 && (!cpre || (SR.copy(S.p5, in.pre5.data() + r0, m * 2) && SR.copy(S.p3, in.pre3.data() + r0, m * 2))) && SR.finish()
-                               : cudaMemcpy(S.seq, spc, nb, cudaMemcpyHostToDevice) == cudaSuccess
-                                 && cudaMemcpy(S.off, S.ho.data(), (m + 1) * 8, cudaMemcpyHostToDevice) == cudaSuccess
-                                 && (!upAux || cudaMemcpy(S.aux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8, cudaMemcpyHostToDevice) == cudaSuccess)
-                                 && (!cpre || (cudaMemcpy(S.p5, in.pre5.data() + r0, m * 2, cudaMemcpyHostToDevice) == cudaSuccess
-                                               && cudaMemcpy(S.p3, in.pre3.data() + r0, m * 2, cudaMemcpyHostToDevice) == cudaSuccess));
+        auto cp = [&](void* d, const void* s, u64 b) -> bool { return b == 0 || (staged ? SR.copy(d, s, b) : cudaMemcpy(d, s, b, cudaMemcpyHostToDevice) == cudaSuccess); };
+        bool up = (packUp ? !nb || (cp(S.pk, in.pseq->w.data() + pc.byte0, pc.nbytes) && cp(S.pk + pkTbOff, S.hTb.data(), (pc.nblk + 1) * 8)
+                                    && cp(S.pk + pkTyOff, S.hTy.data(), pc.nblk * 8) && cp(S.pk + pkRunOff, S.hRun.data(), pc.nruns * 16))
+                          : cp(S.seq, spc, nb))
+                  && cp(S.off, S.ho.data(), (m + 1) * 8)
+                  && (!upAux || cp(S.aux, in.e10.aux.data() + r0 * strideAux, m * strideAux * 8))
+                  && (!cpre || (cp(S.p5, in.pre5.data() + r0, m * 2) && cp(S.p3, in.pre3.data() + r0, m * 2)));
+        if (staged) up = up && SR.finish();
         tUp += now() - ta;
         { const int f = rcFinish(); if (f == 2) return fail(e10OomWhy()); if (f == 1) return fail(rcWhy); }   // the previous chunk (its input set is free again)
         if (!up) return fail("reads upload (read chunk at " + std::to_string(r0) + ")");
@@ -2012,10 +2125,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     }
     decltype(pkey)().swap(pkey);
     {
-        char l[600];
-        snprintf(l, sizeof l, "engine_gpu: P3-MEM-03 reads phase in %llu read chunks of %llu: upload %.2f s, kernels %.2f s, to the host %.2f s; dedup in %llu hash "
+        char l[800], bm[96];
+        if (packUp) snprintf(bm, sizeof bm, "bases packed, decoded on the device %.2f s%s", tDec, packCheck ? ", checked against the host" : "");
+        else snprintf(bm, sizeof bm, "bases decoded on the host");
+        snprintf(l, sizeof l, "engine_gpu: P3-MEM-03 reads phase in %llu read chunks of %llu: upload %.2f s (%s), kernels %.2f s, to the host %.2f s; dedup in %llu hash "
                  "partitions (largest %llu reads): sort %.2f s, groups on the host %.2f s, %llu distinct (%llu with N), %s; order %.2f s (%s)\n",
-                 (unsigned long long) nRC, (unsigned long long) RCN, tUp, tKer, tD2H, (unsigned long long) NP, (unsigned long long) maxP, tSort, tHostD,
+                 (unsigned long long) nRC, (unsigned long long) RCN, tUp, bm, tKer, tD2H, (unsigned long long) NP, (unsigned long long) maxP, tSort, tHostD,
                  (unsigned long long) nDist, (unsigned long long) nWN, bgOn ? "byte check beside the lanes" : "0 collisions", now() - tO0, sorted || nRep == 0 ? "device" : "host");
         out.log += l;
     }
