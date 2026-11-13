@@ -345,6 +345,49 @@ int main() {
               registry_tag("multiome_atac", "10x-arc-atac", "chromatin_accessibility").id == "10x-arc-atac", "other registry ids");
     }
 
+    std::cout << "\n=== species block ===\n";
+    {
+        // two synthetic genomes in different close groups, one filter file each, indexed like the reference pack
+        const std::string g1 = rand_seq(20000), g2 = rand_seq(20000);
+        const std::string sdir = dir + "/species";
+        fs::create_directories(sdir);
+        auto make = [&](const std::string& tag, const std::string& g) {
+            singlet::pileup::BloomFilter bf(1u << 22);
+            for (size_t i = 0; i + 21 <= g.size(); ++i) {
+                uint64_t k = 0;
+                for (size_t j = 0; j < 21; ++j) k = (k << 2) | nuc::ascii_to_num(g[i + j]);
+                bf.insert(singlet::pileup::kmer::canonical_2bit(k, 21));
+            }
+            bf.save(sdir + "/" + tag + "_21mer.bloom");
+        };
+        make("sp1", g1);
+        make("sp2", g2);
+        { std::ofstream o(sdir + "/species_filters.tsv"); o << "filter_tag\treference_id\ttaxon_id\tspecies\tclose_group\tbuild_note\tsha256\nsp1\tr1\t1\tSpecies one\tG1\t\t\nsp2\tr2\t2\tSpecies two\tG2\t\t\n"; }
+        auto reads_of = [&](const std::string& g, size_t n) {
+            std::vector<HeadSpot> v;
+            for (size_t i = 0; i < n; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), g.substr((i * 37) % (g.size() - 100), 90)}));
+            return v;
+        };
+        Options o;
+        o.whitelist_dirs = {dir};
+        o.species_filter_dir = sdir;
+        auto v1 = reads_of(g1, 3000);
+        auto r1 = identify_spots(v1, o, lists, nullptr);
+        CHECK(r1.species.measured && r1.species.call == "CALL" && r1.species.hits[0].tag == "sp1" && !r1.species.mixture, "species: one genome gives a CALL");
+        auto vm = reads_of(g1, 2000);
+        for (auto& x : reads_of(g2, 1000)) vm.push_back(x);
+        auto rm = identify_spots(vm, o, lists, nullptr);
+        CHECK(rm.species.mixture && rm.species.call == "MIXTURE" && rm.species.minor_species == "Species two", "species: a one-third minor genome is a mixture");
+        o.species_hint = "Species two";
+        auto rh = identify_spots(v1, o, lists, nullptr);
+        CHECK(rh.species.hits[0].tag == "sp1" && !rh.species.screened_by_hint, "species: a wrong hint loads the rest and still calls the right filter");
+        auto rn = identify_spots(reads_of(rand_seq(20000), 3000), o, lists, nullptr);
+        CHECK(rn.species.call == "NONE", "species: reads from neither genome give NONE");
+        const std::string js = report_json(r1);
+        CHECK(js.find("\"species\": {\"call\": \"CALL\"") != std::string::npos, "species block in the JSON");
+        CHECK(report_json(run(v1, lists, dir)).find("\"species\": null") != std::string::npos, "species is null without filters");
+    }
+
     fs::remove_all(dir);
     std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
     return n_fail == 0 ? 0 : 1;

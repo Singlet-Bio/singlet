@@ -629,6 +629,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
     measure(spots, opt, lists, R.ev);
     if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, R.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
+    attach_species(R, spots, opt);
     if (want_endpoints() && cli_detail::is_accession(source)) {
         if (R.endpoints.empty()) R.endpoints = survey_endpoints(source, n_reads, lists, opt);
         std::string via;
@@ -642,7 +643,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
 
 inline int identify_main(int argc, char** argv) {
     std::vector<std::string> sources, wl_dirs;
-    std::string json_out, hint, route = "auto", genome_dir, list_path, out_dir, route_status_path;
+    std::string json_out, hint, route = "auto", genome_dir, list_path, out_dir, route_status_path, species_dir, species_hint;
     size_t n_reads = 200000, map_reads = 50000;
     int threads = 8;
     for (int i = 0; i < argc; ++i) {
@@ -661,8 +662,10 @@ inline int identify_main(int argc, char** argv) {
         else if (a == "--endpoints") want_endpoints() = true;
         else if (a == "--out-dir") out_dir = next();
         else if (a == "--route-status") route_status_path = next();
+        else if (a == "--species-filters") species_dir = next();
+        else if (a == "--species-hint") species_hint = next();
         else if (a == "-h" || a == "--help") {
-            std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena] [--route-status FILE]\n"
+            std::cout << "usage: singlet identify SOURCE [--reads N] [--genome-dir DIR] [--whitelist-dir DIR] [--hint assay=X] [--json OUT] [--route auto|sra|ena] [--route-status FILE]\n               [--species-filters DIR [--species-hint ORGANISM]]\n"
                          "       singlet identify --list samples.tsv --out-dir DIR [options]\n"
                          "SOURCE: SRR accession | URL[,URL] | FASTQ[,FASTQ] | bam:FILE | FILE.1fq ; runs separated by ';'\n";
             return 0;
@@ -672,6 +675,8 @@ inline int identify_main(int argc, char** argv) {
     for (const auto& d : default_whitelist_dirs()) wl_dirs.push_back(d);
     Options opt;
     opt.whitelist_dirs = wl_dirs;
+    opt.species_filter_dir = species_dir;
+    opt.species_hint = species_hint;
     if (!route_status_path.empty()) {
         std::ifstream rs(route_status_path);
         std::stringstream buf;

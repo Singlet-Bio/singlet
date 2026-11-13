@@ -21,6 +21,7 @@
 
 #include "protocol.h"
 #include "run_screen.h"
+#include "singlet/pileup/bloom_filter.h"
 #include "types.h"
 
 #include <zlib.h>
@@ -80,6 +81,11 @@ struct Thresholds {
     // one transcript end, at least this many times what even coverage gives, with the strand that goes with that end (3': sense, 5': antisense).
     // Even coverage (bulk, Smart-seq): under even_end_share at either end.
     double tag_end_share = 0.35, tag_end_enrich = 3.0, even_end_share = 0.25;
+    // Species block (validation/references/SPECIES_BARS.md, rule v0): a filter calls when its hit rate (share of canonical 21-mers of cDNA reads
+    // present in it) is at least species_min_rate and species_ratio times the runner-up. A mixture needs the minor species to hold
+    // species_mix_share of the species-specific reads and species_mix_reads reads (a read is specific to A with species_mix_excess more hits).
+    double species_min_rate = 0.02, species_ratio = 1.25, species_mix_share = 0.15;
+    int species_mix_reads = 50, species_mix_excess = 10;
     // Verdict margin over the best interpretation of another family.
     double margin = 0.15;
     // Verdict floor on the top support.
@@ -206,6 +212,24 @@ struct EndpointRec {
     double seconds = 0;
 };
 
+struct SpeciesHit {
+    std::string tag, species, group;
+    double rate = 0;      // share of canonical 21-mers of the scored reads present in the filter
+};
+struct SpeciesBlock {
+    bool measured = false;
+    std::vector<SpeciesHit> hits;       // the top two by rate
+    bool mixture = false;
+    std::string minor_species;          // minor species of the best split outside the top hit's close group
+    double minor_share = 0;             // its share of the species-specific reads
+    int minor_reads = 0;
+    std::string call;                   // CALL | CLOSE_PAIR | MIXTURE | AMBIGUOUS | NONE
+    int filters_scored = 0, filters_available = 0;
+    uint64_t reads_scored = 0;
+    bool short_reads = false, screened_by_hint = false;
+    std::string note;
+};
+
 struct Report {
     int schema = kSchemaVersion;
     SourceInfo src;
@@ -225,9 +249,7 @@ struct Report {
     // sub_call: version-level calls; an empty value is JSON null
     std::string sub_strand, sub_visium, sub_vdj, sub_indrop_version, sub_bd_bead, sub_parse_kit;
     std::string sub_call_reason;
-    std::vector<std::pair<std::string, double>> species_hits;   // species block: top hits with shares; empty when not measured
-    bool species_measured = false, species_mixture = false;
-    std::string species_note;
+    SpeciesBlock species;   // measured only with --species-filters
 };
 
 // ── policy table (separate from the classifier) ──
@@ -753,6 +775,8 @@ struct Options {
     // --route-status: registry id -> route status. When use_route_status is set, `process` needs status "validated".
     bool use_route_status = false;
     std::unordered_map<std::string, std::string> route_status;
+    // --species-filters DIR: directory of <tag>_21mer.bloom files with species_filters.tsv in or beside it; --species-hint: stated organism
+    std::string species_filter_dir, species_hint;
 };
 
 inline double clamp01(double x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
@@ -1460,6 +1484,20 @@ inline std::string report_json(const Report& R) {
       << ", \"rrna_note\": \"annotated rRNA genes only\", \"profile\": [";
     for (int k = 0; k < 10; ++k) o << (k ? ", " : "") << jnum(ev.map.profile[k]);
     o << "]},\n";
+    o << "  \"species\": ";
+    if (!R.species.measured) o << "null";
+    else {
+        const auto& sp = R.species;
+        o << "{\"call\": " << q(sp.call) << ", \"hits\": [";
+        for (size_t i = 0; i < sp.hits.size(); ++i)
+            o << (i ? ", " : "") << "{\"filter\": " << q(sp.hits[i].tag) << ", \"species\": " << q(sp.hits[i].species) << ", \"close_group\": " << q(sp.hits[i].group)
+              << ", \"rate\": " << jnum(sp.hits[i].rate) << "}";
+        o << "], \"mixture\": " << (sp.mixture ? "true" : "false") << ", \"minor_species\": " << qn(sp.minor_species) << ", \"minor_read_share\": " << jnum(sp.minor_share)
+          << ", \"minor_reads\": " << sp.minor_reads << ", \"filters_scored\": " << sp.filters_scored << ", \"filters_available\": " << sp.filters_available
+          << ", \"reads_scored\": " << sp.reads_scored << ", \"short_reads\": " << (sp.short_reads ? "true" : "false") << ", \"screened_by_hint\": "
+          << (sp.screened_by_hint ? "true" : "false") << ", \"note\": " << qn(sp.note) << "}";
+    }
+    o << ",\n";
     o << "  \"endpoints\": [";
     for (size_t i = 0; i < R.endpoints.size(); ++i) {
         const auto& e = R.endpoints[i];
@@ -1482,6 +1520,152 @@ inline std::string report_json(const Report& R) {
     return o.str();
 }
 
+// ── species (validation reference pack filters) ──
+
+namespace detail_sp {
+inline std::string lower(std::string v) { for (auto& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return v; }
+inline std::vector<std::string> cols(const std::string& line) {
+    std::vector<std::string> o;
+    std::string cur;
+    for (char c : line) { if (c == '\t') { o.push_back(cur); cur.clear(); } else if (c != '\r') cur += c; }
+    o.push_back(cur);
+    return o;
+}
+struct Row { std::string tag, species, group; };
+inline bool exists(const std::string& f) { std::ifstream in(f, std::ios::binary); return static_cast<bool>(in); }
+}  // namespace detail_sp
+
+/// Scores the head against the species filters of `opt.species_filter_dir` and fills R.species. Without an index it falls back to
+/// human_21mer.bloom and mouse_21mer.bloom. With a hint the hinted close group plus human and mouse are scored first; the rest load
+/// only when no filter of that set clears the call rule.
+inline void attach_species(Report& R, const std::vector<HeadSpot>& spots, const Options& opt) {
+    using namespace detail_sp;
+    if (opt.species_filter_dir.empty()) return;
+    SpeciesBlock& B = R.species;
+    const std::string dir = opt.species_filter_dir;
+    std::vector<Row> rows;
+    for (const std::string& idx : {dir + "/species_filters.tsv", dir + "/../species_filters.tsv"}) {
+        std::ifstream in(idx);
+        if (!in) continue;
+        std::string line;
+        std::getline(in, line);
+        const auto h = cols(line);
+        int ct = -1, cs = -1, cg = -1;
+        for (size_t i = 0; i < h.size(); ++i) { if (h[i] == "filter_tag") ct = (int)i; else if (h[i] == "species") cs = (int)i; else if (h[i] == "close_group") cg = (int)i; }
+        if (ct < 0) continue;
+        std::unordered_map<std::string, bool> active;
+        bool have_active = false;
+        for (const std::string& af : {dir + "/active_filters.tsv", dir + "/../active_filters.tsv"}) {
+            std::ifstream ain(af);
+            if (!ain) continue;
+            std::string al;
+            std::getline(ain, al);
+            while (std::getline(ain, al)) { const auto c = cols(al); if (!c.empty() && !c[0].empty()) { active[c[0]] = true; have_active = true; } }
+            break;
+        }
+        while (std::getline(in, line)) {
+            const auto c = cols(line);
+            if (c.size() <= (size_t)ct || c[ct].empty()) continue;
+            if (have_active && !active.count(c[ct])) continue;
+            if (!exists(dir + "/" + c[ct] + "_21mer.bloom")) continue;
+            rows.push_back({c[ct], cs >= 0 && c.size() > (size_t)cs ? c[cs] : "", cg >= 0 && c.size() > (size_t)cg ? c[cg] : ""});
+        }
+        if (!rows.empty()) break;
+    }
+    if (rows.empty()) {
+        if (exists(dir + "/human_21mer.bloom")) rows.push_back({"human", "Homo sapiens", "Hominidae"});
+        if (exists(dir + "/mouse_21mer.bloom")) rows.push_back({"mouse", "Mus musculus", "Mus"});
+        B.note = "no species_filters.tsv index; human and mouse filters only";
+    }
+    B.filters_available = static_cast<int>(rows.size());
+    if (rows.empty()) { B.note = "no filter files found in " + dir; return; }
+
+    // reads: every segment of 50 bases or more, up to 20,000; below 2,000 reads the limit drops to 30 bases
+    std::vector<std::vector<uint8_t>> reads;
+    for (const int minlen : {50, 30}) {
+        reads.clear();
+        for (const auto& sp : spots)
+            for (const auto& sg : sp.seg)
+                if (sg.size() >= (size_t)minlen && reads.size() < 20000) reads.push_back(detail_id::num(sg));
+        B.short_reads = minlen == 30;
+        if (reads.size() >= 2000) break;
+    }
+    B.reads_scored = reads.size();
+    if (reads.empty()) { B.note = "no read of 30 bases or more"; return; }
+
+    struct Scored { size_t row; double rate; std::vector<uint16_t> hits; };
+    std::vector<Scored> sc;
+    std::vector<char> done(rows.size(), 0);
+    auto score = [&](size_t ri) {
+        pileup::BloomFilter bf;
+        if (!bf.load(dir + "/" + rows[ri].tag + "_21mer.bloom")) { done[ri] = 1; return; }
+        Scored x{ri, 0, std::vector<uint16_t>(reads.size(), 0)};
+        uint64_t tot = 0, hit = 0;
+        for (size_t i = 0; i < reads.size(); ++i) {
+            const int h = bf.count_hits_numeric(reads[i].data(), static_cast<int>(reads[i].size()), 21);
+            x.hits[i] = static_cast<uint16_t>(std::min(h, 65535));
+            hit += h;
+            tot += reads[i].size() >= 21 ? reads[i].size() - 20 : 0;
+        }
+        x.rate = tot ? double(hit) / double(tot) : 0;
+        sc.push_back(std::move(x));
+        done[ri] = 1;
+    };
+    auto order = [&]() { std::stable_sort(sc.begin(), sc.end(), [](const Scored& a, const Scored& b) { return a.rate > b.rate; }); };
+    auto clears = [&]() {
+        order();
+        return !sc.empty() && sc[0].rate >= kThr.species_min_rate && sc.size() >= 2 && sc[0].rate >= kThr.species_ratio * sc[1].rate;
+    };
+    bool all = opt.species_hint.empty();
+    if (!all) {
+        const std::string hint = lower(opt.species_hint);
+        std::string group;
+        for (const auto& r : rows)
+            if (!r.species.empty() && (lower(r.species) == hint || hint.find(lower(r.species)) == 0)) { group = r.group; break; }
+        for (size_t i = 0; i < rows.size(); ++i) {
+            const bool same = !group.empty() && rows[i].group == group;
+            const bool named = !rows[i].species.empty() && lower(rows[i].species) == hint;
+            if (same || named || rows[i].tag == "human" || rows[i].tag == "mouse") score(i);
+        }
+        B.screened_by_hint = true;
+        if (!clears()) all = true;
+    }
+    if (all) {
+        for (size_t i = 0; i < rows.size(); ++i) if (!done[i]) score(i);
+        B.screened_by_hint = false;
+        order();
+    }
+    B.filters_scored = static_cast<int>(sc.size());
+    if (sc.empty()) { B.note = "no filter could be loaded"; return; }
+    B.measured = true;
+    for (size_t i = 0; i < sc.size() && i < 2; ++i) B.hits.push_back({rows[sc[i].row].tag, rows[sc[i].row].species, rows[sc[i].row].group, sc[i].rate});
+    const Scored& A = sc[0];
+    // mixture: the highest-rate filter outside A's close group, split per read between the two
+    const Scored* Bm = nullptr;
+    for (size_t i = 1; i < sc.size(); ++i)
+        if (rows[sc[i].row].group.empty() || rows[sc[i].row].group != rows[A.row].group) { Bm = &sc[i]; break; }
+    if (Bm) {
+        int na = 0, nb = 0;
+        for (size_t i = 0; i < reads.size(); ++i) {
+            const int a = A.hits[i], b = Bm->hits[i];
+            if (a - b >= kThr.species_mix_excess && 2 * b <= a) ++na;
+            else if (b - a >= kThr.species_mix_excess && 2 * a <= b) ++nb;
+        }
+        const int minor = std::min(na, nb), n = na + nb;
+        B.minor_reads = minor;
+        B.minor_share = n ? double(minor) / n : 0;
+        B.minor_species = rows[(nb < na ? Bm : &A)->row].species;
+        B.mixture = n > 0 && minor >= kThr.species_mix_reads && B.minor_share >= kThr.species_mix_share;
+    }
+    const double ra = A.rate, rb = sc.size() > 1 ? sc[1].rate : 0;
+    const bool same_group = sc.size() > 1 && !rows[A.row].group.empty() && rows[A.row].group == rows[sc[1].row].group;
+    if (B.mixture) B.call = "MIXTURE";
+    else if (ra < kThr.species_min_rate) B.call = "NONE";
+    else if (ra >= kThr.species_ratio * rb && !(same_group && ra < 1.5 * rb)) B.call = "CALL";
+    else if (same_group) B.call = "CLOSE_PAIR";
+    else B.call = "AMBIGUOUS";
+}
+
 /// One call for tests and callers that already hold the head: layers A to C, the interpretations and the verdict.
 inline Report identify_spots(const std::vector<HeadSpot>& spots, const Options& opt, std::vector<ScreenWhitelist>& lists, const MapEvidence* map = nullptr) {
     Report R;
@@ -1490,6 +1674,7 @@ inline Report identify_spots(const std::vector<HeadSpot>& spots, const Options& 
     measure(spots, opt, lists, R.ev);
     if (map) R.ev.map = *map;
     rank(R, opt);
+    attach_species(R, spots, opt);
     return R;
 }
 }  // namespace singlet::fq::identify
