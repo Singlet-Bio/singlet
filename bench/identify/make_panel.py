@@ -17,8 +17,12 @@ T = "SRA run accession"
 rows = []   # id, source, family, protocol, species, label_source, tier
 
 
+# Panel labels use the family ids of validation/routes.yaml. "10x-3p" and "10x-5p" mean the version is not stated (no registry id).
+REGISTRY_ID = {"bulk": "generic-negative", "dronc-seq": "dropseq", "adt": "cite-adt", "hto": "cite-hashtag", "10x-atac": "scatac", "celseq2-u6b8": "celseq2"}
+
+
 def add(i, src, fam, proto, sp, label_source, tier):
-    rows.append((i, src, fam, proto, sp, label_source, tier))
+    rows.append((i, src, fam, REGISTRY_ID.get(proto, proto), sp, label_source, tier))
 
 
 def tenx_family(t):

@@ -30,8 +30,8 @@ GSM5341104	SRR14646421	droplet_3p	10x-3p-v2	Homo sapiens	GEO sample text, confir
 mereu_10X2x5Kcell250Kreads	SRR9621416	droplet_3p	10x-3p	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
 mereu_10XV3_AN4492	SRR10587810	droplet_3p	10x-3p	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
 mereu_SingleNuclei_nextseq1	SRR9621776	droplet_3p	10x-3p	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
-mereu_CELseq2_HCAP1_4	SRR9621728	plate_barcoded	celseq2-u6b8	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
-mereu_CELseq2_HCAP3_1	SRR9621733	plate_barcoded	celseq2-u6b8	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
+mereu_CELseq2_HCAP1_4	SRR9621728	plate_barcoded	celseq2	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
+mereu_CELseq2_HCAP3_1	SRR9621733	plate_barcoded	celseq2	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
 mereu_Dropseq_N701	SRR9621741	droplet_other	dropseq	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
 mereu_Dropseq_N702	SRR9621742	droplet_other	dropseq	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
 mereu_ICELL8_SP021_022	SRR9621749	plate_barcoded	icell8	Homo sapiens	GSE133549 sample name (Mereu 2020)	D
@@ -48,9 +48,9 @@ mereu_inDrop_SP021_024015	SRR9621794	droplet_other	indrop	Homo sapiens	GSE133549
 ding_Mixture2.SM2_103117p3_B8	SRR9167490	smartseq	smartseq2	Homo sapiens	GSE132044 sample name (Ding 2020)	D
 ding_Mixture2.SM2_103117p3_C1	SRR9167495	smartseq	smartseq2	Homo sapiens	GSE132044 sample name (Ding 2020)	D
 ding_Cortex1.SM2_well	SRR9167561	smartseq	smartseq2	Mus musculus	GSE132044 sample name (Ding 2020)	D
-ding_PBMC2_bulk	SRR9170689	bulk_rna	bulk	Homo sapiens	GSE132044 sample name (Ding 2020)	D
-ding_PBMC1_bulk	SRR9169420	bulk_rna	bulk	Homo sapiens	GSE132044 sample name (Ding 2020)	D
-ding_Cortex2_bulk	SRR9171226	bulk_rna	bulk	Mus musculus	GSE132044 sample name (Ding 2020)	D
+ding_PBMC2_bulk	SRR9170689	bulk_rna	generic-negative	Homo sapiens	GSE132044 sample name (Ding 2020)	D
+ding_PBMC1_bulk	SRR9169420	bulk_rna	generic-negative	Homo sapiens	GSE132044 sample name (Ding 2020)	D
+ding_Cortex2_bulk	SRR9171226	bulk_rna	generic-negative	Mus musculus	GSE132044 sample name (Ding 2020)	D
 ding_Mixture2.SeqWell_BC9	SRR9167464	droplet_other	seqwell	Homo sapiens	GSE132044 sample name (Ding 2020)	D
 ding_PBMC2.SeqWell_S3_2	SRR9169213	droplet_other	seqwell	Homo sapiens	GSE132044 sample name (Ding 2020)	D
 ding_PBMC1.July2018-SeqWell_V1R1	SRR9169186	droplet_other	seqwell	Homo sapiens	GSE132044 sample name (Ding 2020)	D
@@ -58,19 +58,19 @@ ding_PBMC1.011719V2_10X_B	SRR9169188	droplet_3p	10x-3p-v2	Homo sapiens	GSE132044
 ding_PBMC1.011719V2_10X_D	SRR9169190	droplet_3p	10x-3p-v2	Homo sapiens	GSE132044 sample name (Ding 2020)	D
 ding_PBMC1.011719V3_10X_B	SRR9169193	droplet_3p	10x-3p-v3	Homo sapiens	GSE132044 sample name (Ding 2020)	D
 ding_PBMC1.011719V3_10X_A	SRR9169192	droplet_3p	10x-3p-v3	Homo sapiens	GSE132044 sample name (Ding 2020)	D
-ding_Cortex2.DroNcSeq_3A	SRR9170887	droplet_other	dronc-seq	Mus musculus	GSE132044 sample name (Ding 2020)	D
-feat_SRR8281307	SRR8281307	feature_barcode	hto	Homo sapiens	GEO sample title (GSM2895283) names an HTO library	T2
-feat_SRR8787262	SRR8787262	feature_barcode	hto	Homo sapiens	GEO sample title (GSM3687894) names an HTO library	T2
-feat_SRR11176314	SRR11176314	feature_barcode	hto	Homo sapiens	GEO sample title (GSM4338142) names an HTO library	T2
-feat_SRR8281308	SRR8281308	feature_barcode	adt	Homo sapiens	GEO sample title (GSM2895284) names an ADT library	T2
-feat_SRR5808750	SRR5808750	feature_barcode	adt	Homo sapiens	GEO sample title (GSM2695379) names an ADT library	T2
-feat_SRR9159911	SRR9159911	feature_barcode	adt	Homo sapiens	GEO sample title (GSM3832736) names an ADT library	T2
+ding_Cortex2.DroNcSeq_3A	SRR9170887	droplet_other	dropseq	Mus musculus	GSE132044 sample name (Ding 2020)	D
+feat_SRR8281307	SRR8281307	feature_barcode	cite-hashtag	Homo sapiens	GEO sample title (GSM2895283) names an HTO library	T2
+feat_SRR8787262	SRR8787262	feature_barcode	cite-hashtag	Homo sapiens	GEO sample title (GSM3687894) names an HTO library	T2
+feat_SRR11176314	SRR11176314	feature_barcode	cite-hashtag	Homo sapiens	GEO sample title (GSM4338142) names an HTO library	T2
+feat_SRR8281308	SRR8281308	feature_barcode	cite-adt	Homo sapiens	GEO sample title (GSM2895284) names an ADT library	T2
+feat_SRR5808750	SRR5808750	feature_barcode	cite-adt	Homo sapiens	GEO sample title (GSM2695379) names an ADT library	T2
+feat_SRR9159911	SRR9159911	feature_barcode	cite-adt	Homo sapiens	GEO sample title (GSM3832736) names an ADT library	T2
 visium_SRR21230112	SRR21230112	visium	10x-visium	Homo sapiens	GEO sample title: GSM6506116 Visium_poor_response_P7	T2
 visium_SRR21230121	SRR21230121	visium	10x-visium	Homo sapiens	GEO sample title: GSM6506117 Visium_poor_response_P8	T2
 visium_SRR22816622	SRR22816622	visium	10x-visium	Mus musculus	GEO sample title: GSM6859073 Visium_Tumor_liver_Mouse3	T2
 visium_V1_Mouse_Brain_Sagittal_Anterior	$DATA/atac-spatial/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_Section_1_fastqs/V1_Mouse_Brain_Sagittal_Anterior_Section_1_S7_L001_R1_001.fastq.gz,$DATA/atac-spatial/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_Section_1_fastqs/V1_Mouse_Brain_Sagittal_Anterior_Section_1_S7_L001_R2_001.fastq.gz	visium	10x-visium	Mus musculus	10x Genomics dataset name (Visium V1 mouse brain)	V
 visium_FFPE_Human_Breast_Cancer	$DATA/atac-spatial/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs/Visium_FFPE_Human_Breast_Cancer_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs/Visium_FFPE_Human_Breast_Cancer_S1_L001_R2_001.fastq.gz	visium	10x-visium	Homo sapiens	10x Genomics dataset name (Visium FFPE, probe based)	V
-atac_pbmc_5k_nextgem	$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R2_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R3_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_I1_001.fastq.gz	atac	10x-atac	Homo sapiens	10x Genomics dataset name (scATAC PBMC 5k Next GEM)	V
+atac_pbmc_5k_nextgem	$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R2_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R3_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_I1_001.fastq.gz	atac	scatac	Homo sapiens	10x Genomics dataset name (scATAC PBMC 5k Next GEM)	V
 multiome_atac_pbmc_3k	$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R2_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R3_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_I1_001.fastq.gz	multiome_atac	10x-arc-atac	Homo sapiens	10x Genomics dataset name (PBMC granulocyte-depleted 3k multiome, ATAC library)	V
 multiome_atac_pbmc_10k	$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R2_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R3_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_I1_001.fastq.gz	multiome_atac	10x-arc-atac	Homo sapiens	10x Genomics dataset name (PBMC granulocyte-depleted 10k multiome, ATAC library)	V
 multiome_gex_pbmc_3k	$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/gex/pbmc_granulocyte_sorted_3k_S1_L003_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/gex/pbmc_granulocyte_sorted_3k_S1_L003_R2_001.fastq.gz	multiome_gex	10x-arc-gex	Homo sapiens	10x Genomics dataset name (PBMC granulocyte-depleted 3k multiome, GEX library)	V

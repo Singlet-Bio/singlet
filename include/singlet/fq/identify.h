@@ -79,8 +79,9 @@ struct Thresholds {
     double vdj_share = 0.40;
     // Tag-based single-cell cDNA without its barcode read: at least this share of reads on transcripts of 4000 nt or more lie within 1000 nt of
     // one transcript end, at least this many times what even coverage gives, with the strand that goes with that end (3': sense, 5': antisense).
-    // Even coverage (bulk, Smart-seq): under even_end_share at either end.
-    double tag_end_share = 0.35, tag_end_enrich = 3.0, even_end_share = 0.25;
+    // Even coverage (bulk, Smart-seq): under even_end_share at either end. 0.25 was tried on the development panel and rejected: bulk fell to 2 of 3
+    // and four more 10x runs without a barcode read were called bulk (7 instead of 3 of 27).
+    double tag_end_share = 0.35, tag_end_enrich = 3.0, even_end_share = 0.15;
     // Species block (validation/references/SPECIES_BARS.md, rule v0): a filter calls when its hit rate (share of canonical 21-mers of cDNA reads
     // present in it) is at least species_min_rate and species_ratio times the runner-up. A mixture needs the minor species to hold
     // species_mix_share of the species-specific reads and species_mix_reads reads (a read is specific to A with species_mix_excess more hits).
