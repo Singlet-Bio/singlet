@@ -47,7 +47,27 @@ for f in fams:
     if f not in cm: continue
     tot = sum(cm[f].values())
     P(f"| {f} | " + " | ".join(str(cm[f][g]) if cm[f][g] else "" for g in fams) + f" | {tot} | {cm[f][f]} |")
-P(f"\nFamily correct: {fam_ok} of {n}. 10x family and protocol correct: {tenx_ok} of {tenx_n}.")
+def has_bc_read(jpath):
+    # a deposit has a barcode read when some non-index segment is 40 bases or shorter (10x barcode reads are 24 to 28)
+    try:
+        j = json.load(open(jpath))
+    except Exception:
+        return True
+    return any(l["len_mode"] <= 40 and not l["index_like"] for l in j["layout"])
+nb_n = nb_ok = 0
+for r in panel:
+    if r["id"] in res and r["protocol"].startswith("10x-") and r["family"] in ("droplet_3p", "droplet_5p", "multiome_gex"):
+        sres, jp = res[r["id"]]
+        if has_bc_read(jp):
+            nb_n += 1
+            got = sres["protocol"]; want = r["protocol"]
+            nb_ok += sres["verdict"] == r["family"] and (got == want or (want in ("10x-3p", "10x-5p") and got.startswith(want)))
+P("\nFamily correct: %d of %d. 10x family and protocol correct: %d of %d; among the %d 10x rows whose deposit holds a barcode read (a non-index segment of 40 bases or fewer): %d." % (fam_ok, n, tenx_ok, tenx_n, nb_n, nb_ok))
+pm = Counter()
+for r in panel:
+    if r["id"] in res and res[r["id"]][0]["verdict"] == r["family"] and not r["protocol"].startswith("10x-"):
+        pm[(r["family"], res[r["id"]][0]["protocol"] == r["protocol"])] += 1
+P("Protocol tag matches inside correct non-10x families: " + ", ".join("%s %s %d" % (k[0], "tag right" if k[1] else "tag differs", v) for k, v in sorted(pm.items())) + ".")
 P(f"Runs labeled ATAC, multiome ATAC, feature barcode, bulk or genomic that received `process`: {len(bad_action)}" + (" (" + ", ".join(bad_action) + ")" if bad_action else "") + ".\n")
 act = Counter((r["family"], res[r["id"]][0]["action"]) for r in panel if r["id"] in res)
 P("## Actions by label family\n")
