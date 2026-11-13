@@ -10719,8 +10719,7 @@ static int singlet_main(int argc, char* argv[]) {
                     if (!singlet::editing::resummarize(out_prefix, config.edit_path, engine_ptr ? engine_ptr->n_edit_sites() : 0u, called, &ee))
                         std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "\n";
                     else if (!config.edit_path.empty())
-                        std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots
-";
+                        std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots\n";
                 }
             }
             auto med = [](std::vector<double> v) {
