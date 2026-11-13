@@ -9720,6 +9720,22 @@ static int singlet_main(int argc, char* argv[]) {
                 if (cnt >= CB_MIN_READS) cb_sorted.emplace_back(cnt, bc);
             std::sort(cb_sorted.begin(), cb_sorted.end(),
                       [](const auto& a, const auto& b) { return a.first > b.first; });
+            // Whitelist-free droplet protocols (Drop-seq, Seq-Well): the refresh lists every CB tag with 5 or more reads, which puts the
+            // sequencing-error and bead-synthesis-error barcodes back as columns of their own (1.19 M at 268 M reads), so the collapse made
+            // at decode time was undone and the cell caller saw an unmerged rank curve. Collapse the refreshed list the same way.
+            if (!config.barcode_alias_path.empty() && !cb_sorted.empty()) {
+                std::vector<std::pair<uint64_t, std::string>> rs;
+                rs.reserve(cb_sorted.size());
+                for (const auto& [cnt, bc] : cb_sorted) rs.emplace_back(cnt, bc);
+                singlet::BarcodeCollapseResult rcr = singlet::collapse_barcodes(rs, 3.0, nullptr, 5);
+                std::ofstream al_out(config.barcode_alias_path);
+                for (const auto& [x, y] : rcr.alias) al_out << x << "\t" << y << "\n";
+                al_out.close();
+                std::cerr << "[singlet] Barcode collapse after the CB-tag refresh: " << cb_sorted.size() << " -> " << rcr.kept.size()
+                          << " barcodes (" << rcr.n_children_in_universe << " merged into a larger neighbor)\n";
+                cb_sorted.clear();
+                for (auto& [cnt, bc] : rcr.kept) cb_sorted.emplace_back(static_cast<uint32_t>(cnt), std::move(bc));
+            }
             if (!cb_sorted.empty()) {
                 std::ofstream bc_out(auto_barcode_file);
                 for (const auto& [cnt, bc] : cb_sorted) bc_out << bc << "\n";
