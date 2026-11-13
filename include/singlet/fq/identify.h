@@ -349,6 +349,7 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
     if (L < 6) return best;
     const size_t n = std::min(spots.size(), max_reads);
     static const uint16_t Ks[3] = {96, 384, 1536};
+    std::vector<WindowHit> cands;
     for (uint16_t len = 12; len >= 6; --len) {
         for (uint16_t off = 0; off + len <= std::min<uint32_t>(L, 36); ++off) {
             std::unordered_map<uint64_t, uint32_t> cnt;
@@ -369,19 +370,31 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
                 const double rnd = std::min(1.0, double(K) / std::pow(4.0, len));
                 if (rnd > kThr.plate_random_share_max) continue;
                 uint64_t top = 0;
-                for (size_t i = 0; i < v.size() && i < K; ++i) top += v[i];
+                const size_t keff = std::min<size_t>(v.size(), K);
+                for (size_t i = 0; i < keff; ++i) top += v[i];
                 const double share = double(top) / tot;
-                if (share >= kThr.plate_top_share) {
-                    if (!best.found || len > best.len || (len == best.len && share > best.top_share)) {
-                        best.found = true; best.seg = s; best.off = off; best.len = len; best.k = K;
-                        best.distinct = static_cast<uint32_t>(std::min<size_t>(v.size(), K));
-                        best.top_share = share; best.random_share = rnd;
-                    }
-                    break;
-                }
+                if (share < kThr.plate_top_share) continue;
+                // barcodes proper: sequences seen at a tenth of the average top count (errors and noise stay out)
+                const double thr = std::max(2.0, 0.1 * double(top) / keff);
+                uint32_t distinct = 0;
+                for (uint32_t c : v) distinct += (c >= thr);
+                if (distinct < 12) break;   // a linker or poly(T) run is one or a few sequences, not a barcode set
+                WindowHit w;
+                w.found = true; w.seg = s; w.off = off; w.len = len; w.k = K; w.distinct = distinct; w.top_share = share; w.random_share = rnd;
+                cands.push_back(w);
+                break;
             }
         }
-        if (best.found) break;   // longest qualifying length wins
+    }
+    // A window that reaches into the UMI multiplies the distinct count by four per base; the barcode is the longest window whose
+    // distinct count stays within a third of the smallest one seen.
+    if (!cands.empty()) {
+        uint32_t mind = UINT32_MAX;
+        for (const auto& c : cands) mind = std::min(mind, c.distinct);
+        for (const auto& c : cands) {
+            if (c.distinct > 1.3 * mind) continue;
+            if (!best.found || c.len > best.len || (c.len == best.len && c.top_share > best.top_share)) best = c;
+        }
     }
     return best;
 }
