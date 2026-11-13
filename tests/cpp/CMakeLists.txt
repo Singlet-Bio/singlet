@@ -47,6 +47,7 @@ add_pileup_test(test_pz_reader)
 add_pileup_test(test_pz_hardening)
 add_pileup_test(test_pz_metadata_bound)   # names block over the old 256 MiB reader cap (editing tables of 13 M sites)
 set_tests_properties(test_pz_metadata_bound PROPERTIES TIMEOUT 600)
+add_pileup_test(test_editing_consistency)   # Visium call replaced after export; the editing self-check
 
 # pz2 (v2 matrix codec). Header-only C++17, runtime ISA dispatch: deliberately built WITHOUT -march flags.
 # test_pz2_roundtrip also reads the legacy corpora under bench/compression (skips when they are absent).

@@ -10713,6 +10713,17 @@ static int singlet_main(int argc, char* argv[]) {
                     in.close();
                     std::ofstream(cc) << outbuf;
                 }
+                // The editing tables were summarized at export time over the call made then; a Visium run's called set is the tissue
+                // spots, so editing_sites, editing_cells and editing_summary are recomputed over it (they must agree with cell_calls.tsv).
+                {
+                    std::string ee;
+                    if (!singlet::editing::resummarize(out_prefix, config.edit_path, engine_ptr ? engine_ptr->n_edit_sites() : 0u, called, &ee))
+                        std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "
+";
+                    else if (!config.edit_path.empty())
+                        std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots
+";
+                }
             }
             auto med = [](std::vector<double> v) {
                 if (v.empty()) return 0.0;
