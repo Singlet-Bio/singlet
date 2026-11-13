@@ -106,6 +106,9 @@ add("multiome_gex_pbmc_10k", fq(D + "/pbmc_granulocyte_sorted_10k/pbmc_granulocy
 
 
 
+# Rows whose labeled chemistry (10x 3’ or 5’) the original deposited files do not support (names and read lengths suggest bulk, nanopore or sheared DNA). Labels are kept.
+LABEL_DOUBT = {'GSM5472074': 'original file bulkRNA_*.fastq', 'GSM5769275': 'original files *_Bulk_RNAseq.fastq', 'GSM6564300': 'original file NP19.fastq (nanopore-like, 651-base reads)', 'GSM6564302': 'original file PAG*_pass_*.fastq (nanopore-like, 685-base reads)', 'GSM6564303': 'original file PAG*_pass_*.fastq (nanopore-like, 661-base reads)', 'GSM6564304': 'original file PAG*_pass_*.fastq (nanopore-like, 851-base reads)', 'GSM8158578': 'original files B_shear_*.fq (sheared DNA)', 'GSM8754140': 'original files Plko-2_*.fq', 'GSM9287649': 'original file T_iMK_*.fq'}
+
 def sc_hint(family):
     """1 where the archive record (GEO or SRA text) states single-cell: every family except bulk and genomic"""
     return "0" if family in ("bulk_rna", "genomic_dna") else "1"
@@ -114,13 +117,13 @@ def sc_hint(family):
 out = sys.argv[2]
 with open(out + "/panel_dev.tsv", "w", newline="") as f:
     w = csv.writer(f, delimiter="\t", lineterminator="\n")
-    w.writerow(["id", "source", "family", "protocol", "species", "label_source", "tier", "single_cell_hint"])
+    w.writerow(["id", "source", "family", "protocol", "species", "label_source", "tier", "single_cell_hint", "label_doubt"])
     seen = set()
     for r in rows:
         if r[0] in seen:
             continue
         seen.add(r[0])
-        w.writerow(list(r) + [sc_hint(r[2])])
+        w.writerow(list(r) + [sc_hint(r[2]), LABEL_DOUBT.get(r[0], "")])
 with open(out + "/sources_dev.tsv", "w", newline="") as f:
     w = csv.writer(f, delimiter="\t", lineterminator="\n")
     for r in rows:

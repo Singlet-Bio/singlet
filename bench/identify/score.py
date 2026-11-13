@@ -88,6 +88,14 @@ P("## 10x 3' and 5' (v1 to v4), whole panel\n")
 P(f"Family: {tp} of {tp + len(fn)} labeled 10x 3'/5' rows called 10x 3'/5' (recall {tp / max(1, tp + len(fn)):.2f}); {tp} of {tp + len(fp)} calls are labeled 10x 3'/5' (precision {tp / max(1, tp + len(fp)):.2f}); false positives from the other {sum(1 for r in panel if r['id'] in res and not vlabel(r))} rows: {', '.join(fp) or 'none'}.")
 P(f"Version (rows with a stated version): {ver_ok} of {ver_n} exact (recall {ver_ok / max(1, ver_n):.2f}); of {ver_pred} calls on those rows, {ver_ok} carry the labeled version (precision {ver_ok / max(1, ver_pred):.2f}).")
 P("Not called: " + (", ".join("%s (%s)" % (i, res[i][0]["verdict"]) for i in fn) or "none") + ".")
+# rows whose original deposited files do not support the 10x label (label_doubt column): recall and bar 2 with and without them
+doubt = {r["id"] for r in panel if r.get("label_doubt")}
+if doubt:
+    lab = [r for r in panel if r["id"] in res and vlabel(r) and r["id"] not in doubt]
+    tpd = sum(1 for r in lab if vcall(res[r["id"]][0]))
+    labv = [r for r in lab if r["protocol"][-2:-1] == "v"]
+    verd = sum(1 for r in labv if vcall(res[r["id"]][0]) and ptag(res[r["id"]][0]) == r["protocol"])
+    P(f"Without the {len(doubt & {r['id'] for r in panel if vlabel(r)})} rows with label doubt: family recall {tpd} of {len(lab)} ({tpd / max(1, len(lab)):.2f}), version recall {verd} of {len(labv)} ({verd / max(1, len(labv)):.2f}); precision unchanged.")
 # the three bars
 nonproc = [r["id"] for r in panel if r["id"] in res and r["family"] in ("atac", "multiome_atac", "feature_barcode", "bulk_rna", "genomic_dna") and res[r["id"]][0]["action"] == "process"]
 cell_fams = {"droplet_3p", "droplet_5p", "droplet_other", "multiome_gex", "plate_barcoded", "smartseq", "visium"}
@@ -103,6 +111,9 @@ refused = [(r["id"], res[r["id"]][0]["verdict"]) for r in panel if r["id"] in re
 nonten_called = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX and vcall(res[r["id"]][0])]
 nonten_proc = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX + ("multiome_gex", "visium") and res[r["id"]][0]["action"] == "process"]
 P("\nBars: ATAC, feature-barcode, bulk or genomic rows given `process`: %d. Single-cell rows given `refuse`: %d with the single_cell=1 hint applied (%s), %d without it. Rows of other protocols called 10x 3'/5': %d (%s). Other-protocol rows given `process` (policy for a known droplet protocol): %d (%s).\n" % (len(nonproc), len(refused), ", ".join("%s as %s" % x for x in refused) or "none", len(refused_nohint), len(nonten_called), ", ".join(nonten_called) or "none", len(nonten_proc), ", ".join(nonten_proc) or "none"))
+if doubt:
+    P("Bar 2 without the rows with label doubt: %d refused with the hint applied, %d without the hint." % (
+        sum(1 for x in refused if x[0] not in doubt), sum(1 for x in refused_nohint if x not in doubt)))
 brm = [i for i, v in res.items() if v[0]["verdict"] == "barcode_read_missing"]
 if brm:
     P("## barcode_read_missing\n")
