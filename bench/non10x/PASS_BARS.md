@@ -62,3 +62,16 @@ Bars are those of the development libraries of the platform, unchanged; where th
 Bulk libraries for the guard (registered 2026-11-12): human RNA-seq read pairs, 4 M spots each, forced through a non-10x tag (dropseq for all;
 indrop for the first, bd-rhapsody for the second as well): SRR1039508 (airway, 2x63), ERR188044 (Geuvadis LCL, 2x76), SRR896663 (SEQC
 sample A, 2x100), SRR12188073 (2x150). Pass rule as in "Bulk check": the run ends rejected, flagged, or with fewer than 10 called cells.
+
+## Dated notes (2026-11-12, D-152). Bars above are unchanged; these are findings and proposals for the owner.
+1. BD Rhapsody, median genes per cell (bar 0.4-1.25x of the authors' median). The deposit GSM4764685 holds 34.2 M WTA read pairs (SRR12581863;
+   SRR12581864 is the sample-tag library). The authors' four matrices hold 127 M molecules over 10,275 cells, more than the reads of the deposit,
+   so the authors counted far more reads than were deposited. Binomial thinning of the authors' matrix to our median UMIs per cell (833) leaves
+   a median of 512 genes per cell; the engine's is 497 (ratio 0.97). The ratio to the unthinned median (3,145 genes at 9,340 UMIs) is 0.16
+   and no counting method reaches the bar at this depth. Barcode extraction was also measured against the vendor layout (linker at 9 and 30
+   in 88% and 78% of reads): fixed positions give 75.8% of reads with all three labels valid within one mismatch, linker-anchored extraction
+   75.6%. Proposed bar for this metric: median genes per cell within 0.8-1.25x of the authors' matrix thinned to the run's median UMIs per
+   cell. The cell-count and status bars are unchanged and pass.
+2. inDrop. python/singlet/data/whitelists/indrop_bc1.txt (8-11 nt, 96 of each length) is the right list; pipeline-benchmark/whitelists/indrop_bc1.txt on
+   Clipper is the stale 8-nt prefix of the published table (md5 differs; the other whitelist files are identical). The validation runs of D-152
+   use the commit's lists (jobs/validation-engine/non10x/whitelists).
