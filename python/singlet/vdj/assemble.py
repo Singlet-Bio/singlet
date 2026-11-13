@@ -105,7 +105,9 @@ class Params:
     # barcode and chain and has >= this many UMIs (B cells of a clone that also has plasma cells)
     ig_top_min_umis: int = 2
     ig_top_paired: bool = True  # ig_top_min_umis gives back a chain only where the barcode holds the partner chain too
-    ig_top_light_only: bool = True  # ig_top_min_umis gives back light chains only (not an ambient plasma-cell IGH)
+    ig_top_light_only: bool = (
+        True  # ig_top_min_umis gives back light chains only (not an ambient plasma-cell IGH)
+    )
     # > 0: an IG contig whose barcode holds no kept partner chain is ambient when its junction is in >= this many barcodes
     ig_lone_spread: int = 5
     # True: a Phe/Trp118 codon mutated to another non-stop codon still ends the junction when the J motif continues (_codon_at)
@@ -888,7 +890,13 @@ def filter_contigs(df, params: Params):
         # 1-9 UMIs) is a real chain where its barcode also holds the partner chain; alone (heavy without light or light
         # without heavy) it is ambient, the same molecule in another cell's droplet
         ig = df["chain"].isin(("IGH", "IGK", "IGL"))
-        n_bc = df[ig].groupby(["chain", "cdr3_nt"])["bcix"].transform("nunique").reindex(df.index).fillna(0)
+        n_bc = (
+            df[ig]
+            .groupby(["chain", "cdr3_nt"])["bcix"]
+            .transform("nunique")
+            .reindex(df.index)
+            .fillna(0)
+        )
         kp = df["kept"] & df["productive"].astype(bool)
         heavy = (kp & (df["chain"] == "IGH")).groupby(df["bcix"]).transform("any")
         light = (kp & df["chain"].isin(("IGK", "IGL"))).groupby(df["bcix"]).transform("any")
@@ -905,7 +913,9 @@ def filter_contigs(df, params: Params):
         if params.ig_lone_min_junction_umis > 0:
             kp = df["kept"] & df["productive"].astype(bool) & ig
             n_kp = kp.groupby(df["bcix"]).transform("sum")
-            drop |= (kp & (n_kp == 1) & (df["junction_umis"] < params.ig_lone_min_junction_umis)).to_numpy()
+            drop |= (
+                kp & (n_kp == 1) & (df["junction_umis"] < params.ig_lone_min_junction_umis)
+            ).to_numpy()
         df.loc[drop, "kept"] = False
     if params.orphan_max_umis > 0:
         kp = df["kept"] & df["productive"].astype(bool)

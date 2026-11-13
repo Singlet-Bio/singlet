@@ -95,6 +95,7 @@
 #include "singlet/pileup/cascade_stats_writer.h"
 #include "singlet/pileup/visium_qc.h"
 #include "singlet/pileup/visium_tissue.h"
+#include "singlet/pileup/self_check.h"
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/nvtx.h"
@@ -119,7 +120,7 @@ extern unsigned int (*g_handoffReadHook)(unsigned long long, const char*, unsign
 #include "singlet/fq/fg2_source.h"
 #include "singlet/fq/read_source.h"  // RunSet, format_block, StarChunkSourceT: the one .1fq decoder
 #include "singlet/fq/concat.h"       // concat_1fq: runs as one file, for consumers that read a single .1fq
-#include "singlet/version.h"        // singlet::kVersion
+#include "singlet/version.h"        // singlet::kVersion, singlet::git_commit()
 #include <htslib/bgzf.h>
 #include <htslib/hfile.h>
 
@@ -3218,6 +3219,8 @@ static void usage(const char* prog) {
         << "  --snps FILE            VCF of SNP positions\n"
         << "  --editing-sites FILE   known RNA editing sites, TSV(.gz) CHROM POS REF ALT (A>G / T>C on the genome strand);\n"
         << "                         --pipeline uses <ref-base>/pileup_indices/rna_editing_<genome>.tsv.gz (--no-editing: none)\n"
+        << "  --self-check           At the end of the run decode the editing outputs and recompute their tables; write self_check.json,\n"
+        << "                         exit 12 on a failure (off by default; the output files are never changed)\n"
         << "  --editing-min-baseq N  minimum base quality at the editing sites only (default: --min-baseq; the SNP panel keeps it)\n"
         << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default for 3' libraries; for 5' it writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
         << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default) or defer (env SINGLET_HLA_GPU_3P)\n"
@@ -3562,6 +3565,7 @@ static std::string pool_preload_refs(const std::vector<std::vector<std::string>>
 }
 
 int main(int argc, char* argv[]) {
+    if (argc >= 2 && std::string(argv[1]) == "--version") { std::cout << singlet::version_line() << "\n"; return 0; }   // one line: the runner compares it with BUILD.txt
     if (argc >= 2 && std::string(argv[1]) == "gpu-pool") return singlet_gpu_pool(argc - 2, argv + 2, &singlet_main, &pool_preload_refs);
     return singlet_main(argc, argv);
 }
@@ -3723,6 +3727,7 @@ static int singlet_main(int argc, char* argv[]) {
     std::string bam_path_reason = "default";   // why the pileup reads the sorted BAM instead of the STAR stream (provenance: pileup_path_reason)
     bool whitelist_missing = false;      // a 10x-type protocol (CB_UMI_Simple) was detected but no barcode whitelist file was found: the sorted path was taken because of it
     int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
+    bool self_check = false;             // --self-check: decode and cross-check the editing outputs at the end of the run (off by default)
     bool no_default_editing = false;     // --no-editing: do not use the default RNA editing panel in --pipeline mode (D-101)
     std::string edit_panel_source = "none";
     std::string hla_t1k_dir;             // --hla-t1k DIR (D-101); --pipeline default <ref-base>/hla/t1k on a human genome
@@ -3764,6 +3769,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--allsite-min-alt-cells" && i+1 < argc) config.allsite_min_alt_cells = std::atoi(argv[++i]);
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
+        else if (arg == "--self-check") self_check = true;   // end-of-run check of the editing outputs (self_check.h); exit 12 on a failure
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
         else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
@@ -4493,13 +4499,13 @@ static int singlet_main(int argc, char* argv[]) {
         {
             std::ofstream sj(out_prefix + "/summary.json");
             if (sj) {
-                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                const std::string env_sha = singlet::git_commit();
                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                 sj << "{\n"
                    << "  \"schema_version\": \"1.2\",\n"
                    << "  \"sample_id\": \"" << fb_sample_id << "\",\n"
                    << "  \"status\": \"feature_barcode_not_gex\",\n"
-                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                   << "  \"git_sha\": \"" << env_sha << "\",\n"
                    << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                    << "  \"protocol_id\": 0,\n"
                    << "  \"protocol_name\": \"CITE_SEQ_ADT\",\n"
@@ -6372,13 +6378,13 @@ static int singlet_main(int argc, char* argv[]) {
                         {
                             std::ofstream sj(out_prefix + "/summary.json");
                             if (sj) {
-                                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                                const std::string env_sha = singlet::git_commit();
                                 const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 sj << "{\n"
                                    << "  \"schema_version\": \"1.2\",\n"
                                    << "  \"sample_id\": \"" << sample_id << "\",\n"
                                    << "  \"status\": \"data_incomplete\",\n"
-                                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                                   << "  \"git_sha\": \"" << env_sha << "\",\n"
                                    << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                                    << "  \"protocol_id\": 0,\n"
                                    << "  \"protocol_name\": \"\",\n"
@@ -6404,11 +6410,11 @@ static int singlet_main(int argc, char* argv[]) {
                         {
                             std::ofstream pj(out_prefix + "/provenance.json");
                             if (pj) {
-                                const char* prov_sha = std::getenv("SINGLET_GIT_SHA");
+                                const std::string prov_sha = singlet::git_commit();
                                 const char* prov_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 pj << "{\n"
                                    << "  \"schema_version\": \"1.1\",\n"
-                                   << "  \"singlet_git_sha\": \"" << (prov_sha ? prov_sha : "unknown") << "\",\n"
+                                   << "  \"singlet_git_sha\": \"" << prov_sha << "\",\n"
                                    << "  \"reference_manifest_sha256\": \"" << (prov_rms ? prov_rms : "") << "\",\n"
                                    << "  \"build_flags\": \"\",\n"
                                    << "  \"command_line\": \"\",\n"
@@ -10096,6 +10102,7 @@ static int singlet_main(int argc, char* argv[]) {
 
     // ── N8: Populate provenance manifest ──
     export_cfg.provenance.singlet_version      = singlet::kVersion;
+    export_cfg.provenance.singlet_git_sha      = singlet::git_commit();
     {
         std::string in_files;  // every run of a multi-run sample, not a temporary concatenation
         for (const auto& f : onefq_runs_in) in_files += (in_files.empty() ? "" : ",") + f;
@@ -10212,6 +10219,8 @@ static int singlet_main(int argc, char* argv[]) {
             }
             export_cfg.user_meta[key] = value;
         }
+        // The metadata JSON was written by `singlet download` (possibly another build): the version recorded in the .1pz is this binary's.
+        { auto it = export_cfg.user_meta.find("singlet_version"); if (it != export_cfg.user_meta.end()) it->second = singlet::kVersion; }
         std::cerr << "[singlet] Loaded " << export_cfg.user_meta.size()
                   << " metadata fields from " << metadata_json_path << "\n";
     }
@@ -10708,6 +10717,15 @@ static int singlet_main(int argc, char* argv[]) {
                     in.close();
                     std::ofstream(cc) << outbuf;
                 }
+                // The editing tables were summarized at export time over the call made then; a Visium run's called set is the tissue
+                // spots, so editing_sites, editing_cells and editing_summary are recomputed over it (they must agree with cell_calls.tsv).
+                {
+                    std::string ee;
+                    if (!singlet::editing::resummarize(out_prefix, config.edit_path, engine_ptr ? engine_ptr->n_edit_sites() : 0u, called, &ee))
+                        std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "\n";
+                    else if (!config.edit_path.empty())
+                        std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots\n";
+                }
             }
             auto med = [](std::vector<double> v) {
                 if (v.empty()) return 0.0;
@@ -11025,6 +11043,15 @@ static int singlet_main(int argc, char* argv[]) {
         std::cerr << "[singlet] EXIT " << export_stats.exit_code
                   << " (zero_cells: cell calling produced 0 cells)\n";
         return export_stats.exit_code;
+    }
+    if (self_check && star_exit == 0) {   // report-only: self_check.json, and exit 12 when a decode or a table comparison fails
+        const int n_bad = singlet::run_self_check(out_prefix);
+        if (n_bad) {
+            std::cerr << "[self-check] FAILED: " << n_bad << " problem(s), see " << out_prefix << "/self_check.json\n";
+            alarm(0);
+            return singlet::kExitSelfCheck;
+        }
+        std::cerr << "[self-check] ok\n";
     }
     alarm(0);  // disarm watchdog — clean exit
     return star_exit;

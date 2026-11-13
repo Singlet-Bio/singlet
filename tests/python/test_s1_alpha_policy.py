@@ -705,5 +705,10 @@ def test_sample_facts_never_carry_an_accession_into_the_manifest(tmp_path, pol):
 def test_private_members_are_withheld_by_both_rules():
     # D-101: the all-site member carries each donor's genotype; the policy withholds it even where private/ was not split off
     from singlet._restricted import is_restricted_member
-    for rel in ("private/allsite/allele_ad.1pz", "private/allsite/allele_dp.1pz", "private/allsite/sites.tsv.gz"):
+
+    for rel in (
+        "private/allsite/allele_ad.1pz",
+        "private/allsite/allele_dp.1pz",
+        "private/allsite/sites.tsv.gz",
+    ):
         assert is_restricted_member(rel) and POL.omitted_layer(rel) == "genotype"

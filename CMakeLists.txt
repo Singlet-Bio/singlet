@@ -10,6 +10,9 @@ option(SINGLET_BUILD_PIPELINE "Build singlet binary"                 OFF)
 option(SINGLET_BUILD_PYTHON   "Build Python bindings"                 OFF)
 option(SINGLET_BUILD_TESTS    "Build test suite"                      OFF)
 
+# Version and commit stamp: defined and checked once for every target (cmake/BuildInfo.cmake)
+include(cmake/BuildInfo.cmake)
+
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)

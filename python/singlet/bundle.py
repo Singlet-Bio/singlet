@@ -938,7 +938,9 @@ def _called_barcodes(out_dir: Path) -> Optional[set]:
 # Machine-specific text in published members: absolute paths (they carry the cluster's directory layout and the user name) and host
 # names. provenance.json and STAR's Log.out files (star_Log.out, cr4_probe/*_Log.out) record both; the public bundle keeps the file
 # names only and drops the compute node.
-_ABS_PATH = re.compile(r"(?<![\w.~:/-])(?:/+[\w.+@%=,-]+)+/*|(?<![\w])[A-Za-z]:\\(?:[^\\\s'\"]+\\)*[^\\\s'\"]*")
+_ABS_PATH = re.compile(
+    r"(?<![\w.~:/-])(?:/+[\w.+@%=,-]+)+/*|(?<![\w])[A-Za-z]:\\(?:[^\\\s'\"]+\\)*[^\\\s'\"]*"
+)
 _HOST = re.compile(r"\b(?:[A-Za-z0-9-]+\.)+(?:edu|org|com|net|gov|local|internal|lan|cluster)\b")
 _URL = re.compile(r"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"]+)")
 _KEEP_PATHS = {"/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr"}
@@ -949,17 +951,27 @@ def _scrub_text(text: str) -> str:
         p = m.group(0)
         if p in _KEEP_PATHS:
             return p
-        parts = [x for x in re.split(r"[\\/]+", p) if x and x not in (".", "..") and not re.fullmatch(r"[A-Za-z]:", x)]
+        parts = [
+            x
+            for x in re.split(r"[\\/]+", p)
+            if x and x not in (".", "..") and not re.fullmatch(r"[A-Za-z]:", x)
+        ]
         return parts[-1] if parts else ""
 
     # URLs (reference downloads, accessions) are public and kept verbatim; only the text between them is scrubbed
     pieces = _URL.split(text)
-    return "".join(x if i % 2 else _HOST.sub("<host>", _ABS_PATH.sub(path, x)) for i, x in enumerate(pieces))
+    return "".join(
+        x if i % 2 else _HOST.sub("<host>", _ABS_PATH.sub(path, x)) for i, x in enumerate(pieces)
+    )
 
 
 def _scrub_json(v):
     if isinstance(v, dict):
-        return {k: _scrub_json(x) for k, x in v.items() if not (k in ("node", "hostname") and isinstance(x, str))}
+        return {
+            k: _scrub_json(x)
+            for k, x in v.items()
+            if not (k in ("node", "hostname") and isinstance(x, str))
+        }
     if isinstance(v, list):
         return [_scrub_json(x) for x in v]
     return _scrub_text(v) if isinstance(v, str) else v
@@ -1986,7 +1998,7 @@ class SingletBundle:
         if not self.has("multimap_counts", gsm):
             warnings.warn(f"{gsm} has no multi-mapping record; unique counts only", stacklevel=3)
             return None
-        if self._is_empty_pz(gsm, "multimap_counts.1pz"):   # a record with no two-gene molecules
+        if self._is_empty_pz(gsm, "multimap_counts.1pz"):  # a record with no two-gene molecules
             return csr_matrix(unique.shape, dtype=np.float32)
         rec = self.read("multimap_counts", gsm)
         gene_row = {g["gene_id"]: i for i, g in enumerate(self.feature_vocab["genes"])}
