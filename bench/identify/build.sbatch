@@ -27,7 +27,7 @@ case $WHAT in
   bin)
     cmake -S $SCR/src -B $SCR/b -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release -DSINGLET_GIT_COMMIT=$SHA > $SCR/c.log 2>&1 || { tail -30 $SCR/c.log; exit 1; }
     cmake --build $SCR/b --target singlet -j ${SLURM_CPUS_PER_TASK} > $SCR/b.log 2>&1 || { grep -m40 -B2 -A8 "error" $SCR/b.log; exit 1; }
-    cp $SCR/b/src/pipeline/singlet $J/bin/singlet-$SHA; ln -sfn singlet-$SHA $J/bin/singlet; ls -la $J/bin/ ;;
+    mkdir -p $J/wl; cp -n $SCR/src/python/singlet/data/whitelists/* $J/wl/; for f in 3M-3pgex-may-2023.txt; do [ -e $J/wl/$f ] || ln -s $W/bpub/whitelists/$f $J/wl/$f; done; cp $SCR/b/src/pipeline/singlet $J/bin/singlet-$SHA; ln -sfn singlet-$SHA $J/bin/singlet; ls -la $J/bin/ ;;
   test)
     cmake -S $SCR/src -B $SCR/t -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF -DCMAKE_BUILD_TYPE=Release > $SCR/tc.log 2>&1 || { tail -30 $SCR/tc.log; exit 1; }
     cmake --build $SCR/t --target test_identify -j ${SLURM_CPUS_PER_TASK} > $SCR/tb.log 2>&1 || { grep -m40 -B2 -A8 "error" $SCR/tb.log; exit 1; }
