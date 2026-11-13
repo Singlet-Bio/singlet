@@ -379,7 +379,10 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
             for (auto& kv : cnt) v.push_back(kv.second);
             std::sort(v.begin(), v.end(), std::greater<uint32_t>());
             for (uint16_t K : Ks) {
-                const double rnd = std::min(1.0, double(K) / std::pow(4.0, len));
+                // chance that K random sequences over the window's varying positions hold this much (constant bases add nothing)
+                int nvar = 0;
+                for (uint16_t k = 0; k < len; ++k) nvar += (pe[off + k] >= 0.5);
+                const double rnd = std::min(1.0, double(K) / std::pow(4.0, nvar));
                 if (rnd > kThr.plate_random_share_max) continue;
                 uint64_t top = 0;
                 const size_t keff = std::min<size_t>(v.size(), K);
