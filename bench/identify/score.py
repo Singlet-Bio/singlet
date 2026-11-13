@@ -92,8 +92,9 @@ P("Not called: " + (", ".join("%s (%s)" % (i, res[i][0]["verdict"]) for i in fn)
 nonproc = [r["id"] for r in panel if r["id"] in res and r["family"] in ("atac", "multiome_atac", "feature_barcode", "bulk_rna", "genomic_dna") and res[r["id"]][0]["action"] == "process"]
 cell_fams = {"droplet_3p", "droplet_5p", "droplet_other", "multiome_gex", "plate_barcoded", "smartseq", "visium"}
 refused = [(r["id"], res[r["id"]][0]["verdict"]) for r in panel if r["id"] in res and r["family"] in cell_fams and res[r["id"]][0]["action"] == "refuse"]
-nonten_proc = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX + ("multiome_gex", "visium") and (vcall(res[r["id"]][0]) or res[r["id"]][0]["action"] == "process")]
-P("\nBars: ATAC, feature-barcode, bulk or genomic rows given `process`: %d. Single-cell rows given `refuse`: %d (%s). Rows of other protocols given `process` or called 10x: %d (%s).\n" % (len(nonproc), len(refused), ", ".join("%s as %s" % x for x in refused) or "none", len(nonten_proc), ", ".join(nonten_proc) or "none"))
+nonten_called = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX and vcall(res[r["id"]][0])]
+nonten_proc = [r["id"] for r in panel if r["id"] in res and r["family"] not in TENX + ("multiome_gex", "visium") and res[r["id"]][0]["action"] == "process"]
+P("\nBars: ATAC, feature-barcode, bulk or genomic rows given `process`: %d. Single-cell rows given `refuse`: %d (%s). Rows of other protocols called 10x 3'/5': %d (%s). Other-protocol rows given `process` (policy for a known droplet protocol): %d (%s).\n" % (len(nonproc), len(refused), ", ".join("%s as %s" % x for x in refused) or "none", len(nonten_called), ", ".join(nonten_called) or "none", len(nonten_proc), ", ".join(nonten_proc) or "none"))
 brm = [i for i, v in res.items() if v[0]["verdict"] == "barcode_read_missing"]
 if brm:
     P("## barcode_read_missing\n")
