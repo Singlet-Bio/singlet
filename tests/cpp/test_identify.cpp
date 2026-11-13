@@ -610,6 +610,26 @@ int main() {
         CHECK(r5.verdict == "droplet_5p" && r5.verdict_protocol == "10x-5p-v3", "antisense TX share calls 5'");
         auto rn = classify(-1);
         CHECK(rn.verdict == "droplet_3p", "no strand tags: the motif evidence decides, as for reads");
+        // reads piled on a few loci (a sorted head) look like a feature-barcode library by their k-mers; the BAM route does not read diversity
+        {
+            std::vector<std::string> loci;
+            for (int i = 0; i < 40; ++i) loci.push_back(rand_seq(90));
+            std::vector<HeadSpot> piled;
+            for (size_t i = 0; i < N; ++i) piled.push_back(spot({pick(wl_v3) + rand_seq(12), pick(loci)}));
+            Options o;
+            o.whitelist_dirs = {dir};
+            Report plain;
+            measure(piled, o, lists, plain.ev);
+            rank(plain, o);
+            CHECK(plain.verdict == "feature_barcode", "reads repeated over a few loci read as a feature-barcode library when taken as they are");
+            Report viaBam;
+            measure(piled, o, lists, viaBam.ev);
+            bam::Evidence be;
+            be.coordinate_sorted = true;
+            apply_bam_evidence(viaBam.ev, be);
+            rank(viaBam, o);
+            CHECK(viaBam.verdict == "droplet_3p" && viaBam.verdict_protocol == "10x-3p-v3", "from a sorted BAM head the barcode list decides: 10x 3' v3");
+        }
         r3.bam = ev;
         r3.bam.list_rate_tag = "CR";
         r3.barcode_source = "bam_tags";
