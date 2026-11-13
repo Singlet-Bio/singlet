@@ -393,7 +393,7 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
         for (const auto& c : cands) mind = std::min(mind, c.distinct);
         for (const auto& c : cands) {
             if (c.distinct > 1.3 * mind) continue;
-            if (!best.found || c.len > best.len || (c.len == best.len && c.top_share > best.top_share)) best = c;
+            if (!best.found || c.len > best.len || (c.len == best.len && c.off < best.off)) best = c;
         }
         // fixed bases (a poly(T) or linker run) next to the barcode keep the distinct count unchanged: trim edges that carry no variation
         uint32_t cnt[40][4] = {};
