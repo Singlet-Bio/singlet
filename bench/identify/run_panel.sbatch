@@ -17,4 +17,4 @@ export LD_LIBRARY_PATH=$ENV/lib PATH=$ENV/bin:$PATH
 SCR=/tmp/$USER-$SLURM_JOB_ID-$I; mkdir -p $SCR/home $OUT/part$I; trap 'rm -rf $SCR' EXIT
 export HOME=$SCR/home        # the archive reader's block cache goes to node-local scratch, not $HOME on the shared quota
 awk -v n=$N -v i=$I 'NR%n==i' $SRC | tr -d '\r' | sed "s#\$DATA#$W/data#g; s#\$REF#/mnt/projects/debruinz_project/cellarium/reference#g" > $SCR/part.tsv
-$J/bin/singlet identify --list $SCR/part.tsv --out-dir $OUT/part$I --whitelist-dir $J/wl "$@"
+${BIN:-$J/bin/singlet} identify --list $SCR/part.tsv --out-dir $OUT/part$I --whitelist-dir $J/wl "$@"

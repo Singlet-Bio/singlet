@@ -77,7 +77,7 @@ struct Thresholds {
     // Tag-based single-cell cDNA without its barcode read: at least this share of reads on transcripts of 4000 nt or more lie within 1000 nt of
     // one transcript end, at least this many times what even coverage gives, with the strand that goes with that end (3': sense, 5': antisense).
     // Even coverage (bulk, Smart-seq): under even_end_share at either end.
-    double tag_end_share = 0.35, tag_end_enrich = 3.0, even_end_share = 0.15;
+    double tag_end_share = 0.35, tag_end_enrich = 3.0, even_end_share = 0.25;
     // Verdict margin over the best interpretation of another family.
     double margin = 0.15;
     // Verdict floor on the top support.
