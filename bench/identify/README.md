@@ -104,13 +104,13 @@ Runs labeled ATAC, multiome ATAC, feature barcode, bulk or genomic that received
 
 ## Reading the misses
 
-Of the 25 rows that are not correct, 16 are 10x libraries whose deposited run has no barcode read (one long segment, or two equal-length
-mates), so the library type cannot be read from it. All 16 are refused (15) or left unknown, none is processed. Two more are label conflicts:
+Of the 25 rows that are not correct, 14 are 10x libraries whose deposited run has no barcode read (one long segment, or two equal-length
+mates), so the library type cannot be read from it. All 14 are refused and none is processed. Two more are label conflicts:
 a run labeled GEM-X 3' v4 whose barcodes hit the multiome GEX list at 94%, and a run labeled multiome GEX whose reads are an amplicon library
-(the top 100 15-mers hold 97% of reads). One run (GSM5704176) is a single 37-base segment with no list hit. The remaining six are protocol
+(the top 100 15-mers hold 97% of reads). One run (GSM5704176) is a single 37-base segment with no list hit. The remaining eight are protocol
 families the first pass does not separate: four plate libraries (two CEL-Seq2, two MARS-seq) are called split-pool droplet beads with an
 unspecified layout (deferred), and Seq-Well and DroNc-seq runs with two long reads show no repeated barcode start and fall to the bulk guard
-(refused) or unknown. Mapping evidence moved the 5' prime libraries from 1 of 3 to 3 of 3 correct.
+(refused) or unknown. Without mapping evidence one of the three 5' libraries was called 3' on the shared 737K list; with it all three are right.
 
 ## Not done in this phase
 
