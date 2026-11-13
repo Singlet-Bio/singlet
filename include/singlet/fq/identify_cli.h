@@ -763,6 +763,9 @@ inline Report identify_source(const std::string& source, const std::string& hint
         BamBest bb;
         auto eps = survey_endpoints(source, n_reads, lists, opt, &bs, &bn, &bb);
         R.endpoints = eps;
+        bool bn_is_bam = false;
+        for (const auto& e : eps) if (e.name == bn && e.bam) bn_is_bam = true;
+        if (bn_is_bam && bb.ev) { bs = bb.spots; bn = bb.name; }   // two copies of one BAM: the quicker one
         if (!bs.empty()) {
             spots = std::move(bs);
             R.src.route = "endpoint:" + bn;
