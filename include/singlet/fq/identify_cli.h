@@ -494,7 +494,7 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
     std::vector<EndpointRec> out;
     // the first endpoint that carries a barcode read keeps its head, for runs whose normalized copy is empty
     auto push_ep = [&](const std::string& nm, const std::vector<HeadSpot>& sp, const SourceInfo& info) {
-        push_ep(nm, sp, info);
+        out.push_back(evaluate_endpoint(nm, !sp.empty(), sp, info, lists, opt));
         if (best && best_name && best->empty() && out.back().barcode_read) { *best = sp; *best_name = nm; }
     };
     {   // SRA normalized
