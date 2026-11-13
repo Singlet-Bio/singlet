@@ -395,6 +395,19 @@ inline WindowHit scan_windows(const std::vector<HeadSpot>& spots, int s, size_t 
             if (c.distinct > 1.3 * mind) continue;
             if (!best.found || c.len > best.len || (c.len == best.len && c.top_share > best.top_share)) best = c;
         }
+        // fixed bases (a poly(T) or linker run) next to the barcode keep the distinct count unchanged: trim edges that carry no variation
+        uint32_t cnt[40][4] = {};
+        for (size_t i = 0; i < n; ++i) {
+            if ((size_t)s >= spots[i].seg.size() || spots[i].seg[s].size() < best.off + best.len) continue;
+            for (uint16_t k = 0; k < best.len && k < 40; ++k) {
+                const uint8_t b = nuc::ascii_to_num(spots[i].seg[s][best.off + k]);
+                if (b < 4) ++cnt[k][b];
+            }
+        }
+        while (best.len > 6 && detail_id::entropy_bits(cnt[best.len - 1]) < 0.5) --best.len;
+        uint16_t shift = 0;
+        while (best.len - shift > 6 && detail_id::entropy_bits(cnt[shift]) < 0.5) ++shift;
+        best.off += shift; best.len -= shift;
     }
     return best;
 }
