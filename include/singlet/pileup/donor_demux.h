@@ -2279,9 +2279,11 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
     // (the rest of the wave that stops the search) is discarded. Thread counts above 8 go to the wave size.
     // The per-K thread budget is fixed by the formula above (threads / 8 evaluations side by side) and does not depend on the wave
     // width actually used, so every evaluation has the thread and chunk counts, and therefore the arithmetic, it always had.
-    // SINGLET_DEMUX_WAVE: unset = every K of the search in one wave; N > 0 = N per wave; 0 = threads / 8 as before.
+    // SINGLET_DEMUX_WAVE: unset = 1 + k_select_patience K values per wave (K = 1 and the patience window after it: the K values a
+    // single-donor sample needs before the search stops; kmax can be 16, but evaluating all of them wastes the cores on K values the
+    // chain never reads); N > 0 = N per wave; 0 = threads / 8 as before.
     const int wave_formula = std::max(1, std::min(kmax, cfg.threads / 8));
-    int wave = kmax;
+    int wave = std::max(1, std::min(kmax, 1 + cfg.k_select_patience));
     if (const char* we = std::getenv("SINGLET_DEMUX_WAVE"); we && *we) {
         const int w = std::atoi(we);
         wave = (w <= 0) ? wave_formula : std::max(1, std::min(kmax, w));
