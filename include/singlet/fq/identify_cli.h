@@ -644,7 +644,7 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
         out.push_back(evaluate_endpoint(nm, !sp.empty(), sp, info, lists, opt, ev, url));
         if (!ev->present && !info.error.empty() && out.back().note.empty()) out.back().note = info.error;
         if (best && best_name && best->empty() && out.back().barcode_read) { *best = sp; *best_name = nm; }
-        if (bam_best && bam_best->spots.empty() && out.back().barcode_read && ev->usable_barcodes) { bam_best->spots = sp; bam_best->name = nm; bam_best->url = url; bam_best->ev = ev; }
+        if (bam_best && out.back().barcode_read && ev->usable_barcodes && (bam_best->spots.empty() || ev->seconds < bam_best->ev->seconds)) {   // the quicker of two copies of one BAM bam_best->spots = sp; bam_best->name = nm; bam_best->url = url; bam_best->ev = ev; }
     };
     // the first endpoint that carries a barcode read keeps its head, for runs whose normalized copy is empty
     auto push_ep = [&](const std::string& nm, const std::vector<HeadSpot>& sp, const SourceInfo& info) {
