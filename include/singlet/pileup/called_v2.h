@@ -102,6 +102,8 @@ struct Result {
     std::string error;
     std::string is_cell_method = "knee";  ///< "emptydrops_cr" (the port), "called_v2_cr_floor" (too few barcodes for its ambient ranks) or "knee"
     int64_t edcr_n_simple = 0, edcr_n_candidates = 0, edcr_n_extra = 0, edcr_min_umi = 0;
+    double wf_cliff_ratio = 0.0;   ///< whitelist-free protocols: the largest total(k) / total(1.5k) of the rank curve
+    int64_t wf_cliff_rank = 0;
     double seconds = 0.0;
 };
 
@@ -833,6 +835,16 @@ inline std::pair<std::string, bool> protocol_family(const std::string& protocol)
     return {"droplet", true};
 }
 
+/// Whitelist-free droplet protocols: random bead barcodes, no list and no expected cell count (Drop-seq, Seq-Well).
+inline bool is_whitelistfree_droplet(const std::string& protocol) {
+    std::string p;
+    for (char ch : protocol) {
+        if (ch == ' ' || ch == '_' || ch == '-') continue;
+        p.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return p.find("dropseq") != std::string::npos || p.find("seqwell") != std::string::npos;
+}
+
 inline std::string gene_key(const std::string& name) {
     auto p = name.find('_');
     return p == std::string::npos ? name : name.substr(0, p);
@@ -1485,6 +1497,44 @@ inline EdcrResult emptydrops_cr(const GeneCounts& X, const EdcrParams& P = EdcrP
     return R;
 }
 
+/// Cell call for whitelist-free droplet protocols (Drop-seq, Seq-Well). EmptyDrops_CR and the 2.1 rule take any barcode that
+/// differs from the ambient pool, and on a deep Drop-seq library the empty beads (about 1,000 UMIs at 268 M reads, mixed species)
+/// do: 4,443 calls for 1,020 STAMPs. The rank curve of such a library has a cliff between the cells and the empties (the UMIs
+/// fall 3-5x within a 1.5x step in rank); that is the call. Where no cliff stands out (a shallow library whose cells run into the
+/// empties, the mouse retina at 30 M reads) the 2.1 EmptyDrops rule decides.
+///   cliff   the rank k (100 to a third of the barcodes, UMIs at 1.5k still 100 or more) with the largest total(k) / total(1.5k),
+///           when that ratio is at least 3; cells = barcodes with at least sqrt(total(k) * total(1.5k)) UMIs.
+inline void whitelistfree_call(Result& R) {
+    constexpr double kCliffRatio = 3.0;
+    constexpr int64_t kNoiseFloor = 100;
+    std::vector<int64_t> s;
+    s.reserve(R.totals.size());
+    for (int64_t v : R.totals)
+        if (v > 0) s.push_back(v);
+    std::sort(s.begin(), s.end(), std::greater<int64_t>());
+    double best = 0.0;
+    size_t kb = 0;
+    if (s.size() >= 300) {
+        const size_t kmax = std::min<size_t>(s.size() / 3, 100000);
+        for (size_t k = 100; k < kmax; ++k) {
+            const size_t k2 = k + k / 2;
+            if (s[k2] < kNoiseFloor) break;
+            const double r = static_cast<double>(s[k]) / static_cast<double>(s[k2]);
+            if (r > best) { best = r; kb = k; }
+        }
+    }
+    if (best >= kCliffRatio) {
+        const double thr = std::sqrt(static_cast<double>(s[kb]) * static_cast<double>(s[kb + kb / 2]));
+        for (size_t j = 0; j < R.totals.size(); ++j) R.is_cell[j] = static_cast<double>(R.totals[j]) >= thr ? 1 : 0;
+        R.is_cell_method = "whitelistfree_cliff";
+    } else {
+        R.is_cell = R.called_v2;
+        R.is_cell_method = "whitelistfree_emptydrops_2.1";
+    }
+    R.wf_cliff_ratio = best;
+    R.wf_cliff_rank = static_cast<int64_t>(kb);
+}
+
 /// cellcall.call: called_v2 from genes x barcodes counts and the knee `called` flags.
 /// `edcr_X`: counts for the EmptyDrops_CR is_cell call (the reference tool runs on exon-only Gene counts); default X.
 inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, const std::string& protocol = "",
@@ -1598,6 +1648,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
             R.is_cell_method = "emptydrops_cr";
         }
     }
+    if (is_whitelistfree_droplet(protocol)) whitelistfree_call(R);
     for (size_t j = 0; j < n; ++j) {
         R.n_is_cell += R.is_cell[j] ? 1 : 0;
         R.n_lowrna += (R.called_v2[j] && !R.is_cell[j]) ? 1 : 0;

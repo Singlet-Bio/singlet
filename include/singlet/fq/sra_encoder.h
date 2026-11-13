@@ -1259,11 +1259,9 @@ class SraEncoder {
             }
             indrop_anchor->reset_stats();
             const double r1_rate = static_cast<double>(ok1) / n_check, r2_rate = static_cast<double>(ok2) / n_check;
-            std::cerr << "[1fq-encode] inDrop anchored-barcode check: read 1 " << ok1 << "/" << n_check << ", read 2 " << ok2 << "/" << n_check << "
-";
+            std::cerr << "[1fq-encode] inDrop anchored-barcode check: read 1 " << ok1 << "/" << n_check << ", read 2 " << ok2 << "/" << n_check << "\n";
             if (r2_rate > r1_rate && r2_rate >= 0.05 && !swap_skip) {
-                std::cerr << "[1fq-encode] Read swap detected: using read 2 as the inDrop barcode read
-";
+                std::cerr << "[1fq-encode] Read swap detected: using read 2 as the inDrop barcode read\n";
                 wl_orientation_swap = true;
                 for (auto& sd : probe_spots) {
                     std::swap(sd.r1_seq, sd.r2_seq);
@@ -1275,8 +1273,7 @@ class SraEncoder {
                 if (r2_len > r1_len) r2_len = 0;   // variable cDNA length: the streaming phase gives the full read
             } else if (std::max(r1_rate, r2_rate) < 0.05) {
                 std::cerr << "[1fq-encode] ERROR: low inDrop barcode resolution in both orientations (read 1 " << ok1 << "/" << n_check
-                          << ", read 2 " << ok2 << "/" << n_check << "). Data is likely barcode-stripped (data_incomplete). Aborting download.
-";
+                          << ", read 2 " << ok2 << "/" << n_check << "). Data is likely barcode-stripped (data_incomplete). Aborting download.\n";
                 stats.exit_code = 2;
                 return stats;
             }
