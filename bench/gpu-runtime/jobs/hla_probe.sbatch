@@ -37,7 +37,9 @@ for s in $SAMPLES; do
   for c in $CUTS; do
     n=$(( kept / c )); [ $n -ge 1000 ] || continue
     X=$D/c$c; mkdir -p $X/private/hla/pending
-    head -n $(( 4 * n )) $D/cand.fq | gzip -1 > $X/private/hla/pending/candidate_reads.fq.gz
+    # every c-th candidate read (SUB=stride, the default): what a run 1/c as deep keeps. SUB=prefix (the first 1/c, as job 813028 took
+    # them) is a shallower run only when the input is in sequencer order, which the Oetjen libraries are not (hla_depth.sbatch).
+    if [ "${SUB:-stride}" = prefix ]; then head -n $(( 4 * n )) $D/cand.fq; else awk -v c=$c -v n=$n 'int((NR - 1) / 4) % c == 0 && int((NR - 1) / 4) / c < n' $D/cand.fq; fi | gzip -1 > $X/private/hla/pending/candidate_reads.fq.gz
     sed -E "s/(\"reads_kept\": )[0-9]+/\1$n/" $P/manifest.json > $X/private/hla/pending/manifest.json
     : > $D/cpu.$c; sampler $D/cpu.$c & SM=$!
     SINGLET_HLA_KEEP_TMP=1 /usr/bin/time -v -o $D/t1k.$c.time $BIN hla --pending $X/private/hla/pending --t1k $TK --threads $T > $D/t1k.$c.log 2>&1; rc=$?
@@ -45,7 +47,7 @@ for s in $SAMPLES; do
     tmpd=$(ls -d $SCR/singlet-hla-* 2>/dev/null | head -1)
     nc=$( [ -n "$tmpd" ] && cat $tmpd/sample_candidate*.fq 2>/dev/null | wc -l ); rm -rf $SCR/singlet-hla-*
     cp $X/private/hla/hla_genotype.tsv $O/$s/genotype.c$c.tsv 2>/dev/null
-    echo "  first 1/$c ($n reads): rc=$rc; $(tm $D/t1k.$c.time); $(stage_cpu $D/cpu.$c); T1K's own candidates $(( ${nc:-0} / 4 ))" | tee -a $R
+    echo "  1/$c ($n reads, ${SUB:-stride}): rc=$rc; $(tm $D/t1k.$c.time); $(stage_cpu $D/cpu.$c); T1K's own candidates $(( ${nc:-0} / 4 ))" | tee -a $R
     rm -rf $X
   done
   python3 - $O/$s $CUTS <<'PY' | tee -a $R

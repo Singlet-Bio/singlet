@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -223,12 +224,20 @@ struct Config {
     std::string tmp_dir;
     int min_cells = 2;              // frequency prior: type against alleles recorded in >= this many cells of IPD-IMGT/HLA (0: all alleles)
     bool defer = false;             // prefilter only: leave private/hla/pending/ for run_pending (--hla-defer)
+    // At most about this many candidate reads go to T1K and into the stored candidate file (0: all; SINGLET_HLA_MAX_READS when 0 here):
+    // every c-th candidate read in input order, c = ceil(candidates / max_reads) (thin_candidates). Off by default: it changes the
+    // abundances T1K reports and can change calls. Measured (bench/gpu-runtime, jobs 813217 and 813235): on two 10x 5' libraries the
+    // 2-field calls at A, B, C, DQB1 and DRB1 are the same from every candidate read down to 1 in 64 and 1 in 256 of them, and
+    // T1K's cost falls in proportion; on 10x 3' libraries accuracy against truth falls with every halving (0.95 at 361 M pairs,
+    // 0.77 at 45 M), so the cap is for 5' libraries.
+    uint64_t max_reads = 0;
 };
 
 struct Result {
     bool ran = false;
     std::string why_not;
     uint64_t reads_scanned = 0, reads_kept = 0;
+    uint64_t reads_candidate = 0, kept_every = 1, max_reads = 0;   // Config::max_reads applied: the candidate reads before it, the stride and the cap (kept_every 1: not applied)
     size_t n_kmers = 0, n_alleles = 0, n_alleles_typed = 0;
     int n_donors_typed = 0, n_donors_failed = 0;   // failed: a donor with candidate reads whose T1K call failed
     double seconds_prefilter = 0, seconds_t1k = 0;
@@ -628,6 +637,42 @@ inline bool gzip_file(const std::string& from, const std::string& to, const char
     return gzclose(g) == Z_OK && ok && !in.bad();
 }
 
+/// At most about `max_reads` of the candidate reads: every c-th record of `fq` in input order (the first, the (c + 1)-th, ...),
+/// c = ceil(kept / max_reads). The kept reads are spread over the whole input whatever its order; the first max_reads are not (an
+/// input written in genome order holds one gene's reads first: the Oetjen libraries typed no locus from their first quarter).
+/// Rewrites the file; false when it cannot (the file is then as it was). n_out: the records kept.
+inline bool thin_candidates(const std::string& fq, uint64_t kept, uint64_t max_reads, uint64_t& n_out, uint64_t& stride) {
+    stride = max_reads > 0 ? (kept + max_reads - 1) / max_reads : 1;
+    n_out = kept;
+    if (stride <= 1) { stride = 1; return true; }
+    const std::string tmp = fq + ".thin";
+    FILE* in = std::fopen(fq.c_str(), "rb");
+    FILE* out = in ? std::fopen(tmp.c_str(), "wb") : nullptr;
+    if (!in || !out) { if (in) std::fclose(in); if (out) std::fclose(out); return false; }
+    std::vector<char> b(size_t(1) << 22);
+    std::string o;
+    uint64_t line = 0, n = 0;   // complete lines so far (4 per record); records kept
+    bool ok = true;
+    for (size_t got; ok && (got = std::fread(b.data(), 1, b.size(), in)) > 0;) {
+        o.clear();
+        for (size_t a = 0; a < got;) {
+            const char* nl = static_cast<const char*>(std::memchr(b.data() + a, '\n', got - a));
+            const size_t e = nl ? static_cast<size_t>(nl - b.data()) + 1 : got;
+            const bool keep = (line / 4) % stride == 0;
+            if (keep) o.append(b.data() + a, e - a);
+            if (nl) { if (keep && line % 4 == 3) ++n; ++line; }   // a line cut by the buffer's end counts once, at its newline
+            a = e;
+        }
+        if (!o.empty() && std::fwrite(o.data(), 1, o.size(), out) != o.size()) ok = false;
+    }
+    if (std::ferror(in)) ok = false;
+    std::fclose(in);
+    if (std::fclose(out) != 0) ok = false;
+    if (!ok || line != 4 * kept || std::rename(tmp.c_str(), fq.c_str()) != 0) { std::remove(tmp.c_str()); return false; }
+    n_out = n;
+    return true;
+}
+
 /// The sample's T1K on the prefiltered reads (Session::kept_fq), with the frequency prior.
 inline void type_sample(Session& s) {
     const Config& cfg = s.cfg;
@@ -703,6 +748,23 @@ inline void sample_stage(Session& s) {
                   << " HLA alleles (" << res.n_kmers << " k-mers), " << res.seconds_prefilter << " s\n";
     }
 
+    // The cap on the candidate reads (Config::max_reads): from here on the thinned reads are the run's candidate reads (T1K, the stored
+    // file, the deferred route's pending reads, the donors)
+    res.reads_candidate = res.reads_kept;
+    {
+        uint64_t cap = cfg.max_reads;
+        if (cap == 0) if (const char* e = std::getenv("SINGLET_HLA_MAX_READS")) cap = std::strtoull(e, nullptr, 10);
+        if (cap > 0 && res.reads_kept > cap) {
+            uint64_t n = 0, c = 1;
+            if (thin_candidates(s.kept_fq, res.reads_kept, cap, n, c)) {
+                std::cerr << "[hla] candidate reads: 1 in " << c << " of " << res.reads_kept << " kept, in input order (at most " << cap << "): " << n << " reads\n";
+                res.reads_kept = n; res.kept_every = c; res.max_reads = cap;
+            } else {
+                std::cerr << "[hla] candidate reads not thinned (cannot rewrite " << s.kept_fq << "): all " << res.reads_kept << " are used\n";
+            }
+        }
+    }
+
     if (cfg.defer) {
         if (res.reads_kept > 0 && !gzip_file(s.kept_fq, s.tmp + "/" + kPendingReads, "wb1")) {
             s.stopped = true; res.why_not = "cannot compress the candidate reads in " + s.tmp; return;
@@ -760,8 +822,10 @@ inline Result write_pending(Session& s) {
         std::ofstream j(pend + "/manifest.json.tmp");
         j << "{\n  \"format\": " << json_quote(kPendingFormat) << ",\n  \"t1k_dir\": " << json_quote(cfg.t1k_dir) << ",\n  \"cdna_is_r1\": " << (cfg.cdna_is_r1 ? "true" : "false")
           << ",\n  \"donor_assignments\": " << json_quote(donors) << ",\n  \"min_cells\": " << cfg.min_cells << ",\n  \"reads_scanned\": " << res.reads_scanned
-          << ",\n  \"reads_kept\": " << res.reads_kept << ",\n  \"n_kmers\": " << res.n_kmers << ",\n  \"n_alleles\": " << res.n_alleles
-          << ",\n  \"seconds_prefilter\": " << res.seconds_prefilter << ",\n  \"candidate_bytes\": " << bytes << "\n}\n";
+          << ",\n  \"reads_kept\": " << res.reads_kept << ",\n  \"n_kmers\": " << res.n_kmers << ",\n  \"n_alleles\": " << res.n_alleles;
+        if (res.kept_every > 1)   // Config::max_reads was applied
+            j << ",\n  \"reads_candidate\": " << res.reads_candidate << ",\n  \"kept_every\": " << res.kept_every << ",\n  \"max_reads\": " << res.max_reads;
+        j << ",\n  \"seconds_prefilter\": " << res.seconds_prefilter << ",\n  \"candidate_bytes\": " << bytes << "\n}\n";
         j.close();
         if (!j || std::rename((pend + "/manifest.json.tmp").c_str(), (pend + "/manifest.json").c_str()) != 0) return fail("cannot write the manifest in " + pend);
     }
@@ -890,6 +954,7 @@ inline Result finish_stage(Session& s) {
         j << "{\n  \"t1k\": " << manifest << ",\n  \"ran\": " << (res.ran ? "true" : "false") << ",\n  \"why_not\": \"" << res.why_not
           << "\",\n  \"prefilter\": {\"k\": " << kK << ", \"stride\": " << kStride << ", \"hla_alleles\": " << res.n_alleles << ", \"typed_alleles\": " << res.n_alleles_typed << ", \"min_cells\": " << cfg.min_cells << ", \"kmers\": " << res.n_kmers
           << ", \"reads_scanned\": " << res.reads_scanned << ", \"reads_kept\": " << res.reads_kept
+          << (res.kept_every > 1 ? ", \"reads_candidate\": " + std::to_string(res.reads_candidate) + ", \"kept_every\": " + std::to_string(res.kept_every) + ", \"max_reads\": " + std::to_string(res.max_reads) : std::string())
           << "},\n  \"run\": {\"prefilter_seconds\": " << res.seconds_prefilter << ", \"t1k_seconds\": " << res.seconds_t1k << "},\n  \"sample\": " << (res.ran ? genotype_json(dir + "/hla_genotype.tsv") : std::string("null"))
           << ",\n  \"donor_rule\": \"called cells (cell_status cell) of one donor with prob_max >= 0.9, matched by raw cell barcode\""
           << ",\n  \"donors\": " << donors_json << "\n}\n";
@@ -937,6 +1002,9 @@ inline Result run_pending(const std::string& pending_dir, const std::string& t1k
     if (!num("min_cells", mc) || !num("reads_scanned", scanned) || !num("reads_kept", kept) || !num("n_kmers", nk) || !num("n_alleles", na)) { bad.why_not = "incomplete manifest in " + pend; return bad; }
     cfg.min_cells = static_cast<int>(mc);
     res.reads_scanned = scanned; res.reads_kept = kept; res.n_kmers = nk; res.n_alleles = na;
+    res.reads_candidate = kept;
+    { unsigned long long rc = 0, ke = 0, mr = 0;   // the run applied Config::max_reads
+      if (num("reads_candidate", rc) && num("kept_every", ke) && ke > 1) { res.reads_candidate = rc; res.kept_every = ke; if (num("max_reads", mr)) res.max_reads = mr; } }
     if (manifest_field(man, "seconds_prefilter", v)) res.seconds_prefilter = std::atof(v.c_str());
 
     s.dir = cfg.out_prefix + "/private/hla";

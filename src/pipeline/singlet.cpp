@@ -1245,7 +1245,7 @@ static int cmd_encode(int argc, char* argv[]) {
 // ════════════════════════════════════════════════════════════
 // singlet hla / hla-prefilter — D-101 HLA typing on its own (the same code as the --pipeline step)
 // ════════════════════════════════════════════════════════════
-// singlet hla --t1k DIR --out DIR [--donors donor_assignments.tsv] [--threads N] [--cdna-r1] [--defer] RUN.1fq [RUN2.1fq ...]
+// singlet hla --t1k DIR --out DIR [--donors donor_assignments.tsv] [--threads N] [--cdna-r1] [--defer] [--max-reads N] RUN.1fq [RUN2.1fq ...]
 //   types HLA from .1fq input exactly as the pipeline does (private/hla/ under --out); --defer: prefilter only, private/hla/pending/
 // singlet hla --pending RUN/private/hla/pending [--t1k DIR] [--threads N]
 //   the deferred route's CPU step (--hla-defer): T1K on the run's candidate reads; the same private/hla/ outputs, then pending/ is deleted
@@ -1255,9 +1255,11 @@ static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
     std::string t1k, out, donors, r1, r2, prefix, pending;
     std::vector<std::string> inputs;
     int threads = 8; bool cdna_r1 = false, defer = false;
+    unsigned long long max_reads = 0;
     for (int i = 0; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--t1k" && i + 1 < argc) t1k = argv[++i];
+        else if (a == "--max-reads" && i + 1 < argc) max_reads = std::strtoull(argv[++i], nullptr, 10);
         else if (a == "--defer") defer = true;
         else if (a == "--out" && i + 1 < argc) out = argv[++i];
         else if (a == "--pending" && i + 1 < argc) pending = argv[++i];
@@ -1290,6 +1292,7 @@ static int cmd_hla(int argc, char* argv[], bool prefilter_only) {
     if (out.empty() || inputs.empty()) { std::cerr << "usage: singlet hla --t1k DIR --out DIR [--donors TSV] [--threads N] RUN.1fq ...\n"; return 2; }
     singlet::hla::Config hc;
     hc.t1k_dir = t1k; hc.onefq = inputs; hc.cdna_is_r1 = cdna_r1; hc.out_prefix = out; hc.donor_assignments = donors; hc.threads = threads; hc.defer = defer;
+    hc.max_reads = max_reads;
     mkdir_p(out);
     const auto hr = singlet::hla::run(hc);
     std::cerr << "[hla] " << singlet::hla::status_text(hr) << "; " << hr.n_donors_typed << " donors typed\n";
@@ -3222,6 +3225,9 @@ static void usage(const char* prog) {
         << "  --hla                  type HLA with T1K inside --pipeline (the CPU engine's default; the GPU engine's default for 3' libraries; for 5' it writes the candidate reads to private/hla/pending/ for `singlet hla --pending`; --hla-defer: that route on either engine; --no-hla: none)\n"
         << "  --hla-gpu-3p MODE      GPU engine, 3' libraries: type on the node (default) or defer (env SINGLET_HLA_GPU_3P)\n"
         << "  --hla-gpu-5p MODE      GPU engine, 5' libraries: defer (default) or type on the node (env SINGLET_HLA_GPU_5P)\n"
+        << "  --hla-max-reads N      at most about N HLA candidate reads go to T1K and into the stored candidate file: 1 in c of them in\n"
+        << "                         input order (env SINGLET_HLA_MAX_READS; default 0: all). For 5' libraries, whose calls at the main\n"
+        << "                         loci do not change with far fewer reads; not for 3' libraries (hla_typing.h Config::max_reads)\n"
         << "  --hla-t1k DIR          T1K install with its IPD-IMGT/HLA index (bin/, hlaidx/, manifest.json); --pipeline on a human\n"
         << "                         genome uses <ref-base>/hla/t1k. Output: private/hla/ (owner-only)\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
@@ -3733,6 +3739,7 @@ static int singlet_main(int argc, char* argv[]) {
     bool hla_defer = false;              // prefilter only, private/hla/pending/ for `singlet hla --pending` (the GPU route's default for 5' libraries; see below)
     std::string hla_gpu_3p, hla_gpu_5p;  // --hla-gpu-3p / --hla-gpu-5p type|defer: the GPU engine's route by chemistry
     bool hla_explicit = false;           // --hla, --no-hla or --hla-defer was given
+    unsigned long long hla_max_reads = 0; // --hla-max-reads N: the cap on the HLA candidate reads (0: none, or SINGLET_HLA_MAX_READS)
     bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
     bool no_allsite = false;             // --no-allsite: no private/allsite/ member (D-101) in --pipeline mode
     bool no_default_te = false;          // --no-te: no TE counts in --pipeline mode
@@ -3768,6 +3775,7 @@ static int singlet_main(int argc, char* argv[]) {
         else if (arg == "--editing-sites" && i+1 < argc) { config.edit_path = argv[++i]; edit_panel_source = "user"; }
         else if (arg == "--no-editing") no_default_editing = true;
         else if (arg == "--hla-t1k" && i+1 < argc) hla_t1k_dir = argv[++i];
+        else if (arg == "--hla-max-reads" && i+1 < argc) hla_max_reads = std::strtoull(argv[++i], nullptr, 10);
         else if (arg == "--hla") { hla_defer = false; no_hla = false; hla_explicit = true; }
         else if (arg == "--no-hla") { no_hla = true; hla_explicit = true; }
         else if (arg == "--hla-defer") { hla_defer = true; no_hla = false; hla_explicit = true; }
@@ -9164,6 +9172,7 @@ static int singlet_main(int argc, char* argv[]) {
                 c.onefq = onefq_files.empty() ? std::vector<std::string>{onefq_file} : onefq_files;
                 c.cdna_is_r1 = reads_inverted;
                 c.defer = hla_defer;
+                c.max_reads = hla_max_reads;
                 c.out_prefix = out_prefix;
                 c.donor_assignments = out_prefix + "/donor_assignments.tsv";
                 c.threads = std::max(config.threads, star_threads);
@@ -10296,6 +10305,7 @@ static int singlet_main(int argc, char* argv[]) {
                 hc.onefq = onefq_files.empty() ? std::vector<std::string>{onefq_file} : onefq_files;
                 hc.cdna_is_r1 = reads_inverted;
                 hc.defer = hla_defer;
+                hc.max_reads = hla_max_reads;
                 hc.out_prefix = out_prefix;
                 hc.donor_assignments = out_prefix + "/donor_assignments.tsv";
                 hc.threads = export_cfg.threads;
