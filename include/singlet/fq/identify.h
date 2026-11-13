@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "identify_bam.h"
 #include "protocol.h"
 #include "run_screen.h"
 #include "singlet/pileup/bloom_filter.h"
@@ -34,6 +35,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -192,6 +194,7 @@ struct Evidence {
     uint32_t cdna_len = 0;
     ProtocolCandidate detected;      // protocol.h detect_protocol on the head
     double repeat_share_bc = 0;      // share of reads whose first 16 bases at the barcode segment repeat another read's
+    double bam_sense = -1;           // BAM route: sense share from the TX/AN tags of a Cell Ranger BAM, -1 when the BAM has none
     // C
     FivePrimeEvidence five_prime;
     bool five_prime_called = false;
@@ -211,6 +214,10 @@ struct EndpointRec {
     double list_rate = 0;
     int64_t bytes = -1;
     double seconds = 0;
+    std::string url;                  // the object that was read, when the endpoint is a single URL
+    std::string barcode_source;       // "reads" or "bam_tags" for a BAM whose tags hold the barcode and UMI
+    std::string tags;                 // BAM: the barcode tags found (CR+UR, CB+UB, none)
+    std::shared_ptr<bam::Evidence> bam;
 };
 
 struct SpeciesHit {
@@ -243,6 +250,10 @@ struct Report {
     std::string action;           // process | classify_only | defer | refuse
     std::string action_note;
     std::string hint;             // caller-supplied metadata, shown and never counted as evidence
+    bool hint_used = false;       // a hint changed the action (never the verdict)
+    std::vector<std::string> defer_candidates;   // an ambiguous verdict that is deferred: the two interpretations, "family/protocol"
+    std::string barcode_source = "reads";        // where the cell barcode and UMI came from: "reads" or "bam_tags"
+    bam::Evidence bam;                           // BAM head route: header, tags, list rates, sort and unmapped findings (bam.present false otherwise)
     std::vector<EndpointRec> endpoints;   // --endpoints: every endpoint of the run, with whether it carries a barcode read
     std::string protocol_tag;                      // registry id (validation/routes.yaml), empty when the verdict has none (JSON null)
     std::vector<std::string> protocol_tag_alternatives;   // ids the reads cannot separate from protocol_tag
@@ -286,7 +297,7 @@ inline const std::vector<Policy>& policy_table() {
         {"methylome", "refuse", "bisulfite reads"},
         {"not_sequence", "refuse", "not sequence data"},
         {"unknown", "refuse", "no known library structure"},
-        {"ambiguous", "refuse", "two families remain; pass a metadata hint or run the mapping evidence"},
+        {"ambiguous", "refuse", "two families remain; deferred when both are single-cell, refused otherwise unless a single_cell=1 hint selects defer"},
     };
     return t;
 }
@@ -1069,6 +1080,126 @@ inline void add_usefulness(Interp& it, const Evidence& ev, double valid_bc) {
 
 }  // namespace detail_id
 
+/// BAM route: hand the BAM's evidence to the classifier. The sense share from TX/AN tags decides 3' against 5'. Reads of a coordinate-sorted head sit
+/// at a few loci and share their k-mers, so the two statistics that read diversity as a signature (top-100 15-mers of read 2 for feature barcodes, repeated
+/// 25-mer starts for probe panels) say nothing and are not used.
+inline void apply_bam_evidence(Evidence& ev, const bam::Evidence& b) {
+    ev.bam_sense = b.sense;
+    if (b.coordinate_sorted) {
+        if (ev.feature_like) ev.feature_reason += " (not used: reads of a position-sorted BAM repeat their k-mers)";
+        ev.feature_like = false;
+        ev.cdna_start_repeat = 0;
+    }
+}
+
+/// Families whose reads are barcoded single-cell or spot libraries. An ambiguous verdict between two of them is deferred, never refused.
+inline bool single_cell_family(const std::string& f) {
+    static const char* const k[] = {"droplet_3p", "droplet_5p", "droplet_other", "multiome_gex", "multiome_atac", "atac", "visium", "combinatorial", "plate_barcoded",
+                                    "smartseq", "smartseq3", "flex", "vdj", "feature_barcode", "barcode_read_missing"};
+    for (const char* x : k) if (f == x) return true;
+    return false;
+}
+
+/// The action for the verdict: the policy table, the protocol-level deferrals, registry id and sub-calls, the metadata hints, and the route status.
+/// Separate from the classifier: it reads R.verdict, R.ambiguous_with and R.ranked and never changes them.
+inline void apply_policy(Report& R, const Options& opt) {
+    const Policy& p = policy_for(R.verdict);
+    R.action = p.action;
+    R.action_note = p.note;
+    if (R.action == "process" && R.verdict_protocol == "dropseq-like") {
+        R.action = "defer";
+        R.action_note = "Drop-seq geometry in a longer first read than the dropseq spec: recognized, deferred until the layout is trimmed to the spec";
+    }
+    if (R.action == "process" && R.verdict_protocol == "barcoded-unspecified") {
+        R.action = "defer";
+        R.action_note = "barcoded single-cell library whose layout has no protocol spec: recognized, deferred";
+    }
+    // registry id and sub-calls
+    {
+        std::string modality;
+        for (const auto& it : R.ranked)
+            if (it.family == R.verdict) { modality = it.modality; break; }
+        const TagCall tc = registry_tag(R.verdict, R.verdict_protocol, modality);
+        R.protocol_tag = tc.id;
+        R.protocol_tag_alternatives = tc.alternatives;
+        if (R.verdict == "droplet_3p") R.sub_strand = "3p";
+        else if (R.verdict == "droplet_5p") R.sub_strand = "5p";
+        if (R.verdict == "visium") R.sub_visium = modality == "spatial_gex_probe" ? "probe" : "polya";
+        if (R.verdict == "vdj") R.sub_vdj = "enriched";
+        R.sub_call_reason = "indrop_version, bd_bead and parse_kit: not implemented";
+    }
+    // an ambiguous verdict keeps the classifier's two interpretations and changes only the action. Two single-cell interpretations: defer with both named
+    // (the run is single-cell whichever one is right). One of them not single-cell: refuse, unless a metadata hint below selects defer.
+    bool ambiguous_one_sided = false;
+    if (R.verdict == "ambiguous") {
+        const size_t bar = R.ambiguous_with.find(" | ");
+        const std::string fa = R.ambiguous_with.substr(0, bar), fb = bar == std::string::npos ? std::string() : R.ambiguous_with.substr(bar + 3);
+        auto name_of = [&](const std::string& fam) {
+            for (const auto& it : R.ranked) if (it.family == fam) return fam + "/" + it.protocol;
+            return fam + "/none";
+        };
+        if (single_cell_family(fa) && single_cell_family(fb)) {
+            R.defer_candidates = {name_of(fa), name_of(fb)};
+            R.action = "defer";
+            R.action_note = "two single-cell interpretations remain (" + R.defer_candidates[0] + " and " + R.defer_candidates[1] + "): deferred with both named, not refused";
+        } else {
+            ambiguous_one_sided = true;
+        }
+    }
+    // a metadata hint is shown and never changes the verdict; it only selects the action inside an ambiguous full-length RNA call
+    if (R.verdict == "ambiguous" && R.ambiguous_with.find("smartseq") != std::string::npos && R.ambiguous_with.find("bulk_rna") != std::string::npos &&
+        opt.hint.find("assay=smartseq") != std::string::npos) {
+        R.action = "defer";
+        R.hint_used = true;
+        R.action_note = "hint assay=smartseq2 (metadata, not read evidence) selects defer; reads alone cannot separate Smart-seq from bulk";
+    }
+    // single_cell=1 (archive metadata, not read evidence): a library without barcode structure that the archive calls single-cell is deferred
+    // instead of refused, since reads cannot confirm the metadata. The verdict is unchanged.
+    {
+        std::string h = opt.hint;
+        for (auto& c : h) if (c == ';' || c == ' ') c = ',';
+        size_t i = 0;
+        while (i <= h.size()) {
+            size_t j = h.find(',', i);
+            if (j == std::string::npos) j = h.size();
+            const std::string kv = h.substr(i, j - i);
+            i = j + 1;
+            if (kv.empty()) continue;
+            const size_t eq = kv.find('=');
+            Report::Hint ht;
+            ht.key = kv.substr(0, eq);
+            ht.value = eq == std::string::npos ? "" : kv.substr(eq + 1);
+            if (ht.key == "single_cell" && ht.value == "1" &&
+                (R.verdict == "bulk_rna" || R.verdict == "genomic_dna" || R.verdict == "unknown" || R.verdict == "rna_no_barcode")) {
+                if (R.action != "defer") { ht.effect = "action " + R.action + " -> defer"; R.hint_used = true; }
+                else ht.effect = "action stays defer";
+                R.action = "defer";
+                R.action_note = "hint single_cell=1 (archive metadata, not read evidence): the reads show no barcode structure and cannot confirm it, so the run is deferred, not refused";
+            }
+            else if (ht.key == "single_cell" && ht.value == "1" && ambiguous_one_sided && R.action != "defer") {
+                // an ambiguous call with one interpretation that is not single-cell: the archive's single-cell statement selects defer over refuse
+                ht.effect = "action " + R.action + " -> defer";
+                R.hint_used = true;
+                R.action = "defer";
+                R.action_note = "hint single_cell=1 (archive metadata, not read evidence): the reads leave " + R.ambiguous_with + " open, so the run is deferred, not refused";
+            }
+            R.hints.push_back(ht);
+        }
+    }
+    // route status (--route-status): process only for registry ids whose route is validated; refuse, classify_only and defer rows stay as they are
+    if (opt.use_route_status) {
+        R.policy_source = "route-status";
+        if (R.action == "process") {
+            const auto it = opt.route_status.find(R.protocol_tag);
+            const std::string st = R.protocol_tag.empty() ? "no registry id" : (it == opt.route_status.end() ? "unrouted" : it->second);
+            if (st != "validated") {
+                R.action = "defer";
+                R.action_note = "route " + (R.protocol_tag.empty() ? std::string("none") : R.protocol_tag) + " has status " + st + ": recognized, deferred until the route is validated";
+            }
+        }
+    }
+}
+
 inline void rank(Report& R, const Options& opt) {
     using namespace detail_id;
     const Evidence& ev = R.ev;
@@ -1108,6 +1239,9 @@ inline void rank(Report& R, const Options& opt) {
         if (ev.map.measured && ev.map.sense >= 0) {
             if (ev.map.sense >= kThr.sense_3p) { five = false; basis = "sense fraction " + detail::jnum(ev.map.sense) + " of mapped reads"; }
             else if (ev.map.sense <= kThr.sense_5p) { five = true; basis = "sense fraction " + detail::jnum(ev.map.sense) + " of mapped reads"; }
+        } else if (ev.bam_sense >= 0) {
+            if (ev.bam_sense >= kThr.sense_3p) { five = false; basis = "sense share " + detail::jnum(ev.bam_sense) + " of the BAM's TX/AN tags"; }
+            else if (ev.bam_sense <= kThr.sense_5p) { five = true; basis = "sense share " + detail::jnum(ev.bam_sense) + " of the BAM's TX/AN tags"; }
         }
         Interp g;
         g.modality = "gex";
@@ -1389,78 +1523,46 @@ inline void rank(Report& R, const Options& opt) {
     } else {
         R.verdict = top.family; R.verdict_protocol = top.protocol;
     }
-    const Policy& p = policy_for(R.verdict);
-    R.action = p.action;
-    R.action_note = p.note;
-    if (R.action == "process" && R.verdict_protocol == "dropseq-like") {
-        R.action = "defer";
-        R.action_note = "Drop-seq geometry in a longer first read than the dropseq spec: recognized, deferred until the layout is trimmed to the spec";
-    }
-    if (R.action == "process" && R.verdict_protocol == "barcoded-unspecified") {
-        R.action = "defer";
-        R.action_note = "barcoded single-cell library whose layout has no protocol spec: recognized, deferred";
-    }
-    // registry id and sub-calls
-    {
-        std::string modality;
-        for (const auto& it : R.ranked)
-            if (it.family == R.verdict) { modality = it.modality; break; }
-        const TagCall tc = registry_tag(R.verdict, R.verdict_protocol, modality);
-        R.protocol_tag = tc.id;
-        R.protocol_tag_alternatives = tc.alternatives;
-        if (R.verdict == "droplet_3p") R.sub_strand = "3p";
-        else if (R.verdict == "droplet_5p") R.sub_strand = "5p";
-        if (R.verdict == "visium") R.sub_visium = modality == "spatial_gex_probe" ? "probe" : "polya";
-        if (R.verdict == "vdj") R.sub_vdj = "enriched";
-        R.sub_call_reason = "indrop_version, bd_bead and parse_kit: not implemented";
-    }
-    // a metadata hint is shown and never changes the verdict; it only selects the action inside an ambiguous full-length RNA call
-    if (R.verdict == "ambiguous" && R.ambiguous_with.find("smartseq") != std::string::npos && R.ambiguous_with.find("bulk_rna") != std::string::npos &&
-        opt.hint.find("assay=smartseq") != std::string::npos) {
-        R.action = "defer";
-        R.action_note = "hint assay=smartseq2 (metadata, not read evidence) selects defer; reads alone cannot separate Smart-seq from bulk";
-    }
-    // single_cell=1 (archive metadata, not read evidence): a library without barcode structure that the archive calls single-cell is deferred
-    // instead of refused, since reads cannot confirm the metadata. The verdict is unchanged.
-    {
-        std::string h = opt.hint;
-        for (auto& c : h) if (c == ';' || c == ' ') c = ',';
-        size_t i = 0;
-        while (i <= h.size()) {
-            size_t j = h.find(',', i);
-            if (j == std::string::npos) j = h.size();
-            const std::string kv = h.substr(i, j - i);
-            i = j + 1;
-            if (kv.empty()) continue;
-            const size_t eq = kv.find('=');
-            Report::Hint ht;
-            ht.key = kv.substr(0, eq);
-            ht.value = eq == std::string::npos ? "" : kv.substr(eq + 1);
-            if (ht.key == "single_cell" && ht.value == "1" &&
-                (R.verdict == "bulk_rna" || R.verdict == "genomic_dna" || R.verdict == "unknown" || R.verdict == "rna_no_barcode")) {
-                if (R.action != "defer") ht.effect = "action " + R.action + " -> defer";
-                else ht.effect = "action stays defer";
-                R.action = "defer";
-                R.action_note = "hint single_cell=1 (archive metadata, not read evidence): the reads show no barcode structure and cannot confirm it, so the run is deferred, not refused";
-            }
-            R.hints.push_back(ht);
-        }
-    }
-    // route status (--route-status): process only for registry ids whose route is validated; refuse, classify_only and defer rows stay as they are
-    if (opt.use_route_status) {
-        R.policy_source = "route-status";
-        if (R.action == "process") {
-            const auto it = opt.route_status.find(R.protocol_tag);
-            const std::string st = R.protocol_tag.empty() ? "no registry id" : (it == opt.route_status.end() ? "unrouted" : it->second);
-            if (st != "validated") {
-                R.action = "defer";
-                R.action_note = "route " + (R.protocol_tag.empty() ? std::string("none") : R.protocol_tag) + " has status " + st + ": recognized, deferred until the route is validated";
-            }
-        }
-    }
+    apply_policy(R, opt);
 }
 
 // ── JSON ──
+
+inline std::string bam_json(const bam::Evidence& b) {
+    using namespace detail;
+    auto q = [](const std::string& v) { return "\"" + jesc(v) + "\""; };
+    auto qn = [&](const std::string& v) { return v.empty() ? std::string("null") : q(v); };
+    const auto& p = b.pooled;
+    const double N = p.records ? double(p.records) : 1;
+    auto sh = [&](uint64_t c) { return jnum(double(c) / N); };
+    std::ostringstream o;
+    o << "{\"url\": " << q(b.url) << ", \"file_size\": " << (b.file_size >= 0 ? std::to_string(b.file_size) : std::string("null")) << ", \"bytes\": " << b.bytes
+      << ", \"seconds\": " << jnum(b.seconds) << ", \"requests\": " << b.requests << ", \"error\": " << qn(b.error) << ",\n    \"header\": {\"ok\": " << (b.header_ok ? "true" : "false")
+      << ", \"sort_order\": " << qn(b.sort_order) << ", \"n_ref\": " << b.n_ref << ", \"refs_head\": " << jlist(b.refs_head) << ", \"cellranger\": " << qn(b.cellranger_version)
+      << ", \"chemistry\": " << qn(b.chemistry) << ", \"reference\": " << qn(b.reference) << ", \"program_lines\": " << jlist(b.program_lines) << ", \"comment_lines\": " << jlist(b.comment_lines) << "},\n";
+    o << "    \"samples\": [";
+    for (size_t i = 0; i < b.samples.size(); ++i) {
+        const auto& s = b.samples[i];
+        o << (i ? ", " : "") << "{\"where\": " << q(s.where) << ", \"offset\": " << s.offset << ", \"bytes\": " << s.bytes << ", \"blocks\": " << s.blocks << ", \"synced\": " << (s.synced ? "true" : "false")
+          << ", \"records\": " << s.c.records << ", \"unmapped\": " << s.c.unmapped << ", \"first_ref\": " << s.c.first_ref << ", \"first_pos\": " << s.c.first_pos << ", \"eof_marker\": " << (s.eof_marker ? "true" : "false") << "}";
+    }
+    o << "],\n    \"records\": " << p.records << ", \"tag_share\": {\"CR\": " << sh(p.cr) << ", \"CY\": " << sh(p.cy) << ", \"UR\": " << sh(p.ur) << ", \"UY\": " << sh(p.uy) << ", \"CB\": " << sh(p.cb)
+      << ", \"UB\": " << sh(p.ub) << ", \"CQ\": " << sh(p.cq) << ", \"UQ\": " << sh(p.uq) << ", \"GX\": " << sh(p.gx) << ", \"TX\": " << sh(p.tx) << ", \"AN\": " << sh(p.an) << ", \"RE\": " << sh(p.re) << "},\n";
+    o << "    \"tags_seen\": [";
+    {
+        std::vector<std::pair<uint64_t, uint16_t>> v;
+        for (const auto& kv : p.tags) v.push_back({kv.second, kv.first});
+        std::sort(v.begin(), v.end(), [](const auto& a, const auto& c) { return a.first > c.first; });
+        for (size_t i = 0; i < v.size() && i < 24; ++i) o << (i ? ", " : "") << q(bam::tname(v[i].second));
+    }
+    o << "], \"tag_length_mode\": {\"CR\": " << bam::mode_len(p.cr_len) << ", \"UR\": " << bam::mode_len(p.ur_len) << ", \"CB\": " << bam::mode_len(p.cb_len) << ", \"UB\": " << bam::mode_len(p.ub_len) << "},\n";
+    o << "    \"barcode_tags\": " << q(b.barcode_tags) << ", \"list_rates\": {\"tag\": " << qn(b.list_rate_tag) << ", \"lists\": [";
+    for (size_t i = 0; i < b.list_rates.size(); ++i)
+        o << (i ? ", " : "") << "{\"file\": " << q(b.list_rates[i].file) << ", \"family\": " << q(b.list_rates[i].family) << ", \"exact\": " << jnum(b.list_rates[i].exact) << ", \"one_mismatch\": " << jnum(b.list_rates[i].one_mm) << "}";
+    o << "]},\n    \"strand\": {\"sense\": " << (b.sense >= 0 ? jnum(b.sense) : std::string("null")) << ", \"reads\": " << b.sense_reads << ", \"basis\": " << q(b.strand_basis) << "},\n";
+    o << "    \"coordinate_sorted\": " << (b.coordinate_sorted ? "true" : "false") << ", \"unmapped\": {\"status\": " << qn(b.unmapped_status) << ", \"note\": " << qn(b.unmapped_note) << "}, \"limits\": " << jlist(b.limits) << "}";
+    return o.str();
+}
 
 inline std::string report_json(const Report& R) {
     using namespace detail;
@@ -1475,6 +1577,7 @@ inline std::string report_json(const Report& R) {
     o << "  \"verdict\": " << q(R.verdict) << ",\n  \"protocol\": " << q(R.verdict_protocol) << ",\n  \"ambiguous_with\": " << q(R.ambiguous_with)
       << ",\n  \"action\": " << q(R.action) << ",\n  \"action_note\": " << q(R.action_note) << ",\n  \"policy_source\": " << q(R.policy_source) << ",\n  \"hint\": " << q(R.hint) << ",\n";
     auto qn = [&](const std::string& v) { return v.empty() ? std::string("null") : q(v); };
+    o << "  \"hint_used\": " << (R.hint_used ? "true" : "false") << ",\n  \"defer_candidates\": " << jlist(R.defer_candidates) << ",\n  \"barcode_source\": " << q(R.barcode_source) << ",\n";
     o << "  \"hints\": [";
     for (size_t i = 0; i < R.hints.size(); ++i)
         o << (i ? ", " : "") << "{\"key\": " << q(R.hints[i].key) << ", \"value\": " << q(R.hints[i].value) << ", \"effect\": " << qn(R.hints[i].effect) << "}";
@@ -1517,6 +1620,7 @@ inline std::string report_json(const Report& R) {
       << ", \"rrna_note\": \"annotated rRNA genes only\", \"profile\": [";
     for (int k = 0; k < 10; ++k) o << (k ? ", " : "") << jnum(ev.map.profile[k]);
     o << "]},\n";
+    o << "  \"bam\": " << (R.bam.present ? bam_json(R.bam) : std::string("null")) << ",\n";
     o << "  \"species\": ";
     if (!R.species.measured) o << "null";
     else {
@@ -1537,7 +1641,7 @@ inline std::string report_json(const Report& R) {
         o << (i ? ", " : "") << "{\"endpoint\": " << q(e.name) << ", \"reachable\": " << (e.reachable ? "true" : "false") << ", \"segments\": [";
         for (size_t k = 0; k < e.seg_lens.size(); ++k) o << (k ? ", " : "") << e.seg_lens[k];
         o << "], \"barcode_read_present\": " << (e.barcode_read ? "true" : "false") << ", \"best_list_rate\": " << jnum(e.list_rate) << ", \"verdict\": " << q(e.verdict)
-          << ", \"protocol\": " << q(e.protocol) << ", \"bytes\": " << (e.bytes >= 0 ? std::to_string(e.bytes) : std::string("null")) << ", \"seconds\": " << jnum(e.seconds)
+          << ", \"protocol\": " << q(e.protocol) << ", \"url\": " << qn(e.url) << ", \"barcode_source\": " << qn(e.barcode_source) << ", \"tags\": " << qn(e.tags) << ", \"bytes\": " << (e.bytes >= 0 ? std::to_string(e.bytes) : std::string("null")) << ", \"seconds\": " << jnum(e.seconds)
           << ", \"note\": " << q(e.note) << "}";
     }
     o << "],\n";

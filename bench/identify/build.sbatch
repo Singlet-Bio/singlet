@@ -10,11 +10,11 @@
 #   sbatch build.sbatch bin            pipeline binary -> jobs/identify/bin/singlet-<sha8>
 #   sbatch build.sbatch test           test_identify only, then run it
 #   sbatch build.sbatch ctest          every C++ test target, then ctest
-# BRANCH (default feat/identify) selects the branch.
+# BRANCH (default feat/identify) selects the branch; JOBDIR (default jobs/identify) the folder for bin/, wl/ and out/.
 set -eu
 WHAT=${1:-bin}
 BR=${BRANCH:-feat/identify}
-W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; J=$W/jobs/identify
+W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; J=${JOBDIR:-$W/jobs/identify}
 mkdir -p $J/bin
 export PATH=$ENV/bin:$PATH CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++ LD_LIBRARY_PATH=$ENV/lib CMAKE_POLICY_VERSION_MINIMUM=3.5

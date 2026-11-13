@@ -155,3 +155,62 @@ Human 10x: `CLOSE_PAIR` human or chimpanzee (declared close group), 0.35 against
 ### Corpus
 
 Of 53,486 Beta corpus runs labeled 10x by text, 21,637 (40 percent) have no read of 26 to 28 bases in their SRA layout; 50 percent of 25,260 samples have no such run, and 41 percent of read pairs. By labeled chemistry the run share is 31 percent (v2), 39 percent (v3), 45 percent (v1), 54 percent (v4), 42 percent (version unstated). `corpus_share_result.txt` has the table.
+
+# BAM head route, ambiguous policy (branch identify/bam-head)
+
+## What the BAM head route reads
+
+For a run whose archive record lists an original-format BAM (ENA `submitted_ftp`, or the SRA original-format object from the SDL locate service), `--endpoints` now reads the BAM by HTTP range and never downloads it. A source of the form `bam:URL`, or a URL that ends in `.bam`, takes the same route directly. Requests: the first 4 MB (header and first records), three 1 MB pieces at a quarter, a half and three quarters of the file, and the last 1 MB, at most one request every 0.3 s. Parser: `include/singlet/fq/identify_bam.h` (BGZF blocks checked against their CRC, BAM header, records, tags; pieces from inside the file are resynchronized on a block and then on a run of three valid records).
+
+The record gains a `bam` block: header (sort order, `@PG` and `@CO` lines, Cell Ranger version, chemistry and reference when the command line is stored), the pieces read, the share of records carrying each of CR, CY, UR, UY, CB, UB, CQ, UQ, GX, TX, AN, RE, tag lengths, the list rates of the barcode tag against each barcode list, the strand evidence, whether the file is coordinate sorted, whether unmapped reads are present, and a statement of limits. The verdict comes from the same classifier on spots made of the barcode tag plus UMI tag (segment 0) and the read in its original orientation (segment 1). `barcode_source` is `bam_tags` when the tags supplied the barcode and `reads` otherwise. A run whose own reads hold no barcode read (verdict `barcode_read_missing`, `rna_no_barcode`, `bulk_rna`, `smartseq`, `unknown`, `genomic_dna` or `ambiguous`) and that has a BAM with a list hit of at least 0.30 on its barcode tag is re-classified from the BAM; the endpoint entry names the URL, bytes and seconds.
+
+3'/5' evidence: the TX and AN tags of a Cell Ranger BAM give the read strand against the transcript without an annotation (sense share of reads that carry TX or AN). Where they are absent the call falls back to the motif evidence in the cDNA read and to mapping when `--genome-dir` is given.
+
+## Limits of a coordinate-sorted head
+
+Every Cell Ranger BAM is coordinate sorted, so its first megabytes hold the first bases of the first chromosome. Used, because they do not depend on the genomic region: tag presence and lengths, the list rate of the raw CR, and the sense share from TX/AN, each pooled over the head and the spread pieces. Not used: reads per cell, number of cells, duplicate rate, MAPQ and multi-mapper shares, chrM and exonic shares. Unmapped reads of a sorted file lie after the last chromosome, so only the last piece can show them; without it the status is `unknown`, never `not_seen`.
+
+## What the engine needs to process a sample from such a BAM (read from source, nothing built)
+
+Existing route: `singlet download FILE.bam` or a URL ending in `.bam` (`src/pipeline/singlet.cpp`) resolves to the spec `bam:FILE`, which `SpotSource` (`include/singlet/fq/spot_source.h`) reads through `samtools view -F 0x900`. What it already does:
+
+- Reads the raw tags: CR with UR, and their qualities CY and UY (CQ and UQ in Cell Ranger 1.x BAMs), as segment 1; the read as segment 2 with its qualities. Phred values come from the tag strings.
+- Restores the sequenced orientation: records with flag 0x10 are reverse complemented, with qualities reversed.
+- Keeps one spot per read: secondary and supplementary alignments (0x900) are dropped, so multi-mappers count once through their primary record. Unmapped records are kept when the file has them.
+- Records with no CR or UR, or with a quality string of different length, are skipped and counted (`bam_skipped`).
+
+What is missing or costly:
+
+1. Corrected tags only. A BAM with CB and UB but no CR and UR (the identify route accepts it) gives zero spots, because `read_bam` requires CR, UR, CY and UY. Fix: fall back to CB (strip the `-1` suffix) and UB with a constant quality, and flag the sample as list-corrected. About half a day.
+2. Naming and resolution. `download` treats only names ending `.bam` as BAMs; SDL objects end `.bam.1`. The endpoint URL that identify finds is not passed on; the campaign wiring has to hand the URL over. About half a day.
+3. Whole-file download. The BAM is fetched whole by curl into the staging folder (9 to 28 GB per sample on the panel runs) before samtools reads it. Acceptable on Clipper node-local scratch, but it doubles the network cost of a sample compared with a FASTQ pair of the same reads, and the campaign is network bound. Streaming through `samtools view URL` or a ranged reader would remove the staging copy; two days, optional.
+4. Passes over the file. `SpotSource::open` counts spots with a full `samtools view` pass, and `seek` backwards reopens and re-reads from the start; the encoder opens several readers (probe, late probe, samplers). On a BAM of 25 GB each is a full decode of a few hundred million records. Fix: take the count from `samtools idxstats` (ENA ships the .bai) plus the unmapped count, and give the late probe a virtual-offset seek. One to two days.
+5. Coordinate order. Spots arrive sorted by position, not in run order. The protocol probe (first 100,000 spots) then sees one genomic region: barcode-list and orientation detection are unaffected, but any probe statistic that depends on content (chrM, rRNA, immunoglobulin share, 3' bias) is biased. Not verified in the encoder here; needs one real run of `download bam:` on a panel BAM compared with its FASTQ route. One day with the benchmark.
+6. Unmapped reads. If the file has none (identify reports this per file), alignment-rate metrics cannot be computed from the BAM and the unmapped share of the sample is lost. Gene counts and cell calls from mapped reads are unaffected.
+7. Runtime. `samtools` must be on PATH in the runtime that runs `download`; not checked.
+8. Cell Ranger 5' BAMs: only the barcode and UMI of read 1 are in the tags, not the rest of read 1. 5' detection that uses read 1 motifs (the TSO tail after the barcode read) has nothing to read; the cDNA read motifs and the TX/AN strand remain.
+
+Total: 3 to 5 working days from the current state, of which items 1, 2, 5 and the idxstats part of 4 (about 3 days) make the first processed sample.
+
+## Action policy for ambiguous verdicts
+
+Only the action changes; the classifier, its scores and the verdict `ambiguous` are untouched (`apply_policy` in `identify.h` reads the verdict and the ranked interpretations and writes only action, note, hints and `defer_candidates`).
+
+| the two interpretations | action | hint |
+|---|---|---|
+| both single-cell (droplet, plate, combinatorial, Smart-seq, multiome, feature barcode, V(D)J, ATAC, Flex, Visium, barcode read missing) | defer, both named as `family/protocol` in `defer_candidates` and in the note | not needed; `hint_used` false |
+| one is not single-cell (bulk, genomic DNA, bisulfite, not sequence, unknown, no-barcode RNA) | refuse | `single_cell=1` selects defer, `hints[]` records the change, `hint_used` true; `assay=smartseq` keeps its earlier rule |
+
+`hint_used` is also true when `single_cell=1` turns a refuse into a defer for a bulk, genomic or unknown verdict (as before, now stated in the record). A hint never changes the verdict.
+
+The two held-out rows that were refused as `ambiguous` (scored once with the frozen binary, not rescored): SRR7827205 (sci-RNA-seq3, ambiguous between plate_barcoded and combinatorial) and SRR13247000 (human-mouse Drop-seq, between droplet_other and plate_barcoded). Both interpretations are single-cell, so the rule gives defer with both candidates named and no hint. The held-out panel is spent: no figure in `results_heldout/` changes.
+
+## Candidates for a later held-out round (studies in neither panel; metadata only, labels still to be assigned from each run's protocol text)
+
+| study | protocol | why |
+|---|---|---|
+| GSE92495 | Seq-Well, human and mouse mixture | Seq-Well against Drop-seq: the two-interpretation case |
+| GSE110688, GSE127005 | inDrop, mouse | inDrop has no sub-call yet; split-pool bead barcodes |
+| GSE100910 | inDrop, zebrafish kidney marrow | a species outside the filter set |
+| GSE114397 | inDrop RNA with ATAC in the same study | RNA and ATAC runs under one study |
+| GSE192708 | Well-paired-seq, human and mouse mixture | a microwell protocol with no spec |
