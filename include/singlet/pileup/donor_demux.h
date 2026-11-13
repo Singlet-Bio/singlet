@@ -2238,8 +2238,17 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
     // evaluations, each with the thread budget one serial evaluation had at 8 threads, and the chain is then replayed in K
     // order, so the chosen K, the trace and every number in it are those of the serial loop. Work past the stopping point
     // (the rest of the wave that stops the search) is discarded. Thread counts above 8 go to the wave size.
-    const int wave = std::max(1, std::min(kmax, cfg.threads / 8));
-    const int kthreads = std::max(1, cfg.threads / wave);   // threads of one K evaluation (its two folds side by side)
+    // The per-K thread budget is fixed by the formula above (threads / 8 evaluations side by side) and does not depend on the wave
+    // width actually used, so every evaluation has the thread and chunk counts, and therefore the arithmetic, it always had.
+    // SINGLET_DEMUX_WAVE: unset = every K of the search in one wave; N > 0 = N per wave; 0 = threads / 8 as before.
+    const int wave_formula = std::max(1, std::min(kmax, cfg.threads / 8));
+    int wave = kmax;
+    if (const char* we = std::getenv("SINGLET_DEMUX_WAVE"); we && *we) {
+        const int w = std::atoi(we);
+        wave = (w <= 0) ? wave_formula : std::max(1, std::min(kmax, w));
+    }
+    const int kthreads = std::max(1, cfg.threads / wave_formula);   // threads of one K evaluation (its two folds side by side)
+    std::cerr << "[demux] auto-K: wave=" << wave << " evaluations side by side, " << kthreads << " threads each\n";
     DonorDemuxConfig fcfg = cfg;                 // per-fold thread budget
     fcfg.threads = std::max(1, kthreads / 2);
     for (int f = 0; f < 2; ++f) get_snp_major(D[f], cfg.threads);   // built once, before the fits that share it start
