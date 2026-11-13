@@ -18,7 +18,7 @@ outside $W/jobs/gpu-runtime, never delete others' files. The account may hold 2 
 another; that is expected.
 
 ## Build (no push needed)
-In the worktree: `git diff c5436ec7 -- src include > /tmp/<name>.diff` (committed and uncommitted changes against v1.3.8), send it to
+In the worktree: `git diff c5436ec7 -- src include CMakeLists.txt > /tmp/<name>.diff` (committed and uncommitted changes against v1.3.8), send it to
 $W/jobs/gpu-runtime/patches/<name>.diff, then
 `cd $W/jobs/gpu-runtime && BASE=e0824b214dd146cf4dffa332a7e73a2b1f33a9bb PATCH=$PWD/patches/<name>.diff NAME=<name> TESTS=1 sbatch rt_build.sbatch`
 -> bin/<name>/singlet-gpu, BUILD.txt, ctest-full.txt (must end "100% tests passed"). A name is built once: use <name>-2, -3 for rebuilds.
