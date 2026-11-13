@@ -64,9 +64,7 @@ def distribute(unique, record, classes: Sequence[Tuple[int, ...]], method: str =
         raise ValueError(f"method must be one of {METHODS}")
     U = sp.csr_matrix(unique, dtype=np.float64)
     M = sp.coo_matrix(record)
-    shape = U.shape
-    assert shape is not None  # scipy stubs type shape as optional
-    n_cells, n_genes = shape
+    n_cells, n_genes = U.shape  # pyright: ignore  (scipy stubs type the shape as optional)
     if M.shape[0] != n_cells:
         raise ValueError("unique and record must have the same cells")
     sizes = np.array([len(c) for c in classes], dtype=np.int64)
