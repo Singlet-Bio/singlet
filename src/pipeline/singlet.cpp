@@ -5541,7 +5541,15 @@ static int singlet_main(int argc, char* argv[]) {
                 }
                 heads.resize(nb);
                 std::string err;
-                const int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
+                int nt = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1, static_cast<int>(std::max<uint32_t>(nb, 1u))));
+                // SINGLET_INGEST_THREADS=N: the threads of this pass alone (the head scan and the fused decode, with the HLA prefilter's scan
+                // when it rides on it). The pass comes before anything else of the sample can start and its results do not depend on the
+                // thread count (each block goes to its own ranges; the probe's offers are idempotent), so a node with idle cores can give
+                // it more than --threads, as SINGLET_TAIL_THREADS does for the end of the run.
+                if (const char* e = std::getenv("SINGLET_INGEST_THREADS")) {
+                    const int v = std::atoi(e);
+                    if (v > 0) nt = std::max(1, std::min<int>(v, static_cast<int>(std::max<uint32_t>(nb, 1u))));
+                }
                 // The fused pass (engine_gpu_ingest_fused.h): the head scan and the packed-read decode from one decompression of each block,
                 // where the decode would start right after this scan anyway (the early decode). The head scan's results
                 // are the same; the decode is then done before the reference load instead of beside it. SINGLET_INGEST_FUSED=0: two passes.
