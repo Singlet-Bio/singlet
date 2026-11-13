@@ -104,19 +104,26 @@ add("multiome_gex_pbmc_3k", fq(D + "/pbmc_granulocyte_sorted_3k/pbmc_granulocyte
 add("multiome_gex_pbmc_10k", fq(D + "/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/gex", "pbmc_granulocyte_sorted_10k_S1", 3, ["R1", "R2"]),
     "multiome_gex", "10x-arc-gex", "Homo sapiens", "10x Genomics dataset name (PBMC granulocyte-depleted 10k multiome, GEX library)", "V")
 
+
+
+def sc_hint(family):
+    """1 where the archive record (GEO or SRA text) states single-cell: every family except bulk and genomic"""
+    return "0" if family in ("bulk_rna", "genomic_dna") else "1"
+
+
 out = sys.argv[2]
 with open(out + "/panel_dev.tsv", "w", newline="") as f:
     w = csv.writer(f, delimiter="\t", lineterminator="\n")
-    w.writerow(["id", "source", "family", "protocol", "species", "label_source", "tier"])
+    w.writerow(["id", "source", "family", "protocol", "species", "label_source", "tier", "single_cell_hint"])
     seen = set()
     for r in rows:
         if r[0] in seen:
             continue
         seen.add(r[0])
-        w.writerow(r)
+        w.writerow(list(r) + [sc_hint(r[2])])
 with open(out + "/sources_dev.tsv", "w", newline="") as f:
     w = csv.writer(f, delimiter="\t", lineterminator="\n")
     for r in rows:
-        # columns: id, source, hint (none), genome for the mapping layer (GRCh38 or GRCm39 STAR index; $REF is the reference directory)
-        w.writerow([r[0], r[1], "", "$REF/GRCh38-2024-A/star_2.7.11b" if r[4] == "Homo sapiens" else "$REF/GRCm39-2024-A/star_2.7.11b"])
+        # columns: id, source, hint (single_cell=1 from the archive record), genome for the mapping layer (GRCh38 or GRCm39 STAR index; $REF is the reference directory)
+        w.writerow([r[0], r[1], "single_cell=1" if sc_hint(r[2]) == "1" else "", "$REF/GRCh38-2024-A/star_2.7.11b" if r[4] == "Homo sapiens" else "$REF/GRCm39-2024-A/star_2.7.11b"])
 print(len(seen), "rows")

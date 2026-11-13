@@ -1,76 +1,76 @@
-GSM4477421	SRR11549020		$REF/GRCh38-2024-A/star_2.7.11b
-GSM4593584	SRR11938061		$REF/GRCh38-2024-A/star_2.7.11b
-GSM4764773	SRR12582154		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5472074	SRR15250054		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5534708	SRR15598779		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5704176	SRR17050045		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5765320	SRR17381634		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5765328	SRR17381626		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5769275	SRR17412744		$REF/GRCh38-2024-A/star_2.7.11b
-GSM6430151	SRR20794273		$REF/GRCh38-2024-A/star_2.7.11b
-GSM6564300	SRR34318914		$REF/GRCh38-2024-A/star_2.7.11b
-GSM6564302	SRR21492157		$REF/GRCh38-2024-A/star_2.7.11b
-GSM6564303	SRR21492156		$REF/GRCh38-2024-A/star_2.7.11b
-GSM6564304	SRR21492155		$REF/GRCh38-2024-A/star_2.7.11b
-GSM6739283	SRR22333824		$REF/GRCh38-2024-A/star_2.7.11b
-GSM7336426	SRR24529636		$REF/GRCh38-2024-A/star_2.7.11b
-GSM7719627	SRR25690557		$REF/GRCh38-2024-A/star_2.7.11b
-GSM8158578	SRR28411267		$REF/GRCh38-2024-A/star_2.7.11b
-GSM8618582	SRR31271207		$REF/GRCh38-2024-A/star_2.7.11b
-GSM8754140	SRR32104309		$REF/GRCh38-2024-A/star_2.7.11b
-GSM9287649	SRR36039828		$REF/GRCh38-2024-A/star_2.7.11b
-SRS5091285	SRR9873585		$REF/GRCh38-2024-A/star_2.7.11b
-SRS5091287	SRR9873595		$REF/GRCh38-2024-A/star_2.7.11b
-SRS5091328	SRR9873661		$REF/GRCh38-2024-A/star_2.7.11b
-SRS5091333	SRR9873660		$REF/GRCh38-2024-A/star_2.7.11b
-SRS5091482	SRR9873514		$REF/GRCh38-2024-A/star_2.7.11b
-GSM4471644	SRR11523293		$REF/GRCh38-2024-A/star_2.7.11b
-GSM5341104	SRR14646421		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_10X2x5Kcell250Kreads	SRR9621416		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_10XV3_AN4492	SRR10587810		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_SingleNuclei_nextseq1	SRR9621776		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_CELseq2_HCAP1_4	SRR9621728		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_CELseq2_HCAP3_1	SRR9621733		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_Dropseq_N701	SRR9621741		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_Dropseq_N702	SRR9621742		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_ICELL8_SP021_022	SRR9621749		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_MARSseq_5569AA	SRR9621752		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_MARSseq_5923AA	SRR9621758		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_QUARTZseq_P2S5	SRR9621763		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_QUARTZseq_P5S8	SRR9621766		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_SCRBseq_N702	SRR9621768		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_SCRBseq_N703	SRR9621769		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_SMARTseq2_allLanes	SRR9621775		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_ddSEQ_Sample2	SRR9621785		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_ddSEQ_Sample3	SRR9621786		$REF/GRCh38-2024-A/star_2.7.11b
-mereu_inDrop_SP021_024015	SRR9621794		$REF/GRCh38-2024-A/star_2.7.11b
-ding_Mixture2.SM2_103117p3_B8	SRR9167490		$REF/GRCh38-2024-A/star_2.7.11b
-ding_Mixture2.SM2_103117p3_C1	SRR9167495		$REF/GRCh38-2024-A/star_2.7.11b
-ding_Cortex1.SM2_well	SRR9167561		$REF/GRCm39-2024-A/star_2.7.11b
+GSM4477421	SRR11549020	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM4593584	SRR11938061	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM4764773	SRR12582154	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5472074	SRR15250054	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5534708	SRR15598779	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5704176	SRR17050045	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5765320	SRR17381634	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5765328	SRR17381626	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5769275	SRR17412744	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM6430151	SRR20794273	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM6564300	SRR34318914	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM6564302	SRR21492157	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM6564303	SRR21492156	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM6564304	SRR21492155	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM6739283	SRR22333824	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM7336426	SRR24529636	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM7719627	SRR25690557	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM8158578	SRR28411267	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM8618582	SRR31271207	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM8754140	SRR32104309	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM9287649	SRR36039828	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+SRS5091285	SRR9873585	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+SRS5091287	SRR9873595	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+SRS5091328	SRR9873661	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+SRS5091333	SRR9873660	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+SRS5091482	SRR9873514	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM4471644	SRR11523293	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+GSM5341104	SRR14646421	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_10X2x5Kcell250Kreads	SRR9621416	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_10XV3_AN4492	SRR10587810	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_SingleNuclei_nextseq1	SRR9621776	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_CELseq2_HCAP1_4	SRR9621728	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_CELseq2_HCAP3_1	SRR9621733	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_Dropseq_N701	SRR9621741	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_Dropseq_N702	SRR9621742	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_ICELL8_SP021_022	SRR9621749	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_MARSseq_5569AA	SRR9621752	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_MARSseq_5923AA	SRR9621758	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_QUARTZseq_P2S5	SRR9621763	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_QUARTZseq_P5S8	SRR9621766	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_SCRBseq_N702	SRR9621768	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_SCRBseq_N703	SRR9621769	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_SMARTseq2_allLanes	SRR9621775	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_ddSEQ_Sample2	SRR9621785	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_ddSEQ_Sample3	SRR9621786	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+mereu_inDrop_SP021_024015	SRR9621794	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_Mixture2.SM2_103117p3_B8	SRR9167490	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_Mixture2.SM2_103117p3_C1	SRR9167495	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_Cortex1.SM2_well	SRR9167561	single_cell=1	$REF/GRCm39-2024-A/star_2.7.11b
 ding_PBMC2_bulk	SRR9170689		$REF/GRCh38-2024-A/star_2.7.11b
 ding_PBMC1_bulk	SRR9169420		$REF/GRCh38-2024-A/star_2.7.11b
 ding_Cortex2_bulk	SRR9171226		$REF/GRCm39-2024-A/star_2.7.11b
-ding_Mixture2.SeqWell_BC9	SRR9167464		$REF/GRCh38-2024-A/star_2.7.11b
-ding_PBMC2.SeqWell_S3_2	SRR9169213		$REF/GRCh38-2024-A/star_2.7.11b
-ding_PBMC1.July2018-SeqWell_V1R1	SRR9169186		$REF/GRCh38-2024-A/star_2.7.11b
-ding_PBMC1.011719V2_10X_B	SRR9169188		$REF/GRCh38-2024-A/star_2.7.11b
-ding_PBMC1.011719V2_10X_D	SRR9169190		$REF/GRCh38-2024-A/star_2.7.11b
-ding_PBMC1.011719V3_10X_B	SRR9169193		$REF/GRCh38-2024-A/star_2.7.11b
-ding_PBMC1.011719V3_10X_A	SRR9169192		$REF/GRCh38-2024-A/star_2.7.11b
-ding_Cortex2.DroNcSeq_3A	SRR9170887		$REF/GRCm39-2024-A/star_2.7.11b
-feat_SRR8281307	SRR8281307		$REF/GRCh38-2024-A/star_2.7.11b
-feat_SRR8787262	SRR8787262		$REF/GRCh38-2024-A/star_2.7.11b
-feat_SRR11176314	SRR11176314		$REF/GRCh38-2024-A/star_2.7.11b
-feat_SRR8281308	SRR8281308		$REF/GRCh38-2024-A/star_2.7.11b
-feat_SRR5808750	SRR5808750		$REF/GRCh38-2024-A/star_2.7.11b
-feat_SRR9159911	SRR9159911		$REF/GRCh38-2024-A/star_2.7.11b
-visium_SRR21230112	SRR21230112		$REF/GRCh38-2024-A/star_2.7.11b
-visium_SRR21230121	SRR21230121		$REF/GRCh38-2024-A/star_2.7.11b
-visium_SRR22816622	SRR22816622		$REF/GRCm39-2024-A/star_2.7.11b
-visium_V1_Mouse_Brain_Sagittal_Anterior	$DATA/atac-spatial/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_Section_1_fastqs/V1_Mouse_Brain_Sagittal_Anterior_Section_1_S7_L001_R1_001.fastq.gz,$DATA/atac-spatial/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_Section_1_fastqs/V1_Mouse_Brain_Sagittal_Anterior_Section_1_S7_L001_R2_001.fastq.gz		$REF/GRCm39-2024-A/star_2.7.11b
-visium_FFPE_Human_Breast_Cancer	$DATA/atac-spatial/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs/Visium_FFPE_Human_Breast_Cancer_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs/Visium_FFPE_Human_Breast_Cancer_S1_L001_R2_001.fastq.gz		$REF/GRCh38-2024-A/star_2.7.11b
-atac_pbmc_5k_nextgem	$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R2_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R3_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_I1_001.fastq.gz		$REF/GRCh38-2024-A/star_2.7.11b
-multiome_atac_pbmc_3k	$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R2_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R3_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_I1_001.fastq.gz		$REF/GRCh38-2024-A/star_2.7.11b
-multiome_atac_pbmc_10k	$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R2_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R3_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_I1_001.fastq.gz		$REF/GRCh38-2024-A/star_2.7.11b
-multiome_gex_pbmc_3k	$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/gex/pbmc_granulocyte_sorted_3k_S1_L003_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/gex/pbmc_granulocyte_sorted_3k_S1_L003_R2_001.fastq.gz		$REF/GRCh38-2024-A/star_2.7.11b
-multiome_gex_pbmc_10k	$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/gex/pbmc_granulocyte_sorted_10k_S1_L003_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/gex/pbmc_granulocyte_sorted_10k_S1_L003_R2_001.fastq.gz		$REF/GRCh38-2024-A/star_2.7.11b
+ding_Mixture2.SeqWell_BC9	SRR9167464	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_PBMC2.SeqWell_S3_2	SRR9169213	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_PBMC1.July2018-SeqWell_V1R1	SRR9169186	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_PBMC1.011719V2_10X_B	SRR9169188	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_PBMC1.011719V2_10X_D	SRR9169190	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_PBMC1.011719V3_10X_B	SRR9169193	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_PBMC1.011719V3_10X_A	SRR9169192	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+ding_Cortex2.DroNcSeq_3A	SRR9170887	single_cell=1	$REF/GRCm39-2024-A/star_2.7.11b
+feat_SRR8281307	SRR8281307	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+feat_SRR8787262	SRR8787262	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+feat_SRR11176314	SRR11176314	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+feat_SRR8281308	SRR8281308	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+feat_SRR5808750	SRR5808750	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+feat_SRR9159911	SRR9159911	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+visium_SRR21230112	SRR21230112	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+visium_SRR21230121	SRR21230121	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+visium_SRR22816622	SRR22816622	single_cell=1	$REF/GRCm39-2024-A/star_2.7.11b
+visium_V1_Mouse_Brain_Sagittal_Anterior	$DATA/atac-spatial/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_Section_1_fastqs/V1_Mouse_Brain_Sagittal_Anterior_Section_1_S7_L001_R1_001.fastq.gz,$DATA/atac-spatial/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_Section_1_fastqs/V1_Mouse_Brain_Sagittal_Anterior_Section_1_S7_L001_R2_001.fastq.gz	single_cell=1	$REF/GRCm39-2024-A/star_2.7.11b
+visium_FFPE_Human_Breast_Cancer	$DATA/atac-spatial/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs/Visium_FFPE_Human_Breast_Cancer_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs/Visium_FFPE_Human_Breast_Cancer_S1_L001_R2_001.fastq.gz	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+atac_pbmc_5k_nextgem	$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R1_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R2_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_R3_001.fastq.gz,$DATA/atac-spatial/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs/atac_pbmc_5k_nextgem_S1_L001_I1_001.fastq.gz	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+multiome_atac_pbmc_3k	$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R2_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_R3_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/atac/pbmc_granulocyte_sorted_3k_S12_L001_I1_001.fastq.gz	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+multiome_atac_pbmc_10k	$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R2_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_R3_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/atac/pbmc_granulocyte_sorted_10k_S16_L001_I1_001.fastq.gz	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+multiome_gex_pbmc_3k	$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/gex/pbmc_granulocyte_sorted_3k_S1_L003_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k/gex/pbmc_granulocyte_sorted_3k_S1_L003_R2_001.fastq.gz	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
+multiome_gex_pbmc_10k	$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/gex/pbmc_granulocyte_sorted_10k_S1_L003_R1_001.fastq.gz,$DATA/atac-spatial/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k/gex/pbmc_granulocyte_sorted_10k_S1_L003_R2_001.fastq.gz	single_cell=1	$REF/GRCh38-2024-A/star_2.7.11b
