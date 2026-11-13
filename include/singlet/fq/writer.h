@@ -294,6 +294,20 @@ class Writer {
             const uint16_t keep = cfg_.r2_adapters.cut(r2_seq, r2_len);
             r2_len = keep < 20 ? static_cast<uint16_t>(20) : keep;
         }
+        // inDrop: an insert shorter than the read runs through the poly(A) tail into the reverse complement of the barcode (BC2, W1),
+        // so the poly(A) is internal and the terminal poly(A) trim below does not see it (11.8% of the cDNA reads of the Baron islet
+        // library; 25% of the reads STAR leaves unmapped). Cut at the start of the first run of 10 or more A (kept at 20 bases or more).
+        if (cfg_.r1_indrop && cfg_.polya_trim && r2_len > 20) {
+            uint16_t run = 0;
+            for (uint16_t i = 0; i < r2_len; ++i) {
+                run = (r2_seq[i] == 0) ? static_cast<uint16_t>(run + 1) : 0;
+                if (run >= 10) {
+                    const uint16_t cut = static_cast<uint16_t>(i + 1 - run);
+                    r2_len = cut < 20 ? static_cast<uint16_t>(20) : cut;
+                    break;
+                }
+            }
+        }
         // PolyA trimming on R2 3' end
         uint16_t trim_len = 0;
         uint16_t effective_r2_len = r2_len;
