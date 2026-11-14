@@ -11,3 +11,5 @@ INC=(-I"$ROOT/include" ${CONDA_PREFIX:+-I"$CONDA_PREFIX/include" -L"$CONDA_PREFI
 echo "built $HERE/decode_bench"
 "$CXX" -std=c++17 -O3 -march=x86-64-v3 -DNDEBUG "${INC[@]}" "$HERE/kernel_bench.cpp" -o "$HERE/kernel_bench" -lzstd -lpthread
 echo "built $HERE/kernel_bench"
+"$CXX" -std=c++17 -O3 -march=x86-64-v3 -DNDEBUG "${INC[@]}" "$HERE/ablate_bench.cpp" -o "$HERE/ablate_bench" -lzstd -lpthread
+echo "built $HERE/ablate_bench"

@@ -993,6 +993,9 @@ def run(cfg: Config) -> int:
     from . import report_limits
 
     report_limits.run(cfg, N, out)
+    from . import ablate
+
+    ablate.aggregate(cfg, out)
     extension_numbers(cfg, N)
     N.write(out / "numbers.tex")
     missing = sorted(used_keys() - set(N.d))

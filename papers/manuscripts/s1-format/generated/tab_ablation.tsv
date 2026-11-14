@@ -1,0 +1,27 @@
+kind	variant	label	n	bits_median	bits_q1	bits_q3	rel_to_ref_median	mnnz_per_s_median	mnnz_per_s_q1	mnnz_per_s_q3	all_ok
+model	m0_order0_source	order-0 code, source gene order	23	7.444094	6.612021	7.674029	1.369688	NA	NA	NA	NA
+model	m1_class_order	+ genes in class order	23	5.9083	5.594669	6.408024	1.148379	NA	NA	NA	NA
+model	m2_cell_depth_ctx	+ cell-depth context	23	5.876391	5.559285	6.271683	1.142107	NA	NA	NA	NA
+model	m3_position_ctx	+ position context	23	5.285628	4.920496	5.555917	1.019969	NA	NA	NA	NA
+model	m4_value_ctx	+ value contexts (full model)	23	5.190301	4.80631	5.518423	1.0	NA	NA	NA	NA
+model	loo_no_class_order	full model without class order	23	7.219804	6.473598	7.483519	1.330341	NA	NA	NA	NA
+model	loo_no_cell_depth_ctx	full model without cell-depth context	23	5.341275	4.95728	5.789811	1.023473	NA	NA	NA	NA
+model	loo_no_position_ctx	full model without position context	23	5.760652	5.470761	6.23398	1.119672	NA	NA	NA	NA
+model	loo_no_value_ctx	full model without value contexts	23	5.285628	4.920496	5.555917	1.019969	NA	NA	NA	NA
+model	loo_value_position_only	value contexts: position only	23	5.190767	4.807263	5.522023	1.000184	NA	NA	NA	NA
+model	loo_value_depth_only	value contexts: depth class only	23	5.283684	4.920372	5.555451	1.019969	NA	NA	NA	NA
+real	real_default	shipped encoder, default options	23	5.231931	4.846628	5.555623	1.0	56.379768	54.241731	60.875681	1
+real	real_ctx0	context configuration 0	23	5.231931	4.846628	5.555623	1.0	56.711762	54.312031	60.874053	1
+real	real_ctx1	context configuration 1	23	5.295573	4.915951	5.591182	1.009514	56.929385	54.596335	61.072794	1
+real	real_ctx2	context configuration 2	23	5.322183	4.945177	5.638429	1.014035	57.037882	54.694806	61.416208	1
+real	real_ctx3	context configuration 3	23	5.374928	4.997583	5.823273	1.02328	57.117885	54.880573	61.310879	1
+real	real_ctx4	context configuration 4	23	5.403872	5.027012	5.839991	1.029292	57.036743	55.164252	61.571498	1
+real	real_cpo0	exact gene rank	23	5.175293	4.826848	5.504716	0.997203	56.498777	54.072324	59.963116	1
+real	real_cpo1	1 class per octave	23	5.291736	4.962721	5.582624	1.014037	56.93932	54.479545	61.328766	1
+real	real_cpo2	2 classes per octave	23	5.245728	4.882526	5.563164	1.004918	56.791481	54.354166	61.066896	1
+real	real_cpo8	8 classes per octave	23	5.226819	4.832469	5.507986	0.998452	56.45409	54.196503	60.504535	1
+real	real_lanes16	16 lanes	23	5.216708	4.833461	5.541264	0.997532	59.307911	56.904553	68.613167	1
+real	real_lanes32	32 lanes	23	5.231931	4.846628	5.555623	1.0	56.760423	54.249777	60.755471	1
+real	real_lanes64	64 lanes	23	5.262334	4.872972	5.584354	1.004954	58.402064	55.972572	63.16992	1
+real	real_codec2_zstd	generic codec (zstd over LEB128 gaps)	23	7.682858	6.819866	7.956952	1.388576	196.878414	179.36336	205.420509	1
+check	model_over_real	full-model estimate / real payload	23	0.993314	0.991832	0.994256	0.993314	NA	NA	NA	NA
