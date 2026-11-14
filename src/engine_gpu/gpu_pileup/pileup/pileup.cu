@@ -1669,6 +1669,13 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             }
             Qp = in.dp.use_q ? Qg : nullptr;
         }
+        else if (K == 1) { Rp = in.R; nRp = nR; Qp = in.dp.use_q ? in.Q : nullptr; }   // one partition: the reads as they are (the kernels skip reads without a barcode)
+        else if (nR > 0) {
+            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::If(t, b, cub::CountingInputIterator<uint32_t>(0), ridx, dnp, nR, IsPart{pid, (uint8_t)part}); });
+            CK(cudaMemcpy(&nRp, dnp, 4, cudaMemcpyDeviceToHost));
+            if (nRp > 0) k_gatherr<<<(nRp + TB - 1) / TB, TB>>>(in.R, ridx, nRp, Rp);
+            if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, in.dp.qw, ridx, nRp, Qg); Qp = Qg; }
+        }
         if (ph) {   // this partition's signature rows: GRes, counts, offsets, the NH / strand flags (as S and Al), the lists (junction ids looked up in the run's table)
             const int nU = (int) ph->nU; const size_t n1 = std::max(nU, 1);
             gr = A.alloc<GRes>(n1);
@@ -1702,13 +1709,6 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 A.top_reset(tmj);
             }
             if (part + 1 < K) pfut = std::async(std::launch::async, [&prep, &phs, part]() { prep(part + 1, phs[(part + 1) & 1]); });   // the host buffers of this partition are free now
-        }
-        else if (K == 1) { Rp = in.R; nRp = nR; Qp = in.dp.use_q ? in.Q : nullptr; }   // one partition: the reads as they are (the kernels skip reads without a barcode)
-        else if (nR > 0) {
-            cub_run(A, [&](void* t, size_t& b) { return cub::DeviceSelect::If(t, b, cub::CountingInputIterator<uint32_t>(0), ridx, dnp, nR, IsPart{pid, (uint8_t)part}); });
-            CK(cudaMemcpy(&nRp, dnp, 4, cudaMemcpyDeviceToHost));
-            if (nRp > 0) k_gatherr<<<(nRp + TB - 1) / TB, TB>>>(in.R, ridx, nRp, Rp);
-            if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, in.dp.qw, ridx, nRp, Qg); Qp = Qg; }
         }
         T.mark("part.select");
         fprintf(stderr, "[pileup] partition %d/%d selected: %d reads\n", part, K, nRp);
