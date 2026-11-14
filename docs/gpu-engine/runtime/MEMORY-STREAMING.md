@@ -201,3 +201,29 @@ would fit, whether the GPU has the compute for them is a separate measurement.
   (84 GB on nuclei2k_v2, OOM at 388 GB for 1.2 G pairs (m)) is a separate limit.
 - Unverified assumptions: the 1.16 KB per unmapped read is one measurement; rho at depth is not measured (rho = 1 is the bound); 20 M subsample cap of the screen is from the
   run-time reference.
+
+## 6. Host work inside the pileup hold (rt/deeppile, deeppile3)
+
+What runs on the host while the slot lock is held (`pileupRun`, called by `gpu_pileup_apply` after `lockDevice`; the caller owns the lock, so nothing of
+pileup.cu can run before it is taken without a new entry point in pileup_engine.h, which this branch does not touch):
+1. Whole-table stream path: signature stage on the device (about 1 s on d300_3p), then `k_wsig` and a pageable D2H of the per-signature weights; **host sizing**
+   (`host_bins`: one scan of all reads for K=1, then one scan per batch of 8 trial Ks, a hash and a 64-bit modulo per read and K); **host grouping**
+   (`host_partition`: two scans). d300_3p job 815486: sizing 6.21 s + grouping 2.07 s of a 23.1 s `run_pipeline`.
+2. Per partition: `host_gather` of the partition's reads (and masks) into pageable buffers, pageable `cudaMemcpy` H2D, the compute (default stream, scalar
+   D2H syncs inside the reducers), then the fetch: `fetch_csr` and the other downloads into freshly allocated pageable arrays (page faults in the driver's
+   staging copy, about 2 GB/s), their host halves deferred past the unlock (E24).
+3. Sigblock path additionally: the blocked signature stage (pageable H2D per block, per-block host loops, pageable D2H of the lists into fresh arrays), the
+   per-partition table rows gathered on a thread (`part_prepare`), `host_tabs` scans per trial K.
+The `part.select` stage in the E23 stage line is an event interval that for partition 0 also spans everything since the signature stage (sizing, grouping): on
+d1000_3p 37.5 of its 40.2 s were the sizing scan (job 815819 host profile: select proper 3.5 s).
+
+Changes (each switch default on, `=0` restores the earlier code; outputs identical, `test_gpu_pileup_stream` 474/474):
+- `SINGLET_PILEUP_SIGBLOCK` = auto (default): blocked only if max(signature-stage estimate, partition-stage estimate) exceeds the arena; the estimate is logged;
+  an `ArenaExhausted` of the whole-table layout in auto mode repeats attempt 0 blocked before widening. `=1` forces, `=0` off.
+- `SINGLET_PILEUP_CELLTAB`: one scan gives per-cell weight sums and read counts, every trial K's bounds are sums over cells; cell->partition table for the
+  grouping; per-signature row weights made once and several trial Ks per bitmap scan for the sigblock bounds.
+- `SINGLET_PILEUP_PIN`: partition buffers page-locked (cudaHostAlloc, malloc on failure). `SINGLET_PILEUP_PIPE`: the next partition's reads/masks/indices are
+  gathered on a thread into the other of two pinned buffers while this one runs (whole-table path; the sigblock path already prepared on a thread).
+- `SINGLET_PILEUP_D2HPIN`: result downloads go through a ring of eight 16 MB pinned chunks, each chunk copied into its destination by its own thread;
+  the CSR downloads no longer zero-fill their destination.
+- Log: a `host profile (s)` line (sizing scan with cells/tabs split, grouping, select with gather/upload split, compute, fetch, pinned allocations).
