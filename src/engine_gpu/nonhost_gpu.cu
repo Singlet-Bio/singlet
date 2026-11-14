@@ -443,7 +443,14 @@ struct FileId {
     bool same(const FileId& o) const { return path == o.path && dev == o.dev && ino == o.ino && size == o.size && mtime == o.mtime; }
 };
 // one index in page-locked host memory
-struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; };
+// rt/xfer: SINGLET_NONHOST_ZEROCOPY (default on; =0: the index is copied to the device for every request, as before): the entries stay in
+// page-locked, device-mapped host memory and the kernels read the few they touch over the bus (the sample's 69 M probes touch a fraction of
+// the 25 GB); the radix directories (2.7 GB, built once at load) are copied to the device per request, with the Bloom filter. The kernels
+// and the answers are the same, only where `Entry*` points differs.
+bool zeroCopyOn() { const char* e = std::getenv("SINGLET_NONHOST_ZEROCOPY"); return !(e && e[0] == '0'); }
+// rt/xfer: SINGLET_NONHOST_OVERLAP (default on; =0 off): the device copy is made on a thread while the request's reads are received
+bool overlapOn() { const char* e = std::getenv("SINGLET_NONHOST_OVERLAP"); return !(e && e[0] == '0'); }
+struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; Entry* hd = nullptr; uint32_t* dir = nullptr; uint64_t dirN = 0; };
 void read_pinned(const std::string& path, off_t base, uint64_t total, char* dst, int threads) {
     int fd = open(path.c_str(), O_RDONLY);
     if (fd < 0) throw "cannot open " + path;
@@ -466,7 +473,7 @@ struct Resident {
     FileId bloomId; uint64_t nbits = 0, nw = 0; uint64_t* bloom = nullptr;
     bool ok = false; double seconds = 0; uint64_t bytes = 0;
     void clear() {
-        for (HostIndex* x : {&v, &b, &f}) { if (x->h) cudaFreeHost(x->h); *x = HostIndex(); }
+        for (HostIndex* x : {&v, &b, &f}) { if (x->h) cudaFreeHost(x->h); if (x->dir) cudaFreeHost(x->dir); *x = HostIndex(); }
         if (bloom) cudaFreeHost(bloom);
         bloom = nullptr; nbits = nw = 0; bloomId = FileId(); ok = false; bytes = 0;
     }
@@ -478,12 +485,14 @@ struct Resident {
     void load(const NonhostPaths& p, int threads) {
         clear();
         const double t0 = now();
+        const bool zc = zeroCopyOn();
         auto one = [&](const std::string& path, HostIndex& x) {
             if (!x.id.get(path)) throw "cannot stat " + path;
             if (path.empty()) return;
             x.n = index_header(path, x.B);
             if (x.n == 0) return;
-            NH_CK(cudaHostAlloc((void**)&x.h, x.n * sizeof(Entry), cudaHostAllocDefault));
+            NH_CK(cudaHostAlloc((void**)&x.h, x.n * sizeof(Entry), zc ? cudaHostAllocMapped : cudaHostAllocDefault));
+            if (zc) NH_CK(cudaHostGetDevicePointer((void**)&x.hd, (void*)x.h, 0));
             read_pinned(path, 32, x.n * sizeof(Entry), (char*)x.h, threads);
             bytes += x.n * sizeof(Entry);
         };
@@ -494,6 +503,18 @@ struct Resident {
         NH_CK(cudaHostAlloc((void**)&bloom, nw * 8, cudaHostAllocDefault));
         read_pinned(p.bloom, 32, nw * 8, (char*)bloom, std::min(threads, 4));
         bytes += nw * 8;
+        if (zc) {   // the directories, once: built on the device from the mapped entries (which also checks the sort order), kept in page-locked host memory
+            for (HostIndex* x : {&v, &b, &f}) {
+                if (!x->n) continue;
+                Arena A;
+                Index ix; ix.n = x->n; ix.B = x->B; ix.e = x->hd;
+                build_dir(ix, A, x->id.path);
+                x->dirN = (1ull << x->B) + 1;
+                NH_CK(cudaHostAlloc((void**)&x->dir, x->dirN * 4, cudaHostAllocDefault));
+                NH_CK(cudaMemcpy(x->dir, ix.dir, x->dirN * 4, cudaMemcpyDeviceToHost));
+                bytes += x->dirN * 4;
+            }
+        }
         seconds = now() - t0;
         ok = true;
     }
@@ -508,6 +529,12 @@ struct OnDevice {
         auto one = [&](const HostIndex& h, Index& ix) {
             ix.n = h.n; ix.B = h.B;
             if (h.n == 0) return;
+            if (h.dir) {   // zero-copy: the entries where they are, the directory on the device
+                ix.e = h.hd;
+                ix.dir = (uint32_t*)A.dev(h.dirN * 4);
+                NH_CK(cudaMemcpy(ix.dir, h.dir, h.dirN * 4, cudaMemcpyHostToDevice));
+                return;
+            }
             ix.e = (Entry*)A.dev(h.n * sizeof(Entry));
             NH_CK(cudaMemcpy(ix.e, h.h, h.n * sizeof(Entry), cudaMemcpyHostToDevice));
             build_dir(ix, A, h.id.path);
@@ -727,9 +754,19 @@ int nonhostServe(const std::string& sock, int device, int loadThreads, const Non
                 }
             }
             if (err.empty()) {
-                char* h_seq = (char*)Wk.pinned(bytes);
-                uint64_t* h_off = (uint64_t*)Wk.pinned((n + 1) * 8ull);
-                if (!rd(c, h_off, (n + 1) * 8ull) || !rd(c, h_seq, bytes) || h_off[0] != 0 || h_off[n] != bytes) err = "reads not received";
+                std::thread upT; std::string upErr;
+                if (!D.on && overlapOn()) upT = std::thread([&]() {   // the index's device copy beside the reads' arrival
+                    try { NH_CK(cudaSetDevice(device)); up = D.upload(R); } catch (const std::string& e) { upErr = e; } catch (const std::exception& e) { upErr = std::string("host: ") + e.what(); }
+                });
+                char* h_seq = nullptr; uint64_t* h_off = nullptr; bool rdOk = false;
+                try {
+                    h_seq = (char*)Wk.pinned(bytes);
+                    h_off = (uint64_t*)Wk.pinned((n + 1) * 8ull);
+                    rdOk = rd(c, h_off, (n + 1) * 8ull) && rd(c, h_seq, bytes);
+                } catch (...) { if (upT.joinable()) upT.join(); throw; }
+                if (upT.joinable()) upT.join();
+                if (!upErr.empty()) throw upErr;
+                if (!rdOk || h_off[0] != 0 || h_off[n] != bytes) err = "reads not received";
                 else {
                     if (!D.on) up = D.upload(R);
                     const double t1 = now();

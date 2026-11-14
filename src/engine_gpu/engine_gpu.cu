@@ -42,6 +42,8 @@
 #include <thread>
 #include <vector>
 #include <condition_variable>
+#include <sys/mman.h>
+#include <cerrno>
 #include <dirent.h>
 #include <glob.h>
 #include <poll.h>
@@ -633,6 +635,42 @@ static void parMemcpy(uint8_t* d, const uint8_t* src, u64 m, int nt) {
 // E12: device -> host copies through two page-locked buffers of 64 MB: the DMA of one chunk runs while nt threads copy the previous one
 // out (and fault the destination's pages in, in parallel). Before: pageable cudaMemcpy into vectors zero-filled by one thread first.
 // SINGLET_ENGINE_GPU_D2H=pageable (or CFG=old): as before
+// rt/xfer: SINGLET_ENGINE_GPU_PREFAULT (default on; =0 off): the pages of the shared region's arrays (a memfd: a fresh page costs a fault and a
+// clear, which bound the staged device -> host copies to ~5-7 GB/s where prefaulted pages take them at the bus rate, 14 GB/s on Gen4) are
+// populated by helper threads (MADV_POPULATE_WRITE: no byte is written, so it is safe beside the copies into the same pages) ahead of the copies.
+// SINGLET_ENGINE_GPU_PREFAULT_THREADS: helper threads (default 4).
+struct Prefault {
+    static constexpr u64 PIECE = 64ull << 20;
+    std::mutex mu; std::condition_variable cv; std::deque<std::pair<uint8_t*, u64>> q; std::vector<std::thread> th;
+    bool stop = false, started = false, enabled = true; std::atomic<u64> bytes{0}; std::atomic<u64> ns{0}; std::atomic<int> err{0};
+    Prefault() { const char* e = std::getenv("SINGLET_ENGINE_GPU_PREFAULT"); enabled = !(e && e[0] == '0'); }
+    void add(uint8_t* p, u64 len) {
+        if (!enabled || err.load() || len < (8ull << 20)) return;
+        uint8_t* a = (uint8_t*) (((uintptr_t) p + 4095) & ~(uintptr_t) 4095); uint8_t* e = (uint8_t*) (((uintptr_t) (p + len)) & ~(uintptr_t) 4095);
+        if (e <= a) return;
+        std::lock_guard<std::mutex> lk(mu);
+        if (!started) {
+            started = true;
+            const char* te = std::getenv("SINGLET_ENGINE_GPU_PREFAULT_THREADS"); const int nt = std::max(1, std::min(16, te ? std::atoi(te) : 4));
+            for (int t = 0; t < nt; t++) th.emplace_back([this]() { work(); });
+        }
+        for (uint8_t* x = a; x < e; x += PIECE) q.push_back({x, (u64) std::min<uintptr_t>(PIECE, (uintptr_t) (e - x))});
+        cv.notify_all();
+    }
+    void work() {
+        singlet::ThreadNameScope tn("gpu-prefault");
+        for (;;) {
+            std::pair<uint8_t*, u64> w;
+            { std::unique_lock<std::mutex> lk(mu); cv.wait(lk, [&] { return stop || !q.empty(); }); if (stop) return; w = q.front(); q.pop_front(); }
+            const auto t0 = std::chrono::steady_clock::now();
+            if (madvise(w.first, w.second, 23 /* MADV_POPULATE_WRITE */) != 0) { err = errno; continue; }
+            bytes += w.second; ns += (u64) std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+        }
+    }
+    ~Prefault() { { std::lock_guard<std::mutex> lk(mu); stop = true; } cv.notify_all(); for (auto& x : th) x.join(); }
+};
+static thread_local const char* g_d2hTag = "other";   // rt/xfer: the call site's name in D2H's per-site totals (compared by pointer: string literals)
+struct D2HTag { const char* o; explicit D2HTag(const char* t) : o(g_d2hTag) { g_d2hTag = t; } ~D2HTag() { g_d2hTag = o; } };
 struct D2H {
     static constexpr u64 CH = 64ull << 20;
     uint8_t* buf[2] = {nullptr, nullptr}; cudaEvent_t ev[2] = {nullptr, nullptr}; cudaStream_t s = nullptr; int nt = 1;
@@ -661,8 +699,18 @@ struct D2H {
             const u64 o = c * CH;
             parMemcpy((uint8_t*)dst + o, buf[c & 1], std::min(CH, n - o), nt);
         }
-        bytes += n; sec += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        const double dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        bytes += n; sec += dt;
+        { std::lock_guard<std::mutex> lk(tsMu); TS* e = nullptr; for (TS& x : ts) if (x.t == g_d2hTag) e = &x; if (!e) { ts.push_back({g_d2hTag, 0, 0, 0}); e = &ts.back(); } e->b += n; e->s += dt; e->c++; }
         return true;
+    }
+    // rt/xfer: bytes and seconds per call site (g_d2hTag), for the log line
+    struct TS { const char* t; u64 b; double s; u64 c; };
+    std::mutex tsMu; std::vector<TS> ts;
+    std::string tagLog() {
+        std::string r; char b[160];
+        for (const TS& x : ts) { snprintf(b, sizeof b, " %s %.2f GB %.2f s (%.1f GB/s, %llu calls);", x.t, x.b / 1e9, x.s, x.b / 1e9 / std::max(1e-9, x.s), (unsigned long long) x.c); r += b; }
+        return r;
     }
     void release() {
         if (s) cudaStreamSynchronize(s);
@@ -936,6 +984,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
         EG_CK(cudaGetLastError());
         L.out.resize(total);
+        D2HTag tg_ln0("lanes.d2h");
         const char* ldE = std::getenv("SINGLET_ENGINE_GPU_LANED2H");
         if (asyncCopy && g_d2h && (!ldE || ldE[0] != '0') && total > 0) {
             EG_CK(cudaStreamSynchronize(0));   // k_pack is done: the thread's copies need no wait on the legacy stream
@@ -961,6 +1010,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         g_pend.on = true;
         g_pend.th = std::thread([dv]() {
             singlet::ThreadNameScope tnC("gpu-lanecopy");
+            D2HTag tg_ln("lanes.d2h");
             cudaSetDevice(dv);
             g_pend.ok = g_d2h->copy(g_pend.hOut, g_pend.dPacked, g_pend.total, false) && g_d2h->copy(g_pend.hOff, g_pend.dPoff, (g_pend.n + 1) * 8, false);
             if (!g_pend.ok) g_pend.err = "lane results copy";
@@ -1258,6 +1308,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     std::string err;
     Stager SR, SI;   // E12: staged uploads of the reads (this thread) and of the index (idxTh); declared first: destroyed after the join
     D2H DR;          // E12: staged device -> host copies (g_d2h while mapDistinct runs)
+    Prefault PF;     // rt/xfer: populates the shared region's arrays ahead of the copies
     struct D2HReset { ~D2HReset() { g_d2h = nullptr; } } d2hReset;
     bool idxOk = true; double tIdxEnd = 0;
     std::thread idxTh;   // E12: the index upload (staged, on its own stream) while the reads are uploaded, clipped and deduplicated
@@ -1526,6 +1577,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         const double t0e = now();
         const u64 oEn = RG.take(n * sizeof(e6::ReadEntry)), oQm = dQm ? RG.take(n * qmBytes()) : 0;
         if (!oEn || (dQm && !oQm)) { e10Off("the shared region is full"); return; }
+        PF.add(RG.base + oEn, n * sizeof(e6::ReadEntry)); if (oQm) PF.add(RG.base + oQm, n * qmBytes());
         if (cudaStreamSynchronize(0) != cudaSuccess) { e10Off("entries"); return; }
         const bool cp = g_d2h ? g_d2h->copy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry)) && (!dQm || g_d2h->copy(RG.base + oQm, dQm, n * qmBytes()))
                               : cudaMemcpy(RG.base + oEn, dEnt, n * sizeof(e6::ReadEntry), cudaMemcpyDeviceToHost) == cudaSuccess
@@ -1865,6 +1917,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (!entOff || (in.e10.wantMask && !qmOff)) e10Off("the shared region is full");
         else if (!al(cAux, RCN * strideAux * 8) || !al(cEnt, RCN * sizeof(e6::ReadEntry)) || (in.e10.wantMask && !al(cQm, RCN * qmBytes())))
             e10Off("out of device memory (read chunk)");
+            else { PF.add(RG.base + entOff, n * sizeof(e6::ReadEntry)); if (qmOff) PF.add(RG.base + qmOff, n * qmBytes()); }
         if (e10OomNow()) return fail(e10OomWhy());
     }
     bool r11On = e10 && in.e10.wl != nullptr && in.e10.nWL > 0;
@@ -1985,6 +2038,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             else {
                 msEnt += ms;
                 singlet_engine_gpu::E2ERegion& RG = *in.e2e;
+                D2HTag tg_ent("rc.entries");
                 if (!d2h(RG.base + entOff + r0 * sizeof(e6::ReadEntry), cEnt, m * sizeof(e6::ReadEntry)) || (cQm && !d2h(RG.base + qmOff + r0 * qmBytes(), cQm, m * qmBytes())))
                     e10Off("entries copy");
             }
@@ -2000,6 +2054,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         k_hash_span<<<G, 256>>>(S.seq, S.off, in.clip.on ? cCs : nullptr, cCl, m, oH1, oH2, cN);
         if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("hash kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
         tKer += now() - ta; ta = now();
+        D2HTag tg_hs("rc.hash+clip");
         if (((!h1Dev || h1Check) && (!d2h(hH1.data() + r0, oH1, m * 8) || !d2h(hH2.data() + r0, oH2, m * 8))) || !d2h(hN.data() + r0, cN, m)
             || (in.clip.on && (!d2h(hcs.data() + r0, cCs, m * 8) || !d2h(hcl.data(), cCl, m * 8)))) { why = "read chunk copy"; return; }
         if (in.clip.on) {
@@ -3038,7 +3093,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         const u64 oS = RG.take(R6.nRec * sizeof(SigRec)), oA = RG.take(R6.nAln * sizeof(AlnRec)), oO = RG.take(R6.nOps * 4), oN = RG.take(R6.nAln * 2),
                   oQ = RG.take(R6.nSeq);
         if (!oS || !oA || !oO || !oN || !oQ) { why = "the shared region is full"; return false; }
+        PF.add(RG.base + oS, R6.nRec * sizeof(SigRec)); PF.add(RG.base + oA, R6.nAln * sizeof(AlnRec)); PF.add(RG.base + oO, R6.nOps * 4); PF.add(RG.base + oN, R6.nAln * 2); PF.add(RG.base + oQ, R6.nSeq);
         bool pinned = false, cp = false;
+        D2HTag tg_reg("records.region");
         if (g_d2h)   // E12: through the page-locked buffers (the region's pages faulted in by the copying threads)
             cp = g_d2h->copy(RG.base + oS, R6.sigs, R6.nRec * sizeof(SigRec)) && g_d2h->copy(RG.base + oA, R6.alns, R6.nAln * sizeof(AlnRec))
                  && g_d2h->copy(RG.base + oO, R6.ops, R6.nOps * 4) && g_d2h->copy(RG.base + oN, R6.nm, R6.nAln * 2) && g_d2h->copy(RG.base + oQ, R6.seq, R6.nSeq);
@@ -3264,6 +3321,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (nAln >= 0xFFFFFFFFull || nOps >= 0xFFFFFFFFull) { why = "the records' alignments or operations exceed 32-bit offsets"; return false; }
         const u64 oS = RG.take(nRec * sizeof(SigRec)), oA = RG.take(nAln * sizeof(AlnRec)), oO = RG.take(nOps * 4), oN = RG.take(nAln * 2), oQ = RG.take(nSeqT);
         if (!oS || !oA || !oO || !oN || !oQ) { why = "the shared region is full"; return false; }
+        PF.add(RG.base + oS, nRec * sizeof(SigRec)); PF.add(RG.base + oA, nAln * sizeof(AlnRec)); PF.add(RG.base + oO, nOps * 4); PF.add(RG.base + oN, nAln * 2); PF.add(RG.base + oQ, nSeqT);
         // pass 2: build, shift, copy; E10's products and E11's annotation per chunk
         decltype(out.e10) acc;   // the products, summed
         struct SJ { u64 start; uint32_t gap, cu, cm; uint8_t strand, motif, annot; uint16_t ov; };
@@ -3516,6 +3574,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         char ld[160];
         snprintf(ld, sizeof ld, "engine_gpu: E12 device -> host copies staged: %.2f GB in %.2f s (%.1f GB/s)\n", DR.bytes / 1e9, DR.sec, DR.bytes / 1e9 / std::max(1e-9, DR.sec));
         out.log += ld;
+        char pl[200];
+        snprintf(pl, sizeof pl, "; region prefault: %.2f GB populated in %.2f thread-s (%s)", PF.bytes.load() / 1e9, PF.ns.load() / 1e9,
+                 PF.err.load() ? "FAILED" : PF.enabled ? "on" : "off");
+        out.log += "engine_gpu: E12 device -> host copies by site:" + DR.tagLog() + pl + "\n";
     }
     if (pool) {
         char lp[240];
