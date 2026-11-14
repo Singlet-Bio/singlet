@@ -19,12 +19,15 @@
 //   4. K-level early stopping when ELBO degrades for 2 consecutive K values.
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <condition_variable>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -33,6 +36,7 @@
 #include <mutex>
 #include <numeric>
 #include <random>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -152,12 +156,117 @@ static inline float digamma(float x) {
 }
 
 // ============================================================================
+// Persistent worker pool behind parallel_chunks / parallel_det_chunks (SINGLET_DEMUX_POOL=0: spawn threads per call, as before).
+// A call is a job of `n` units; unit u runs fn for chunk (or chunk group) u, exactly as the thread u of the spawning version did, so
+// chunk boundaries, the chunk -> result slot mapping and the order the caller reduces in are unchanged and the floats are
+// bit-identical. Only the threads executing the units are reused. The calling thread works on its own job's units too and returns
+// when all of them are done: a job always completes even if no pool worker is free, so concurrent callers (the K evaluations of
+// the auto-K waves, the folds, the restarts) and nested calls cannot deadlock. Workers are added on demand up to the number of
+// units concurrent jobs can run at once (never fewer than the spawning version had threads, capped at kMaxWorkers), and live
+// until the process exits.
+// ============================================================================
+// SINGLET_DEMUX_AUTOK_FAST=0 restores the earlier auto-K path: all PCs for K up to kmax up front, folds prepared one after the other, the
+// wave of threads / 8 K evaluations, a thread spawned per parallel call (no pool). The numbers are the same either way.
+inline int& demux_autok_fast_override() { static int v = -1; return v; }   // tests: 0 / 1 force the path, -1 = environment
+inline bool demux_autok_fast() {
+    static const bool env_on = [] { const char* e = std::getenv("SINGLET_DEMUX_AUTOK_FAST"); return !(e && std::atoi(e) == 0); }();
+    const int o = demux_autok_fast_override();
+    return o >= 0 ? o != 0 : env_on;
+}
+inline bool demux_pool_enabled() {
+    static const bool env_on = [] { const char* e = std::getenv("SINGLET_DEMUX_POOL"); return !(e && std::atoi(e) == 0); }();
+    return demux_autok_fast() && env_on;
+}
+
+class DemuxPool {
+public:
+    static DemuxPool& instance() { static DemuxPool p; return p; }
+
+    // Runs unit(0) .. unit(n - 1), possibly concurrently, and returns when all have finished.
+    void run(int n, const std::function<void(int)>& unit) {
+        if (n <= 1) { if (n == 1) unit(0); return; }
+        Job job;
+        job.f = &unit;
+        job.n = n;
+        std::unique_lock<std::mutex> lk(mu_);
+        jobs_.push_back(&job);
+        extra_ += n - 1;
+        while (static_cast<int>(workers_.size()) < std::min(kMaxWorkers, extra_))
+            workers_.emplace_back([this] { worker_loop(); });
+        work_cv_.notify_all();
+        int u;
+        while ((u = claim(&job)) >= 0) {
+            lk.unlock();
+            unit(u);
+            lk.lock();
+            ++job.done;
+        }
+        job.cv.wait(lk, [&] { return job.done == job.n; });
+        extra_ -= n - 1;
+    }
+
+    ~DemuxPool() {
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            stop_ = true;
+        }
+        work_cv_.notify_all();
+        for (auto& t : workers_) t.join();
+    }
+
+private:
+    static constexpr int kMaxWorkers = 256;
+    struct Job {
+        const std::function<void(int)>* f = nullptr;
+        int n = 0, next = 0, done = 0;
+        std::condition_variable cv;
+    };
+
+    // Takes the next unclaimed unit of the job (mu_ held); a job whose units are all claimed leaves the queue. -1: none left.
+    int claim(Job* j) {
+        if (j->next >= j->n) return -1;
+        const int u = j->next++;
+        if (j->next >= j->n) jobs_.erase(std::find(jobs_.begin(), jobs_.end(), j));
+        return u;
+    }
+
+    void worker_loop() {
+        std::unique_lock<std::mutex> lk(mu_);
+        for (;;) {
+            work_cv_.wait(lk, [&] { return stop_ || !jobs_.empty(); });
+            if (jobs_.empty()) { if (stop_) return; continue; }
+            Job* j = jobs_.front();
+            const int u = claim(j);
+            lk.unlock();
+            (*j->f)(u);
+            lk.lock();
+            if (++j->done == j->n) j->cv.notify_all();
+        }
+    }
+
+    std::mutex mu_;
+    std::condition_variable work_cv_;
+    std::deque<Job*> jobs_;
+    std::vector<std::thread> workers_;
+    int extra_ = 0;     // units of the jobs in flight that run beside their caller
+    bool stop_ = false;
+};
+
+// ============================================================================
 // Threading helper: run fn(thread_index, begin, end) over [0, n) in contiguous chunks.
 // ============================================================================
 template <class Fn>
 static void parallel_chunks(int n, int nthreads, Fn&& fn) {
     nthreads = std::max(1, std::min(nthreads, std::max(1, n)));
     if (nthreads == 1) { fn(0, 0, n); return; }
+    if (demux_pool_enabled()) {
+        DemuxPool::instance().run(nthreads, [&fn, n, nthreads](int t) {
+            const int b = static_cast<int>(static_cast<int64_t>(t) * n / nthreads);
+            const int e = static_cast<int>(static_cast<int64_t>(t + 1) * n / nthreads);
+            fn(t, b, e);
+        });
+        return;
+    }
     std::vector<std::thread> ts;
     ts.reserve(nthreads);
     for (int t = 0; t < nthreads; ++t) {
@@ -187,6 +296,12 @@ static void parallel_det_chunks(int n, int nthreads, Fn&& fn) {
         for (int c = 0; c < kDetChunks; ++c) { int b, e; range(c, b, e); fn(c, b, e); }
         return;
     }
+    if (demux_pool_enabled()) {
+        DemuxPool::instance().run(nthreads, [&](int t) {
+            for (int c = t; c < kDetChunks; c += nthreads) { int b, e; range(c, b, e); fn(c, b, e); }
+        });
+        return;
+    }
     std::vector<std::thread> ts;
     ts.reserve(nthreads);
     for (int t = 0; t < nthreads; ++t)
@@ -211,14 +326,21 @@ inline std::atomic<long long>* demux_phase_ns() {
     static std::atomic<long long> v[kPhCount];
     return v;
 }
+// Per-fit accumulator of the calling thread (set by run_vb_inplace for the span of one fit; phases of the VB loop are timed in
+// the thread that runs the loop, so one fit's table holds its own wall-clock split even while other fits run beside it).
+inline std::array<long long, kPhCount>*& demux_phase_local() {
+    static thread_local std::array<long long, kPhCount>* p = nullptr;
+    return p;
+}
 struct PhaseScope {
     int id;
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     explicit PhaseScope(int i) : id(i) {}
     ~PhaseScope() {
-        demux_phase_ns()[id].fetch_add(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
-            std::memory_order_relaxed);
+        const long long ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+        demux_phase_ns()[id].fetch_add(ns, std::memory_order_relaxed);
+        if (auto* loc = demux_phase_local()) (*loc)[id] += ns;
     }
 };
 
@@ -669,6 +791,37 @@ static int run_vb_inplace_fp(
         iters_run = total;
     };
 
+    // One summary line per fit with the wall-clock split of the loop (SINGLET_DEMUX_FITLOG=0 silences it). Log only.
+    struct FitPhaseLog {
+        std::array<long long, kPhCount> ns{};
+        std::array<long long, kPhCount>* prev;
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        const int& iters; int K, nc, ns_snps, nthreads, max_iter; bool on;
+        FitPhaseLog(const int& it, int K_, int nc_, int nsn, int nt, int mi)
+            : prev(demux_phase_local()), iters(it), K(K_), nc(nc_), ns_snps(nsn), nthreads(nt), max_iter(mi) {
+            const char* e = std::getenv("SINGLET_DEMUX_FITLOG");
+            on = !(e && std::atoi(e) == 0);
+            if (on) demux_phase_local() = &ns;
+        }
+        ~FitPhaseLog() {
+            if (!on) return;
+            demux_phase_local() = prev;
+            const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            double sum = 0.0;
+            std::ostringstream os;
+            for (int i = 0; i < kPhCount; ++i) {
+                if (ns[i] == 0) continue;
+                sum += static_cast<double>(ns[i]) * 1e-9;
+                os << " " << kDemuxPhaseName[i] << "=" << static_cast<double>(ns[i]) * 1e-9;
+            }
+            std::ostringstream line;
+            line << "[demux] vb fit: K=" << K << " cells=" << nc << " snps=" << ns_snps << " threads=" << nthreads
+                 << " iters=" << iters << "/" << max_iter << " wall=" << wall << " s; phase seconds:" << os.str()
+                 << " other=" << std::max(0.0, wall - sum) << "\n";
+            std::cerr << line.str();
+        }
+    } fit_log(iters_run, K, nc, ns, nthreads, max_iter);
+
     for (int iter = 0; iter < max_iter; ++iter) {
         const bool need_elbo_orig = (iter + 1 >= cfg.min_iter) || (iter == max_iter - 1);
         const bool need_elbo = need_elbo_orig || probing;
@@ -1012,8 +1165,113 @@ static InformativeSNPs find_informative_snps(
 // Power-iteration PCA on mean-centered cell allele-frequency profiles.
 // X_centered[c][j] = AF[c][j] - mean_af[j] for covered (c,j), 0 otherwise.
 // Uses Gram-Schmidt deflation for multiple PCs. The PCs are computed one after
-// the other from one RNG stream, so the first m PCs do not depend on n_pcs.
-// Returns cell scores [nc × n_pcs] in cell-major layout.
+// the other from one RNG stream, so the first m PCs do not depend on n_pcs: PowerPca keeps the state between PCs (RNG, the
+// eigenvectors so far) and extend() computes the next ones when they are asked for, with exactly the arithmetic of computing
+// them all at once (thread counts do not matter: per-cell matvec, fixed chunks for the reduction).
+// Scores are cell-major [nc x n_pcs] with the stride of the full request; columns not computed yet are 0.
+class PowerPca {
+public:
+    PowerPca(const CoveredSNPData& data, const InformativeSNPs& inf, int n_pcs, int n_iter, uint64_t seed)
+        : data_(&data), mean_af_(inf.mean_af), n_iter_(n_iter), n_pcs_(n_pcs), rng_(seed) {
+        const int nc = data.n_cells;
+        const int ni = static_cast<int>(inf.indices.size());
+        n_actual_ = std::min(n_pcs, std::min(nc - 1, ni));
+        if (n_actual_ <= 0 || ni == 0 || nc < 2) { n_actual_ = 0; return; }
+        snp_to_inf_.assign(data.n_covered_snps, -1);
+        for (int i = 0; i < ni; ++i) snp_to_inf_[inf.indices[i]] = i;
+        evecs_.assign(n_actual_, std::vector<float>(ni, 0.0f));
+        v_.assign(ni, 0.0f); w_.assign(nc, 0.0f); v_new_.assign(ni, 0.0f);
+        vtl_.assign(kDetChunks, std::vector<float>(ni));
+    }
+    int done() const { return done_; }
+    int actual() const { return n_actual_; }
+
+    // Computes PCs done() .. min(upto, actual) - 1 into scores (sized nc * n_pcs by the caller, zero filled).
+    void extend(int upto, int nthreads, std::vector<float>& scores) {
+        const CoveredSNPData& data = *data_;
+        const int nc = data.n_cells;
+        const int ni = static_cast<int>(v_.size());
+        nthreads = std::max(1, nthreads);
+        upto = std::min(upto, n_actual_);
+        std::vector<float>& v = v_; std::vector<float>& w = w_; std::vector<float>& v_new = v_new_;
+        auto& vtl = vtl_; auto& evecs = evecs_;
+        const std::vector<int>& snp_to_inf = snp_to_inf_;
+        auto matvec = [&]() {
+            parallel_chunks(nc, nthreads, [&](int, int c0, int c1) {
+                for (int c = c0; c < c1; ++c) {
+                    const auto& cell = data.cells[c];
+                    float val = 0.0f;
+                    for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
+                        int ii = snp_to_inf[cell.snp_idx[si]];
+                        if (ii < 0 || cell.dp[si] == 0) continue;
+                        float af = static_cast<float>(cell.ad[si]) / static_cast<float>(cell.dp[si]);
+                        val += (af - mean_af_[ii]) * v[ii];
+                    }
+                    w[c] = val;
+                }
+            });
+        };
+        for (int pc = done_; pc < upto; ++pc) {
+            // Random unit-vector init in SNP space
+            float vn = 0.0f;
+            for (int i = 0; i < ni; ++i) { v[i] = nd_(rng_); vn += v[i] * v[i]; }
+            vn = std::sqrt(vn) + 1e-12f;
+            for (int i = 0; i < ni; ++i) v[i] /= vn;
+
+            for (int it = 0; it < n_iter_; ++it) {
+                matvec();
+                // v_new = X_centered^T * w  (n_snps), thread-local accumulators
+                parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
+                    std::vector<float>& acc = vtl[t];
+                    std::fill(acc.begin(), acc.end(), 0.0f);
+                    for (int c = c0; c < c1; ++c) {
+                        if (w[c] == 0.0f) continue;
+                        const auto& cell = data.cells[c];
+                        for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
+                            int ii = snp_to_inf[cell.snp_idx[si]];
+                            if (ii < 0 || cell.dp[si] == 0) continue;
+                            float af = static_cast<float>(cell.ad[si]) / static_cast<float>(cell.dp[si]);
+                            acc[ii] += (af - mean_af_[ii]) * w[c];
+                        }
+                    }
+                });
+                std::fill(v_new.begin(), v_new.end(), 0.0f);
+                for (int t = 0; t < kDetChunks; ++t)
+                    for (int i = 0; i < ni; ++i) v_new[i] += vtl[t][i];
+                // Gram-Schmidt deflation against previous eigenvectors
+                for (int prev = 0; prev < pc; ++prev) {
+                    float dot = 0.0f;
+                    for (int i = 0; i < ni; ++i) dot += v_new[i] * evecs[prev][i];
+                    for (int i = 0; i < ni; ++i) v_new[i] -= dot * evecs[prev][i];
+                }
+                // Normalize
+                float vnorm = 0.0f;
+                for (int i = 0; i < ni; ++i) vnorm += v_new[i] * v_new[i];
+                vnorm = std::sqrt(vnorm) + 1e-12f;
+                for (int i = 0; i < ni; ++i) v[i] = v_new[i] / vnorm;
+            }
+            evecs[pc] = v;
+
+            // Cell PC scores: w = X_centered * v (final result for this PC)
+            matvec();
+            for (int c = 0; c < nc; ++c)
+                scores[static_cast<size_t>(c) * n_pcs_ + pc] = w[c];
+            done_ = pc + 1;
+        }
+    }
+
+private:
+    const CoveredSNPData* data_;
+    std::vector<float> mean_af_;
+    int n_iter_, n_pcs_, n_actual_ = 0, done_ = 0;
+    std::mt19937 rng_;
+    std::normal_distribution<float> nd_{0.0f, 1.0f};
+    std::vector<int> snp_to_inf_;
+    std::vector<std::vector<float>> evecs_;
+    std::vector<float> v_, w_, v_new_;
+    std::vector<std::vector<float>> vtl_;
+};
+
 static std::vector<float> power_iteration_pca(
     const CoveredSNPData& data,
     const InformativeSNPs& inf,
@@ -1022,87 +1280,9 @@ static std::vector<float> power_iteration_pca(
     uint64_t    seed   = 0,
     int         nthreads = 1)
 {
-    const int nc = data.n_cells;
-    const int ni = static_cast<int>(inf.indices.size());
-    const int n_pcs_actual = std::min(n_pcs, std::min(nc - 1, ni));
-    std::vector<float> result(static_cast<size_t>(nc) * n_pcs, 0.0f);
-    if (n_pcs_actual <= 0 || ni == 0 || nc < 2) return result;
-    nthreads = std::max(1, nthreads);
-
-    // Build covered_snp → informative-index lookup (-1 if not informative)
-    std::vector<int> snp_to_inf(data.n_covered_snps, -1);
-    for (int i = 0; i < ni; ++i) snp_to_inf[inf.indices[i]] = i;
-
-    std::mt19937 rng(seed);
-    std::normal_distribution<float> nd(0.0f, 1.0f);
-
-    std::vector<std::vector<float>> evecs(n_pcs_actual, std::vector<float>(ni, 0.0f));
-    std::vector<float> v(ni), w(nc), v_new(ni);
-    std::vector<std::vector<float>> vtl(kDetChunks, std::vector<float>(ni));
-
-    // w = X_centered * v   (n_cells)
-    auto matvec = [&]() {
-        parallel_chunks(nc, nthreads, [&](int, int c0, int c1) {
-            for (int c = c0; c < c1; ++c) {
-                const auto& cell = data.cells[c];
-                float val = 0.0f;
-                for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
-                    int ii = snp_to_inf[cell.snp_idx[si]];
-                    if (ii < 0 || cell.dp[si] == 0) continue;
-                    float af = static_cast<float>(cell.ad[si]) / static_cast<float>(cell.dp[si]);
-                    val += (af - inf.mean_af[ii]) * v[ii];
-                }
-                w[c] = val;
-            }
-        });
-    };
-
-    for (int pc = 0; pc < n_pcs_actual; ++pc) {
-        // Random unit-vector init in SNP space
-        float vn = 0.0f;
-        for (int i = 0; i < ni; ++i) { v[i] = nd(rng); vn += v[i] * v[i]; }
-        vn = std::sqrt(vn) + 1e-12f;
-        for (int i = 0; i < ni; ++i) v[i] /= vn;
-
-        for (int it = 0; it < n_iter; ++it) {
-            matvec();
-            // v_new = X_centered^T * w  (n_snps), thread-local accumulators
-            parallel_det_chunks(nc, nthreads, [&](int t, int c0, int c1) {
-                std::vector<float>& acc = vtl[t];
-                std::fill(acc.begin(), acc.end(), 0.0f);
-                for (int c = c0; c < c1; ++c) {
-                    if (w[c] == 0.0f) continue;
-                    const auto& cell = data.cells[c];
-                    for (size_t si = 0; si < cell.snp_idx.size(); ++si) {
-                        int ii = snp_to_inf[cell.snp_idx[si]];
-                        if (ii < 0 || cell.dp[si] == 0) continue;
-                        float af = static_cast<float>(cell.ad[si]) / static_cast<float>(cell.dp[si]);
-                        acc[ii] += (af - inf.mean_af[ii]) * w[c];
-                    }
-                }
-            });
-            std::fill(v_new.begin(), v_new.end(), 0.0f);
-            for (int t = 0; t < kDetChunks; ++t)
-                for (int i = 0; i < ni; ++i) v_new[i] += vtl[t][i];
-            // Gram-Schmidt deflation against previous eigenvectors
-            for (int prev = 0; prev < pc; ++prev) {
-                float dot = 0.0f;
-                for (int i = 0; i < ni; ++i) dot += v_new[i] * evecs[prev][i];
-                for (int i = 0; i < ni; ++i) v_new[i] -= dot * evecs[prev][i];
-            }
-            // Normalize
-            float vnorm = 0.0f;
-            for (int i = 0; i < ni; ++i) vnorm += v_new[i] * v_new[i];
-            vnorm = std::sqrt(vnorm) + 1e-12f;
-            for (int i = 0; i < ni; ++i) v[i] = v_new[i] / vnorm;
-        }
-        evecs[pc] = v;
-
-        // Cell PC scores: w = X_centered * v (final result for this PC)
-        matvec();
-        for (int c = 0; c < nc; ++c)
-            result[static_cast<size_t>(c) * n_pcs + pc] = w[c];
-    }
+    std::vector<float> result(static_cast<size_t>(data.n_cells) * n_pcs, 0.0f);
+    PowerPca pp(data, inf, n_pcs, n_iter, seed);
+    pp.extend(n_pcs, nthreads, result);
     return result;
 }
 
@@ -1257,19 +1437,35 @@ static inline int pca_dims_for_k(int K) { return K - 1 + 3; }
 struct PcaCache {
     InformativeSNPs inf;
     std::vector<float> scores;   // [nc × n_pcs], cell-major
-    int n_pcs = 0;
+    int n_pcs = 0;               // stride of scores (the PCs asked for)
+    int ready = 0;               // columns computed so far (all of them unless the cache is progressive, see compute_pca_cache)
+    std::shared_ptr<PowerPca> lazy;
+    // Makes sure the first `upto` PCs are computed (progressive caches only; the PCs are those a full computation gives).
+    void ensure(int upto, int nthreads) {
+        if (!lazy || upto <= ready) return;
+        lazy->extend(upto, nthreads, scores);
+        ready = std::min(std::max(ready, upto), n_pcs);
+    }
 };
 
+// first_pcs >= 0: only that many PCs are computed now and the rest on demand by PcaCache::ensure (a K search that stops after a few
+// K never needs the PCs of the K it does not reach); the scores of every PC are the same either way.
 static PcaCache compute_pca_cache(const CoveredSNPData& data, int n_pcs,
-                                  int nthreads, uint64_t seed)
+                                  int nthreads, uint64_t seed, int first_pcs = -1)
 {
     PhaseScope ph_pca(kPhPca);
     PcaCache pc;
     // A SNP must be informative in ~1% of the cells (20 for large inputs, >= 5 for small ones).
     pc.inf = find_informative_snps(data, std::max(5, std::min(20, data.n_cells / 100)));
     pc.n_pcs = std::max(0, n_pcs);
-    if (pc.n_pcs > 0)
+    if (pc.n_pcs > 0 && first_pcs >= 0) {
+        pc.scores.assign(static_cast<size_t>(data.n_cells) * pc.n_pcs, 0.0f);
+        pc.lazy = std::make_shared<PowerPca>(data, pc.inf, pc.n_pcs, 30, seed);
+        pc.ensure(first_pcs, nthreads);
+    } else if (pc.n_pcs > 0) {
         pc.scores = power_iteration_pca(data, pc.inf, pc.n_pcs, 30, seed, nthreads);
+        pc.ready = pc.n_pcs;
+    }
     return pc;
 }
 
@@ -1297,7 +1493,7 @@ static VBResult init_vb_pca_seeded(
 
     PcaCache local;
     const int n_pcs = (mode == 1) ? K - 1 : pca_dims_for_k(K);
-    if (!cache || cache->n_pcs < n_pcs) {
+    if (!cache || cache->n_pcs < n_pcs || (cache->lazy && cache->ready < n_pcs)) {
         local = compute_pca_cache(data, n_pcs, 1, seed);
         cache = &local;
     }
@@ -2122,21 +2318,49 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
     std::cerr << "[demux] auto-K: " << n << " cells, " << ns << " SNPs (seen in >= "
               << cfg.k_select_min_snp_cells << " cells), K in 1.." << kmax << "\n";
 
+    const bool fast = demux_autok_fast();
+    const auto t_setup = std::chrono::steady_clock::now();
     PcaCache pca[2];
     const int n_pcs = pca_dims_for_k(kmax);
-    for (int f = 0; f < 2; ++f)
-        pca[f] = compute_pca_cache(D[f], n_pcs, cfg.threads, cfg.seed + 17ULL + f);
 
     // The K evaluations are independent of each other (a fit depends on K, the fold and the restart index only, never on what
     // another K found); only the acceptance chain below is sequential. K values are evaluated in waves of `wave` concurrent
     // evaluations, each with the thread budget one serial evaluation had at 8 threads, and the chain is then replayed in K
     // order, so the chosen K, the trace and every number in it are those of the serial loop. Work past the stopping point
     // (the rest of the wave that stops the search) is discarded. Thread counts above 8 go to the wave size.
-    const int wave = std::max(1, std::min(kmax, cfg.threads / 8));
-    const int kthreads = std::max(1, cfg.threads / wave);   // threads of one K evaluation (its two folds side by side)
+    // The per-K thread budget is fixed by the formula above (threads / 8 evaluations side by side) and does not depend on the wave
+    // width actually used, so every evaluation has the thread and chunk counts, and therefore the arithmetic, it always had.
+    // SINGLET_DEMUX_WAVE: unset = 1 + k_select_patience K values per wave (K = 1 and the patience window after it: the K values a
+    // single-donor sample needs before the search stops; kmax can be 16, but evaluating all of them wastes the cores on K values the
+    // chain never reads); N > 0 = N per wave; 0 = threads / 8 as before.
+    const int wave_formula = std::max(1, std::min(kmax, cfg.threads / 8));
+    int wave = fast ? std::max(1, std::min(kmax, 1 + cfg.k_select_patience)) : wave_formula;
+    if (const char* we = std::getenv("SINGLET_DEMUX_WAVE"); we && *we) {
+        const int w = std::atoi(we);
+        wave = (w <= 0) ? wave_formula : std::max(1, std::min(kmax, w));
+    }
+    const int kthreads = std::max(1, cfg.threads / wave_formula);   // threads of one K evaluation (its two folds side by side)
+    std::cerr << "[demux] auto-K: wave=" << wave << " evaluations side by side, " << kthreads << " threads each\n";
     DonorDemuxConfig fcfg = cfg;                 // per-fold thread budget
     fcfg.threads = std::max(1, kthreads / 2);
-    for (int f = 0; f < 2; ++f) get_snp_major(D[f], cfg.threads);   // built once, before the fits that share it start
+    // Setup: the SNP-major copies (built once, before the fits that share them start) and the PCA caches. Fast path: the PCA computes
+    // only the PCs the first wave seeds from (K1 + 2; the PCs of the K the search may never reach are computed per wave by
+    // PcaCache::ensure, and are the same numbers), and the two folds are prepared side by side (nothing is shared between them; no
+    // result depends on the thread count). SINGLET_DEMUX_AUTOK_FAST=0: both folds one after the other, every PC of K up to kmax.
+    auto setup_fold = [&](int f, int nt) {
+        get_snp_major(D[f], nt);
+        pca[f] = compute_pca_cache(D[f], n_pcs, nt, cfg.seed + 17ULL + f,
+                                   fast ? pca_dims_for_k(std::min(kmax, wave)) : -1);
+    };
+    if (fast && cfg.threads >= 2) {
+        std::thread t1(setup_fold, 1, std::max(1, cfg.threads / 2));
+        setup_fold(0, std::max(1, cfg.threads / 2));
+        t1.join();
+    } else {
+        for (int f = 0; f < 2; ++f) setup_fold(f, cfg.threads);
+    }
+    const double setup_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_setup).count();
+    double pca_ext_s = 0.0;
     const double delta = multiplet_prior(cfg, cov.n_cells);
 
     struct KEval {
@@ -2196,6 +2420,14 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
 
     for (int K0 = 1; K0 <= kmax && !stopped; K0 += wave) {
         const int K1 = std::min(kmax, K0 + wave - 1);
+        if (fast && pca[0].lazy && pca[0].ready < pca_dims_for_k(K1)) {   // the PCs this wave seeds from (both folds, side by side)
+            const auto te = std::chrono::steady_clock::now();
+            const int need = pca_dims_for_k(K1), nt = std::max(1, cfg.threads / 2);
+            std::thread t1([&] { pca[1].ensure(need, nt); });
+            pca[0].ensure(need, nt);
+            t1.join();
+            pca_ext_s += std::chrono::duration<double>(std::chrono::steady_clock::now() - te).count();
+        }
         std::vector<KEval> ev(K1 - K0 + 1);
         if (K1 == K0) {
             eval_k(K0, ev[0]);
@@ -2244,6 +2476,8 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             if (stall >= cfg.k_select_patience) stopped = true;
         }
     }
+    std::cerr << "[demux] auto-K: setup " << setup_s << " s (SNP-major + PCA, both folds), later PCA " << pca_ext_s << " s, fast="
+              << (fast ? 1 : 0) << "\n";
     std::cerr << "[demux] auto-K: selected K=" << best_v << " in "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
               << " s\n";
