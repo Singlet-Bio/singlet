@@ -502,11 +502,12 @@ struct FileId {
     bool same(const FileId& o) const { return path == o.path && dev == o.dev && ino == o.ino && size == o.size && mtime == o.mtime; }
 };
 // one index in page-locked host memory
-// rt/xfer: SINGLET_NONHOST_ZEROCOPY (default on; =0: the index is copied to the device for every request, as before): the entries stay in
+// rt/xfer: SINGLET_NONHOST_ZEROCOPY (default off since node arms 815557/815748: classify 4x slower, no node gain; =1 on; off: the index is
+// copied to the device for every request, as before): the entries stay in
 // page-locked, device-mapped host memory and the kernels read the few they touch over the bus (the sample's 69 M probes touch a fraction of
 // the 25 GB); the radix directories (2.7 GB, built once at load) are copied to the device per request, with the Bloom filter. The kernels
 // and the answers are the same, only where `Entry*` points differs.
-bool zeroCopyOn() { const char* e = std::getenv("SINGLET_NONHOST_ZEROCOPY"); return !(e && e[0] == '0'); }
+bool zeroCopyOn() { const char* e = std::getenv("SINGLET_NONHOST_ZEROCOPY"); return e && e[0] == '1'; }
 // rt/xfer: SINGLET_NONHOST_OVERLAP (default on; =0 off): the device copy is made on a thread while the request's reads are received
 bool overlapOn() { const char* e = std::getenv("SINGLET_NONHOST_OVERLAP"); return !(e && e[0] == '0'); }
 struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; Entry* hd = nullptr; uint32_t* dir = nullptr; uint64_t dirN = 0; };
