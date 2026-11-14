@@ -300,6 +300,7 @@ if(TARGET singlet_engine_gpu)
     target_compile_definitions(test_allsite_gpu PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
 add_pileup_test(test_allsite_kernel)
+add_pileup_test(test_allsite_gather)   # the device route host gather: look-ahead prefetch walk against the plain walk (SINGLET_ALLSITE_GATHER_PF=0)
 add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
 add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
 add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features

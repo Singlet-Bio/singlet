@@ -158,6 +158,11 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
             const std::vector<uint64_t>& wl = elist[c0 + c];
             return wl.empty() ? by_tid[cnt[static_cast<uint32_t>(in.contigs[c0 + c].tid)] + (i - list_off[c])] : by_tid[wl[i - list_off[c]]];
         };
+        // SINGLET_ALLSITE_GATHER_PF=0: the plain walk (one binary search per read, no prefetch); the default walks the slice with a contig
+        // cursor per look-ahead distance and prefetches the read, signature, alignment, sequence and CIGAR records a few reads ahead (the
+        // walk is bound by those misses). The same reads in the same order: the arrays are the same bytes.
+        const char* gpfE = std::getenv("SINGLET_ALLSITE_GATHER_PF");
+        const bool gpf = !(gpfE != nullptr && gpfE[0] == '0');
         const unsigned ns = static_cast<unsigned>(std::max<uint64_t>(1, std::min<uint64_t>(nth, n / 4096 + 1)));
         struct Sz { uint64_t ops = 0, seq = 0, lq = 0; };
         std::vector<Sz> sz(ns + 1);
@@ -166,8 +171,22 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
             astm::Scope tsc(&cpu_ga);
             uint64_t a, b; slice(s, a, b);
             Sz o = write ? sz[s] : Sz{};
+            uint32_t k0 = 0, k2 = 0, k4 = 0, k8 = 0, k16 = 0;   // contig cursors of the walk and its look-aheads (indices only grow)
+            if (gpf && a < b) k0 = k2 = k4 = k8 = k16 = static_cast<uint32_t>(std::upper_bound(list_off.begin(), list_off.end(), a) - list_off.begin()) - 1;
+            auto id_at = [&](uint32_t& k, uint64_t i) {   // read id of the i-th read of the chunk, i not decreasing per cursor
+                while (i >= list_off[k + 1]) ++k;
+                const std::vector<uint64_t>& wl = elist[c0 + k];
+                return wl.empty() ? by_tid[cnt[static_cast<uint32_t>(in.contigs[c0 + k].tid)] + (i - list_off[k])] : by_tid[wl[i - list_off[k]]];
+            };
             for (uint64_t i = a; i < b; ++i) {
-                uint32_t c; const uint64_t r = read_at(i, c);
+                uint32_t c; uint64_t r;
+                if (gpf) {
+                    if (i + 16 < b) __builtin_prefetch(&R.read(id_at(k16, i + 16)));
+                    if (i + 8 < b) { const auto& y = R.read(id_at(k8, i + 8)); __builtin_prefetch(&R.sig(y.sig)); __builtin_prefetch(&sig_p[y.sig]); }
+                    if (i + 4 < b) { const auto& y = R.read(id_at(k4, i + 4)); const auto& sy = R.sig(y.sig); __builtin_prefetch(&R.aln(sy.aln_off + sig_p[y.sig])); __builtin_prefetch(R.seq_at(sy.seq_off)); }
+                    if (i + 2 < b) { const auto& y = R.read(id_at(k2, i + 2)); const auto& sy = R.sig(y.sig); __builtin_prefetch(R.ops_at(R.aln(sy.aln_off + sig_p[y.sig]).ops_off)); }
+                    r = id_at(k0, i); c = k0;
+                } else r = read_at(i, c);
                 const auto& x = R.read(r); const auto& sg = R.sig(x.sig); const auto& al = R.aln(sg.aln_off + sig_p[x.sig]);
                 const uint64_t sb = (sg.rlen + 1u) / 2u, nl = nlq_of(sg.rlen);
                 if (write) {
