@@ -161,8 +161,14 @@ __global__ void k_sum(const uint32_t* np, const uint64_t* qoff, uint64_t Q, cons
         tot64[i] = s;
     }
 }
+// fungal ids are returned with this bit set, as MinSketchIndex::merge(bacterial, fungal, kFungalIdBit) reads them on the CPU: both files
+// number their species from 1 (min_sketch.h, kFungalIdBit)
+constexpr uint32_t kFungalIdBit = 0x40000000u;
 // one key per (read, minimizer, entry) in the CPU's insertion sequence: viral segment first (minimizers ascending, entries in file
-// order), then the microbial segment (per minimizer: bacterial entries, then fungal entries - std::merge puts a before b)
+// order), then the microbial segment: the bacterial run (minimizers ascending, entries in file order), then the fungal run. The CPU's joined
+// microbial index holds the two files as separate sorted runs and scans one run after the other (MinSketchIndex::for_each_run), so a read's
+// hit map is filled bacterial hits first. The two ids are different keys since v1.3.9, and a tie between a bacterium and a fungus is
+// resolved by the map's iteration order, so the insertion order must be the CPU's.
 __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* lo, const uint32_t* len, DevIndex v, DevIndex b,
                         DevIndex f, uint32_t n, const uint64_t* hoff, uint64_t* keys, uint32_t* vals) {
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += gridDim.x * blockDim.x) {
@@ -171,10 +177,10 @@ __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, co
         const uint64_t q0 = qoff[i], q1 = q0 + np[i], rd = (uint64_t)i << 33;
         for (uint64_t q = q0; q < q1; ++q)
             for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | v.e[lo[q] + t].sid; vals[pos] = (uint32_t)pos; }
-        for (uint64_t q = q0; q < q1; ++q) {
+        for (uint64_t q = q0; q < q1; ++q)
             for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | b.e[lo[Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
-            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | f.e[lo[2 * Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
-        }
+        for (uint64_t q = q0; q < q1; ++q)
+            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | f.e[lo[2 * Q + q] + t].sid | kFungalIdBit; vals[pos] = (uint32_t)pos; }
     }
 }
 // after sort 1 (by key, stable) every (read, map, species) group is contiguous; first occurrence = min original position

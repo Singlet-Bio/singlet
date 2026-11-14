@@ -193,6 +193,7 @@ add_pileup_test(test_nonhost_cell_matrix)
 add_pileup_test(test_nonhost_confirmed_reads)
 add_pileup_test(test_nonhost_db_build)
 add_pileup_test(test_nonhost_em)
+add_pileup_test(test_nonhost_id_namespace)
 add_pileup_test(test_nonhost_host_filter)
 add_pileup_test(test_nonhost_unmapped_capture)
 
