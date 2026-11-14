@@ -3575,6 +3575,88 @@ int main(int argc, char* argv[]) {
 // D-101 HLA: the prefilter made inside the read ingest's fused pass (hla_typing.h Presift), from there to the HLA sample stage
 static std::shared_ptr<singlet::hla::Presift> g_hla_presift;
 
+// ── The CR4 probe's STAR runs (decision block in singlet_main) ──
+// The probe's argument vector from the STAR run's: the profile's tokens left out for the plain arm (and its score value reset to the base),
+// the options that make no output or read the fifos dropped, the .1fq read by the probe itself (probe_src), the probe's thread count,
+// read cap, I/O chunk size and output prefix added. One function for the late launch (in the STAR child) and the early one (in
+// the parent, beside the .1fq scan), so that the two cannot differ except by the inputs they are given: the late launch compares.
+static std::vector<std::string> cr4_probe_argv(const std::vector<const char*>& args, size_t cr4_beg, size_t cr4_end, size_t score_val_idx,
+                                               bool with_cr4, int threads, bool probe_src, int probe_reads, bool serial, bool extra_iobuf,
+                                               const std::string& prefix) {
+    static const std::set<std::string> drop = {
+        "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
+        "--outBAMsortingBinsN", "--outBAMsortingThreadN", "--outFileNamePrefix", "--outTmpDir",
+        "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber"};
+    std::vector<std::string> pa;
+    bool skipping = false;
+    for (size_t i = 1; i + 1 < args.size(); ++i) {   // args[0] = "STAR", args.back() = nullptr
+        if (!with_cr4 && i >= cr4_beg && i < cr4_end) continue;
+        std::string t = args[i];
+        if (!with_cr4 && score_val_idx != 0 && i == score_val_idx) t = "10";   // the plain arm keeps the base score
+        if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
+        if (!skipping) pa.push_back(t);
+        if (t == "--readFilesIn" && probe_src) {   // the probe reads the .1fq itself, not the fifos
+            pa.push_back("/dev/null"); pa.push_back("/dev/null");
+            skipping = true;
+        }
+    }
+    for (size_t i = 0; i + 1 < pa.size(); ++i)
+        if (pa[i] == "--runThreadN") pa[i + 1] = std::to_string(threads);
+    for (const char* t : {"--outSAMtype", "None", "--readMapNumber"}) pa.push_back(t);
+    pa.push_back(std::to_string(probe_reads));
+    if (!serial && !extra_iobuf)
+        for (const char* t : {"--limitIObufferSize", "4000000", "50000000"}) pa.push_back(t);
+    pa.push_back("--outFileNamePrefix"); pa.push_back(prefix);
+    return pa;
+}
+
+// A probe run's unique-mapping rate from its Log.final.out; -1 when the file lacks it or the run saw under 1000 reads
+static double cr4_probe_rate(const std::string& log_final) {
+    std::ifstream lf(log_final);
+    std::string ln;
+    double inreads = 0, uniq = -1.0;
+    while (std::getline(lf, ln)) {
+        auto bar = ln.find('|');
+        if (bar == std::string::npos) continue;
+        if (ln.find("Number of input reads") != std::string::npos) inreads = std::atof(ln.c_str() + bar + 1);
+        if (ln.find("Uniquely mapped reads %") != std::string::npos) uniq = std::atof(ln.c_str() + bar + 1);
+    }
+    if (inreads < 1000) return -1.0;   // too few reads for a rate
+    return uniq;
+}
+
+// SINGLET_PROBE_EARLY (default on; 0: the probe runs in the STAR child as before). The probe's two STAR runs are forked by the
+// parent as soon as the .1fq's scan is about to start (every input of their arguments is known then: the header, the whitelist,
+// the aligner profile's gates) and run beside the scan; the parent reaps them with one thread each and joins them at the STAR fork.
+// The STAR child's decision block rebuilds the probe's arguments from its own (the way it always did) and takes these results only
+// when the vectors and the read source are identical, else it runs the probe itself: the decision cannot differ from today's.
+struct EarlyCr4Probe {
+    struct Arm {
+        const char* tag = "";
+        bool with_cr4 = false;
+        int threads = 0;
+        pid_t pid = -1;
+        double t_end = 0, cpu = -1, uniq = -1.0;
+        std::atomic<bool> reaped{false};
+        std::vector<std::string> argv;
+        std::thread waiter;
+    };
+    Arm arm[2];
+    bool launched = false;
+    uint32_t dict_n = 0;     // the read source's FormatOptions::bc_dict_n
+    int dthreads = 0;        // its decode threads
+    std::string pdir;
+    StopWatch sw;
+    void join() { for (auto& a : arm) if (a.waiter.joinable()) a.waiter.join(); }
+    void discard() {   // the .1fq scan will not feed the stream the probe assumed: stop the runs and forget them
+        if (!launched) return;
+        launched = false;
+        for (auto& a : arm) if (a.pid > 0 && !a.reaped.load()) kill(a.pid, SIGKILL);
+        join();
+    }
+    ~EarlyCr4Probe() { discard(); join(); }
+};
+
 static int singlet_main(int argc, char* argv[]) {
     singlet::entry_env().take();   // restart_on_sorted_path re-executes this command with this environment
     g_argc = argc; g_argv = argv;   // and these arguments
@@ -4748,6 +4830,7 @@ static int singlet_main(int argc, char* argv[]) {
         std::thread t;
         std::string log;
         bool ok = false;
+        std::atomic<bool> done{false};   // set when the thread's work is complete (the early CR4 probe forks only on a finished preload)
         void join() { if (t.joinable()) t.join(); }
         ~GenomePreloadJob() { join(); }
     } genome_preload;
@@ -4758,6 +4841,7 @@ static int singlet_main(int argc, char* argv[]) {
         genome_preload.t = std::thread([&gp = genome_preload, dir = genome_dir, pthreads]() {
             singlet::set_thread_name("sg-gpreload");
             gp.ok = star_genome_preload(dir, pthreads, gp.log);
+            gp.done.store(true);
         });
     }
     // Overlap STAR's genome load with Pass 1 and the reference load: read the private genome's index files once in
@@ -4968,6 +5052,7 @@ static int singlet_main(int argc, char* argv[]) {
     const bool ingest_req = engine_gpu_reads && onefq_mode && getenv("SINGLET_ENGINE_GPU_INGEST") && std::string(getenv("SINGLET_ENGINE_GPU_INGEST")) == "1";
     bool ingest_on = false;
     singlet::fq::FormatOptions ingest_fmt;   // the read source STAR gets: file mode's records (no 5' clip, no R2 length guard)
+    EarlyCr4Probe early_probe;               // SINGLET_PROBE_EARLY: the CR4 probe's runs, started before the scan below
 
     // Hoisted from inner decode block so per-segment whitelist discovery
     // (Phase 0.9+) can read them after the onefq_mode block closes.
@@ -5469,6 +5554,109 @@ static int singlet_main(int argc, char* argv[]) {
         // each block's read and base counts for the prefill's exact allocation). R11's exact CB histogram comes from STAR's prefill (E8 region)
         // when the stream first needs it. Where a condition does not hold, or the probe finds a prefix to clip, the file decode runs as before.
 #ifdef SINGLET_HAVE_ENGINE_GPU
+        // SINGLET_PROBE_EARLY (default on): the CR4 probe's two STAR runs start here, beside the scan, instead of after the STAR fork.
+        // They need the STAR argument vector and the read source, which the header gives (the whitelist, barcode and UMI geometry, the
+        // aligner profile's gates); none of it comes from the scan except the 5' prefix probe's verdict, which can only turn the ingest off
+        // (then the runs are dropped here and the probe runs in the STAR child, as before). This builds the arguments for the one case
+        // it can know ahead (CB_UMI_Simple with a whitelist, the profile on, no 5' clip or 3' adapter, no UMI clamp); the STAR child
+        // rebuilds its own and takes the early results only when every probe argument is identical (EarlyCr4Probe). Any other case: the old path.
+        auto launch_early_cr4_probe = [&](uint32_t dict_n) {
+            const char* pe = std::getenv("SINGLET_PROBE_EARLY");
+            if (pe && pe[0] == '0') return;
+            const char* pm = std::getenv("SINGLET_CR4_PROBE");
+            std::string no;
+            std::string tag;
+            for (const auto& sp : singlet::fq::known_protocols())
+                if (sp.protocol_id == onefq_protocol_id) { tag = sp.tag; break; }
+            if (!meta_json_proto_tag.empty()) tag = meta_json_proto_tag;
+            const singlet::fq::CandidateSpec* spec = nullptr;
+            for (const auto& sp : singlet::fq::known_protocols())
+                if (sp.tag == tag) { spec = &sp; break; }
+            bool star_extra_clips = false, extra_iobuf = false, extra_score = false;
+            for (const auto& a : star_extra) {
+                if (a.rfind("--clipAdapterType", 0) == 0) star_extra_clips = true;
+                if (a.rfind("--limitIObufferSize", 0) == 0) extra_iobuf = true;
+                if (a == "--outFilterScoreMin") extra_score = true;
+            }
+            const int cb = detected_bc_len > 0 ? detected_bc_len : 16;
+            const int ustart = detected_umi_start > 0 ? detected_umi_start : cb + 1;
+            if (spec == nullptr || !spec->cr4 || no_cr4 || star_extra_clips || cr4_probe_reads <= 0) no = "no profile";
+            else if (!onefq_mode || is_atac_mode || is_smart_seq2_mode || is_bulk_rna_mode || sra_mode || use_complex_concat || reads_inverted) no = "path";
+            else if (detected_soloType != "CB_UMI_Simple" || whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none") no = "barcode mode";
+            else if (!detected_adapter3p.empty() || r2_clip5p > 0) no = "3' adapter or 5' clip";
+            else if (onefq_r1_len > 0 && ustart + umi_len - 1 > static_cast<int>(onefq_r1_len)) no = "UMI clamp";
+            else if (pm && std::string(pm) == "serial") no = "SINGLET_CR4_PROBE=serial";
+            else if (star_threads < 2) no = "threads";
+            else if (genome_load == "NoSharedMemory" && !(genome_preload_on && genome_preload.done.load() && genome_preload.ok)) no = "genome preload not complete";
+            if (!no.empty()) { std::cerr << "[singlet] CR4 probe: early start not used (" << no << ")\n"; return; }
+            // the STAR argument vector as the child builds it for this case, up to the tokens the probe drops
+            std::vector<std::string> S = {"--runMode", "alignReads", "--genomeDir", genome_dir, "--readFilesIn", "/dev/null", "/dev/null",
+                "--soloType", "CB_UMI_Simple", "--soloCBwhitelist", whitelist_file, "--soloCBlen", std::to_string(cb),
+                "--soloCBstart", std::to_string(detected_cb_start), "--soloUMIstart", std::to_string(ustart),
+                "--soloBarcodeReadLength", "0", "--soloCellReadStats", "Standard", "--soloUMIlen", std::to_string(umi_len)};
+            const size_t cr4_beg = S.size() + 1;   // args[0] = "STAR"
+            for (const char* t : {"--clipAdapterType", "CellRanger4", "--alignSJoverhangMin", "8", "--outFilterIntronMotifs",
+                                  "RemoveNoncanonicalUnannotated", "--outFilterMismatchNoverLmax", "0.05"}) S.push_back(t);
+            const size_t cr4_end = S.size() + 1;
+            size_t score_idx = 0;
+            if (!extra_score) { S.push_back("--outFilterScoreMin"); S.push_back("30"); score_idx = S.size(); }
+            for (const char* t : {"--soloCBmatchWLtype", "1MM_multi_Nbase_pseudocounts", "--runThreadN"}) S.push_back(t);
+            S.push_back(std::to_string(star_threads));
+            S.push_back("--genomeLoad"); S.push_back(genome_load);
+            for (const auto& a : star_extra) S.push_back(a);
+            std::vector<const char*> P = {"STAR"};
+            for (const auto& s : S) P.push_back(s.c_str());
+            P.push_back(nullptr);
+            auto& ep = early_probe;
+            ep.pdir = out_prefix + "/cr4_probe";
+            mkdir(ep.pdir.c_str(), 0755);
+            const int t_half = std::max(1, star_threads / 2);
+            ep.arm[0].tag = "plain"; ep.arm[0].with_cr4 = false; ep.arm[0].threads = t_half;
+            ep.arm[1].tag = "cr4";   ep.arm[1].with_cr4 = true;  ep.arm[1].threads = std::max(1, star_threads - t_half);
+            ep.dict_n = dict_n;
+            ep.dthreads = std::max(2, std::min(4, ep.arm[0].threads / 4));
+            if (std::max(2, std::min(4, ep.arm[1].threads / 4)) != ep.dthreads) return;
+            for (auto& a : ep.arm)
+                a.argv = cr4_probe_argv(P, cr4_beg, cr4_end, score_idx, a.with_cr4, a.threads, /*probe_src=*/true, cr4_probe_reads,
+                                        /*serial=*/false, extra_iobuf, ep.pdir + "/" + a.tag + "_");
+            ep.sw = StopWatch();
+            for (auto& a : ep.arm) {
+                std::vector<char*> pv;
+                pv.push_back(const_cast<char*>("STAR"));
+                for (auto& t : a.argv) pv.push_back(const_cast<char*>(t.c_str()));
+                pv.push_back(nullptr);
+                a.pid = fork();
+                if (a.pid == 0) {
+                    int dn = open("/dev/null", O_WRONLY);
+                    if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
+                    unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF");   // the probe maps on the CPU, not through the GPU prefill
+                    singlet::fq::FormatOptions pf = ingest_fmt;   // what the ingest's source gets: the defaults and the dictionary size
+                    pf.bc_dict_n = dict_n;
+                    g_starReadSource = new singlet::fq::StarChunkSourceT<StarReadSource>(onefq_files, pf, std::max(2, std::min(4, a.threads / 4)), /*cdna_first=*/true);
+                    singlet::set_thread_name("star-probe");
+                    _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
+                }
+                if (a.pid < 0) {   // no fork: stop what started and leave the probe to the STAR child
+                    for (auto& b : ep.arm) if (b.pid > 0) { kill(b.pid, SIGKILL); int ws = 0; waitpid(b.pid, &ws, 0); b.pid = -1; }
+                    std::cerr << "[singlet] CR4 probe: early start not used (fork failed)\n";
+                    return;
+                }
+            }
+            for (auto& a : ep.arm)
+                a.waiter = std::thread([&ep, &a]() {
+                    singlet::set_thread_name("sg-probewait");
+                    int ws = 0;
+                    struct rusage ru{};
+                    const bool ok = wait4(a.pid, &ws, 0, &ru) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                    a.cpu = ru.ru_utime.tv_sec + ru.ru_stime.tv_sec + (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1e6;
+                    a.t_end = ep.sw.elapsed_s();
+                    a.uniq = ok ? cr4_probe_rate(ep.pdir + "/" + a.tag + "_Log.final.out") : -1.0;
+                    a.reaped.store(true);
+                });
+            ep.launched = true;
+            std::cerr << "[singlet] CR4 probe: both runs started beside the .1fq scan (SINGLET_PROBE_EARLY=0: after the STAR fork), "
+                      << ep.arm[0].threads << "+" << ep.arm[1].threads << " threads\n";
+        };
         if (ingest_req && !use_fifo_decode) {
             std::cerr << "[1fq-ingest] Scanning the .1fq's blocks (SINGLET_ENGINE_GPU_INGEST=1)\n";
             singlet::ThreadNameScope tn_scan("sg-scan");
@@ -5510,6 +5698,7 @@ static int singlet_main(int argc, char* argv[]) {
                 else if (qm == singlet::fq::QualMode::ILLUMINA4) { std::memcpy(qphred, singlet::fq::qual::kIlmn4Phred, 4); qcodes = 4; }
                 else if (qm == singlet::fq::QualMode::BINNED2) { qphred[0] = 10; qphred[1] = 30; qcodes = 3; }   // code 2: 'F' (a read without quality)
                 else if (qm != singlet::fq::QualMode::NONE) why = "per-base quality stored in full";
+                if (why.empty()) launch_early_cr4_probe(runs->bc_dict_size());   // every gate before the scan itself has held
                 if (why.empty() && !(cb_corrector.load_whitelist(whitelist_file) && cb_corrector.length() == detected_bc_len))
                     why = "the whitelist is unusable for " + std::to_string(detected_bc_len) + "-base barcodes";
             }
@@ -5642,6 +5831,7 @@ static int singlet_main(int argc, char* argv[]) {
                 if (why.empty() && clip > 0) why = "a constant 5' prefix to clip (" + std::to_string(clip) + " bp)";
             }
             if (!why.empty()) {
+                if (early_probe.launched) { early_probe.discard(); std::cerr << "[singlet] CR4 probe: the early runs are dropped (the ingest is not used)\n"; }
                 if (ingest_fused) singlet_engine_gpu::ingest::dropFused();
                 std::cerr << "[1fq-ingest] not used (" << why << "): the .1fq is decoded to FASTQ files\n";
             } else {
@@ -7869,6 +8059,11 @@ static int singlet_main(int argc, char* argv[]) {
             if (!lg.empty()) std::cerr << "[1fq-ingest] " << lg << "; waited " << waited << " s for it at the STAR fork\n";
         }
 #endif
+        if (early_probe.launched) {   // the probe's runs (started beside the .1fq scan) are reaped by their threads; the STAR child takes the results
+            StopWatch ew;
+            early_probe.join();
+            std::cerr << "[singlet] CR4 probe: early runs complete; waited " << ew.elapsed_s() << " s for them at the STAR fork\n";
+        }
         star_pid = fork();
         if (star_pid != 0) star_genome_preload_release();   // E14: the parent's references; the STAR child keeps the pages
 #ifdef SINGLET_HAVE_ENGINE_GPU
@@ -9040,32 +9235,12 @@ static int singlet_main(int argc, char* argv[]) {
                     }
                     StopWatch probe_sw;
                     struct ProbeRun { const char* tag; bool with_cr4; int threads; pid_t pid = -1; double t_end = 0; double cpu = -1; };
+                    auto probe_argv = [&](const ProbeRun& r) {
+                        return cr4_probe_argv(args, cr4_beg, cr4_end, score_val_idx, r.with_cr4, r.threads, probe_src, cr4_probe_reads,
+                                              probe_serial, probe_extra_iobuf, pdir + "/" + r.tag + "_");
+                    };
                     auto probe_start = [&](ProbeRun& r) {
-                        static const std::set<std::string> drop = {
-                            "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM",
-                            "--outBAMsortingBinsN", "--outBAMsortingThreadN", "--outFileNamePrefix", "--outTmpDir",
-                            "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber"};
-                        std::vector<std::string> pa;
-                        bool skipping = false;
-                        for (size_t i = 1; i + 1 < args.size(); ++i) {   // args[0] = "STAR", args.back() = nullptr
-                            if (!r.with_cr4 && i >= cr4_beg && i < cr4_end) continue;
-                            std::string t = args[i];
-                            if (!r.with_cr4 && score_val_idx != 0 && i == score_val_idx) t = "10";   // the plain arm keeps the base score
-                            if (t.rfind("--", 0) == 0) skipping = drop.count(t) > 0;
-                            if (!skipping) pa.push_back(t);
-                            if (t == "--readFilesIn" && probe_src) {   // the probe reads the .1fq itself, not the fifos
-                                pa.push_back("/dev/null"); pa.push_back("/dev/null");
-                                skipping = true;
-                            }
-                        }
-                        for (size_t i = 0; i + 1 < pa.size(); ++i)
-                            if (pa[i] == "--runThreadN") pa[i + 1] = std::to_string(r.threads);
-                        const std::string prefix = pdir + "/" + r.tag + "_";
-                        for (const char* t : {"--outSAMtype", "None", "--readMapNumber"}) pa.push_back(t);
-                        pa.push_back(std::to_string(cr4_probe_reads));
-                        if (!probe_serial && !probe_extra_iobuf)
-                            for (const char* t : {"--limitIObufferSize", "4000000", "50000000"}) pa.push_back(t);
-                        pa.push_back("--outFileNamePrefix"); pa.push_back(prefix);
+                        std::vector<std::string> pa = probe_argv(r);
                         std::vector<char*> pv;
                         pv.push_back(const_cast<char*>("STAR"));
                         for (auto& t : pa) pv.push_back(const_cast<char*>(t.c_str()));
@@ -9091,33 +9266,51 @@ static int singlet_main(int argc, char* argv[]) {
                         r.cpu = ru.ru_utime.tv_sec + ru.ru_stime.tv_sec + (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1e6;
                         r.t_end = probe_sw.elapsed_s();
                         if (!ok) return -1.0;
-                        std::ifstream lf(pdir + "/" + r.tag + "_Log.final.out");
-                        std::string ln;
-                        double inreads = 0, uniq = -1.0;
-                        while (std::getline(lf, ln)) {
-                            auto bar = ln.find('|');
-                            if (bar == std::string::npos) continue;
-                            if (ln.find("Number of input reads") != std::string::npos) inreads = std::atof(ln.c_str() + bar + 1);
-                            if (ln.find("Uniquely mapped reads %") != std::string::npos) uniq = std::atof(ln.c_str() + bar + 1);
-                        }
-                        if (inreads < 1000) return -1.0;   // too few reads for a rate
-                        return uniq;
+                        return cr4_probe_rate(pdir + "/" + r.tag + "_Log.final.out");
                     };
                     const int t_half = std::max(1, star_threads / 2);
                     ProbeRun rp{"plain", false, probe_serial ? star_threads : t_half};
                     ProbeRun rc{"cr4", true, probe_serial ? star_threads : std::max(1, star_threads - t_half)};
                     double u_off = -1.0, u_on = -1.0;
-                    if (probe_serial) {
+                    // SINGLET_PROBE_EARLY: the parent ran the two probe arms beside the .1fq scan (EarlyCr4Probe). Taken only when the
+                    // arguments this block just built give the probe the identical vectors and read source; else it runs here as before.
+                    bool probe_early_used = false;
+                    double probe_total = 0;
+                    if (early_probe.launched) {
+                        std::string why_not;
+                        if (probe_serial) why_not = "SINGLET_CR4_PROBE=serial";
+                        else if (!ingest_on) why_not = "the .1fq's ingest was not used";
+                        else if (ingest_fmt.bc_dict_n != early_probe.dict_n) why_not = "different read source";
+                        else if (std::max(2, std::min(4, rp.threads / 4)) != early_probe.dthreads ||
+                                 std::max(2, std::min(4, rc.threads / 4)) != early_probe.dthreads) why_not = "different decode threads";
+                        else if (probe_argv(rp) != early_probe.arm[0].argv || probe_argv(rc) != early_probe.arm[1].argv)
+                            why_not = "different STAR arguments";
+                        else if (early_probe.arm[0].t_end <= 0 || early_probe.arm[1].t_end <= 0 ||
+                                 early_probe.arm[0].uniq < 0 || early_probe.arm[1].uniq < 0) why_not = "an early run failed";
+                        if (why_not.empty()) {
+                            rp.t_end = early_probe.arm[0].t_end; rp.cpu = early_probe.arm[0].cpu; u_off = early_probe.arm[0].uniq;
+                            rc.t_end = early_probe.arm[1].t_end; rc.cpu = early_probe.arm[1].cpu; u_on = early_probe.arm[1].uniq;
+                            probe_total = std::max(rp.t_end, rc.t_end);
+                            probe_early_used = true;
+                        } else {
+                            std::cerr << "[singlet] CR4 probe: the early run is not used (" << why_not << "); the probe runs now\n";
+                        }
+                    }
+                    if (probe_early_used) {
+                        // nothing to run
+                    } else if (probe_serial) {
                         probe_start(rp); u_off = probe_finish(rp);
                         probe_start(rc); u_on = probe_finish(rc);
                     } else {
                         probe_start(rp); probe_start(rc);
                         u_off = probe_finish(rp); u_on = probe_finish(rc);
                     }
+                    if (!probe_early_used) probe_total = probe_sw.elapsed_s();
                     std::cerr << "[singlet] CR4 probe timing: plain " << rp.t_end << " s, cr4 " << (probe_serial ? rc.t_end - rp.t_end : rc.t_end)
                               << " s, " << (probe_serial ? "serial" : "concurrent") << " on " << rp.threads << "+" << rc.threads
-                              << " threads, total " << probe_sw.elapsed_s() << " s; " << preload_note
-                              << "; CPU (user + system) plain " << rp.cpu << " s, cr4 " << rc.cpu << " s\n";
+                              << " threads, total " << probe_total << " s; " << preload_note
+                              << "; CPU (user + system) plain " << rp.cpu << " s, cr4 " << rc.cpu << " s"
+                              << (probe_early_used ? "; early: ran beside the .1fq scan" : "") << "\n";
                     pj = ", \"probe_reads\": " + std::to_string(cr4_probe_reads) +
                          ", \"unique_pct_plain\": " + std::to_string(u_off) +
                          ", \"unique_pct_cr4\": " + std::to_string(u_on) + ", \"max_drop_pts\": " + std::to_string(kMaxDropPts);
