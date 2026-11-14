@@ -2477,8 +2477,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
         }
     }
     std::cerr << "[demux] auto-K: setup " << setup_s << " s (SNP-major + PCA, both folds), later PCA " << pca_ext_s << " s, fast="
-              << (fast ? 1 : 0) << "
-";
+              << (fast ? 1 : 0) << "\n";
     std::cerr << "[demux] auto-K: selected K=" << best_v << " in "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
               << " s\n";
