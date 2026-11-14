@@ -65,6 +65,23 @@ int main() {
                 eq = eq && std::memcmp(&part.scores[static_cast<size_t>(c) * npc + p], &full.scores[static_cast<size_t>(c) * npc + p], 4) == 0;
         CHECK(eq, "first 6 PCs of a partial cache equal those of the full one");
     }
+    // 1b. a restarted fit does not depend on the thread count nor on how the threads are shared among the restarts
+    {
+        CoveredSNPData d = make_data(500, 400, 3, 21);
+        PcaCache pc = compute_pca_cache(d, pca_dims_for_k(4), 2, 77);
+        DonorDemuxConfig cfg;
+        auto same = [](const VBResult& a, const VBResult& b) { return vb_result_bits_equal(a, b); };
+        for (int K : {2, 3, 4}) {
+            const std::vector<int> kinds(3, 2);
+            VBResult ref = fit_vb_k(d, K, cfg, kinds, 30, 60, 1, &pc, 5, true);
+            for (int th : {2, 3, 4, 8}) {
+                VBResult a = fit_vb_k(d, K, cfg, kinds, 30, 60, th, &pc, 5, true, nullptr, false);
+                VBResult b = fit_vb_k(d, K, cfg, kinds, 30, 60, th, &pc, 5, true, nullptr, true);
+                CHECK(same(ref, a), "fit_vb_k equals the 1-thread fit");
+                CHECK(same(ref, b), "fit_vb_k with spread threads equals the 1-thread fit");
+            }
+        }
+    }
     // 2. auto-K both ways
     for (int nd : {1, 3, 5}) {
         CoveredSNPData data = make_data(900, 500, nd, 40 + nd);
@@ -74,13 +91,21 @@ int main() {
             cfg.max_donors = 8;
             std::vector<KSelectRow> tf, ts;
             demux_autok_fast_override() = 1;
+            demux_autok_spread_override() = 0;
+            std::vector<KSelectRow> tn;
+            const int kn = select_k_heldout(data, cfg, &tn);   // fast path, restarts at threads / restarts
+            demux_autok_spread_override() = -1;
             const int kf = select_k_heldout(data, cfg, &tf);
             demux_autok_fast_override() = 0;
             const int ks = select_k_heldout(data, cfg, &ts);
             demux_autok_fast_override() = -1;
             std::cout << "donors=" << nd << " threads=" << threads << ": chosen K fast=" << kf << " old=" << ks
                       << " trace rows " << tf.size() << " / " << ts.size() << "\n";
-            CHECK(kf == ks, "chosen K equal");
+            CHECK(kf == ks && kn == ks, "chosen K equal");
+            CHECK(tn.size() == ts.size(), "trace length equal (spread off)");
+            for (size_t i = 0; i < std::min(tn.size(), ts.size()); ++i)
+                CHECK(same_bits(tn[i].ll_per_cell, ts[i].ll_per_cell) && same_bits(tn[i].gain, ts[i].gain) && same_bits(tn[i].z, ts[i].z),
+                      "trace row bitwise equal (spread off)");
             CHECK(tf.size() == ts.size(), "trace length equal");
             for (size_t i = 0; i < std::min(tf.size(), ts.size()); ++i) {
                 CHECK(tf[i].K == ts[i].K && tf[i].valid == ts[i].valid && tf[i].accepted == ts[i].accepted, "trace row K/valid/accepted");
