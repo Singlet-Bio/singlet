@@ -30,11 +30,13 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
     if (ctid.empty()) return false;
     in.contigs.resize(ctid.size());
     const unsigned nth = std::max(1u, P.threads);
+    astm::Acc cpu_sz, cpu_rs, cpu_ga;   // thread CPU of the sizes, resplit and gather workers (SINGLET_ALLSITE_TIMING)
     auto nlq_of = [&](uint16_t rlen) { return P.use_qual ? static_cast<uint64_t>((rlen + 63) / 64) : 0ull; };
     {   // per contig: the sizes of its gathered arrays, from equal slices of the selected reads (per-thread sums per contig)
         const uint64_t nsel = cnt[n_tid];
         std::vector<std::vector<uint64_t>> part(nth, std::vector<uint64_t>(3 * static_cast<size_t>(n_tid), 0));
         auto work = [&](unsigned s) {
+            astm::Scope tsc(&cpu_sz);
             const uint64_t a = nsel * s / nth, b = nsel * (s + 1) / nth;
             if (a >= b) return;
             uint32_t t = static_cast<uint32_t>(std::upper_bound(cnt.begin(), cnt.end(), a) - cnt.begin()) - 1;
@@ -55,6 +57,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         }
     }
     const double s_sizes = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    astm::line("sizes: per-contig array sizes", s_sizes, cpu_sz.sec(), nth);
     // entries of in.contigs: whole contigs, or after Input::resplit windows of a contig in position order. ek: the contig (index into
     // ctid) of each entry; elist: a window's reads as indices into by_tid, in by_tid order (empty for a whole contig)
     std::vector<uint32_t> ek(ctid.size()); for (size_t k = 0; k < ek.size(); ++k) ek[k] = static_cast<uint32_t>(k);
@@ -66,10 +69,11 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         return e;
     };
     in.resplit = [&](uint64_t max_bytes, uint64_t max_items) -> bool {
+        astm::Timed tmr("resplit: windows of oversize contigs", &cpu_rs, nth);
         const std::vector<dev::Contig> base = in.contigs;
         std::vector<dev::Contig> nc; std::vector<uint32_t> nk; std::vector<std::vector<uint64_t>> nl;
         const uint64_t per_read = sizeof(Read) + 20;
-        auto par = [&](auto&& f) { std::vector<std::thread> th; for (unsigned s = 1; s < nth; ++s) th.emplace_back(f, s); f(0u); for (auto& x : th) x.join(); };
+        auto par = [&](auto&& f) { auto g = [&](unsigned s) { astm::Scope tsc(&cpu_rs); f(s); }; std::vector<std::thread> th; for (unsigned s = 1; s < nth; ++s) th.emplace_back(g, s); g(0u); for (auto& x : th) x.join(); };
         for (size_t k = 0; k < base.size(); ++k) {
             const dev::Contig& c = base[k];
             if (dev::contig_bytes(c) <= max_bytes && c.reads < max_items) {
@@ -154,15 +158,35 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
             const std::vector<uint64_t>& wl = elist[c0 + c];
             return wl.empty() ? by_tid[cnt[static_cast<uint32_t>(in.contigs[c0 + c].tid)] + (i - list_off[c])] : by_tid[wl[i - list_off[c]]];
         };
+        // SINGLET_ALLSITE_GATHER_PF=0: the plain walk (one binary search per read, no prefetch); the default walks the slice with a contig
+        // cursor per look-ahead distance and prefetches the read, signature, alignment, sequence and CIGAR records a few reads ahead (the
+        // walk is bound by those misses). The same reads in the same order: the arrays are the same bytes.
+        const char* gpfE = std::getenv("SINGLET_ALLSITE_GATHER_PF");
+        const bool gpf = !(gpfE != nullptr && gpfE[0] == '0');
         const unsigned ns = static_cast<unsigned>(std::max<uint64_t>(1, std::min<uint64_t>(nth, n / 4096 + 1)));
         struct Sz { uint64_t ops = 0, seq = 0, lq = 0; };
         std::vector<Sz> sz(ns + 1);
         auto slice = [&](unsigned s, uint64_t& a, uint64_t& b) { a = n * s / ns; b = n * (s + 1) / ns; };
         auto pass = [&](unsigned s, bool write) {
+            astm::Scope tsc(&cpu_ga);
             uint64_t a, b; slice(s, a, b);
             Sz o = write ? sz[s] : Sz{};
+            uint32_t k0 = 0, k2 = 0, k4 = 0, k8 = 0, k16 = 0;   // contig cursors of the walk and its look-aheads (indices only grow)
+            if (gpf && a < b) k0 = k2 = k4 = k8 = k16 = static_cast<uint32_t>(std::upper_bound(list_off.begin(), list_off.end(), a) - list_off.begin()) - 1;
+            auto id_at = [&](uint32_t& k, uint64_t i) {   // read id of the i-th read of the chunk, i not decreasing per cursor
+                while (i >= list_off[k + 1]) ++k;
+                const std::vector<uint64_t>& wl = elist[c0 + k];
+                return wl.empty() ? by_tid[cnt[static_cast<uint32_t>(in.contigs[c0 + k].tid)] + (i - list_off[k])] : by_tid[wl[i - list_off[k]]];
+            };
             for (uint64_t i = a; i < b; ++i) {
-                uint32_t c; const uint64_t r = read_at(i, c);
+                uint32_t c; uint64_t r;
+                if (gpf) {
+                    if (i + 16 < b) __builtin_prefetch(&R.read(id_at(k16, i + 16)));
+                    if (i + 8 < b) { const auto& y = R.read(id_at(k8, i + 8)); __builtin_prefetch(&R.sig(y.sig)); __builtin_prefetch(&sig_p[y.sig]); }
+                    if (i + 4 < b) { const auto& y = R.read(id_at(k4, i + 4)); const auto& sy = R.sig(y.sig); __builtin_prefetch(&R.aln(sy.aln_off + sig_p[y.sig])); __builtin_prefetch(R.seq_at(sy.seq_off)); }
+                    if (i + 2 < b) { const auto& y = R.read(id_at(k2, i + 2)); const auto& sy = R.sig(y.sig); __builtin_prefetch(R.ops_at(R.aln(sy.aln_off + sig_p[y.sig]).ops_off)); }
+                    r = id_at(k0, i); c = k0;
+                } else r = read_at(i, c);
                 const auto& x = R.read(r); const auto& sg = R.sig(x.sig); const auto& al = R.aln(sg.aln_off + sig_p[x.sig]);
                 const uint64_t sb = (sg.rlen + 1u) / 2u, nl = nlq_of(sg.rlen);
                 if (write) {
@@ -198,7 +222,14 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
         spl.u.emplace_back(); ukey.push_back({c, s0}); spl.put(spl.u.size() - 1, 0, nkeep, b);
     };
     dev::Output o;
-    if (!P.device(in, o)) {
+    const double w_dev0 = astm::wall(), c_dev0 = astm::on() ? astm::thread_cpu() : 0;
+    const bool dev_ok = P.device(in, o);
+    if (astm::on()) {
+        astm::line("device route, caller thread (kernels, spill puts, waits for gathers)", astm::wall() - w_dev0, astm::thread_cpu() - c_dev0, 1);
+        astm::line("gather: reads of the chunks into flat arrays (wall = sum over chunks; runs beside the device)", o.sec_gather, cpu_ga.sec(), nth);
+    }
+    const double w_post0 = astm::wall();
+    if (!dev_ok) {
         std::cerr << "[allsite-gpu] host pass: " << o.why << "\n";
         return false;
     }
@@ -235,6 +266,7 @@ inline bool device_pass(const Rec& R, const Genome& G, const Params& P, uint32_t
     auto& p0 = out[ctid[0]];   // finish_spill sums the statistics over contigs; DP and AD records are the summed molecules, as kernel 1's
     p0.st.snp_molecules += o.molecules; p0.st.snp_molecules_ambiguous += o.ambiguous; p0.st.snp_molecules_other += o.other;
     p0.obs += o.obs; p0.dp_rec += o.kept_dp; p0.ad_rec += o.kept_ad;   // the kept sites' molecules, as the host kernel counts them
+    astm::line("post: sites, kept masks, unit order", astm::wall() - w_post0, 0, 1);
     const double s_sel = 1e-9 * static_cast<double>(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count()) - t_run0);
     std::cerr << "[allsite-gpu] selection " << s_sel
               << " s, sizes " << s_sizes << " s; " << o.chunks << " chunks, " << o.blocks << " blocks; hits " << o.hits << ", entries " << o.entries << ", groups " << o.groups

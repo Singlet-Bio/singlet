@@ -2350,6 +2350,7 @@ public:
     };
     void allsite_from_input(const singlet_engine_gpu::PileupInput& in) {
         if (!allsite_on() || allsite_done_) return;
+        allsite::astm::Acc as_cpu; allsite::astm::Timed as_tm("pass total, allsite thread (own CPU; workers are in the steps above)", &as_cpu, 1); allsite::astm::Scope as_sc(&as_cpu);   // SINGLET_ALLSITE_TIMING
         allsite_done_ = true;
         const auto t0 = std::chrono::steady_clock::now();
         if (in.snpSkipN < 0 && !in.useQual) { std::cerr << "[allsite] not run: base qualities neither constant nor tied to N, and no masks\n"; return; }
