@@ -718,6 +718,10 @@ struct E2EPassIn {
     // E16: the region and the kept reads' arrays (reads, lowq) stay page-locked in a context that stays (no device reset) for pileupRun's
     // uploads, which then run at the pinned rate; pileupRun's own device reset ends both
     bool keepPinned = false;
+    // rt/holds (SINGLET_HANDOFF_PINCACHE, default on): preReg is e2ePreRegister's handle (the region page-locked before the device lock was taken, so
+    // the cudaHostRegister of the region is not under the slot); deferUnpin (with keepPinned) leaves the per-read ranges to e2eUnpinLater after the unlock
+    void* preReg = nullptr;
+    bool deferUnpin = false;
 };
 struct E2EPassOut {
     std::vector<uint8_t> reads;      // ReadRec per kept read, read order (= the pass's add_handoff_read order)
@@ -737,7 +741,15 @@ struct E2EPassOut {
     uint64_t nKeys = 0;
     double msKeys = 0, msTable = 0, msEval = 0, msScatter = 0, msUpload = 0, msDownload = 0, msTotal = 0;
     std::string log;
+    void* unpinLater = nullptr;      // rt/holds: the ranges e2ePass left page-locked for e2eUnpinLater (E2EPassIn::deferUnpin)
 };
+// rt/holds: page-locks the region's ranges (as e2ePass would, split as keepPinned + "trim") on `device` (its context created if need be) without the
+// device lock held; the handle goes in E2EPassIn::preReg. nullptr: not done (e2ePass then registers inside the hold, as before).
+void* e2ePreRegister(const E2ERegion& R, int device, bool split);
+// the handle's memory (unlocks the ranges e2ePass did not take over)
+void e2ePreRegisterRelease(void* h);
+// unlocks the ranges E2EPassOut::unpinLater holds (after the device unlock; the context of `device` is made current) and frees the handle
+void e2eUnpinLater(void* h, int device);
 bool e2ePass(const E2EPassIn& in, int device,
              const std::function<void(const std::vector<uint64_t>& keys, std::vector<E2ECrVal>& vals)>& crTable, E2EPassOut& out);
 

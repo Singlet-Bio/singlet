@@ -2415,9 +2415,11 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
         if (g_e10Level == 5 && e11.perRead)
             cbQual = [&P](const uint64_t *idx, const uint64_t *cr3, uint64 n, uint8_t *o, std::string &why) { return e11CbQual(P, idx, cr3, n, o, why); };
         const bool ok = nHost < (1ull << 32) && g_handoffNReads < (1ull << 32)
-            && e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual);
+            && (e9::soloDeferHostFrees(true), e9::soloRunKept(e11.device, e11.S, e11.M, nHost, hostIdx.data(), hostAnn.data(), res, log, cbQual));   // rt/holds: SINGLET_SOLO_DEFERFREE
         singlet_engine_gpu::unlockDevice(lockFd);
         sd.tr = std::chrono::steady_clock::now();
+        e9::soloDeferHostFrees(false);
+        e9::soloFlushDeferredHostFrees(e11.device);   // rt/holds: the page-locked frees queued under the slot, now that it is released
         if (!ok) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): Solo's counting on the device failed: " + log, std::cerr,
                                P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         sd.done = true;

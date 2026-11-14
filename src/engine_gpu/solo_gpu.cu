@@ -10,10 +10,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <parallel/algorithm>
+#include <mutex>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <unordered_map>
 #include <utility>
+#include "devpool.h"   // rt/holds: SINGLET_MAP2_POOL (drain on a failed allocation)
 #include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
 namespace e9 {
@@ -72,7 +74,7 @@ template <class T> struct Buf {
     void alloc(bool d, u64 cnt) {
         release(); dev = d; n = cnt; own = true;
         const u64 b = std::max<u64>(1, cnt) * sizeof(T);
-        if (dev) { CK(cudaMalloc(&p, b)); g_use.note(); }
+        if (dev) { cudaError_t ea = cudaMalloc(&p, b); if (ea == cudaErrorMemoryAllocation) { cudaGetLastError(); singlet_devpool::drain(); ea = cudaMalloc(&p, b); } CK(ea); g_use.note(); }
         else { p = (T*)malloc(b); if (!p) throw std::runtime_error("host allocation failed"); }
     }
     void zero() { if (!n) return; if (dev) CK(cudaMemset(p, 0, n * sizeof(T))); else memset(p, 0, n * sizeof(T)); }
@@ -1136,6 +1138,45 @@ SoloKeep g_keep;
 double msSince(std::chrono::steady_clock::time_point t) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); }
 }
 SoloKeep& soloKeep() { return g_keep; }
+// rt/holds (SINGLET_SOLO_DEFERFREE, default on; =0 restores the free inside the hold): the four page-locked host arrays soloKeepToHost made
+// (cudaFreeHost of GBs: ~0.4 s each, device-synchronising) are not freed by the soloKeepRelease that ends soloRunKept under the device lock;
+// they are queued and soloFlushDeferredHostFrees frees them after the caller has unlocked the device. Nothing is cached: the memory is freed
+// right after the unlock, so the host RSS is the same as before at every later point of the item.
+namespace {
+thread_local bool tl_deferHostFree = false;
+std::mutex g_dfMu;
+std::vector<void*> g_dfHost;
+void keepHostFree(void* p) {
+    if (!p) return;
+    if (tl_deferHostFree) { std::lock_guard<std::mutex> lk(g_dfMu); g_dfHost.push_back(p); return; }
+    cudaFreeHost(p);
+}
+// SINGLET_MAP2_POOL: the model's device arrays of soloKeepRecordsPart, uploaded once per records pass instead of once per part
+struct KeepModelCache {
+    const SoloModel* key = nullptr; size_t n0 = 0, n1 = 0;
+    Buf<u64> trS, trE, trEmax; Buf<u32> trExI, trGene, exSE; Buf<uint16_t> trExN; Buf<uint8_t> trStr; Buf<u64> cnt;
+    void clear() {
+        trS.release(); trE.release(); trEmax.release(); trExI.release(); trGene.release(); exSE.release(); trExN.release(); trStr.release(); cnt.release();
+        key = nullptr; n0 = n1 = 0;
+    }
+};
+KeepModelCache& keepModelCache() { static KeepModelCache* c = new KeepModelCache; return *c; }
+}
+void soloDeferHostFrees(bool on) {
+    static const bool allowed = [] { const char* e = std::getenv("SINGLET_SOLO_DEFERFREE"); return !(e && e[0] == '0'); }();
+    tl_deferHostFree = on && allowed;
+}
+void soloFlushDeferredHostFrees(int device) {
+    std::vector<void*> v;
+    { std::lock_guard<std::mutex> lk(g_dfMu); v.swap(g_dfHost); }
+    if (v.empty()) return;
+    const auto t0 = std::chrono::steady_clock::now();
+    if (device >= 0 && cudaSetDevice(device) != cudaSuccess) cudaGetLastError();
+    for (void* p : v) cudaFreeHost(p);
+    fprintf(stderr, "[engine_gpu] Solo: %zu page-locked host arrays freed after the device unlock (%.3f s)\n", v.size(),
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+}
+void soloKeepModelFlush() { keepModelCache().clear(); }
 void soloKeepRelease() {
     SoloKeep& K = g_keep;
     if (K.toHost.joinable()) K.toHost.join();
@@ -1143,10 +1184,11 @@ void soloKeepRelease() {
     if (K.ur3) cudaFree(K.ur3);
     if (K.rec) cudaFree(K.rec);
     if (K.recAnn) cudaFree(K.recAnn);
-    if (K.hcr3) cudaFreeHost(K.hcr3);
-    if (K.hur3) cudaFreeHost(K.hur3);
-    if (K.hrec) cudaFreeHost(K.hrec);
-    if (K.hrecAnn) cudaFreeHost(K.hrecAnn);
+    keepHostFree(K.hcr3);
+    keepHostFree(K.hur3);
+    keepHostFree(K.hrec);
+    keepHostFree(K.hrecAnn);
+    keepModelCache().clear();
     K = SoloKeep{};
 }
 // E15 (E11 §5.3): the four kept arrays to page-locked host memory on a thread (STAR's loop runs meanwhile); the device copies are freed only
@@ -1279,12 +1321,24 @@ bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecP
     try {
         SoloKeep& K = g_keep;
         if (!K.recAnn || r0 + m > K.nRec) throw std::runtime_error("the records' annotation array does not hold this part");
-        Buf<u64> dTrS, dTrE, dTrEmax; Buf<u32> dTrExI, dTrGene, dExSE; Buf<uint16_t> dTrExN; Buf<uint8_t> dTrStr;
-        dTrS.from(true, M.trS.data(), M.trS.size()); dTrE.from(true, M.trE.data(), M.trE.size()); dTrEmax.from(true, M.trEmax.data(), M.trEmax.size());
-        dTrExI.from(true, M.trExI.data(), M.trExI.size()); dTrGene.from(true, M.trGene.data(), M.trGene.size()); dExSE.from(true, M.exSE.data(), M.exSE.size());
-        dTrExN.from(true, M.trExN.data(), M.trExN.size()); dTrStr.from(true, M.trStr.data(), M.trStr.size());
+        // SINGLET_MAP2_POOL: the model's arrays stay on the device between the parts of one records pass (soloKeepRecordsEnd / soloKeepRelease /
+        // soloKeepModelFlush free them); =0 uploads and frees them per part as before
+        const bool pool = singlet_devpool::enabled();
+        KeepModelCache& C = keepModelCache();
+        Buf<u64> lTrS, lTrE, lTrEmax; Buf<u32> lTrExI, lTrGene, lExSE; Buf<uint16_t> lTrExN; Buf<uint8_t> lTrStr; Buf<u64> lCnt;
+        Buf<u64>& dTrS = pool ? C.trS : lTrS; Buf<u64>& dTrE = pool ? C.trE : lTrE; Buf<u64>& dTrEmax = pool ? C.trEmax : lTrEmax;
+        Buf<u32>& dTrExI = pool ? C.trExI : lTrExI; Buf<u32>& dTrGene = pool ? C.trGene : lTrGene; Buf<u32>& dExSE = pool ? C.exSE : lExSE;
+        Buf<uint16_t>& dTrExN = pool ? C.trExN : lTrExN; Buf<uint8_t>& dTrStr = pool ? C.trStr : lTrStr; Buf<u64>& cnt = pool ? C.cnt : lCnt;
+        if (!pool || C.key != &M || C.n0 != M.trS.size() || C.n1 != M.exSE.size() || !C.cnt.p) {
+            if (pool) C.clear();
+            dTrS.from(true, M.trS.data(), M.trS.size()); dTrE.from(true, M.trE.data(), M.trE.size()); dTrEmax.from(true, M.trEmax.data(), M.trEmax.size());
+            dTrExI.from(true, M.trExI.data(), M.trExI.size()); dTrGene.from(true, M.trGene.data(), M.trGene.size()); dExSE.from(true, M.exSE.data(), M.exSE.size());
+            dTrExN.from(true, M.trExN.data(), M.trExN.size()); dTrStr.from(true, M.trStr.data(), M.trStr.size());
+            cnt.alloc(true, 1);
+            if (pool) { C.key = &M; C.n0 = M.trS.size(); C.n1 = M.exSE.size(); }
+        }
         const TrModel tm{dTrS.p, dTrE.p, dTrEmax.p, dTrExI.p, dTrExN.p, dTrStr.p, dTrGene.p, dExSE.p, (u32)M.trS.size()};
-        Buf<u64> cnt; cnt.alloc(true, 1); cnt.zero();
+        cnt.zero();
         RecAnn* ra = K.recAnn + r0; u64* c = cnt.p; const SoloParams s = S; const e6::RecParams rp = RP;
         each(true, m, [=] __host__ __device__(u64 r) {
             const RecAnn a = recAnnotate(rp, dBlob + dBlobOff[r], dSeqOff[r + 1] - dSeqOff[r], tm, s);
@@ -1300,7 +1354,7 @@ bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecP
         return false;
     }
 }
-void soloKeepRecordsEnd(double ms) { g_keep.recs = true; g_keep.msRecs = ms; }
+void soloKeepRecordsEnd(double ms) { g_keep.recs = true; g_keep.msRecs = ms; keepModelCache().clear(); }
 namespace {
 // What soloRun(device) allocates beyond the kept inputs, as a bound (bytes): per read the largest live set of its stages (the whole-run
 // bound is the stage (c) set: the annotation 8, the distinct-CR array 8 (sized to the reads), the CR index 4, the UMI 4, the match 1, the keys 8,
