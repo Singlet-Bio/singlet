@@ -153,6 +153,35 @@ __global__ void k_probe(const uint64_t* flat, uint64_t Q, DevIndex v, DevIndex b
         probe(f, h, l, n); lo[2 * Q + q] = l; len[2 * Q + q] = n;
     }
 }
+// rt/xfer, zero-copy index: the probes in ascending hash order (the entries are read over the bus: sorted addresses stream at ~175-240 M lines/s,
+// random ones at 37 M/s). sq[t] is the probe's position in `flat`; the outputs are the same arrays k_probe writes.
+__global__ void k_probe_sorted(const uint64_t* sh, const uint32_t* sq, uint64_t Q, DevIndex v, DevIndex b, DevIndex f, uint32_t* lo, uint32_t* len) {
+    for (uint64_t t = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; t < Q; t += (uint64_t)gridDim.x * blockDim.x) {
+        const uint64_t h = sh[t];
+        const uint64_t q = sq[t];
+        uint32_t l, n;
+        probe(v, h, l, n); lo[q] = l; len[q] = n;
+        probe(b, h, l, n); lo[Q + q] = l; len[Q + q] = n;
+        probe(f, h, l, n); lo[2 * Q + q] = l; len[2 * Q + q] = n;
+    }
+}
+__global__ void k_iota32(uint32_t* a, uint64_t n) {
+    for (uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; i < n; i += (uint64_t)gridDim.x * blockDim.x) a[i] = (uint32_t)i;
+}
+// the probes' hit counts of one index in sorted order
+__global__ void k_gather_len(const uint32_t* sq, const uint32_t* len, uint64_t Q, uint64_t* out) {
+    for (uint64_t t = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; t < Q; t += (uint64_t)gridDim.x * blockDim.x) out[t] = len[sq[t]];
+}
+// the species ids of the hits of one index, copied from the mapped entries in sorted order into sid[coff[t] ..); lo then points into sid
+__global__ void k_cp_sid(const uint32_t* sq, const Entry* e, uint64_t Q, uint32_t* lo, const uint32_t* len, const uint64_t* coff, uint32_t* sid) {
+    for (uint64_t t = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; t < Q; t += (uint64_t)gridDim.x * blockDim.x) {
+        const uint64_t q = sq[t];
+        const uint32_t l = lo[q], n = len[q];
+        const uint64_t c = coff[t];
+        for (uint32_t u = 0; u < n; ++u) sid[c + u] = e[l + u].sid;
+        lo[q] = (uint32_t)c;
+    }
+}
 // per read: occurrences in the viral map and in the microbial map (bacterial + fungal)
 __global__ void k_sum(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* len, uint32_t n, uint64_t* tot64) {
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += gridDim.x * blockDim.x) {
@@ -164,16 +193,17 @@ __global__ void k_sum(const uint32_t* np, const uint64_t* qoff, uint64_t Q, cons
 // one key per (read, minimizer, entry) in the CPU's insertion sequence: viral segment first (minimizers ascending, entries in file
 // order), then the microbial segment (per minimizer: bacterial entries, then fungal entries - std::merge puts a before b)
 __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* lo, const uint32_t* len, DevIndex v, DevIndex b,
-                        DevIndex f, uint32_t n, const uint64_t* hoff, uint64_t* keys, uint32_t* vals) {
+                        DevIndex f, uint32_t n, const uint64_t* hoff, uint64_t* keys, uint32_t* vals,
+                        const uint32_t* sv, const uint32_t* sb, const uint32_t* sf) {   // sv/sb/sf: the hits' species ids gathered from the host-mapped index (zero-copy), else null
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += gridDim.x * blockDim.x) {
         if (!np[i] || hoff[i + 1] == hoff[i]) continue;
         uint64_t pos = hoff[i];
         const uint64_t q0 = qoff[i], q1 = q0 + np[i], rd = (uint64_t)i << 33;
         for (uint64_t q = q0; q < q1; ++q)
-            for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | v.e[lo[q] + t].sid; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | (sv ? sv[lo[q] + t] : v.e[lo[q] + t].sid); vals[pos] = (uint32_t)pos; }
         for (uint64_t q = q0; q < q1; ++q) {
-            for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | b.e[lo[Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
-            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | f.e[lo[2 * Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | (sb ? sb[lo[Q + q] + t] : b.e[lo[Q + q] + t].sid); vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | (sf ? sf[lo[2 * Q + q] + t] : f.e[lo[2 * Q + q] + t].sid); vals[pos] = (uint32_t)pos; }
         }
     }
 }
@@ -301,7 +331,7 @@ uint64_t bloom_header(const std::string& path) {
 unsigned ceil_log2(uint64_t v) { unsigned b = 0; while ((1ull << b) < v) ++b; return b; }
 
 // what the classification reads on the device: the three indexes and the Bloom filter
-struct DevSet { Index vi, bi, fi; uint64_t* bloom = nullptr; uint64_t nbits = 0; };
+struct DevSet { Index vi, bi, fi; uint64_t* bloom = nullptr; uint64_t nbits = 0; bool zc = false; };   // zc: the entries are in host-mapped memory
 
 // Phases A-C for n reads whose bases are h_seq[h_off[i] .. h_off[i+1]) in page-locked host memory (n > 0)
 void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64_t bytes, const DevSet& X, Arena& A, NonhostResult& out) {
@@ -333,6 +363,35 @@ void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64
     NH_CK(cudaGetLastError());
     // ---- probe the three indexes
     uint32_t* d_lo = (uint32_t*)A.dev(Q * 12), *d_len = (uint32_t*)A.dev(Q * 12);
+    uint32_t *d_sv = nullptr, *d_sb = nullptr, *d_sf = nullptr;   // zero-copy: the hits' species ids, gathered in hash order
+    if (Q && X.zc && Q < (1ull << 31)) {
+        cub::DoubleBuffer<uint64_t> sk(d_flat, (uint64_t*)A.dev(Q * 8));
+        cub::DoubleBuffer<uint32_t> sv_((uint32_t*)A.dev(Q * 4), (uint32_t*)A.dev(Q * 4));
+        k_iota32<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 20), blk>>>(sv_.Current(), Q);
+        NH_CK(cudaGetLastError());
+        size_t tb = 0;
+        NH_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, sk, sv_, (int)Q, 0, 64));
+        NH_CK(cub::DeviceRadixSort::SortPairs(A.dev(tb), tb, sk, sv_, (int)Q, 0, 64));
+        const int pg = (int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22);
+        k_probe_sorted<<<pg, blk>>>(sk.Current(), sv_.Current(), Q, dv, db, df, d_lo, d_len);
+        NH_CK(cudaGetLastError());
+        uint64_t* d_ls = (uint64_t*)A.dev((Q + 1) * 8);
+        uint64_t* d_co = (uint64_t*)A.dev((Q + 1) * 8);
+        const Entry* ents[3] = {dv.e, db.e, df.e};
+        uint32_t** sids[3] = {&d_sv, &d_sb, &d_sf};
+        for (int x = 0; x < 3; ++x) {
+            k_gather_len<<<pg, blk>>>(sv_.Current(), d_len + (uint64_t)x * Q, Q, d_ls);
+            NH_CK(cudaGetLastError());
+            NH_CK(cudaMemset(d_ls + Q, 0, 8));
+            size_t tb2 = 0; NH_CK(cub::DeviceScan::ExclusiveSum(nullptr, tb2, d_ls, d_co, (int)Q + 1));
+            NH_CK(cub::DeviceScan::ExclusiveSum(A.dev(tb2), tb2, d_ls, d_co, (int)Q + 1));
+            uint64_t tot = 0; NH_CK(cudaMemcpy(&tot, d_co + Q, 8, cudaMemcpyDeviceToHost));
+            if (tot >= (1ull << 32)) throw std::string("more than 2^32 hits in one index");
+            *sids[x] = (uint32_t*)A.dev(tot * 4 + 16);
+            if (ents[x]) k_cp_sid<<<pg, blk>>>(sv_.Current(), ents[x], Q, d_lo + (uint64_t)x * Q, d_len + (uint64_t)x * Q, d_co, *sids[x]);
+            NH_CK(cudaGetLastError());
+        }
+    } else
     if (Q) k_probe<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22), blk>>>(d_flat, Q, dv, db, df, d_lo, d_len);
     NH_CK(cudaGetLastError());
     uint64_t* d_tot = (uint64_t*)A.dev((n + 1) * 8ull);
@@ -349,7 +408,7 @@ void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64
     if (H) {
         cub::DoubleBuffer<uint64_t> keys((uint64_t*)A.dev(H * 8), (uint64_t*)A.dev(H * 8));
         cub::DoubleBuffer<uint32_t> vals((uint32_t*)A.dev(H * 4), (uint32_t*)A.dev(H * 4));
-        k_write<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, dv, db, df, n, d_hoff, keys.Current(), vals.Current());
+        k_write<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, dv, db, df, n, d_hoff, keys.Current(), vals.Current(), d_sv, d_sb, d_sf);
         NH_CK(cudaGetLastError());
         size_t tb = 0;
         NH_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, keys, vals, (int)H, 0, 64));
@@ -540,7 +599,7 @@ struct OnDevice {
             build_dir(ix, A, h.id.path);
         };
         one(R.v, X.vi); one(R.b, X.bi); one(R.f, X.fi);
-        X.nbits = R.nbits;
+        X.nbits = R.nbits; X.zc = R.v.dir || R.b.dir || R.f.dir;
         X.bloom = (uint64_t*)A.dev(R.nw * 8);
         NH_CK(cudaMemcpy(X.bloom, R.bloom, R.nw * 8, cudaMemcpyHostToDevice));
         NH_CK(cudaDeviceSynchronize());
