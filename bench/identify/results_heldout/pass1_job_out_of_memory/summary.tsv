@@ -1,0 +1,48 @@
+id	verdict	protocol	protocol_tag	action	top_family	top_support	spots	route	bytes	seconds	ambiguous_with	error
+SRR10139719	droplet_3p	10x-3p-v2	10x-3p-v2	process	droplet_3p	0.97846	200000	sra	-1	4.58877		
+SRR11067221	droplet_5p	10x-5p-v2	10x-5p-v2	process	droplet_5p	0.95382	200000	sra	-1	8.49773		
+SRR11089986	unknown	none		defer	bulk_rna	0.093	200000	sra	-1	4.50218		
+SRR11260853	droplet_5p	10x-5p-v2	10x-5p-v2	process	droplet_5p	0.93752	200000	sra	-1	8.35077		
+SRR13247000	ambiguous	none		refuse	droplet_other	0.325	200000	sra	-1	2.84597	droplet_other | plate_barcoded	
+SRR13450126	atac	10x-atac	scatac	classify_only	atac	0.97738	200000	sra	-1	4.10116		
+SRR14848344	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	4.95459		
+SRR15178151	droplet_5p	10x-5p-v2	10x-5p-v2	process	droplet_5p	0.87632	200000	sra	-1	3.58546		
+SRR15178153	vdj	10x-5p-v2	tcr	classify_only	vdj	0.883557	200000	sra	-1	5.81551		
+SRR15178156	vdj	10x-5p-v2	tcr	classify_only	vdj	0.869098	200000	sra	-1	5.94432		
+SRR17209008	unknown	none		defer	rna_no_barcode	0.09	200000	sra	-1	4.90867		
+SRR18070426	unknown	none		defer	rna_no_barcode	0.09	200000	sra	-1	3.69107		
+SRR18070427	unknown	none		defer	rna_no_barcode	0.09	200000	sra	-1	4.66963		
+SRR18070428	unknown	none		defer	rna_no_barcode	0.09	200000	sra	-1	7.15928		
+SRR18070625	unknown	none		defer	bulk_rna	0.093	200000	sra	-1	5.89705		
+SRR18070626	unknown	none		defer	droplet_other	0.0866281	200000	sra	-1	5.51739		
+SRR18070627	unknown	none		defer	droplet_other	0.100737	200000	sra	-1	5.304		
+SRR18116784	visium	10x-visium	10x-visium	process	visium	0.96762	200000	sra	-1	4.11297		
+SRR18214206	feature_barcode	10x-5p-v3	cite-adt	classify_only	feature_barcode	0.553166	200000	sra	-1	3.18766		
+SRR18214211	droplet_3p	10x-3p-v3	10x-3p-v3	process	droplet_3p	0.97768	200000	sra	-1	6.06628		
+SRR1853178	droplet_other	dropseq	dropseq	process	droplet_other	0.65	200000	sra	-1	2.57193		
+SRR18911820	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	1.97986		
+SRR19100747	plate_barcoded	plate-unknown		defer	plate_barcoded	0.883809	200000	sra	-1	2.77335		
+SRR19645614	plate_barcoded	plate-unknown		defer	plate_barcoded	0.914082	200000	sra	-1	2.98233		
+SRR20989841	feature_barcode	10x-5p-v3	cite-adt	classify_only	feature_barcode	0.560804	200000	sra	-1	2.77604		
+SRR21226943	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	3.41519		
+SRR22031356	feature_barcode	10x-3p-v2	cite-adt	classify_only	feature_barcode	0.935636	200000	sra	-1	3.75308		
+SRR22561792	visium	10x-visium	10x-visium	process	visium	0.96194	200000	sra	-1	3.8631		
+SRR23979322	barcode_read_missing	tag-3p		defer	barcode_read_missing	0.85	200000	sra	-1	2.6719		
+SRR24364777	atac	10x-atac	scatac	classify_only	atac	0.97082	200000	sra	-1	12.7411		
+SRR25434104	atac	10x-atac	scatac	classify_only	atac	0.97718	200000	sra	-1	6.59509		
+SRR27301081	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	5.7432		
+SRR27536879	droplet_other	barcoded-unspecified		defer	droplet_other	0.407004	200000	sra	-1	2.62925		
+SRR29202305	droplet_other	barcoded-unspecified		defer	droplet_other	0.426148	200000	sra	-1	5.11583		
+SRR29506390	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	3.35206		
+SRR29625964	smartseq3	smartseq3	smartseq3	defer	smartseq3	1	200000	sra	-1	10.5243		
+SRR31116722	plate_barcoded	plate-unknown		defer	plate_barcoded	0.46848	200000	sra	-1	3.23649		
+SRR36176795	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	2.14508		
+SRR4340391	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	3.20611		
+SRR6750041	combinatorial	splitseq	splitseq-parse	process	combinatorial	0.85	200000	sra	-1	4.68932		
+SRR7722018	unknown	none		defer	rna_no_barcode	0.09	200000	sra	-1	4.58453		
+SRR7788880	unknown	none		defer	rna_no_barcode	0.09	200000	sra	-1	5.77195		
+SRR7791890	droplet_3p	10x-3p-v2	10x-3p-v2	process	droplet_3p	0.95122	200000	sra	-1	5.41825		
+SRR7827205	plate_barcoded	plate-unknown		defer	plate_barcoded	0.946035	200000	sra	-1	2.39115		
+SRR8088290	droplet_5p	10x-5p-v2	10x-5p-v2	process	droplet_5p	0.91102	200000	sra	-1	9.37995		
+SRR9004325	droplet_3p	10x-3p-v3	10x-3p-v3	process	droplet_3p	0.98018	200000	sra	-1	9.37569		
+SRR9644308	rna_no_barcode	undetermined		defer	rna_no_barcode	0.3	200000	sra	-1	5.25317		

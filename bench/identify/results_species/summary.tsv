@@ -1,0 +1,7 @@
+run	elapsed	max_rss_mb	call	mixture	top_hit	top_rate	second_hit	second_rate	minor_species	minor_read_share	minor_reads	filters_scored	action
+human_hint	0:15.76	699	CLOSE_PAIR	False	Homo sapiens	0.3483	Pan troglodytes	0.2661	Mus musculus	0.0105	99	3	process
+human_noHint	0:30.64	699	CLOSE_PAIR	False	Homo sapiens	0.3483	Pan troglodytes	0.2661	Macaca fascicularis	0.0304	112	38	process
+mouse_hintHuman	0:10.24	588	CALL	False	Mus musculus	0.8137	Homo sapiens	0.0678	Homo sapiens	0.0004	8	3	process
+mouse_noHint	0:16.98	588	CALL	False	Mus musculus	0.8137	Rattus norvegicus	0.1776	Rattus norvegicus	0.0017	27	38	process
+xeno_hintHuman	0:07.08	561	MIXTURE	True	Homo sapiens	0.4694	Pan troglodytes	0.3496	Mus musculus	0.224	3024	3	process
+xeno_noHint	0:14.49	561	MIXTURE	True	Homo sapiens	0.4694	Pan troglodytes	0.3496	Mus musculus	0.224	3024	38	process

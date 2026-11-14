@@ -1,0 +1,415 @@
+// SPDX-License-Identifier: MIT
+// tests/cpp/test_identify.cpp
+//
+// `singlet identify` classifier (include/singlet/fq/identify.h) on synthetic spots, one decisive signal per family: 10x 3' and 5'
+// (barcode list, TSO tail), v2 inside v3 (nested lists), Visium (spot list), scATAC (barcode segment, reverse complement), HTO
+// (feature-barcode constants), well-barcode plates (CEL-Seq2, SCRB-seq), Smart-seq3 (UMI tag), full-length RNA without a barcode
+// (run size decides Smart-seq against bulk, both refuse or defer, never process), not-sequence reads. Also the policy table and the
+// mapping evidence parser.
+
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <random>
+#include <string>
+#include <vector>
+
+#include "singlet/fq/identify.h"
+#include "test_harness.h"
+
+using namespace singlet::fq;
+using namespace singlet::fq::identify;
+
+namespace {
+
+std::mt19937 rng(20261112);
+
+std::string rand_seq(size_t n) {
+    static const char b[4] = {'A', 'C', 'G', 'T'};
+    std::string s(n, 'A');
+    for (auto& c : s) c = b[rng() & 3];
+    return s;
+}
+
+void write_list(const std::string& path, const std::vector<std::string>& v) {
+    std::ofstream f(path);
+    for (const auto& s : v) f << s << "\n";
+}
+
+std::vector<std::string> make_list(size_t n, size_t len = 16) {
+    std::vector<std::string> v;
+    for (size_t i = 0; i < n; ++i) v.push_back(rand_seq(len));
+    return v;
+}
+
+HeadSpot spot(std::vector<std::string> segs) {
+    HeadSpot s;
+    s.seg = std::move(segs);
+    return s;
+}
+
+std::string pick(const std::vector<std::string>& v) { return v[rng() % v.size()]; }
+
+Report run(const std::vector<HeadSpot>& spots, std::vector<ScreenWhitelist>& lists, const std::string& dir, int64_t run_spots = -1,
+           const MapEvidence* map = nullptr) {
+    Options o;
+    o.whitelist_dirs = {dir};
+    o.run_spots = run_spots;
+    return identify_spots(spots, o, lists, map);
+}
+
+std::vector<std::string> wl_v3, wl_v2, wl_vis, wl_atac;
+
+}  // namespace
+
+int main() {
+    namespace fs = std::filesystem;
+    const std::string dir = (fs::temp_directory_path() / ("test_identify_" + std::to_string(rng()))).generic_string();
+    fs::create_directories(dir);
+    wl_v3 = make_list(6000);
+    wl_v2.assign(wl_v3.begin(), wl_v3.begin() + 1200);   // the 737K list sits inside the 3M list
+    wl_vis = make_list(1500);
+    wl_atac = make_list(6000);
+    write_list(dir + "/3M-february-2018.txt", wl_v3);
+    write_list(dir + "/737K-august-2016.txt", wl_v2);
+    write_list(dir + "/visium-v1.txt", wl_vis);
+    write_list(dir + "/737K-cratac-v1.txt", wl_atac);
+    auto lists = identify_lists();
+    const size_t N = 8000;
+
+    std::cout << "\n=== 10x droplet ===\n";
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "droplet_3p" && r.verdict_protocol == "10x-3p-v3", "3' v3: family and tag");
+        CHECK(r.action == "process", "3' v3 is processed");
+        CHECK(r.ev.bc_seg == 0 && r.ev.cdna_seg == 1, "roles: barcode in segment 0, cDNA in segment 1");
+        CHECK(!r.ranked.empty() && r.ranked[0].usefulness > 0.9 && !r.ranked[0].unmeasured.empty(), "usefulness reported with its unmeasured components");
+    }
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12) + "TTTCTTATATGGG" + rand_seq(9), rand_seq(90)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "droplet_5p" && r.verdict_protocol == "10x-5p-v3", "5' v3 from the TSO tail");
+    }
+    {   // the same 5' reads with strand evidence that says sense: the strand decides the 3'/5' question when it is clear
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12) + "TTTCTTATATGGG" + rand_seq(9), rand_seq(90)}));
+        MapEvidence m; m.measured = true; m.unique = 0.9; m.exonic = 0.5; m.exonic_measured = true; m.sense = 0.05;
+        auto r = run(v, lists, dir, -1, &m);
+        CHECK(r.verdict_protocol == "10x-5p-v3", "antisense reads keep 5'");
+        MapEvidence m2 = m; m2.sense = 0.95;
+        std::vector<HeadSpot> w;
+        for (size_t i = 0; i < N; ++i) w.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto r2 = run(w, lists, dir, -1, &m2);
+        CHECK(r2.verdict_protocol == "10x-3p-v3", "sense reads give 3'");
+        MapEvidence m3 = m; m3.sense = 0.97;   // motifs say 5', strand says sense: the strand wins
+        auto r3 = run(v, lists, dir, -1, &m3);
+        CHECK(r3.verdict_protocol == "10x-3p-v3", "strand evidence overrules the motifs");
+    }
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_v2) + rand_seq(10), rand_seq(98)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict_protocol == "10x-3p-v2", "nested lists: a library on the 737K list is v2");
+    }
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_vis) + rand_seq(12), rand_seq(90)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "visium" && r.action == "process", "Visium spot list -> visium, processed");
+    }
+    {   // a read-1-only head: no cDNA read, barcode list still calls the chemistry
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.ranked[0].family.rfind("droplet", 0) == 0 || r.verdict == "ambiguous" || r.verdict == "droplet_3p", "single barcode read does not crash");
+    }
+
+    {   // Visium sub-call: probe panels repeat their read starts, poly(A) fragments do not; V(D)J enrichment and Flex from the same evidence
+        const auto probes = make_list(2000, 50);
+        std::vector<HeadSpot> pv, fv, gv;
+        for (size_t i = 0; i < 40000; ++i) {
+            pv.push_back(spot({pick(wl_vis) + rand_seq(12), pick(probes)}));
+            fv.push_back(spot({pick(wl_v3) + rand_seq(12), pick(probes)}));
+        }
+        for (size_t i = 0; i < N; ++i) gv.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto rp = run(pv, lists, dir);
+        CHECK(rp.verdict == "visium" && rp.action == "process" && rp.ranked[0].modality == "spatial_gex_probe", "Visium with probe-site read starts -> sub-call probe-based, still processed");
+        auto rpa = run(gv, lists, dir);
+        CHECK(rpa.verdict == "droplet_3p", "random cDNA starts are not a probe panel");
+        auto rf = run(fv, lists, dir);
+        CHECK(rf.verdict == "flex" && rf.action == "defer", "barcode list plus probe-site read starts -> flex, deferred");
+        MapEvidence vd; vd.measured = true; vd.tx_measured = true; vd.unique = 0.9; vd.exonic = 0.7; vd.exonic_measured = true; vd.sense = 0.1; vd.sense_span = 0.1; vd.vdj = 0.62;
+        auto rv = run(gv, lists, dir, -1, &vd);
+        CHECK(rv.verdict == "vdj" && rv.action == "classify_only", "list hit and most reads on IG or TR genes -> vdj, classify only");
+    }
+    std::cout << "\n=== ATAC and feature barcodes ===\n";
+    {
+        std::vector<HeadSpot> v, w;
+        for (size_t i = 0; i < N; ++i) {
+            const std::string bc = pick(wl_atac);
+            v.push_back(spot({rand_seq(50), bc, rand_seq(50)}));
+            std::string rc(bc.rbegin(), bc.rend());
+            for (auto& c : rc) c = singlet::fq::identify::detail_id::comp(c);
+            w.push_back(spot({rand_seq(50), rand_seq(50), rc}));
+        }
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "atac" && r.action == "classify_only", "ATAC barcode segment -> atac, classify only");
+        auto r2 = run(w, lists, dir);
+        CHECK(r2.verdict == "atac" && r2.action == "classify_only", "reverse-complement ATAC barcode segment");
+    }
+    {
+        std::vector<std::string> tags = make_list(12, 15);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), pick(tags) + "AAAAAAAAAAAA" + rand_seq(63)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "feature_barcode" && r.action == "classify_only", "hashtag R2 -> feature_barcode, classify only");
+    }
+
+    std::cout << "\n=== plates, Smart-seq3, no barcode ===\n";
+    {
+        const auto wells = make_list(96, 6);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(wells) + rand_seq(10), rand_seq(70)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "plate_barcoded" && r.verdict_protocol == "scrbseq", "96 well barcodes in a 16-base read -> SCRB-seq layout");
+        CHECK(r.action == "defer", "plate protocols are deferred");
+    }
+    {
+        const auto wells = make_list(300, 8);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({rand_seq(6) + pick(wells) + std::string(10, 'T') + rand_seq(8), rand_seq(70)}));
+        auto r = run(v, lists, dir);
+        std::cout << "  [celseq2 case] verdict " << r.verdict << " protocol " << r.verdict_protocol << " window off " << r.ev.window.off << " len " << r.ev.window.len << " k " << r.ev.window.k << " found " << r.ev.window.found << " bc_seg " << r.ev.bc_seg << " detector " << r.ev.detected.tag << std::endl;
+        CHECK(r.verdict == "plate_barcoded" && r.verdict_protocol == "celseq2-u6b8", "UMI6 + 8-base well barcode -> CEL-Seq2 layout");
+    }
+    {   // Drop-seq style: a 12-base barcode from thousands of beads is more than a plate holds; the barcode read repeats at its start
+        const auto beads = make_list(2500, 12);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < 40000; ++i) v.push_back(spot({pick(beads) + rand_seq(8), rand_seq(60)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "droplet_other", "large barcode set (12 bases + 8 base UMI) -> droplet_other");
+        std::vector<HeadSpot> w;
+        for (size_t i = 0; i < 40000; ++i) w.push_back(spot({pick(beads) + rand_seq(10) + rand_seq(33), rand_seq(60)}));
+        auto r2 = run(w, lists, dir);
+        CHECK(r2.verdict == "droplet_other", "large barcode set in a long first read -> droplet_other");
+        CHECK(r2.verdict_protocol != "barcoded-unspecified" || r2.action == "defer", "an unspecified layout is deferred, not processed");
+    }
+    {   // split-pool beads: two disjoint 96-barcode windows separated by a linker
+        const auto b1 = make_list(96, 6), b2 = make_list(96, 6);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({pick(b1) + "ACG" + pick(b2) + "GACTCA" + rand_seq(8), rand_seq(70)}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "droplet_other", "two barcode windows -> split-pool droplet beads, not a plate");
+    }
+    {   // plate-based Smart-seq: 96 well indices in index reads, two long insert reads without a barcode
+        const auto idx = make_list(96, 8);
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) { const std::string w = pick(idx); v.push_back(spot({rand_seq(76), rand_seq(76), w, w})); }
+        auto r = run(v, lists, dir, 500000);
+        CHECK(r.verdict == "smartseq" && r.action == "defer", "well indices in the index reads -> smartseq, deferred");
+    }
+    {   // a long single read with a repeated start is not a barcoded plate
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({"GATCGGAAGAGC" + rand_seq(70)}));
+        auto r = run(v, lists, dir, 20000000);
+        std::cout << "  [long single] verdict " << r.verdict << " " << r.verdict_protocol << " action " << r.action << std::endl;
+        CHECK(r.verdict != "plate_barcoded" && r.action != "process", "long single read: no plate call, never processed");
+    }
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) {
+            const bool tag = (i % 3) != 0;
+            v.push_back(spot({(tag ? std::string("ATTGCGCAATG") + rand_seq(8) + rand_seq(80) : rand_seq(99)), rand_seq(100)}));
+        }
+        auto r = run(v, lists, dir, 400000);
+        CHECK(r.verdict == "smartseq3" && r.action == "defer", "Smart-seq3 tag -> smartseq3, deferred");
+    }
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({rand_seq(100), rand_seq(100)}));
+        // without mapping evidence a run with no barcode read is held, never called bulk
+        auto none = run(v, lists, dir, 60000000);
+        CHECK(none.verdict == "rna_no_barcode" && none.action == "defer", "no barcode read, no mapping evidence -> rna_no_barcode, deferred");
+        CHECK(none.verdict != "bulk_rna" && none.verdict != "smartseq", "size alone never calls bulk or Smart-seq");
+        MapEvidence even; even.measured = true; even.tx_measured = true; even.unique = 0.9; even.exonic = 0.6; even.exonic_measured = true; even.sense = 0.5;
+        even.sense_span = 0.5; even.end3 = 0.08; even.end5 = 0.07; even.end_expected = 0.06; even.end_reads = 5000; even.tx_reads = 20000;
+        auto big = run(v, lists, dir, 60000000, &even);
+        CHECK(big.verdict == "bulk_rna" && big.action == "refuse", "even coverage, large run -> bulk, refused");
+        auto small = run(v, lists, dir, 2000000, &even);
+        CHECK(small.verdict == "smartseq" && small.action == "defer", "even coverage, plate-sized run -> smartseq, deferred");
+        auto unk = run(v, lists, dir, -1, &even);
+        CHECK(unk.verdict == "ambiguous" && unk.action == "refuse", "even coverage, run size unknown -> ambiguous, refused");
+        CHECK(unk.ambiguous_with.find("smartseq") != std::string::npos && unk.ambiguous_with.find("bulk_rna") != std::string::npos, "ambiguity names both");
+        Options o; o.whitelist_dirs = {dir}; o.hint = "assay=smartseq2";
+        auto hinted = identify_spots(v, o, lists, &even);
+        CHECK(hinted.verdict == "ambiguous" && hinted.action == "defer" && hinted.hint == "assay=smartseq2", "a hint selects the action and leaves the verdict");
+        // single_cell=1 turns the refusals of runs without barcode structure into defers and leaves the verdict alone
+        Options sc; sc.whitelist_dirs = {dir}; sc.hint = "single_cell=1";
+        auto sbulk = identify_spots(v, sc, lists, &even);
+        CHECK(sbulk.verdict == "ambiguous" && sbulk.action == "refuse" && sbulk.hints.size() == 1 && sbulk.hints[0].effect.empty(),
+              "single_cell=1 does not touch an ambiguous call");
+        { std::vector<HeadSpot> w2 = v; Options so = sc; so.run_spots = 60000000;
+          auto sb = identify_spots(w2, so, lists, &even);
+          CHECK(sb.verdict == "bulk_rna" && sb.action == "defer" && sb.hints[0].effect == "action refuse -> defer", "single_cell=1: bulk verdict stays, refuse becomes defer");
+          const std::string js = report_json(sb);
+          CHECK(js.find("\"hints\": [{\"key\": \"single_cell\", \"value\": \"1\", \"effect\": \"action refuse -> defer\"}]") != std::string::npos && sb.policy_source == "builtin",
+                "hints[] recorded in the JSON, policy_source unchanged");
+          Options so2 = so; so2.hint.clear();
+          CHECK(identify_spots(w2, so2, lists, &even).action == "refuse", "without the hint the bulk call is still refused"); }
+        std::vector<HeadSpot> se;
+        for (size_t i = 0; i < N; ++i) se.push_back(spot({rand_seq(75)}));
+        auto r = run(se, lists, dir, 30000000, &even);
+        CHECK(r.verdict == "bulk_rna" && r.action == "refuse", "single-end long reads, even coverage, large run -> bulk refused");
+        // tag-based single-cell cDNA whose barcode read is missing: one transcript end, one strand
+        MapEvidence t3 = even; t3.end3 = 0.62; t3.end5 = 0.05; t3.sense_span = 0.95; t3.end_expected = 0.07;
+        auto rt3 = run(v, lists, dir, 20000000, &t3);
+        CHECK(rt3.verdict == "barcode_read_missing" && rt3.verdict_protocol == "tag-3p" && rt3.action == "defer", "3' end pile-up on the sense strand -> barcode_read_missing, 3'");
+        MapEvidence t5 = even; t5.end3 = 0.04; t5.end5 = 0.55; t5.sense_span = 0.06; t5.end_expected = 0.07;
+        auto rt5 = run(v, lists, dir, 20000000, &t5);
+        CHECK(rt5.verdict == "barcode_read_missing" && rt5.verdict_protocol == "tag-5p" && rt5.action == "defer", "5' end pile-up on the antisense strand -> barcode_read_missing, 5'");
+        bool has_try = false;
+        for (const auto& re : rt3.ranked[0].reasons) has_try = has_try || re.find("try_endpoints") != std::string::npos;
+        CHECK(has_try, "barcode_read_missing carries the try_endpoints note");
+        MapEvidence st = even; st.end3 = 0.6; st.sense_span = 0.5;   // end pile-up on both strands is not a tag library
+        auto rst = run(v, lists, dir, 20000000, &st);
+        CHECK(rst.verdict != "barcode_read_missing" && rst.action != "process", "end pile-up without the strand of a tag kit is not barcode_read_missing");
+    }
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < 3000; ++i) v.push_back(spot({std::string(100, 'N'), std::string(100, 'N')}));
+        auto r = run(v, lists, dir);
+        CHECK(r.verdict == "not_sequence" && r.action == "refuse", "all-N reads -> not_sequence");
+    }
+
+    std::cout << "\n=== mapping evidence ===\n";
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < N; ++i) v.push_back(spot({rand_seq(100), rand_seq(100)}));
+        MapEvidence g; g.measured = true; g.unique = 0.85; g.exonic = 0.02; g.exonic_measured = true; g.sense = 0.5;
+        auto r = run(v, lists, dir, 2000000, &g);
+        CHECK(r.verdict == "genomic_dna" && r.action == "refuse", "reads that map outside genes -> genomic DNA, refused");
+        MapEvidence rna; rna.measured = true; rna.unique = 0.9; rna.exonic = 0.6; rna.exonic_measured = true; rna.sense = 0.5;
+        rna.tx_measured = true; rna.sense_span = 0.5; rna.end3 = 0.08; rna.end5 = 0.07; rna.end_expected = 0.06; rna.end_reads = 5000;
+        auto r2 = run(v, lists, dir, 2000000, &rna);
+        CHECK(r2.verdict == "smartseq", "reads that map to genes evenly keep the RNA calls");
+        const std::string p = dir + "/star.";
+        { std::ofstream l(p + "Log.final.out"); l << "                          Number of input reads |\t1000\n                   Uniquely mapped reads number |\t900\n"
+                                                     "        Number of reads mapped to multiple loci |\t50\n"; }
+        { std::ofstream l(p + "ReadsPerGene.out.tab"); l << "N_unmapped\t100\t100\t100\nN_noFeature\t10\t300\t10\nG1\t800\t780\t10\nG2\t50\t45\t5\n"; }
+        auto m = parse_star_outputs(p, 1000);
+        CHECK(m.measured && std::abs(m.unique - 0.9) < 1e-9 && std::abs(m.multi - 0.05) < 1e-9, "STAR log parsed");
+        CHECK(m.exonic_measured && std::abs(m.sense - 825.0 / 840.0) < 1e-9, "sense fraction from the strand columns");
+    }
+
+    std::cout << "\n=== policy and JSON ===\n";
+    for (const char* f : {"atac", "multiome_atac", "feature_barcode", "vdj", "bulk_rna", "genomic_dna", "methylome", "not_sequence", "unknown", "ambiguous", "rna_no_barcode"})
+        CHECK(std::string(policy_for(f).action) != "process", std::string("family never processed: ") + f);
+    CHECK(std::string(policy_for("droplet_3p").action) == "process" && std::string(policy_for("visium").action) == "process", "10x and Visium are processed");
+    CHECK(std::string(policy_for("not a family").action) == "refuse", "an unlisted family is refused");
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < 2000; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto r = run(v, lists, dir);
+        const std::string js = report_json(r);
+        CHECK(js.find("\"schema_version\": 1") != std::string::npos, "JSON carries the schema version");
+        CHECK(js.find("\"interpretations\"") != std::string::npos && js.find("\"components\"") != std::string::npos, "JSON lists interpretations with components");
+    }
+
+    std::cout << "\n=== record version 2: registry ids, sub-calls, route status ===\n";
+    {
+        std::vector<HeadSpot> v;
+        for (size_t i = 0; i < 2000; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), rand_seq(90)}));
+        auto r = run(v, lists, dir);
+        const std::string js = report_json(r);
+        CHECK(js.rfind("{\n  \"record_version\": 2,", 0) == 0, "record_version 2 is the first key");
+        CHECK(r.protocol_tag == "10x-3p-v3" && js.find("\"protocol_tag\": \"10x-3p-v3\"") != std::string::npos, "protocol_tag is the registry id");
+        CHECK(js.find("\"strand\": \"3p\"") != std::string::npos && js.find("\"indrop_version\": null") != std::string::npos &&
+              js.find("\"sub_call_reason\": \"indrop_version, bd_bead and parse_kit: not implemented\"") != std::string::npos,
+              "sub_call carries 3p and null version calls with the reason");
+        CHECK(r.action == "process" && r.policy_source == "builtin" && js.find("\"policy_source\": \"builtin\"") != std::string::npos, "built-in policy by default");
+        Options o;
+        o.whitelist_dirs = {dir};
+        o.use_route_status = true;
+        o.route_status["10x-3p-v3"] = "dev_pass";
+        auto r2 = identify_spots(v, o, lists, nullptr);
+        CHECK(r2.verdict == "droplet_3p" && r2.action == "defer" && r2.policy_source == "route-status", "route status other than validated defers a recognized family");
+        o.route_status["10x-3p-v3"] = "validated";
+        auto r3 = identify_spots(v, o, lists, nullptr);
+        CHECK(r3.action == "process", "a validated route is processed");
+        o.route_status.clear();
+        auto r4 = identify_spots(v, o, lists, nullptr);
+        CHECK(r4.action == "defer", "an id missing from the status map counts as unrouted");
+        std::unordered_map<std::string, std::string> m;
+        CHECK(parse_route_status("{\n \"10x-3p-v3\": \"validated\",\n \"bd-rhapsody\": \"failed\"\n}", m) && m.size() == 2 && m["bd-rhapsody"] == "failed",
+              "route status JSON parsed");
+    }
+    {
+        auto t = registry_tag("droplet_other", "dropseq-like", "gex");
+        CHECK(t.id == "dropseq" && t.alternatives.size() == 1 && t.alternatives[0] == "seqwell", "Drop-seq and Seq-Well are listed as alternatives");
+        auto a = registry_tag("feature_barcode", "10x-3p-v3", "feature_totalseq_a_or_hto");
+        CHECK(a.id == "cite-adt" && a.alternatives.size() == 1 && a.alternatives[0] == "cite-hashtag", "ADT against hashtag is listed as an alternative");
+        CHECK(registry_tag("barcode_read_missing", "tag-3p", "gex").id.empty() && registry_tag("unknown", "none", "none").id.empty() &&
+              registry_tag("droplet_other", "barcoded-unspecified", "gex").id.empty(), "no registry id gives null");
+        CHECK(registry_tag("bulk_rna", "bulk", "gex").id == "generic-negative" && registry_tag("plate_barcoded", "celseq2-u6b8", "gex").id == "celseq2" &&
+              registry_tag("multiome_atac", "10x-arc-atac", "chromatin_accessibility").id == "10x-arc-atac", "other registry ids");
+    }
+
+    std::cout << "\n=== species block ===\n";
+    {
+        // two synthetic genomes in different close groups, one filter file each, indexed like the reference pack
+        const std::string g1 = rand_seq(20000), g2 = rand_seq(20000);
+        const std::string sdir = dir + "/species";
+        fs::create_directories(sdir);
+        auto make = [&](const std::string& tag, const std::string& g) {
+            singlet::pileup::BloomFilter bf(1u << 22);
+            for (size_t i = 0; i + 21 <= g.size(); ++i) {
+                uint64_t k = 0;
+                for (size_t j = 0; j < 21; ++j) k = (k << 2) | nuc::ascii_to_num(g[i + j]);
+                bf.insert(singlet::pileup::kmer::canonical_2bit(k, 21));
+            }
+            bf.save(sdir + "/" + tag + "_21mer.bloom");
+        };
+        make("sp1", g1);
+        make("sp2", g2);
+        // a decoy: a diverged copy of genome one in its own close group, which outranks genome two by hit rate (as another primate does for human)
+        std::string g3 = g1;
+        for (size_t i = 7; i < g3.size(); i += 70) g3[i] = g3[i] == 'A' ? 'C' : 'A';
+        make("sp3", g3);
+        { std::ofstream o(sdir + "/species_filters.tsv"); o << "filter_tag\treference_id\ttaxon_id\tspecies\tclose_group\tbuild_note\tsha256\nsp1\tr1\t1\tSpecies one\tG1\t\t\nsp2\tr2\t2\tSpecies two\tG2\t\t\nsp3\tr3\t3\tSpecies three\tG3\t\t\n"; }
+        auto reads_of = [&](const std::string& g, size_t n) {
+            std::vector<HeadSpot> v;
+            for (size_t i = 0; i < n; ++i) v.push_back(spot({pick(wl_v3) + rand_seq(12), g.substr((i * 37) % (g.size() - 100), 90)}));
+            return v;
+        };
+        Options o;
+        o.whitelist_dirs = {dir};
+        o.species_filter_dir = sdir;
+        auto v1 = reads_of(g1, 3000);
+        auto r1 = identify_spots(v1, o, lists, nullptr);
+        CHECK(r1.species.measured && r1.species.call == "CALL" && r1.species.hits[0].tag == "sp1" && !r1.species.mixture, "species: one genome gives a CALL");
+        auto vm = reads_of(g1, 2000);
+        for (auto& x : reads_of(g2, 1000)) vm.push_back(x);
+        auto rm = identify_spots(vm, o, lists, nullptr);
+        CHECK(rm.species.mixture && rm.species.call == "MIXTURE" && rm.species.minor_species == "Species two" && rm.species.hits[1].tag == "sp3",
+              "species: a one-third minor genome is a mixture even when a diverged copy of the major genome outranks it by rate");
+        // a 10x library that also carries non-human reads (xenograft, parasite, microbes) keeps the action of its family
+        CHECK(rm.verdict == "droplet_3p" && rm.protocol_tag == "10x-3p-v3" && rm.action == "process" && rm.species.hits.size() == 2,
+              "species: a mixture sets the flag and lists the second hit without changing the action");
+        o.species_hint = "Species two";
+        auto rh = identify_spots(v1, o, lists, nullptr);
+        CHECK(rh.species.hits[0].tag == "sp1" && !rh.species.screened_by_hint, "species: a wrong hint loads the rest and still calls the right filter");
+        auto rn = identify_spots(reads_of(rand_seq(20000), 3000), o, lists, nullptr);
+        CHECK(rn.species.call == "NONE", "species: reads from neither genome give NONE");
+        const std::string js = report_json(r1);
+        CHECK(js.find("\"species\": {\"call\": \"CALL\"") != std::string::npos, "species block in the JSON");
+        CHECK(report_json(run(v1, lists, dir)).find("\"species\": null") != std::string::npos, "species is null without filters");
+    }
+
+    fs::remove_all(dir);
+    std::cout << "\n" << n_pass << " passed, " << n_fail << " failed\n";
+    return n_fail == 0 ? 0 : 1;
+}

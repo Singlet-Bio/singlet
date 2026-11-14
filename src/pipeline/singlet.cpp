@@ -110,6 +110,7 @@
 #include "../stage/stage_encoder.h"   // singlet download --stage-out
 #include "singlet/fq/fastq_encoder.h"
 #include "singlet/fq/run_screen.h"
+#include "singlet/fq/identify_cli.h"
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/pileup/run_restart.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
@@ -3615,6 +3616,8 @@ static int singlet_main(int argc, char* argv[]) {
                 return cmd_whitelists(argc - 2, argv + 2);
             if (sub == "screen-runs")
                 return singlet::fq::screen_runs_main(argc - 2, argv + 2);
+            if (sub == "identify")   // read-based library identification from the head of a dataset (include/singlet/fq/identify.h)
+                return singlet::fq::identify::identify_main(argc - 2, argv + 2);
             if (sub == "build-host-filter")
                 return cmd_build_host_filter(argc - 2, argv + 2);
             if (sub == "star") {   // the bundled STAR on its own: `singlet star <STAR arguments>` (measurements, E14)
