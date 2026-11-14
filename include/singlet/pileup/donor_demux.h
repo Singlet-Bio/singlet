@@ -602,16 +602,27 @@ static inline uint32_t float_bits(float x) { uint32_t u; std::memcpy(&u, &x, 4);
 //   * the ELBO is evaluated only when its value is read: by the convergence test (iterations >= min_iter) and as the previous
 //     value of that test (the iteration before), and at the last iteration;
 //   * beta_mu / beta_sum, which only the final iteration leaves behind, are written once at the end.
-static void run_vb_inplace(
+//
+// Exact fixed-point exit (mode 1; SINGLET_DEMUX_FIXEDPOINT=0 turns it off): one iteration is a pure function of q (the M-step
+// builds s1/s2 from q, the E-step builds q from s1/s2; the digamma/KL caches only hold values of those same bits). So once an
+// iteration returns a q that is bitwise the q it started from, every later iteration repeats it exactly, and so does its ELBO.
+// Instead of running them, the loop replays the bookkeeping of the remaining iterations on that constant ELBO (the convergence
+// test, prev_elbo, result.elbo, n_iter) and stops. If the ELBO of the fixed state was not computed yet (the iteration was
+// not one that reads it), one extra iteration with the ELBO forced on is run on the fixed state and counted as the first
+// skipped one. Returns the number of iterations that were not run.
+// Note on the K=1 case: prev_elbo is a float, so elbo - float(elbo) is the float rounding residual of the (constant) ELBO,
+// which is >= eps_conv for part of the values; the original convergence test then never fires and the loop runs to max_iter.
+// That behaviour is kept (outputs must not change); only the repeated work is skipped.
+static int run_vb_inplace_fp(
     const CoveredSNPData& data, int K,
     const DonorDemuxConfig& cfg, VBResult& result,
-    int max_iter, int nthreads)
+    int max_iter, int nthreads, bool use_fp)
 {
     const int nc = data.n_cells;
     const int ns = data.n_covered_snps;
     const float s1_prior = 1.0f, s2_prior = 1.0f;
     nthreads = std::max(1, nthreads);
-    if (max_iter <= 0) return;
+    if (max_iter <= 0) return 0;
     const size_t nsK = static_cast<size_t>(ns) * K;
     const std::shared_ptr<const SnpMajor> smp = get_snp_major(data, nthreads);
     const SnpMajor& sm = *smp;
@@ -636,9 +647,32 @@ static void run_vb_inplace(
                              - demux_lgamma(s1_prior) - demux_lgamma(s2_prior);
     const size_t pf = 12;      // prefetch distance (entries) of the ELBO's cell-major gathers
     int iters_run = 0;
+    int skipped = 0;
+    bool probing = false;               // the coming iteration is the extra one that evaluates the ELBO of a fixed state
+    std::atomic<int> n_changed{0};      // cells whose q changed in this iteration's E-step
+
+    // Replays the ELBO bookkeeping of iterations j0..max_iter-1 for a constant ELBO `E`; iters_run counts the iterations run
+    // so far (the original counts them the same way). Leaves the counters as the original loop would at its exit.
+    auto fast_forward = [&](int j0, double E) {
+        int j = j0;
+        for (; j < max_iter; ++j) {
+            const bool ne = (j + 1 >= cfg.min_iter) || (j == max_iter - 1);
+            if (!ne) continue;
+            result.elbo = E;
+            if (j >= cfg.min_iter && static_cast<float>(E - prev_elbo) < cfg.eps_conv) break;
+            prev_elbo = static_cast<float>(E);
+        }
+        const int last = (j < max_iter) ? j : max_iter - 1;
+        const int total = last + 1;
+        skipped = total - iters_run;
+        result.n_iter += skipped;
+        iters_run = total;
+    };
 
     for (int iter = 0; iter < max_iter; ++iter) {
-        const bool need_elbo = (iter + 1 >= cfg.min_iter) || (iter == max_iter - 1);
+        const bool need_elbo_orig = (iter + 1 >= cfg.min_iter) || (iter == max_iter - 1);
+        const bool need_elbo = need_elbo_orig || probing;
+        n_changed.store(0, std::memory_order_relaxed);
         if (need_elbo && klt.empty()) {
             klt.assign(nsK, 0.0f); kk1.assign(nsK, 0xFFFFFFFFu); kk2.assign(nsK, 0xFFFFFFFFu);
         }
@@ -704,6 +738,8 @@ static void run_vb_inplace(
             const float inv_k = 1.0f / K;
             parallel_chunks(sm.nblocks, nthreads, [&](int, int b0, int b1) {
                 std::vector<float> llbuf;
+                std::vector<float> qold(use_fp ? K : 0);
+                bool chg = false;
                 for (int blk = b0; blk < b1; ++blk) {
                     const int c0 = sm.cell0[blk], c1 = sm.cell0[blk + 1];
                     llbuf.assign(static_cast<size_t>(c1 - c0) * K, 0.0f);
@@ -727,19 +763,24 @@ static void run_vb_inplace(
                     }
                     for (int c = c0; c < c1; ++c) {
                         float* idp = q.data() + static_cast<size_t>(c) * K;
+                        if (use_fp) for (int k = 0; k < K; ++k) qold[k] = idp[k];
                         if (data.cells[c].snp_idx.empty()) {
                             for (int k = 0; k < K; ++k) idp[k] = inv_k;
-                            continue;
+                        } else {
+                            const float* ll = llb + static_cast<size_t>(c - c0) * K;
+                            float mx = ll[0];
+                            for (int k = 1; k < K; ++k) if (ll[k] > mx) mx = ll[k];
+                            float sm_ = 0.0f;
+                            for (int k = 0; k < K; ++k) { idp[k] = std::exp(ll[k] - mx); sm_ += idp[k]; }
+                            const float inv = 1.0f / sm_;
+                            for (int k = 0; k < K; ++k) idp[k] *= inv;
                         }
-                        const float* ll = llb + static_cast<size_t>(c - c0) * K;
-                        float mx = ll[0];
-                        for (int k = 1; k < K; ++k) if (ll[k] > mx) mx = ll[k];
-                        float sm_ = 0.0f;
-                        for (int k = 0; k < K; ++k) { idp[k] = std::exp(ll[k] - mx); sm_ += idp[k]; }
-                        const float inv = 1.0f / sm_;
-                        for (int k = 0; k < K; ++k) idp[k] *= inv;
+                        if (use_fp && !chg)
+                            for (int k = 0; k < K; ++k)
+                                if (float_bits(idp[k]) != float_bits(qold[k])) { chg = true; break; }
                     }
                 }
+                if (chg) n_changed.fetch_add(1, std::memory_order_relaxed);
             });
         }
         ++iters_run;
@@ -809,12 +850,22 @@ static void run_vb_inplace(
             double elbo = 0.0;
             for (double v : e_part) elbo += v;
             for (double v : e_part2) elbo += v;
+            if (probing) {                       // fixed state, ELBO read: replay the skipped iterations (this one is virtual j = iter)
+                fast_forward(iter, elbo);
+                break;
+            }
             result.elbo = elbo;
 
             if (iter >= cfg.min_iter) {
                 if (static_cast<float>(elbo - prev_elbo) < cfg.eps_conv) break;
             }
             prev_elbo = static_cast<float>(elbo);
+        }
+
+        if (use_fp && n_changed.load(std::memory_order_relaxed) == 0 && iter + 1 < max_iter) {
+            // q after this iteration is bitwise q before it: a fixed point
+            if (need_elbo_orig) { fast_forward(iter + 1, result.elbo); break; }
+            if (iter + 1 < max_iter - 1) probing = true;
         }
     }
 
@@ -834,6 +885,80 @@ static void run_vb_inplace(
             }
         });
     }
+    return skipped;
+}
+
+// SINGLET_DEMUX_FIXEDPOINT: unset/1 = skip repeated iterations at a fixed point (default), 0 = run every iteration,
+// check = run the skipping fit and the full fit and compare them bitwise.
+inline int demux_fp_mode() {
+    static const int m = [] {
+        const char* e = std::getenv("SINGLET_DEMUX_FIXEDPOINT");
+        if (!e || !*e) return 1;
+        if (std::string(e) == "check") return 2;
+        return std::atoi(e) != 0 ? 1 : 0;
+    }();
+    return m;
+}
+struct DemuxFpStats {
+    std::atomic<long long> fits{0}, fits_fixed{0}, iters_run{0}, iters_skipped{0}, check_fits{0}, check_differ{0};
+};
+inline DemuxFpStats& demux_fp_stats() { static DemuxFpStats s; return s; }
+
+static bool vb_result_bits_equal(const VBResult& a, const VBResult& b) {
+    if (a.n_iter != b.n_iter) return false;
+    if (std::memcmp(&a.elbo, &b.elbo, sizeof(double)) != 0) return false;
+    auto eq2 = [](const std::vector<std::vector<float>>& x, const std::vector<std::vector<float>>& y) {
+        if (x.size() != y.size()) return false;
+        for (size_t i = 0; i < x.size(); ++i) {
+            if (x[i].size() != y[i].size()) return false;
+            if (!x[i].empty() && std::memcmp(x[i].data(), y[i].data(), x[i].size() * sizeof(float)) != 0) return false;
+        }
+        return true;
+    };
+    return eq2(a.id_prob, b.id_prob) && eq2(a.beta_mu, b.beta_mu) && eq2(a.beta_sum, b.beta_sum);
+}
+
+// mode: 0 off, 1 skip, 2 check (see above)
+static void run_vb_inplace_mode(
+    const CoveredSNPData& data, int K,
+    const DonorDemuxConfig& cfg, VBResult& result,
+    int max_iter, int nthreads, int mode)
+{
+    auto& st = demux_fp_stats();
+    const int before = result.n_iter;
+    if (mode == 2) {
+        VBResult ref = result;
+        const int sk = run_vb_inplace_fp(data, K, cfg, result, max_iter, nthreads, true);
+        run_vb_inplace_fp(data, K, cfg, ref, max_iter, nthreads, false);
+        st.check_fits.fetch_add(1);
+        if (!vb_result_bits_equal(result, ref)) {
+            st.check_differ.fetch_add(1);
+            std::cerr << "[demux] fixedpoint check: MISMATCH K=" << K << " n_iter " << result.n_iter << " vs " << ref.n_iter << "\n";
+        }
+        st.fits.fetch_add(1); st.iters_run.fetch_add(result.n_iter - before - sk); st.iters_skipped.fetch_add(sk);
+        if (sk > 0) st.fits_fixed.fetch_add(1);
+        return;
+    }
+    const int sk = run_vb_inplace_fp(data, K, cfg, result, max_iter, nthreads, mode == 1);
+    st.fits.fetch_add(1); st.iters_run.fetch_add(result.n_iter - before - sk); st.iters_skipped.fetch_add(sk);
+    if (sk > 0) st.fits_fixed.fetch_add(1);
+}
+
+static void run_vb_inplace(
+    const CoveredSNPData& data, int K,
+    const DonorDemuxConfig& cfg, VBResult& result,
+    int max_iter, int nthreads)
+{
+    run_vb_inplace_mode(data, K, cfg, result, max_iter, nthreads, demux_fp_mode());
+}
+
+inline void demux_fp_report() {
+    auto& st = demux_fp_stats();
+    if (demux_fp_mode() == 0) return;
+    std::cerr << "[demux] fixedpoint: " << st.fits.load() << " fits, " << st.fits_fixed.load() << " at a fixed point, "
+              << st.iters_skipped.load() << " iterations skipped, " << st.iters_run.load() << " run (process totals)\n";
+    if (demux_fp_mode() == 2)
+        std::cerr << "[demux] fixedpoint check: " << st.check_fits.load() << " fits, " << st.check_differ.load() << " differ\n";
 }
 
 // ============================================================================
@@ -2621,6 +2746,7 @@ inline DemuxResult run_demux(
                   << n_unassigned_ambient << " unassigned\n";
     }
 
+    demux_fp_report();
     if (const char* pe = std::getenv("SINGLET_DEMUX_PROFILE"); pe && std::atoi(pe) != 0) {
         std::cerr << "[demux] profile (thread-seconds):";
         for (int i = 0; i < kPhCount; ++i)

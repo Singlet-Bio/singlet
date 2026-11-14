@@ -286,6 +286,7 @@ add_pileup_test(test_encode_autodetect_whitelist)
 add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_demux_fixedpoint)   # exact fixed-point exit of the VB loop: bitwise equal to the full loop
 add_pileup_test(test_donor_genotype_call)
 add_pileup_test(test_genotype_export)
 add_pileup_test(test_allsite)
