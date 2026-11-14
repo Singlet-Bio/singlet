@@ -10,7 +10,9 @@ Commands run through one shared bridge: `bash "<RC>" '<command>' [timeout_s]` wi
 RC=/c/Users/debruinz/AppData/Local/Temp/claude/b47c38086aba7e7c/f25663d1-6f16-4dcd-a7c4-2bb7c22e3f45/scratchpad/clipper/rc.sh
 Keep each command short (< 60 s): sbatch, squeue, sacct, cat/grep of logs. Send files as `echo <base64 -w0> | base64 -d > path`
 (strip CRs first: `tr -d '\r'`). If the bridge times out twice, stop and report; do not try plain ssh. To wait for a job, poll squeue
-every 60 s from a Bash call with run_in_background or a long timeout; never busy-loop faster.
+every 60 s from a Bash call with run_in_background or a long timeout; never busy-loop faster. The bridge is ONE serial shell shared by all
+agents: wrap remote commands in `timeout 30`, and never run recursive grep/find/du over data trees (jobs/gpu-campaign, campaign/, inputs):
+one such command blocked every agent for hours on 2026-11-14. Use `ls` of specific directories or read named small files.
 W=/mnt/projects/debruinz_project/debruinz/singlet. Our directory: $W/jobs/gpu-runtime (scripts, patches/, bin/, results/); the
 scripts there are copies of `bench/gpu-runtime/jobs/*` and `bench/gpu-runtime/*.{py,sh}` of the repo. Logs: $W/logs/<jobname>-<job>.out.
 Never cancel, hold or modify a job that is not yours (jobs named camp-pilot, s15-node, adt-*, ... belong to other work), never write
