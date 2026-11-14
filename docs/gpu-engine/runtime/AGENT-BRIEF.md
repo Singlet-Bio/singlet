@@ -38,7 +38,7 @@ runs' fallbacks.txt. Read-only use of gpu-pr2 and gpu-campaign; this is the only
 (HLA is off for optimisation from 2026-11-13 on.) Result: results/rt-node-<job>-<tag>/results.txt: the RUN line (rate_overall,
 item_wall_mean, core_s_per_Mpair), "NODE steady-state rate", and the IDENT line (24 outputs, 1 distinct set hash, which must equal the
 reference arm's). Then `python3 cpu_ledger.py <dir>`, `bash steps.sh <dir>` (mapping steps and lock holds), `bash lock_ledger.sh <dir>`.
-One run per arm has about 4 % run-to-run variation: report numbers, do not claim a gain under that without a repeat.
+Before trusting a run, read its "memory: node" line: if MemFree min is far below ~140 GB or cgroup memory pressure is above a few %, the node was disturbed (another tenant; seen 2026-11-14 in 815809/815810) and the run is invalid; rerun it. One run per arm has about 4 % run-to-run variation: report numbers, do not claim a gain under that without a repeat.
 
 ## Report
 Final message: what changed (files, functions), job ids, the exact result lines, anything that failed or was skipped, and the commit
