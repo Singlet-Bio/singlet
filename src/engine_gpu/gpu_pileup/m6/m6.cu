@@ -62,16 +62,30 @@ struct Agg { uint32_t count, flags, exon, intron; };
 struct ArenaExhausted { size_t need, cap; };
 struct Arena {
     char* base = nullptr; size_t cap = 0, off = 0, peak = 0;
+    // SINGLET_PILEUP_STREAM: a second, transient region taken from the arena's end (top bytes in use). While in_top is set, alloc() takes from it
+    // (cub_run's temporaries too). Freed in stack order with top_reset(mark); peak counts both regions. With top == 0 and in_top unset
+    // the arena behaves exactly as before.
+    size_t top = 0; bool in_top = false;
     void init(size_t c) { cap = c; CK(cudaMalloc(&base, c)); }
     bool try_init(size_t c) { cap = c; if (cudaMalloc(&base, c) != cudaSuccess) { cudaGetLastError(); base = nullptr; return false; } return true; }   // the engine's second attempt: a failed allocation is reported, not fatal
     void init_managed(size_t c) { cap = c; CK(cudaMallocManaged(&base, c)); }   // unified memory: may exceed the device's
-    template <class T> T* alloc(size_t n) {
+    template <class T> T* alloc_top(size_t n) {
         size_t b = (n * sizeof(T) + 255) & ~size_t(255); if (b == 0) b = 256;
-        if (off + b > cap) { fprintf(stderr, "arena exhausted: need %zu have %zu\n", off + b, cap); throw ArenaExhausted{off + b, cap}; }
-        T* p = (T*)(base + off); off += b; peak = std::max(peak, off); return p;
+        const size_t capA = cap & ~size_t(255);
+        if (off + top + b > capA) { fprintf(stderr, "arena exhausted (top): need %zu have %zu\n", off + top + b, cap); throw ArenaExhausted{off + top + b, cap}; }
+        top += b; peak = std::max(peak, off + top);
+        return (T*)(base + capA - top);
+    }
+    template <class T> T* alloc(size_t n) {
+        if (in_top) return alloc_top<T>(n);
+        size_t b = (n * sizeof(T) + 255) & ~size_t(255); if (b == 0) b = 256;
+        if (off + top + b > cap) { fprintf(stderr, "arena exhausted: need %zu have %zu\n", off + top + b, cap); throw ArenaExhausted{off + top + b, cap}; }
+        T* p = (T*)(base + off); off += b; peak = std::max(peak, off + top); return p;
     }
     size_t mark() const { return off; }
     void reset(size_t m) { off = m; }
+    size_t top_mark() const { return top; }
+    void top_reset(size_t m) { top = m; }
 };
 template <class F> static void cub_run(Arena& A, F f) { size_t bytes = 0; CK(f(nullptr, bytes)); void* t = A.alloc<char>(bytes); CK(f(t, bytes)); }
 

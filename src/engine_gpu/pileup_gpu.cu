@@ -181,6 +181,28 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         (void) elem; return d;
     };
     const bool cat = pi.preSigs.n || pi.preAlns.n || pi.preOps.n || pi.preSeq.n || pi.preReads.n || pi.preLowq.n;
+    // SINGLET_PILEUP_STREAM (default on; 0: the earlier layout): the reads and their masks stay in host memory (a cell partition's reads are uploaded
+    // when it runs); the CIGAR ops and sequences, needed only until the signature lists, and the alignment-level tables go in the arena's top region
+    // and are freed after use (docs/gpu-engine/runtime/MEMORY-STREAMING.md, ranks 3a and 4)
+    in.stream = !(getenv("SINGLET_PILEUP_STREAM") != nullptr && strcmp(getenv("SINGLET_PILEUP_STREAM"), "0") == 0);
+    if (in.stream) {
+        in.S = (SigRec*) devCat(pi.preSigs, pi.sigs.data(), pi.sigs.size(), sizeof(SigRec));
+        in.Al = (AlnRec*) devCat(pi.preAlns, pi.alns.data(), pi.alns.size(), sizeof(AlnRec));
+        {
+            const bool wasTop = A.in_top; A.in_top = true;
+            in.ops = (uint32_t*) devCat(pi.preOps, pi.ops.data(), pi.ops.size() * 4, 4);
+            in.seq = devCat(pi.preSeq, pi.seq.data(), pi.seq.size(), 1);
+            A.in_top = wasTop;
+        }
+        in.R = nullptr; in.Q = nullptr;
+        in.hr.ra = (const ReadRec*) pi.preReads.p; in.hr.nra = pi.preReads.n / sizeof(ReadRec);
+        in.hr.rb = (const ReadRec*) pi.reads.data(); in.hr.nr = nR;
+        if (pi.useQual) {
+            in.hr.qw = (int) singlet_qmask::words();
+            in.hr.qa = (const uint64_t*) pi.preLowq.p; in.hr.nqa = pi.preLowq.n / (8ull * (uint64_t) in.hr.qw);
+            in.hr.qb = (const uint64_t*) pi.lowq.data();
+        }
+    } else
     if (!cat) {
     in.S = (SigRec*)devBytes(pi.sigs); in.Al = (AlnRec*)devBytes(pi.alns); in.R = (ReadRec*)devBytes(pi.reads);
     in.ops = to_dev(A, pi.ops); in.seq = devBytes(pi.seq);
@@ -297,6 +319,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.editHits = g_edit_stat[0]; po.editMolecules = g_edit_stat[1]; po.editAmbiguous = g_edit_stat[2]; po.editOther = g_edit_stat[3];
     if (attempt < 2) { char ab[160]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB, free at start %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
                                               singlet_engine_gpu::memBudget(totB) / 1073741824.0, freeB / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
+    po.log += std::string("pileup stream ") + (in.stream ? "on" : "off") + "; ";
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
     e16step("outputs copied");
