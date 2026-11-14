@@ -185,7 +185,20 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // when it runs); the CIGAR ops and sequences, needed only until the signature lists, and the alignment-level tables go in the arena's top region
     // and are freed after use (docs/gpu-engine/runtime/MEMORY-STREAMING.md, ranks 3a and 4)
     in.stream = !(getenv("SINGLET_PILEUP_STREAM") != nullptr && strcmp(getenv("SINGLET_PILEUP_STREAM"), "0") == 0);
+    // SINGLET_PILEUP_SIGBLOCK (default on with the stream; 0: the signature tables whole on the device, as before): the signature stage in blocks of
+    // signatures (S, Al, ops and seq stay in host memory), the per-signature results on the host, and each cell partition uploads the rows it touches
+    // (docs/gpu-engine/runtime/MEMORY-STREAMING.md, rank 3b). Needs ascending alignment, op and sequence offsets (checked).
+    in.sigblock = in.stream && !(getenv("SINGLET_PILEUP_SIGBLOCK") != nullptr && strcmp(getenv("SINGLET_PILEUP_SIGBLOCK"), "0") == 0);
+    if (in.sigblock) {
+        in.hS.a = (const SigRec*) pi.preSigs.p; in.hS.na = pi.preSigs.n / sizeof(SigRec); in.hS.b = (const SigRec*) pi.sigs.data(); in.hS.nb = pi.sigs.size() / sizeof(SigRec);
+        in.hA.a = (const AlnRec*) pi.preAlns.p; in.hA.na = pi.preAlns.n / sizeof(AlnRec); in.hA.b = (const AlnRec*) pi.alns.data(); in.hA.nb = pi.alns.size() / sizeof(AlnRec);
+        in.hO.a = (const uint32_t*) pi.preOps.p; in.hO.na = pi.preOps.n / 4; in.hO.b = pi.ops.data(); in.hO.nb = pi.ops.size();
+        in.hQ.a = pi.preSeq.p; in.hQ.na = pi.preSeq.n; in.hQ.b = pi.seq.data(); in.hQ.nb = pi.seq.size();
+        if (!sigs_monotone(in)) { in.sigblock = false; notes += "sigblock off: signature offsets not ascending; "; fprintf(stderr, "[pileup] sigblock off: signature offsets not ascending\n"); }
+    }
     if (in.stream) {
+        if (in.sigblock) { in.S = nullptr; in.Al = nullptr; in.ops = nullptr; in.seq = nullptr; }
+        else {
         in.S = (SigRec*) devCat(pi.preSigs, pi.sigs.data(), pi.sigs.size(), sizeof(SigRec));
         in.Al = (AlnRec*) devCat(pi.preAlns, pi.alns.data(), pi.alns.size(), sizeof(AlnRec));
         {
@@ -193,6 +206,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
             in.ops = (uint32_t*) devCat(pi.preOps, pi.ops.data(), pi.ops.size() * 4, 4);
             in.seq = devCat(pi.preSeq, pi.seq.data(), pi.seq.size(), 1);
             A.in_top = wasTop;
+        }
         }
         in.R = nullptr; in.Q = nullptr;
         in.hr.ra = (const ReadRec*) pi.preReads.p; in.hr.nra = pi.preReads.n / sizeof(ReadRec);
@@ -319,7 +333,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.editHits = g_edit_stat[0]; po.editMolecules = g_edit_stat[1]; po.editAmbiguous = g_edit_stat[2]; po.editOther = g_edit_stat[3];
     if (attempt < 2) { char ab[160]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB, free at start %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
                                               singlet_engine_gpu::memBudget(totB) / 1073741824.0, freeB / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
-    po.log += std::string("pileup stream ") + (in.stream ? "on" : "off") + "; ";
+    po.log += std::string("pileup stream ") + (in.stream ? "on" : "off") + ", sigblock " + (in.sigblock ? "on" : "off") + "; ";
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
     e16step("outputs copied");
