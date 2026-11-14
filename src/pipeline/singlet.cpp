@@ -5587,7 +5587,17 @@ static int singlet_main(int argc, char* argv[]) {
             else if (onefq_r1_len > 0 && ustart + umi_len - 1 > static_cast<int>(onefq_r1_len)) no = "UMI clamp";
             else if (pm && std::string(pm) == "serial") no = "SINGLET_CR4_PROBE=serial";
             else if (star_threads < 2) no = "threads";
-            else if (genome_load == "NoSharedMemory" && !(genome_preload_on && genome_preload.done.load() && genome_preload.ok)) no = "genome preload not complete";
+            else if (genome_load == "NoSharedMemory" && !genome_preload_on) no = "no genome preload";
+            if (no.empty() && genome_load == "NoSharedMemory") {
+                // the probe's processes take the preloaded index by fork: it must be complete (the STAR fork waits for it as well)
+                if (genome_preload.t.joinable() && !genome_preload.done.load()) {
+                    StopWatch gw;
+                    genome_preload.join();
+                    std::cerr << "[singlet] Genome preload: " << (genome_preload.ok ? "" : "failed (STAR loads the files): ")
+                              << genome_preload.log << "; waited " << gw.elapsed_s() << " s for it before the early CR4 probe\n";
+                }
+                if (!genome_preload.ok) no = "genome preload not available";
+            }
             if (!no.empty()) { std::cerr << "[singlet] CR4 probe: early start not used (" << no << ")\n"; return; }
             // the STAR argument vector as the child builds it for this case, up to the tokens the probe drops
             std::vector<std::string> S = {"--runMode", "alignReads", "--genomeDir", genome_dir, "--readFilesIn", "/dev/null", "/dev/null",
