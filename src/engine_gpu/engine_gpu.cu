@@ -615,14 +615,13 @@ __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
 typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
 static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
 // rt/lanes: the lane kernels' latency fixes (stitch.cuh m5_fast): SINGLET_LANE_FASTCOPY (Tr::copyFrom with batched loads), SINGLET_LANE_FASTSJ
-// (junction scans loading a position's bytes together), each default on, =0 the plain code; SINGLET_LANE_NOINLINE_COPY / _EXT (out-of-line
-// copy / extendAlign); set once per device before the kernels run
+// (junction scans loading a position's bytes together), each default on, =0 the plain code; set once per device before the kernels run
 static void laneFastInit() {
     static bool done[16] = {};
     int dev = 0; cudaGetDevice(&dev);
     if (dev < 0 || dev >= 16 || done[dev]) return;
     auto onD = [](const char* k, bool d) { const char* v = std::getenv(k); return v ? v[0] != '0' : d; };
-    const unsigned f = (onD("SINGLET_LANE_FASTCOPY", true) ? 1u : 0u) | (onD("SINGLET_LANE_FASTSJ", true) ? 4u : 0u) | (onD("SINGLET_LANE_NOINLINE_COPY", false) ? 8u : 0u) | (onD("SINGLET_LANE_NOINLINE_EXT", false) ? 16u : 0u);
+    const unsigned f = (onD("SINGLET_LANE_FASTCOPY", true) ? 1u : 0u) | (onD("SINGLET_LANE_FASTSJ", true) ? 4u : 0u);
     if (cudaMemcpyToSymbol(m5::m5_fast, &f, sizeof f) == cudaSuccess) done[dev] = true;
 }
 

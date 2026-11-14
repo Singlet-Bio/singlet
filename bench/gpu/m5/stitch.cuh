@@ -101,9 +101,7 @@ typedef long long i64;
 typedef u64 uint;     // STAR's `uint` is 64-bit (IncludeDefine.h)
 // rt/lanes: device-side switches for the lane kernels' latency fixes, set by the engine from SINGLET_LANE_* (a host build runs the plain
 // code). bit 0 (SINGLET_LANE_FASTCOPY): Tr::copyFrom as batched loads then stores; bit 2 (SINGLET_LANE_FASTSJ): the junction scans of
-// stitchAlignToTranscript load a position's bytes together; bit 3 (SINGLET_LANE_NOINLINE_COPY): that copy as one out-of-line function;
-// bit 4 (SINGLET_LANE_NOINLINE_EXT): finalizeTranscript's two extendAlign calls share one out-of-line copy. Each gives the same results
-// as the plain code.
+// stitchAlignToTranscript load a position's bytes together. Each gives the same results as the plain code.
 #ifdef __CUDACC__
 __device__ __constant__ unsigned m5_fast = 5u;
 #endif
@@ -304,12 +302,9 @@ template <int NEX> struct Tr {
         }
     }
 #endif
-#if defined(__CUDA_ARCH__) && defined(M5_TR32)
-    static __device__ __noinline__ void copyFastNI(Tr* __restrict__ d, const Tr* __restrict__ s) { copyFast(d, s); }
-#endif
     HD void copyFrom(const Tr& o) {
 #if defined(__CUDA_ARCH__) && defined(M5_TR32)
-        if (m5_fast & 1u) { if (m5_fast & 8u) copyFastNI(this, &o); else copyFast(this, &o); return; }
+        if (m5_fast & 1u) { copyFast(this, &o); return; }
 #endif
         nExons = o.nExons; iFrag = o.iFrag;
         rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = o.cStart;
@@ -969,17 +964,6 @@ HD inline bool extendAlign(const char* R, const char* G, uint rStart, uint gStar
     }
     return trA->extendL > 0;
 }
-#ifdef __CUDA_ARCH__
-// rt/lanes (SINGLET_LANE_NOINLINE_EXT): finalizeTranscript's two extensions call one out-of-line copy of extendAlign instead of two inlined
-// ones (the kernels' instruction footprint: "no instruction" stalls are a third of lane A's warp stalls)
-__device__ __noinline__ bool extendAlignNI(const char* R, const char* G, uint rStart, uint gStart, int dR, int dG, uint L, uint Lprev, uint nMMprev,
-                                           uint nMMmax, double pMMmax, bool extendToEnd, Ext* trA) {
-    return extendAlign(R, G, rStart, gStart, dR, dG, L, Lprev, nMMprev, nMMmax, pMMmax, extendToEnd, trA);
-}
-#define M5_EXTALIGN(...) ((m5_fast & 16u) ? extendAlignNI(__VA_ARGS__) : extendAlign(__VA_ARGS__))
-#else
-#define M5_EXTALIGN(...) extendAlign(__VA_ARGS__)
-#endif
 // Transcript::add of an extension result (reset() Transcript: only maxScore, nMatch, nMM are non-zero)
 template <class T> HD inline void addExt(T& t, const Ext& e) { t.maxScore += e.maxScore; t.nMatch += e.nMatch; t.nMM += e.nMM; }
 
@@ -1310,7 +1294,7 @@ template <class S> HD inline bool finalizeTranscript(const Params& P, const Geno
             if (trA.rStart > 0) {
                 trAstep1.extendL = 0; trAstep1.maxScore = 0; trAstep1.nMatch = 0; trAstep1.nMM = 0;
                 uint imate = trA.exons[0][EX_iFrag];
-                if (M5_EXTALIGN(R, gv.G, trA.rStart - 1, trA.gStart - 1, -1, -1, trA.rStart, tR2 - trA.rStart + 1,
+                if (extendAlign(R, gv.G, trA.rStart - 1, trA.gStart - 1, -1, -1, trA.rStart, tR2 - trA.rStart + 1,
                                 trA.nMM, w.outFilterMismatchNmaxTotal, P.outFilterMismatchNoverLmax,
                                 P.alignEndsTypeExt[imate][(int)(trA.Str != imate)], &trAstep1)) {
                     addExt(trA, trAstep1);
@@ -1325,7 +1309,7 @@ template <class S> HD inline bool finalizeTranscript(const Params& P, const Geno
             if (tR2 < Lread) {
                 trAstep1.extendL = 0; trAstep1.maxScore = 0; trAstep1.nMatch = 0; trAstep1.nMM = 0;
                 uint imate = trA.exons[trA.nExons - 1][EX_iFrag];
-                if (M5_EXTALIGN(R, gv.G, tR2 + 1, tG2 + 1, +1, +1, Lread - tR2 - 1, tR2 - trA.rStart + 1,
+                if (extendAlign(R, gv.G, tR2 + 1, tG2 + 1, +1, +1, Lread - tR2 - 1, tR2 - trA.rStart + 1,
                                 trA.nMM, w.outFilterMismatchNmaxTotal, P.outFilterMismatchNoverLmax,
                                 P.alignEndsTypeExt[imate][(int)(imate == trA.Str)], &trAstep1)) {
                     addExt(trA, trAstep1);
