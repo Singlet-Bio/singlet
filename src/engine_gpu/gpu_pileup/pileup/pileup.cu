@@ -832,6 +832,83 @@ struct IsPart { const uint8_t* pid; uint8_t p; __device__ __forceinline__ bool o
 __global__ void k_gatherr(const ReadRec* R, const uint32_t* ridx, int n, ReadRec* out) {
     int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) out[i] = R[ridx[i]]; }
 
+// ---- the pileup hold's host work (docs/gpu-engine/runtime/MEMORY-STREAMING.md, "host idle in the hold"): each switch is read once per run in run_pipeline,
+// default on, =0 restores the earlier code for that part. Outputs are identical either way (the choice of K and the buffers never reach the results).
+//   SINGLET_PILEUP_CELLTAB  sizing and grouping by a per-cell table (partition of each barcode, per-cell weight sums) instead of a hash per read per trial K
+//   SINGLET_PILEUP_PIN      the host buffers a partition is uploaded from are page-locked (cudaHostAlloc, malloc when that fails)
+//   SINGLET_PILEUP_PIPE     (stream without sigblock) the next partition's reads gathered on a thread while this one runs
+//   SINGLET_PILEUP_D2HPIN   the results' device-to-host copies go through a ring of page-locked chunks, the copy into the destination on threads
+static bool g_celltab = true, g_pin = true, g_pipe = true, g_d2hpin = true;
+static int g_dev = 0;
+static std::atomic<long long> g_pin_ns(0), g_pin_n(0);
+static void zero_par(void* p, size_t bytes);
+struct UArr {   // a uint32 array that is not zero-filled when sized (the fill threads touch the pages)
+    std::unique_ptr<uint32_t[]> p; size_t n = 0;
+    void resize(size_t k) { p.reset(new uint32_t[k ? k : 1]); n = k; }
+    uint32_t* data() const { return p.get(); }
+};
+// the cell partition of every barcode for one K as a table: a lookup per read where the hash and the modulo cost more than the read's own access
+struct CellPart {
+    std::vector<uint8_t> t; uint32_t K = 1;
+    void build(uint32_t K_, uint32_t ncells, bool on);
+    uint32_t of(int32_t bc) const { return (uint32_t) bc < t.size() ? t[(size_t) bc] : cell_part(bc, K); }
+};
+// a ring of page-locked chunks: a device array is copied to the host chunk by chunk (async copies on the default stream, so after the kernels that wrote
+// it), each chunk then copied into the destination by its own thread while the next chunks are in flight. The destination's first-touch page faults
+// run on those threads; a plain cudaMemcpy into fresh pageable memory does them one after the other in the driver.
+struct D2HRing {
+    static constexpr int kSlots = 8;
+    size_t kChunk = size_t(16) << 20, minBytes = size_t(4) << 20;   // SINGLET_PILEUP_D2HPIN_CHUNK_KB / _MIN_KB: smaller values for the unit test
+    void* buf[kSlots]; cudaEvent_t ev[kSlots]; std::future<void> fu[kSlots]; bool ok = false; std::mutex mu; int made = 0, evs = 0;
+    D2HRing() {
+        if (const char* e = getenv("SINGLET_PILEUP_D2HPIN_CHUNK_KB")) { const double kb = atof(e); if (kb >= 4) kChunk = (size_t) (kb * 1024) & ~size_t(7); }
+        if (const char* e = getenv("SINGLET_PILEUP_D2HPIN_MIN_KB")) { const double kb = atof(e); if (kb > 0) minBytes = (size_t) (kb * 1024); }
+        for (int i = 0; i < kSlots; i++) buf[i] = nullptr;
+        for (int i = 0; i < kSlots; i++) { if (cudaHostAlloc(&buf[i], kChunk, cudaHostAllocPortable) != cudaSuccess) { cudaGetLastError(); buf[i] = nullptr; return; } made++; }
+        for (int i = 0; i < kSlots; i++) { if (cudaEventCreateWithFlags(&ev[i], cudaEventDisableTiming) != cudaSuccess) { cudaGetLastError(); return; } evs++; }
+        ok = true;
+    }
+    ~D2HRing() {
+        for (int i = 0; i < kSlots; i++) if (fu[i].valid()) fu[i].get();
+        for (int i = 0; i < evs; i++) cudaEventDestroy(ev[i]);
+        for (int i = 0; i < made; i++) cudaFreeHost(buf[i]);
+    }
+    void copy(void* dst, const void* src, size_t n) {
+        std::lock_guard<std::mutex> lk(mu);
+        const size_t nch = (n + kChunk - 1) / kChunk;
+        auto issue = [&](size_t c) {   // chunk c into slot c % kSlots (its previous copy into the destination is finished first)
+            const int s = (int) (c % kSlots); if (fu[s].valid()) fu[s].get();
+            const size_t off = c * kChunk, len = std::min(kChunk, n - off);
+            CK(cudaMemcpyAsync(buf[s], (const char*) src + off, len, cudaMemcpyDeviceToHost, 0)); CK(cudaEventRecord(ev[s], 0));
+        };
+        size_t nx = 0;
+        for (; nx < nch && nx < (size_t) (kSlots - 1); nx++) issue(nx);
+        for (size_t c = 0; c < nch; c++) {
+            if (nx < nch) issue(nx++);   // the slot of chunk c - 1: its copy into the destination was started one step ago
+            const int s = (int) (c % kSlots);
+            CK(cudaEventSynchronize(ev[s]));
+            const size_t off = c * kChunk, len = std::min(kChunk, n - off); char* d = (char*) dst + off; const void* b = buf[s];
+            fu[s] = std::async(std::launch::async, [d, b, len]() { memcpy(d, b, len); });
+        }
+        for (int i = 0; i < kSlots; i++) if (fu[i].valid()) fu[i].get();
+    }
+};
+static D2HRing* g_ring = nullptr;
+static void d2h(void* dst, const void* src, size_t n) {
+    if (g_ring != nullptr && n >= g_ring->minBytes) g_ring->copy(dst, src, n);
+    else CK(cudaMemcpy(dst, src, n, cudaMemcpyDeviceToHost));
+}
+
+struct CsrH { std::unique_ptr<uint32_t[]> indptr, indices; std::unique_ptr<uint16_t[]> data; };   // a downloaded CSR matrix (SINGLET_PILEUP_D2HPIN)
+static CsrH fetch_csr_h(const CsrDev& C, int ncells) {
+    CsrH o; const size_t nz = (size_t) std::max(C.nnz, 0);
+    o.indptr.reset(new uint32_t[(size_t) ncells + 1]); d2h(o.indptr.get(), C.indptr, 4 * (size_t) (ncells + 1));
+    o.indices.reset(new uint32_t[nz ? nz : 1]); o.data.reset(new uint16_t[nz ? nz : 1]);
+    if (nz) { d2h(o.indices.get(), C.indices, 4 * nz); d2h(o.data.get(), C.data, 2 * nz); }
+    return o;
+}
+static std::vector<T3> csr_to_t3h(const CsrH& c, int ncells) { std::vector<T3> v; v.reserve(c.indptr[ncells]); for (int cell = 0; cell < ncells; cell++) for (uint32_t k = c.indptr[cell]; k < c.indptr[cell + 1]; k++) v.push_back(T3{(uint32_t)cell, c.indices[k], c.data[k]}); return v; }
+
 // ---- SINGLET_PILEUP_STREAM (the sizing and the partitions of run_pipeline with the reads in host memory)
 // per signature, k_binsum's weight of one read of it (bytes): the host sums these per cell partition for a trial K
 __global__ void k_wsig(const GRes* G, const uint32_t* c_sj, const uint32_t* c_snp, const uint32_t* c_mt, const uint32_t* c_ind, int n, uint32_t* w) {
@@ -867,11 +944,50 @@ static void host_bins(const HostReadSrc& H, const std::vector<uint32_t>& wsig, c
     }
 }
 // the barcoded reads' indices grouped by cell partition (ascending within a partition): partition p is idx[off[p] .. off[p + 1])
-static void host_partition(const HostReadSrc& H, uint32_t K, std::vector<uint64_t>& off, std::vector<uint32_t>& idx) {
+static void zero_par(void* p, size_t bytes) {   // memset on threads (a serial zero-fill of a few GB is a second)
+    const int nth = bytes < (size_t(64) << 20) ? 1 : stream_threads();
+    stream_parallel(nth, [&](int t) { const size_t a = bytes / nth * t, b = t + 1 == nth ? bytes : bytes / nth * (t + 1); memset((char*) p + a, 0, b - a); });
+}
+void CellPart::build(uint32_t K_, uint32_t ncells, bool on) {
+    K = K_; t.clear();
+    if (!on) return;
+    t.resize(ncells);
+    const int nth = ncells < 1000000 ? 1 : stream_threads();
+    stream_parallel(nth, [&](int w) { for (uint64_t c = (uint64_t) ncells * w / nth, e = (uint64_t) ncells * (w + 1) / nth; c < e; c++) t[c] = (uint8_t) cell_part((int32_t) c, K); });
+}
+// SINGLET_PILEUP_CELLTAB: one scan of the reads gives each cell's summed per-read weight and read count (what k_binsum bins by cell partition); the bound
+// of every trial K is then a sum over the cells. False when a barcode lies beyond the whitelist (the hash route is used then).
+static bool host_cells(const HostReadSrc& H, const std::vector<uint32_t>& wsig, uint32_t ncells, std::unique_ptr<uint64_t[]>& cw, std::unique_ptr<uint32_t[]>& cc) {
+    const int nth = stream_threads(); const size_t nc = ncells ? ncells : 1;
+    cw.reset(new uint64_t[nc]); cc.reset(new uint32_t[nc]); zero_par(cw.get(), nc * 8); zero_par(cc.get(), nc * 4);
+    std::atomic<bool> bad(false);
+    stream_parallel(nth, [&](int t) {
+        for (uint64_t r = H.nr * t / nth, e = H.nr * (t + 1) / nth; r < e; r++) {
+            const ReadRec& x = H.read(r);
+            if (x.bc < 0) continue;
+            if ((uint32_t) x.bc >= ncells) { bad = true; return; }
+            __atomic_fetch_add(&cw[(size_t) x.bc], (uint64_t) wsig[x.sig], __ATOMIC_RELAXED); __atomic_fetch_add(&cc[(size_t) x.bc], 1u, __ATOMIC_RELAXED);
+        }
+    });
+    return !bad;
+}
+static void cells_bins(const uint64_t* cw, const uint32_t* cc, uint32_t ncells, const std::vector<int>& ks,
+                       std::vector<std::vector<unsigned long long>>& est, std::vector<std::vector<unsigned long long>>& cnt) {
+    const int nk = (int) ks.size(), nth = std::min(nk, stream_threads());
+    est.assign(nk, {}); cnt.assign(nk, {});
+    stream_parallel(nth, [&](int w) {
+        for (int j = w; j < nk; j += nth) {
+            est[j].assign(ks[j], 0); cnt[j].assign(ks[j], 0);
+            for (uint32_t c = 0; c < ncells; c++) { if (cc[c] == 0) continue; const uint32_t p = cell_part((int32_t) c, (uint32_t) ks[j]); est[j][p] += cw[c]; cnt[j][p] += cc[c]; }
+        }
+    });
+}
+static void host_partition(const HostReadSrc& H, uint32_t K, uint32_t ncells, std::vector<uint64_t>& off, UArr& idx) {
     const int nth = stream_threads();
+    CellPart cp; cp.build(K, ncells, g_celltab);   // without the table: the hash and the modulo per read, as before
     std::vector<std::vector<uint64_t>> pos(nth, std::vector<uint64_t>(K, 0));
     stream_parallel(nth, [&](int t) {
-        for (uint64_t r = H.nr * t / nth, e = H.nr * (t + 1) / nth; r < e; r++) { const ReadRec& x = H.read(r); if (x.bc >= 0) pos[t][cell_part(x.bc, K)]++; }
+        for (uint64_t r = H.nr * t / nth, e = H.nr * (t + 1) / nth; r < e; r++) { const ReadRec& x = H.read(r); if (x.bc >= 0) pos[t][cp.of(x.bc)]++; }
     });
     off.assign(K + 1, 0);
     uint64_t run = 0;
@@ -879,7 +995,7 @@ static void host_partition(const HostReadSrc& H, uint32_t K, std::vector<uint64_
     off[K] = run;
     idx.resize(run);
     stream_parallel(nth, [&](int t) {
-        for (uint64_t r = H.nr * t / nth, e = H.nr * (t + 1) / nth; r < e; r++) { const ReadRec& x = H.read(r); if (x.bc >= 0) idx[pos[t][cell_part(x.bc, K)]++] = (uint32_t) r; }
+        for (uint64_t r = H.nr * t / nth, e = H.nr * (t + 1) / nth; r < e; r++) { const ReadRec& x = H.read(r); if (x.bc >= 0) idx.data()[pos[t][cp.of(x.bc)]++] = (uint32_t) r; }
     });
 }
 // one partition's reads (and masks) gathered into host buffers, in index order
@@ -897,9 +1013,23 @@ static void host_gather(const HostReadSrc& H, const uint32_t* idx, size_t n, Rea
 // SINGLET_PILEUP_SIGBLOCK: the signature stage in blocks of contiguous signatures (their alignments, CIGAR ops and sequences uploaded per block,
 // freed after it); the per-signature results the partitions read (GRes, the list counts, the lists, a flag byte) go back to host memory (SigTab) and
 // each cell partition uploads only the rows of the signatures its reads touch, with the signature ids remapped monotonically to 0..nU-1.
-template <class T> struct Buf {   // a host buffer that grows (contents not kept), uninitialised
-    std::unique_ptr<T[]> p; size_t cap = 0;
-    T* get(size_t n) { if (n + 1 > cap) { cap = n + 1 + n / 8; p.reset(new T[cap]); } return p.get(); }
+template <class T> struct Buf {   // a host buffer that grows (contents not kept), uninitialised; page-locked with SINGLET_PILEUP_PIN (malloc when that fails)
+    T* p = nullptr; size_t cap = 0; bool pin = false;
+    Buf() {}
+    Buf(const Buf&) = delete; Buf& operator=(const Buf&) = delete;
+    ~Buf() { release(); }
+    void release() { if (p) { if (pin) cudaFreeHost(p); else free(p); } p = nullptr; cap = 0; pin = false; }
+    T* get(size_t n) {
+        if (n + 1 > cap) {
+            release(); const size_t c = n + 1 + n / 8; void* q = nullptr; const auto t0 = std::chrono::steady_clock::now();
+            if (g_pin && cudaHostAlloc(&q, c * sizeof(T), cudaHostAllocPortable) == cudaSuccess) pin = true;
+            else { if (g_pin) cudaGetLastError(); q = malloc(c * sizeof(T)); if (!q) throw std::bad_alloc(); }
+            p = (T*) q; cap = c;
+            if (pin) { g_pin_n++; g_pin_ns += (long long) std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t0).count(); }
+        }
+        return p;
+    }
+    T* data() const { return p; }
 };
 template <class T> struct Chunked {   // the lists of consecutive signature blocks: chunk i holds the entries [start, start + n) of the whole list
     struct C { uint64_t start, n; std::unique_ptr<T[]> p; };
@@ -1031,7 +1161,7 @@ static void sigblock_stage(Arena& A, Timer& T, const Inputs& in, Outputs* out, S
                 if (nAb > 0) k_annotate<<<(unsigned)((nAb + TB - 1) / TB), TB>>>(dAl, (int) nAb, opsh, in.EX, in.IN, in.e2g, in.ne2g, in.i2g, in.ni2g, in.gstr, in.ngstr, in.dp, aa, in.GM, in.TX);
                 T.mark("1.annotate");
                 k_resolve<<<G, TB>>>(dS, (int) n, Ash, shiftp(aa, R.a0), in.gmt, in.ngmt, in.tsp, in.ntsp, in.dp, gr, ambs);
-                CK(cudaMemcpy(out->amb_sig.data() + s0, ambs, (size_t) n * sizeof(uint2), cudaMemcpyDeviceToHost));
+                d2h(out->amb_sig.data() + s0, ambs, (size_t) n * sizeof(uint2));
                 if (g_cell_stats && nAb > 0) {
                     const size_t chunk = size_t(1) << 24, tm2 = A.top_mark();
                     for (size_t o = 0; o < (size_t) nAb; o += chunk) {
@@ -1039,9 +1169,9 @@ static void sigblock_stage(Arena& A, Timer& T, const Inputs& in, Outputs* out, S
                         uint32_t* dg = A.alloc_top<uint32_t>(c); uint32_t* de = A.alloc_top<uint32_t>(c); uint8_t* ds = A.alloc_top<uint8_t>(c);
                         k_e16_aa_split<<<(c + 255) / 256, 256>>>(aa + o, c, dg, ds, de);
                         CK(cudaGetLastError());
-                        CK(cudaMemcpy(out->aa_gene.data() + R.a0 + o, dg, (size_t) c * 4, cudaMemcpyDeviceToHost));
-                        CK(cudaMemcpy(out->aa_exg.data() + R.a0 + o, de, (size_t) c * 4, cudaMemcpyDeviceToHost));
-                        CK(cudaMemcpy(out->aa_stat.data() + R.a0 + o, ds, (size_t) c, cudaMemcpyDeviceToHost));
+                        d2h(out->aa_gene.data() + R.a0 + o, dg, (size_t) c * 4);
+                        d2h(out->aa_exg.data() + R.a0 + o, de, (size_t) c * 4);
+                        d2h(out->aa_stat.data() + R.a0 + o, ds, (size_t) c);
                         A.top_reset(tm2);
                     }
                 }
@@ -1061,11 +1191,11 @@ static void sigblock_stage(Arena& A, Timer& T, const Inputs& in, Outputs* out, S
                 cub_run(A, [&](void* t, size_t& b) { return cub::DeviceRadixSort::SortPairs(t, b, dg, dj, nn, 0, 64); });
                 uint32_t *nf = A.alloc<uint32_t>(nn), *rk = A.alloc<uint32_t>(nn); k_newflag2<<<Gj, TB>>>(k1, k2, dj.Current(), nn, nf);
                 cub_run(A, [&](void* t, size_t& b) { return cub::DeviceScan::InclusiveSum(t, b, nf, rk, nn); });
-                int njb = 0; CK(cudaMemcpy(&njb, rk + nn - 1, 4, cudaMemcpyDeviceToHost));
+                int njb = 0; d2h(&njb, rk + nn - 1, 4);
                 uint64_t* tb1 = A.alloc<uint64_t>(njb); uint32_t* tb2 = A.alloc<uint32_t>(njb);
                 k_sjtab<<<Gj, TB>>>(k1, k2, dj.Current(), nf, rk, nn, tb1, tb2);
                 std::vector<uint64_t> h1(njb); std::vector<uint32_t> h2(njb);
-                CK(cudaMemcpy(h1.data(), tb1, (size_t) njb * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(h2.data(), tb2, (size_t) njb * 4, cudaMemcpyDeviceToHost));
+                d2h(h1.data(), tb1, (size_t) njb * 8); d2h(h2.data(), tb2, (size_t) njb * 4);
                 Ub.resize(njb); for (int i = 0; i < njb; i++) Ub[i] = JK{h1[i], h2[i]};
                 Um.clear(); Um.reserve(U.size() + Ub.size());
                 std::set_union(U.begin(), U.end(), Ub.begin(), Ub.end(), std::back_inserter(Um)); U.swap(Um);
@@ -1073,9 +1203,9 @@ static void sigblock_stage(Arena& A, Timer& T, const Inputs& in, Outputs* out, S
             }
             T.mark("3.sjids");
             // the block's rows to the host
-            CK(cudaMemcpy(tab.G.get() + s0, gr, (size_t) n * sizeof(GRes), cudaMemcpyDeviceToHost));
-            CK(cudaMemcpy(tab.c[0].get() + s0, c_sj, (size_t) n * 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(tab.c[1].get() + s0, c_snp, (size_t) n * 4, cudaMemcpyDeviceToHost));
-            CK(cudaMemcpy(tab.c[2].get() + s0, c_mt, (size_t) n * 4, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(tab.c[3].get() + s0, c_ind, (size_t) n * 4, cudaMemcpyDeviceToHost));
+            d2h(tab.G.get() + s0, gr, (size_t) n * sizeof(GRes));
+            d2h(tab.c[0].get() + s0, c_sj, (size_t) n * 4); d2h(tab.c[1].get() + s0, c_snp, (size_t) n * 4);
+            d2h(tab.c[2].get() + s0, c_mt, (size_t) n * 4); d2h(tab.c[3].get() + s0, c_ind, (size_t) n * 4);
             const uint64_t b0[4] = {tab.base[0], tab.base[1], tab.base[2], tab.base[3]};
             for (uint64_t i = s0; i < s1; i++) {
                 for (int k = 0; k < 4; k++) { tab.o[k][i] = tab.base[k]; tab.base[k] += tab.c[k][i]; }
@@ -1083,16 +1213,16 @@ static void sigblock_stage(Arena& A, Timer& T, const Inputs& in, Outputs* out, S
                 for (int k = 0; k < g.n_aln; k++) { const AlnRec& a = in.hA[(uint64_t) g.aln_off + k]; if (a.flags & 2) { if (a.flags & 1) v |= 2; break; } }
                 tab.nr[i] = v;
             }
-            if (nsj > 0) { std::unique_ptr<SJL[]> h(new SJL[nsj]); CK(cudaMemcpy(h.get(), l_sj, (size_t) nsj * sizeof(SJL), cudaMemcpyDeviceToHost)); tab.l_sj.add(b0[0], std::move(h), nsj); }
+            if (nsj > 0) { std::unique_ptr<SJL[]> h(new SJL[nsj]); d2h(h.get(), l_sj, (size_t) nsj * sizeof(SJL)); tab.l_sj.add(b0[0], std::move(h), nsj); }
             if (nsnp > 0) {
-                std::unique_ptr<uint32_t[]> h(new uint32_t[nsnp]); CK(cudaMemcpy(h.get(), l_snp, (size_t) nsnp * 4, cudaMemcpyDeviceToHost)); tab.l_snp.add(b0[1], std::move(h), nsnp);
-                if (useq) { std::unique_ptr<uint16_t[]> q(new uint16_t[nsnp]); CK(cudaMemcpy(q.get(), lq_snp, (size_t) nsnp * 2, cudaMemcpyDeviceToHost)); tab.q_snp.add(b0[1], std::move(q), nsnp); }
+                std::unique_ptr<uint32_t[]> h(new uint32_t[nsnp]); d2h(h.get(), l_snp, (size_t) nsnp * 4); tab.l_snp.add(b0[1], std::move(h), nsnp);
+                if (useq) { std::unique_ptr<uint16_t[]> q(new uint16_t[nsnp]); d2h(q.get(), lq_snp, (size_t) nsnp * 2); tab.q_snp.add(b0[1], std::move(q), nsnp); }
             }
             if (nmt > 0) {
-                std::unique_ptr<uint32_t[]> h(new uint32_t[nmt]); CK(cudaMemcpy(h.get(), l_mt, (size_t) nmt * 4, cudaMemcpyDeviceToHost)); tab.l_mt.add(b0[2], std::move(h), nmt);
-                if (useq) { std::unique_ptr<uint16_t[]> q(new uint16_t[nmt]); CK(cudaMemcpy(q.get(), lq_mt, (size_t) nmt * 2, cudaMemcpyDeviceToHost)); tab.q_mt.add(b0[2], std::move(q), nmt); }
+                std::unique_ptr<uint32_t[]> h(new uint32_t[nmt]); d2h(h.get(), l_mt, (size_t) nmt * 4); tab.l_mt.add(b0[2], std::move(h), nmt);
+                if (useq) { std::unique_ptr<uint16_t[]> q(new uint16_t[nmt]); d2h(q.get(), lq_mt, (size_t) nmt * 2); tab.q_mt.add(b0[2], std::move(q), nmt); }
             }
-            if (nind > 0) { std::unique_ptr<IND[]> h(new IND[nind]); CK(cudaMemcpy(h.get(), l_ind, (size_t) nind * sizeof(IND), cudaMemcpyDeviceToHost)); tab.l_ind.add(b0[3], std::move(h), nind); }
+            if (nind > 0) { std::unique_ptr<IND[]> h(new IND[nind]); d2h(h.get(), l_ind, (size_t) nind * sizeof(IND)); tab.l_ind.add(b0[3], std::move(h), nind); }
             return true;
         }();
         A.reset(m0); A.top_reset(topm0);
@@ -1138,11 +1268,44 @@ static void host_tabs(const HostReadSrc& H, const SigTab& T, bool useq, int K, s
     out.assign(K, 0);
     for (int t = 0; t < nth; t++) for (int p = 0; p < K; p++) out[p] += part[t][p];
 }
+// SINGLET_PILEUP_CELLTAB, sigblock: host_tabs for several trial Ks in one scan of the reads (a bitmap per partition and K over the signatures), the
+// per-signature weights summed from a table made once (tw) instead of four lookups per set bit. The total bitmap size is the caller's to bound.
+static void host_tabs_multi(const HostReadSrc& H, const SigTab& T, const std::vector<uint32_t>& tw, uint32_t ncells, const std::vector<int>& ks, std::vector<std::vector<unsigned long long>>& out) {
+    const int nth = stream_threads(), nk = (int) ks.size(); const uint64_t nS = T.n, W = (nS + 63) / 64;
+    std::vector<CellPart> cp(nk); for (int j = 0; j < nk; j++) cp[j].build((uint32_t) ks[j], ncells, true);
+    std::vector<std::unique_ptr<uint64_t[]>> bm(nk);
+    for (int j = 0; j < nk; j++) { const size_t n = (size_t) ks[j] * W; bm[j].reset(new uint64_t[n ? n : 1]); zero_par(bm[j].get(), n * 8); }
+    stream_parallel(nth, [&](int t) {
+        for (uint64_t r = H.nr * t / nth, e = H.nr * (t + 1) / nth; r < e; r++) {
+            const ReadRec& x = H.read(r); if (x.bc < 0) continue;
+            const uint64_t bit = 1ull << (x.sig & 63), w = x.sig >> 6;
+            for (int j = 0; j < nk; j++) __atomic_fetch_or(&bm[j][(size_t) cp[j].of(x.bc) * W + w], bit, __ATOMIC_RELAXED);
+        }
+    });
+    out.assign(nk, {});
+    for (int j = 0; j < nk; j++) {
+        const int K = ks[j]; std::vector<std::vector<unsigned long long>> part(nth, std::vector<unsigned long long>(K, 0));
+        stream_parallel(nth, [&](int t) {
+            for (int p = 0; p < K; p++) {
+                unsigned long long sum = 0;
+                for (uint64_t w = W * t / nth, e = W * (t + 1) / nth; w < e; w++) {
+                    uint64_t m = bm[j][(size_t) p * W + w];
+                    while (m) { const int b = __builtin_ctzll(m); m &= m - 1; sum += tw[(w << 6) + (uint64_t) b]; }
+                }
+                part[t][p] = sum;
+            }
+        });
+        out[j].assign(K, 0);
+        for (int t = 0; t < nth; t++) for (int p = 0; p < K; p++) out[j][p] += part[t][p];
+        bm[j].reset();
+    }
+}
 // one cell partition's host side: its reads gathered in read order, the distinct signatures they touch (ascending), the reads' signature ids remapped to
 // their rank among them, and those signatures' rows of the tables (offsets local to the partition, lists concatenated in signature order)
+struct GBuf { Buf<ReadRec> R; Buf<uint64_t> Q; Buf<uint32_t> idx; };   // a partition reads, masks and read indices gathered for upload (the stream without sigblock)
 struct PartHost {
     uint32_t nR = 0, nU = 0; uint64_t tot[4] = {0, 0, 0, 0};
-    Buf<ReadRec> R; Buf<uint64_t> Q; Buf<uint32_t> U; Buf<GRes> G; Buf<uint32_t> c[4], o[4]; Buf<uint8_t> nr;
+    Buf<ReadRec> R; Buf<uint64_t> Q; Buf<uint32_t> U; Buf<GRes> G; Buf<uint32_t> c[4], o[4]; Buf<uint8_t> nr; Buf<uint32_t> idxp;   // idxp: the partition's read indices (uploaded with the reads)
     Buf<SJL> l_sj; Buf<uint32_t> l_snp, l_mt; Buf<IND> l_ind; Buf<uint16_t> q_snp, q_mt;
 };
 template <class T> static void chunk_copy(T* dst, const Chunked<T>& ch, uint64_t g, uint32_t n) { if (n) memcpy(dst, ch.at(g), (size_t) n * sizeof(T)); }
@@ -1151,6 +1314,7 @@ static void part_prepare(const HostReadSrc& H, const SigTab& T, bool useq, int q
     ph.nR = (uint32_t) nr;
     ReadRec* hR = ph.R.get(nr); uint64_t* hQ = useq ? ph.Q.get((size_t) qw * nr) : nullptr;
     if (nr) host_gather(H, idx, nr, hR, hQ);
+    { uint32_t* di = ph.idxp.get(nr); const int ni = nr < 1000000 ? 1 : stream_threads(); stream_parallel(ni, [&](int t) { const size_t a = nr * t / ni, b = nr * (t + 1) / ni; if (b > a) memcpy(di + a, idx + a, (b - a) * 4); }); }
     std::fill(bm.begin(), bm.end(), 0ull);
     stream_parallel(nth, [&](int t) { for (size_t i = nr * t / nth, e = nr * (t + 1) / nth; i < e; i++) { const uint32_t s = hR[i].sig; __atomic_fetch_or(&bm[s >> 6], 1ull << (s & 63), __ATOMIC_RELAXED); } });
     uint64_t cnt = 0; for (uint64_t w : bm) cnt += (uint64_t) __builtin_popcountll(w);
@@ -1439,6 +1603,16 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const int TB = 256; const int nS = in.nS, nA = in.nA, nR = in.nR;
     { const char* pf = getenv("SINGLET_GPU_PILEUP_PROF"); g_prof = pf && *pf && *pf != '0'; g_prof_log.clear(); }
     { const char* e = getenv("SINGLET_GPU_PILEUP_E23"); g_e23 = !(e && *e == '0'); g_cr_replay = g_e23; }
+    {   // the hold's host work (g_celltab and the others above): read once per run
+        auto sw = [](const char* nm) { const char* e = getenv(nm); return !(e != nullptr && e[0] == '0' && e[1] == 0); };
+        g_celltab = sw("SINGLET_PILEUP_CELLTAB"); g_pin = sw("SINGLET_PILEUP_PIN"); g_pipe = sw("SINGLET_PILEUP_PIPE"); g_d2hpin = sw("SINGLET_PILEUP_D2HPIN");
+        cudaGetDevice(&g_dev); g_pin_ns = 0; g_pin_n = 0;
+    }
+    std::unique_ptr<D2HRing> ring; if (g_d2hpin) { ring.reset(new D2HRing); if (!ring->ok) ring.reset(); }
+    struct RingGuard { ~RingGuard() { g_ring = nullptr; } } ringGuard;
+    g_ring = ring.get();
+    const bool usePipe = in.stream && !in.sigblock && g_pipe;   // the next partition reads gathered on a thread (the sigblock path prepares its partitions on a thread already)
+    double sizeBinsS = 0, sizeTabsS = 0, selS = 0, compS = 0, fetchS = 0, h2dS = 0, gatherS = 0;   // host wall seconds of the hold steps (profile line)
     // per-signature tables: on the device (the whole run) or, with in.sigblock, on the host (tab) and per partition on the device
     AA* aa = nullptr; GRes* gr = nullptr; uint32_t *c_sj = nullptr, *c_snp = nullptr, *c_mt = nullptr, *c_ind = nullptr, *o_sj = nullptr, *o_snp = nullptr, *o_mt = nullptr, *o_ind = nullptr;
     uint32_t *l_snp = nullptr, *l_mt = nullptr, *l_jid = nullptr; IND* l_ind = nullptr; uint16_t *lq_snp = nullptr, *lq_mt = nullptr;
@@ -1527,8 +1701,9 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     const size_t base = A.mark();
     int K = 1;
     std::vector<unsigned long long> est, estn;   // per partition: the bound in bytes, the reads
-    std::vector<uint64_t> hoff; std::vector<uint32_t> hidx;   // stream: the barcoded reads' indices by cell partition (partition p: hidx[hoff[p] .. hoff[p + 1]))
+    std::vector<uint64_t> hoff; UArr hidx;   // stream: the barcoded reads' indices by cell partition (partition p: hidx[hoff[p] .. hoff[p + 1]))
     double streamScanS = 0, streamPartS = 0;
+    GBuf gb[2]; std::future<void> pinfut;   // usePipe: the host buffers of two partitions reads (page-locked), allocated on a thread while the reads are grouped
     if (!in.stream) {
         // no per-read array: the bound is summed in k_binsum from the signature tables. K starts at the least value whose mean partition fits
         // the arena (a trial K only needs the per-partition sums, so each trial is one pass over the reads)
@@ -1587,18 +1762,58 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         auto scratchOf = [&](unsigned long long mn) { return (size_t)(mn + 1) * (sizeof(ReadRec) + 4 + qbytes) + 4096; };
         std::vector<std::vector<unsigned long long>> be, bc_;
         K = 0;
-        // sigblock: each partition also holds the table rows of the signatures its reads touch (host_tabs); est below then includes them
-        auto addTabs = [&](int k, std::vector<unsigned long long>& e) { std::vector<unsigned long long> tb; host_tabs(in.hr, tab, in.dp.use_q != 0, k, tb); for (int q = 0; q < k; q++) e[q] += tb[q]; };
+        // SINGLET_PILEUP_CELLTAB: one scan gives every cell summed weight and read count, and each trial K bounds are sums over the cells
+        const uint32_t ncl = (uint32_t) std::max(in.ncells, 0);
+        std::unique_ptr<uint64_t[]> cellW; std::unique_ptr<uint32_t[]> cellC; bool haveCells = false;
+        if (g_celltab) { const double tc = now_s(); haveCells = host_cells(in.hr, wsig, ncl, cellW, cellC); sizeBinsS += now_s() - tc; }
+        auto binsFor = [&](const std::vector<int>& ks) {
+            const double tb0 = now_s();
+            if (haveCells) cells_bins(cellW.get(), cellC.get(), ncl, ks, be, bc_); else host_bins(in.hr, wsig, ks, be, bc_);
+            sizeBinsS += now_s() - tb0; };
+        // sigblock: each partition also holds the table rows of the signatures its reads touch (host_tabs); est below then includes them. With the cell table
+        // the bounds of several trial Ks come from one scan (tabsFor), the per-signature row weights from a table made once (tw).
+        std::vector<uint32_t> tw;
+        auto tabsFor = [&](const std::vector<int>& ks, std::vector<std::vector<unsigned long long>>& tb) {
+            const double tt0 = now_s();
+            if (g_celltab) {
+                if (tw.empty()) {
+                    tw.resize((size_t) std::max<uint64_t>(tab.n, 1)); const bool uq = in.dp.use_q != 0; const int nth = stream_threads();
+                    stream_parallel(nth, [&](int t) { for (uint64_t s = tab.n * t / nth, e = tab.n * (t + 1) / nth; s < e; s++) { const unsigned long long w = tab_weight(tab, s, uq); tw[s] = w > 0xFFFFFFFFull ? 0xFFFFFFFFu : (uint32_t) w; } });
+                }
+                host_tabs_multi(in.hr, tab, tw, ncl, ks, tb);
+            } else { tb.assign(ks.size(), {}); for (size_t j = 0; j < ks.size(); j++) host_tabs(in.hr, tab, in.dp.use_q != 0, ks[j], tb[j]); }
+            sizeTabsS += now_s() - tt0; };
+        auto addTabs = [&](int k, std::vector<unsigned long long>& e) { std::vector<std::vector<unsigned long long>> tb; tabsFor(std::vector<int>{k}, tb); for (int q = 0; q < k; q++) e[q] += tb[0][q]; };
         if (forced > 0) {
-            host_bins(in.hr, wsig, std::vector<int>{forced}, be, bc_); K = forced; est = be[0]; estn = bc_[0];
+            binsFor(std::vector<int>{forced}); K = forced; est = be[0]; estn = bc_[0];
             if (in.sigblock) addTabs(K, est);
         } else {
-            host_bins(in.hr, wsig, std::vector<int>{1}, be, bc_);
+            binsFor(std::vector<int>{1});
             const double tot = (double) be[0][0];
             const int k0 = budget > 0 ? (int)std::min<double>(kMaxParts, std::max(1.0, std::floor(tot / (double)budget))) : kMaxParts;
             for (int lo = k0; lo <= kMaxParts && K == 0; lo += 8) {
                 std::vector<int> ks; for (int k = lo; k <= std::min(lo + 7, kMaxParts); k++) ks.push_back(k);
-                host_bins(in.hr, wsig, ks, be, bc_);
+                binsFor(ks);
+                if (in.sigblock && g_celltab) {   // the trial Ks whose reads bound fits, their table rows bounds a few Ks per scan (the bitmaps size bounded)
+                    std::vector<size_t> cand;
+                    for (size_t j = 0; j < ks.size(); j++) {
+                        const unsigned long long mx = *std::max_element(be[j].begin(), be[j].end()), mn = *std::max_element(bc_[j].begin(), bc_[j].end());
+                        if (mx + scratchOf(mn) <= budget) cand.push_back(j);
+                    }
+                    const size_t Wb = ((size_t) tab.n + 63) / 64 * 8;
+                    for (size_t a = 0; a < cand.size() && K == 0;) {
+                        std::vector<size_t> grp; std::vector<int> kg; size_t bytes = 0;
+                        while (a < cand.size() && (grp.empty() || (grp.size() < 4 && bytes + (size_t) ks[cand[a]] * Wb <= (size_t(4) << 30)))) { grp.push_back(cand[a]); kg.push_back(ks[cand[a]]); bytes += (size_t) ks[cand[a]] * Wb; a++; }
+                        std::vector<std::vector<unsigned long long>> tb; tabsFor(kg, tb);
+                        for (size_t g = 0; g < grp.size(); g++) {
+                            const size_t j = grp[g]; std::vector<unsigned long long> e2 = be[j]; for (int q = 0; q < ks[j]; q++) e2[q] += tb[g][q];
+                            const unsigned long long mn = *std::max_element(bc_[j].begin(), bc_[j].end());
+                            if (*std::max_element(e2.begin(), e2.end()) + scratchOf(mn) > budget) continue;
+                            be[j] = e2; K = ks[j]; est = be[j]; estn = bc_[j]; break;
+                        }
+                    }
+                    continue;
+                }
                 for (size_t j = 0; j < ks.size(); j++) {
                     const unsigned long long mx = *std::max_element(be[j].begin(), be[j].end());
                     const unsigned long long mn = *std::max_element(bc_[j].begin(), bc_[j].end());
@@ -1611,12 +1826,17 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                     K = ks[j]; est = be[j]; estn = bc_[j]; break;
                 }
             }
-            if (K == 0) { K = kMaxParts; host_bins(in.hr, wsig, std::vector<int>{K}, be, bc_); est = be[0]; estn = bc_[0]; if (in.sigblock) addTabs(K, est); }   // nothing fits: the largest K; the next attempt catches the rest
+            if (K == 0) { K = kMaxParts; binsFor(std::vector<int>{K}); est = be[0]; estn = bc_[0]; if (in.sigblock) addTabs(K, est); }   // nothing fits: the largest K; the next attempt catches the rest
         }
         std::vector<uint32_t>().swap(wsig);
+        cellW.reset(); cellC.reset();
         streamScanS = now_s() - ts0;
         const double tp0 = now_s();
-        host_partition(in.hr, (uint32_t) K, hoff, hidx);
+        if (usePipe) {
+            const size_t mnp = *std::max_element(estn.begin(), estn.end()) + 1;
+            pinfut = std::async(std::launch::async, [&, mnp]() { cudaSetDevice(g_dev); for (int i = 0; i < 2; i++) { gb[i].R.get(mnp); gb[i].idx.get(mnp); if (in.dp.use_q) gb[i].Q.get(mnp * (size_t) in.dp.qw); } });
+        }
+        host_partition(in.hr, (uint32_t) K, ncl, hoff, hidx);
         streamPartS = now_s() - tp0;
         for (int p = 0; p < K; p++) if (hoff[p + 1] - hoff[p] != estn[p]) { fprintf(stderr, "[pileup] stream: partition %d holds %llu reads, the sizing counted %llu\n", p, (unsigned long long)(hoff[p + 1] - hoff[p]), estn[p]); estn[p] = hoff[p + 1] - hoff[p]; }
     }
@@ -1631,7 +1851,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             const size_t mn = *std::max_element(estn.begin(), estn.end()) + 1;
             Rp = A.alloc<ReadRec>(mn); ridx = A.alloc<uint32_t>(mn);
             if (in.dp.use_q) Qg = A.alloc<uint64_t>((size_t)in.dp.qw * mn);
-            if (!in.sigblock) { hRp.resize(mn); if (in.dp.use_q) hQp.resize((size_t)in.dp.qw * mn); }
+            if (!in.sigblock && !usePipe) { hRp.resize(mn); if (in.dp.use_q) hQp.resize((size_t)in.dp.qw * mn); }
         } else if (K > 1) {
             const size_t mn = *std::max_element(estn.begin(), estn.end()) + 1;
             pid = A.alloc<uint8_t>(std::max(nR, 1)); Rp = A.alloc<ReadRec>(mn); ridx = A.alloc<uint32_t>(mn); dnp = A.alloc<int>(1);
@@ -1649,23 +1869,42 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
     // sigblock: the next partition's host side (reads, distinct signatures, table rows) is prepared on a thread while this one runs on the device
     PartHost phs[2]; std::vector<uint64_t> pbm; std::vector<uint32_t> premap; double prepFirstS = 0, prepWaitS = 0;
     Inputs ip = in;   // ip: the partition's S / Al (sigblock: rebuilt from the flags of its signatures)
-    auto prep = [&](int pt, PartHost& ph) { part_prepare(in.hr, tab, in.dp.use_q != 0, in.dp.qw, hidx.data() + hoff[pt], (size_t)(hoff[pt + 1] - hoff[pt]), pbm, premap, ph); };
+    auto prep = [&](int pt, PartHost& ph) { cudaSetDevice(g_dev); part_prepare(in.hr, tab, in.dp.use_q != 0, in.dp.qw, hidx.data() + hoff[pt], (size_t)(hoff[pt + 1] - hoff[pt]), pbm, premap, ph); };
+    // usePipe: one partition reads, masks and indices gathered into a host buffer pair member (the first before the loop, each next one on a thread)
+    auto gather_part = [&](int pt, GBuf& g) {
+        const size_t n = (size_t)(hoff[pt + 1] - hoff[pt]); if (n == 0) return;
+        ReadRec* r = g.R.get(n); uint64_t* q = in.dp.use_q ? g.Q.get(n * (size_t) in.dp.qw) : nullptr; uint32_t* di = g.idx.get(n);
+        host_gather(in.hr, hidx.data() + hoff[pt], n, r, q);
+        const uint32_t* si = hidx.data() + hoff[pt]; const int ni = n < 1000000 ? 1 : stream_threads();
+        stream_parallel(ni, [&](int t) { const size_t a = n * t / ni, b = n * (t + 1) / ni; if (b > a) memcpy(di + a, si + a, (b - a) * 4); });
+    };
+    std::future<void> gfut;   // declared before pfut: waited for after it when the stack unwinds
+    if (usePipe && K > 0) { if (pinfut.valid()) pinfut.get(); const double tg = now_s(); gather_part(0, gb[0]); gatherS += now_s() - tg; }
     if (in.sigblock && K > 0) { pbm.assign((size_t)(tab.n + 63) / 64, 0); premap.resize((size_t) std::max<uint64_t>(tab.n, 1)); const double tp = now_s(); prep(0, phs[0]); prepFirstS = now_s() - tp; }
     std::future<void> pfut;   // declared last: it is waited for first when the stack unwinds
     for (int part = 0; part < K; part++) {
+        const double tSel0 = now_s();
         A.reset(base2); A.peak = base2;
         int nRp = 0; const uint64_t* Qp = nullptr;   // Qp: the partition's per-read low-quality masks (dp.use_q)
-        PartHost* ph = nullptr;
+        PartHost* ph = nullptr; GBuf* gbp = nullptr;
         if (in.sigblock) { ph = &phs[part & 1]; if (part > 0) { const double tw = now_s(); pfut.get(); prepWaitS += now_s() - tw; } }
+        if (usePipe) {   // this partition's reads were gathered on a thread (the buffer pair member of its parity); the next ones start now
+            gbp = &gb[part & 1];
+            if (part > 0) { const double tw = now_s(); gfut.get(); gatherS += now_s() - tw; }
+            if (part + 1 < K) gfut = std::async(std::launch::async, [&, part]() { cudaSetDevice(g_dev); gather_part(part + 1, gb[(part + 1) & 1]); });
+        }
         if (in.stream) {   // this partition's reads: gathered on the host in read order, uploaded
             nRp = (int)(hoff[part + 1] - hoff[part]);
             if (nRp > 0) {
-                const ReadRec* srcR = hRp.data(); const uint64_t* srcQ = hQp.data();
-                if (ph) { srcR = ph->R.p.get(); srcQ = ph->Q.p.get(); }
-                else host_gather(in.hr, hidx.data() + hoff[part], (size_t) nRp, hRp.data(), in.dp.use_q ? hQp.data() : nullptr);
+                const ReadRec* srcR = hRp.data(); const uint64_t* srcQ = hQp.data(); const uint32_t* srcI = hidx.data() + hoff[part];
+                if (ph) { srcR = ph->R.data(); srcQ = ph->Q.data(); srcI = ph->idxp.data(); }
+                else if (gbp) { srcR = gbp->R.data(); srcQ = gbp->Q.data(); srcI = gbp->idx.data(); }
+                else { const double tg = now_s(); host_gather(in.hr, hidx.data() + hoff[part], (size_t) nRp, hRp.data(), in.dp.use_q ? hQp.data() : nullptr); gatherS += now_s() - tg; }
+                const double th = now_s();
                 CK(cudaMemcpy(Rp, srcR, (size_t) nRp * sizeof(ReadRec), cudaMemcpyHostToDevice));
-                CK(cudaMemcpy(ridx, hidx.data() + hoff[part], (size_t) nRp * 4, cudaMemcpyHostToDevice));
+                CK(cudaMemcpy(ridx, srcI, (size_t) nRp * 4, cudaMemcpyHostToDevice));
                 if (in.dp.use_q) { CK(cudaMemcpy(Qg, srcQ, (size_t) nRp * (size_t) in.dp.qw * 8, cudaMemcpyHostToDevice)); }
+                h2dS += now_s() - th;
             }
             Qp = in.dp.use_q ? Qg : nullptr;
         }
@@ -1677,41 +1916,44 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             if (in.dp.use_q && nRp > 0) { k_gatherq<<<(nRp + TB - 1) / TB, TB>>>(in.Q, in.dp.qw, ridx, nRp, Qg); Qp = Qg; }
         }
         if (ph) {   // this partition's signature rows: GRes, counts, offsets, the NH / strand flags (as S and Al), the lists (junction ids looked up in the run's table)
+            const double th2 = now_s();
             const int nU = (int) ph->nU; const size_t n1 = std::max(nU, 1);
             gr = A.alloc<GRes>(n1);
             c_sj = A.alloc<uint32_t>(n1); c_snp = A.alloc<uint32_t>(n1); c_mt = A.alloc<uint32_t>(n1); c_ind = A.alloc<uint32_t>(n1);
             o_sj = A.alloc<uint32_t>(n1); o_snp = A.alloc<uint32_t>(n1); o_mt = A.alloc<uint32_t>(n1); o_ind = A.alloc<uint32_t>(n1);
             uint8_t* dnr = A.alloc<uint8_t>(n1); SigRec* Sp = A.alloc<SigRec>(n1); AlnRec* Alp = A.alloc<AlnRec>(n1);
             if (nU > 0) {
-                CK(cudaMemcpy(gr, ph->G.p.get(), (size_t) nU * sizeof(GRes), cudaMemcpyHostToDevice));
+                CK(cudaMemcpy(gr, ph->G.data(), (size_t) nU * sizeof(GRes), cudaMemcpyHostToDevice));
                 uint32_t* dc[4] = {c_sj, c_snp, c_mt, c_ind}; uint32_t* dof[4] = {o_sj, o_snp, o_mt, o_ind};
-                for (int x = 0; x < 4; x++) { CK(cudaMemcpy(dc[x], ph->c[x].p.get(), (size_t) nU * 4, cudaMemcpyHostToDevice)); CK(cudaMemcpy(dof[x], ph->o[x].p.get(), (size_t) nU * 4, cudaMemcpyHostToDevice)); }
-                CK(cudaMemcpy(dnr, ph->nr.p.get(), (size_t) nU, cudaMemcpyHostToDevice));
+                for (int x = 0; x < 4; x++) { CK(cudaMemcpy(dc[x], ph->c[x].data(), (size_t) nU * 4, cudaMemcpyHostToDevice)); CK(cudaMemcpy(dof[x], ph->o[x].data(), (size_t) nU * 4, cudaMemcpyHostToDevice)); }
+                CK(cudaMemcpy(dnr, ph->nr.data(), (size_t) nU, cudaMemcpyHostToDevice));
                 k_mkfake<<<(nU + TB - 1) / TB, TB>>>(dnr, nU, Sp, Alp);
             }
             ip.S = Sp; ip.Al = Alp;
             l_snp = A.alloc<uint32_t>(std::max<uint64_t>(ph->tot[1], 1)); l_mt = A.alloc<uint32_t>(std::max<uint64_t>(ph->tot[2], 1)); l_ind = A.alloc<IND>(std::max<uint64_t>(ph->tot[3], 1));
-            if (ph->tot[1]) CK(cudaMemcpy(l_snp, ph->l_snp.p.get(), (size_t) ph->tot[1] * 4, cudaMemcpyHostToDevice));
-            if (ph->tot[2]) CK(cudaMemcpy(l_mt, ph->l_mt.p.get(), (size_t) ph->tot[2] * 4, cudaMemcpyHostToDevice));
-            if (ph->tot[3]) CK(cudaMemcpy(l_ind, ph->l_ind.p.get(), (size_t) ph->tot[3] * sizeof(IND), cudaMemcpyHostToDevice));
+            if (ph->tot[1]) CK(cudaMemcpy(l_snp, ph->l_snp.data(), (size_t) ph->tot[1] * 4, cudaMemcpyHostToDevice));
+            if (ph->tot[2]) CK(cudaMemcpy(l_mt, ph->l_mt.data(), (size_t) ph->tot[2] * 4, cudaMemcpyHostToDevice));
+            if (ph->tot[3]) CK(cudaMemcpy(l_ind, ph->l_ind.data(), (size_t) ph->tot[3] * sizeof(IND), cudaMemcpyHostToDevice));
             lq_snp = lq_mt = nullptr;
             if (in.dp.use_q) {
                 lq_snp = A.alloc<uint16_t>(std::max<uint64_t>(ph->tot[1], 1)); lq_mt = A.alloc<uint16_t>(std::max<uint64_t>(ph->tot[2], 1));
-                if (ph->tot[1]) CK(cudaMemcpy(lq_snp, ph->q_snp.p.get(), (size_t) ph->tot[1] * 2, cudaMemcpyHostToDevice));
-                if (ph->tot[2]) CK(cudaMemcpy(lq_mt, ph->q_mt.p.get(), (size_t) ph->tot[2] * 2, cudaMemcpyHostToDevice));
+                if (ph->tot[1]) CK(cudaMemcpy(lq_snp, ph->q_snp.data(), (size_t) ph->tot[1] * 2, cudaMemcpyHostToDevice));
+                if (ph->tot[2]) CK(cudaMemcpy(lq_mt, ph->q_mt.data(), (size_t) ph->tot[2] * 2, cudaMemcpyHostToDevice));
             }
             l_jid = A.alloc<uint32_t>(std::max<uint64_t>(ph->tot[0], 1));
             if (ph->tot[0] > 0) {
                 const size_t tmj = A.top_mark(); SJL* dsj = A.alloc_top<SJL>(ph->tot[0]);
-                CK(cudaMemcpy(dsj, ph->l_sj.p.get(), (size_t) ph->tot[0] * sizeof(SJL), cudaMemcpyHostToDevice));
+                CK(cudaMemcpy(dsj, ph->l_sj.data(), (size_t) ph->tot[0] * sizeof(SJL), cudaMemcpyHostToDevice));
                 k_jid_lookup<<<(int)((ph->tot[0] + TB - 1) / TB), TB>>>(dsj, (int) ph->tot[0], t1, t2, nj, l_jid);
                 CK(cudaGetLastError());
                 A.top_reset(tmj);
             }
+            h2dS += now_s() - th2;
             if (part + 1 < K) pfut = std::async(std::launch::async, [&prep, &phs, part]() { prep(part + 1, phs[(part + 1) & 1]); });   // the host buffers of this partition are free now
         }
         T.mark("part.select");
         fprintf(stderr, "[pileup] partition %d/%d selected: %d reads\n", part, K, nRp);
+        const double tComp0 = now_s(); selS += tComp0 - tSel0;
         const int GR = (nRp + TB - 1) / TB;
         const size_t s0 = A.mark();
         // 4 expand to read level: gene tuples + counts / offsets of the other streams
@@ -1773,6 +2015,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         }
         peak_all = std::max(peak_all, A.peak);
         ng_all += ng; n_sjt_all += n_sjt; n_snpt_all += n_snpt; n_mtt_all += n_mtt; n_indt_all += n_indt;
+        const double tFet0 = now_s(); compS += tFet0 - tComp0;
         if (!out) continue;
         // ---------------- fetch this partition's cells (host; its span is marked "fetch" and left out of the GPU time) ----------------
         // E24 (g_e24_post): each step downloads here and queues its host half (the rows from the downloaded arrays) in its own list of
@@ -1788,6 +2031,12 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         const int ncl = in.ncells;
         // (E16: the steps as lambdas, called in this order, or with g_e16_fetchpar on threads: each fills its own outputs in the same order)
         auto add = [&](std::vector<T3>& v, const CsrDev& c, int step) {
+            if (g_ring != nullptr) {   // SINGLET_PILEUP_D2HPIN: the arrays downloaded through the chunk ring into arrays that are not zero-filled first
+                auto h = std::make_shared<CsrH>(fetch_csr_h(c, ncl)); auto sk = sink(&v);
+                defer(step, [h, sk, ncl]() { std::vector<T3> t = csr_to_t3h(*h, ncl);
+                                             if (sk->empty()) sk->swap(t); else sk->insert(sk->end(), t.begin(), t.end()); });
+                return;
+            }
             auto h = std::make_shared<Csr>(fetch_csr(c, ncl)); auto sk = sink(&v);
             defer(step, [h, sk, ncl]() { std::vector<T3> t = csr_to_t3(*h, ncl);
                                          if (sk->empty()) sk->swap(t); else sk->insert(sk->end(), t.begin(), t.end()); }); };
@@ -1797,8 +2046,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             if (g_want_reads) {
                 auto addr = [&](std::vector<T3>& v, const CsrDev32& c) {
                     auto ip = std::make_shared<std::vector<uint32_t>>(ncl + 1), ix = std::make_shared<std::vector<uint32_t>>(c.nnz), da = std::make_shared<std::vector<uint32_t>>(c.nnz);
-                    CK(cudaMemcpy(ip->data(), c.indptr, 4 * (size_t)(ncl + 1), cudaMemcpyDeviceToHost));
-                    if (c.nnz) { CK(cudaMemcpy(ix->data(), c.indices, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(da->data(), c.data, 4 * (size_t)c.nnz, cudaMemcpyDeviceToHost)); }
+                    d2h(ip->data(), c.indptr, 4 * (size_t)(ncl + 1));
+                    if (c.nnz) { d2h(ix->data(), c.indices, 4 * (size_t)c.nnz); d2h(da->data(), c.data, 4 * (size_t)c.nnz); }
                     auto sk = sink(&v);
                     defer(3, [ip, ix, da, sk, ncl]() { for (int cell = 0; cell < ncl; cell++) for (uint32_t k = (*ip)[cell]; k < (*ip)[cell + 1]; k++) sk->push_back(T3{(uint32_t)cell, (*ix)[k], (*da)[k]}); });
                 };
@@ -1809,7 +2058,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
         auto hbuf64 = [](int n) { return std::shared_ptr<uint64_t>(new uint64_t[(size_t)n], std::default_delete<uint64_t[]>()); };
         auto hbuf32 = [](int n) { return std::shared_ptr<uint32_t>(new uint32_t[(size_t)n], std::default_delete<uint32_t[]>()); };
         auto fSj = [&]() {
-        if (n_sju > 0) { auto k = hbuf64(n_sju); auto c = hbuf32(n_sju); CK(cudaMemcpy(k.get(), sj_u, (size_t)n_sju * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), sj_n, (size_t)n_sju * 4, cudaMemcpyDeviceToHost));
+        if (n_sju > 0) { auto k = hbuf64(n_sju); auto c = hbuf32(n_sju); d2h(k.get(), sj_u, (size_t)n_sju * 8); d2h(c.get(), sj_n, (size_t)n_sju * 4);
             const int n = n_sju, jbl = jb; auto sk = sink(&out->sj);
             defer(4, [k, c, n, jbl, out, sk]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
                 unsigned long long sum = 0; for (int i = 0; i < n; i++) sum += cc[i];
@@ -1817,7 +2066,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 for (int i = 0; i < n; i++) sk->push_back(T3{(uint32_t)(kk[i] >> jbl), (uint32_t)(kk[i] & ((1ull << jbl) - 1)), std::min(cc[i], 65535u)}); }); }
         };
         auto fSn = [&]() {
-        if (n_snu > 0) { auto k = hbuf64(n_snu), v = hbuf64(n_snu); CK(cudaMemcpy(k.get(), sn_u, (size_t)n_snu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(v.get(), sn_v, (size_t)n_snu * 8, cudaMemcpyDeviceToHost));
+        if (n_snu > 0) { auto k = hbuf64(n_snu), v = hbuf64(n_snu); d2h(k.get(), sn_u, (size_t)n_snu * 8); d2h(v.get(), sn_v, (size_t)n_snu * 8);
             const int n = n_snu, sbl = sb; auto skd = sink(&out->snp_dp), ska = sink(&out->snp_ad);
             defer(5, [k, v, n, sbl, skd, ska]() { const uint64_t* kk = k.get(); const uint64_t* vv = v.get();
                 skd->reserve(skd->size() + (size_t)n);
@@ -1825,7 +2074,7 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                     if (dp == 0) continue; T3 d = a; d.val = std::min(dp, 65535u); skd->push_back(d); if (ad > 0) { a.val = std::min(ad, 65535u); ska->push_back(a); } } }); }
         };
         auto fMt = [&]() {
-        if (n_mtu > 0) { auto k = hbuf64(n_mtu); auto c = hbuf32(n_mtu); CK(cudaMemcpy(k.get(), mt_u, (size_t)n_mtu * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(c.get(), mt_n, (size_t)n_mtu * 4, cudaMemcpyDeviceToHost));
+        if (n_mtu > 0) { auto k = hbuf64(n_mtu); auto c = hbuf32(n_mtu); d2h(k.get(), mt_u, (size_t)n_mtu * 8); d2h(c.get(), mt_n, (size_t)n_mtu * 4);
             const int n = n_mtu; auto skm = sink(&out->mt), skr = sink(&out->mt_rev);
             defer(6, [k, c, n, skm, skr]() { const uint64_t* kk = k.get(); const uint32_t* cc = c.get();
             for (int i = 0; i < n;) {            // key = cell << 18 | feat << 1 | rev: entries (cell, feat, 0) and (cell, feat, 1) are adjacent
@@ -1835,8 +2084,8 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
                 skm->push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(tot, 65535)}); if (rv > 0) skr->push_back(T3{cell, feat, (uint32_t)std::min<uint64_t>(rv, 65535)}); i = j; } }); }
         };
         auto fInd = [&]() {
-        if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); CK(cudaMemcpy(b.data(), in_bc, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
-            CK(cudaMemcpy(d.data(), in_ind, (size_t)n_indt * 8, cudaMemcpyDeviceToHost)); CK(cudaMemcpy(ri.data(), in_ri, (size_t)n_indt * 4, cudaMemcpyDeviceToHost));
+        if (n_indt > 0) { std::vector<uint32_t> b(n_indt), ri(n_indt); std::vector<IND> d(n_indt); d2h(b.data(), in_bc, (size_t)n_indt * 4);
+            d2h(d.data(), in_ind, (size_t)n_indt * 8); d2h(ri.data(), in_ri, (size_t)n_indt * 4);
             for (int i = 0; i < n_indt; i++) indels.push_back({ri[i], {b[i], d[i].pos, d[i].lenins >> 1, d[i].lenins & 1}}); }
         };
         if (g_e16_fetchpar) {
@@ -1851,11 +2100,17 @@ static void run_pipeline(Arena& A, Timer& T, const Inputs& in, Outputs* out) {
             fExtra(); fSj(); fSn(); fMt(); fInd();
         }
         T.mark("fetch");
+        fetchS += now_s() - tFet0;
         fprintf(stderr, "[pileup] partition %d/%d fetched\n", part, K);
     }
     A.reset(base2); A.peak = peak_all;
     if (pfut.valid()) pfut.get();
     if (in.sigblock) { char b[160]; snprintf(b, sizeof b, "sigblock partitions: first host preparation %.2f s, waited for the next %.2f s", prepFirstS, prepWaitS); g_parts_log.push_back(b); }
+    {   // the hold host wall time by step (compute: the host until the fetch starts, which includes waiting for the kernels; fetch: the downloads and their host half)
+        char b[480]; snprintf(b, sizeof b, "host profile (s): sizing scan %.2f (cells %.2f, tabs %.2f), grouping %.2f, partitions: select %.2f (reads gather/wait %.2f, upload %.2f), compute %.2f, fetch %.2f; page-locked buffers %lld (%.2f s); celltab %d pin %d pipe %d d2hpin %d",
+                              streamScanS, sizeBinsS, sizeTabsS, streamPartS, selS, gatherS + prepWaitS, h2dS, compS, fetchS, (long long) g_pin_n.load(), g_pin_ns.load() * 1e-9, (int) g_celltab, (int) g_pin, (int) usePipe, (int) (g_ring != nullptr));
+        g_parts_log.push_back(b); fprintf(stderr, "[pileup] %s\n", b);
+    }
     T.finish();
     {   // E23: the GPU time per stage (ms, every partition summed; "fetch" is the host)
         std::string st = "stages (ms):"; char b[64];

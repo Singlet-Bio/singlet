@@ -121,6 +121,8 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // memory twice the device's size: the part beyond the device pages to the host, the results are the same
     size_t arenaB = 0;   // E17: the device arena's size (logged)
     PileupWiden W; std::string notes;
+    const char* sbEnv = getenv("SINGLET_PILEUP_SIGBLOCK"); const bool sbAutoMode = !(sbEnv != nullptr && (strcmp(sbEnv, "0") == 0 || strcmp(sbEnv, "1") == 0));
+    bool sbFallback = false, lastBlocked = false, lastStream = false;   // SINGLET_PILEUP_SIGBLOCK=auto: the whole-table layout ran out of arena although the estimate said it fits: attempt 0 repeated blocked
     for (int attempt = 0; attempt < 3; attempt++) {
     Arena A;
     try {
@@ -188,14 +190,39 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     // SINGLET_PILEUP_SIGBLOCK (default on with the stream; 0: the signature tables whole on the device, as before): the signature stage in blocks of
     // signatures (S, Al, ops and seq stay in host memory), the per-signature results on the host, and each cell partition uploads the rows it touches
     // (docs/gpu-engine/runtime/MEMORY-STREAMING.md, rank 3b). Needs ascending alignment, op and sequence offsets (checked).
-    in.sigblock = in.stream && !(getenv("SINGLET_PILEUP_SIGBLOCK") != nullptr && strcmp(getenv("SINGLET_PILEUP_SIGBLOCK"), "0") == 0);
+    // SINGLET_PILEUP_SIGBLOCK=auto (the default): the blocked path only when the whole-table layout (the e3fcc910 stream path) would not fit this arena, by
+    // the estimate below; =1 forces it, =0 turns it off. The estimate (bytes) from the input's sizes, calibrated on d300_3p and d1000_3p (job 815486 / 815406 logs):
+    //   resident   = arena in use now (annotation) + 85 B per signature (S, Al, GRes, counts, offsets, lists, junction ids) + 16 B per alignment beyond the signatures
+    //   sig stage  = 1.10 x (resident + sequence bytes + 4 B per CIGAR op word + 24 B per alignment (annotation) + 8 B per signature (multimap genes))
+    //   partitions = 1.05 x resident + the arena reserve + 9 B per read (the K = 64 partition and its scratch) + 64 MB
+    // blocked when the larger of the two exceeds the arena. SINGLET_PILEUP_SIGBLOCK_CAP_KB replaces the arena size in the comparison (the unit test).
+    std::string sbWhy;
+    {
+        const bool sbOffReq = sbEnv != nullptr && strcmp(sbEnv, "0") == 0, sbOnReq = sbEnv != nullptr && strcmp(sbEnv, "1") == 0;
+        bool want = in.stream && !sbOffReq;
+        if (want && !sbOnReq && !sbFallback) {
+            const double nSd = (double) nS, nAd = (double) nA, nOps = (double) (pi.preOps.n / 4 + pi.ops.size()), nSeq = (double) (pi.preSeq.n + pi.seq.size());
+            const double resident = (double) A.mark() + 85.0 * nSd + (nAd > nSd ? 16.0 * (nAd - nSd) : 0.0);
+            const double sigPeak = 1.10 * (resident + nSeq + 4.0 * nOps + 24.0 * nAd + 8.0 * nSd);
+            const double partFloor = 1.05 * resident + (double) kArenaReserve + 9.0 * (double) nR + 64.0 * 1048576.0;
+            double cap = (double) A.cap;
+            if (const char* ck = getenv("SINGLET_PILEUP_SIGBLOCK_CAP_KB")) { const double kb = atof(ck); if (kb > 0) cap = kb * 1024.0; }
+            want = std::max(sigPeak, partFloor) > cap;
+            char wb[300]; snprintf(wb, sizeof wb, " (auto: signature stage est %.1f GB, partition stage est %.1f GB, arena %.1f GB: %s)", sigPeak / 1e9, partFloor / 1e9, cap / 1e9, want ? "does not fit whole, blocked" : "fits whole");
+            sbWhy = wb;
+        } else if (want) sbWhy = sbOnReq ? " (forced by SINGLET_PILEUP_SIGBLOCK=1)" : " (auto fallback: whole-table layout exhausted the arena)";
+        else if (in.stream) sbWhy = " (SINGLET_PILEUP_SIGBLOCK=0)";
+        in.sigblock = want;
+        fprintf(stderr, "[pileup] sigblock %s%s\n", want ? "on" : "off", sbWhy.c_str());
+    }
     if (in.sigblock) {
         in.hS.a = (const SigRec*) pi.preSigs.p; in.hS.na = pi.preSigs.n / sizeof(SigRec); in.hS.b = (const SigRec*) pi.sigs.data(); in.hS.nb = pi.sigs.size() / sizeof(SigRec);
         in.hA.a = (const AlnRec*) pi.preAlns.p; in.hA.na = pi.preAlns.n / sizeof(AlnRec); in.hA.b = (const AlnRec*) pi.alns.data(); in.hA.nb = pi.alns.size() / sizeof(AlnRec);
         in.hO.a = (const uint32_t*) pi.preOps.p; in.hO.na = pi.preOps.n / 4; in.hO.b = pi.ops.data(); in.hO.nb = pi.ops.size();
         in.hQ.a = pi.preSeq.p; in.hQ.na = pi.preSeq.n; in.hQ.b = pi.seq.data(); in.hQ.nb = pi.seq.size();
-        if (!sigs_monotone(in)) { in.sigblock = false; notes += "sigblock off: signature offsets not ascending; "; fprintf(stderr, "[pileup] sigblock off: signature offsets not ascending\n"); }
+        if (!sigs_monotone(in)) { in.sigblock = false; sbWhy += " (signature offsets not ascending: off)"; notes += "sigblock off: signature offsets not ascending; "; fprintf(stderr, "[pileup] sigblock off: signature offsets not ascending\n"); }
     }
+    lastBlocked = in.sigblock; lastStream = in.stream;
     if (in.stream) {
         if (in.sigblock) { in.S = nullptr; in.Al = nullptr; in.ops = nullptr; in.seq = nullptr; }
         else {
@@ -333,7 +360,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
     po.editHits = g_edit_stat[0]; po.editMolecules = g_edit_stat[1]; po.editAmbiguous = g_edit_stat[2]; po.editOther = g_edit_stat[3];
     if (attempt < 2) { char ab[160]; snprintf(ab, sizeof ab, "arena %.1f GB (E17 budget %.1f GB, free at start %.1f GB), peak %.1f GB; ", arenaB / 1073741824.0,
                                               singlet_engine_gpu::memBudget(totB) / 1073741824.0, freeB / 1073741824.0, A.peak / 1073741824.0); po.log += ab; }
-    po.log += std::string("pileup stream ") + (in.stream ? "on" : "off") + ", sigblock " + (in.sigblock ? "on" : "off") + "; ";
+    po.log += std::string("pileup stream ") + (in.stream ? "on" : "off") + ", sigblock " + (in.sigblock ? "on" : "off") + sbWhy + "; ";
     po.log += "cell partitions: " + std::to_string(g_parts_used) + (g_force_parts > 0 ? " (forced)" : "") + "; ";
     for (auto& l : g_parts_log) po.log += l + "; ";
     e16step("outputs copied");
@@ -350,6 +377,7 @@ bool pileupRun(const PileupInput& pi, int device, PileupOutput& po) {
         cudaDeviceSynchronize();
         cudaFree(A.base);
         { char nb[160]; snprintf(nb, sizeof nb, "attempt %d: %zu MB needed, %zu MB arena; ", attempt, e.need >> 20, e.cap >> 20); notes += nb; fprintf(stderr, "[pileup] %s\n", nb); }
+        if (attempt == 0 && lastStream && !lastBlocked && !sbFallback && sbAutoMode) { sbFallback = true; notes += "retrying attempt 0 with the blocked signature stage; "; fprintf(stderr, "[pileup] retrying attempt 0 with the blocked signature stage\n"); attempt = -1; continue; }
         if (attempt > 1) {
             po.log += "GPU memory: " + std::to_string(e.need >> 20) + " MB needed, " + std::to_string(e.cap >> 20) + " MB unified arena";
             cudaDeviceReset();

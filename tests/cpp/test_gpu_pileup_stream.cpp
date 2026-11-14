@@ -168,10 +168,15 @@ bool runOnce(const PileupInput& pi, PileupOutput& po) {
     return ok;
 }
 
-struct Case { const char* name; const char* stream; const char* sigblock; const char* parts; const char* budgetKb; const char* sigKb; int minParts; int minBlocks; };
+// sigblock: nullptr = auto (the default), "1" forced on, "0" off. capKb: SINGLET_PILEUP_SIGBLOCK_CAP_KB, the arena size the auto estimate compares with (a tiny
+// one makes auto choose the blocked path). off: new host-work switches set to 0 (letters: C celltab, P pin, I pipe, D d2hpin).
+struct Case { const char* name; const char* stream; const char* sigblock; const char* parts; const char* budgetKb; const char* sigKb; int minParts; int minBlocks; const char* capKb = nullptr; const char* off = ""; };
 int runCases(const char* label, const PileupInput& pi, const Case* cases, size_t nc) {
-    setenv("SINGLET_PILEUP_STREAM", "0", 1); unsetenv("SINGLET_PILEUP_SIGBLOCK"); unsetenv("SINGLET_PILEUP_SIGBLOCK_KB");
+    setenv("SINGLET_PILEUP_STREAM", "0", 1); unsetenv("SINGLET_PILEUP_SIGBLOCK"); unsetenv("SINGLET_PILEUP_SIGBLOCK_KB"); unsetenv("SINGLET_PILEUP_SIGBLOCK_CAP_KB");
     unsetenv("SINGLET_GPU_PILEUP_PARTS"); unsetenv("SINGLET_PILEUP_STREAM_BUDGET_KB");
+    unsetenv("SINGLET_PILEUP_CELLTAB"); unsetenv("SINGLET_PILEUP_PIN"); unsetenv("SINGLET_PILEUP_PIPE"); unsetenv("SINGLET_PILEUP_D2HPIN");
+    // the chunk ring of the device-to-host copies: every copy through it, in chunks of 4 KB (more chunks than its slots on the larger arrays)
+    setenv("SINGLET_PILEUP_D2HPIN_MIN_KB", "1", 1); setenv("SINGLET_PILEUP_D2HPIN_CHUNK_KB", "4", 1);
     PileupOutput ref;
     const bool okRef = runOnce(pi, ref);
     CHECK(okRef, "unstreamed run (SINGLET_PILEUP_STREAM=0)");
@@ -187,13 +192,18 @@ int runCases(const char* label, const PileupInput& pi, const Case* cases, size_t
         if (c.parts) setenv("SINGLET_GPU_PILEUP_PARTS", c.parts, 1); else unsetenv("SINGLET_GPU_PILEUP_PARTS");
         if (c.budgetKb) setenv("SINGLET_PILEUP_STREAM_BUDGET_KB", c.budgetKb, 1); else unsetenv("SINGLET_PILEUP_STREAM_BUDGET_KB");
         if (c.sigKb) setenv("SINGLET_PILEUP_SIGBLOCK_KB", c.sigKb, 1); else unsetenv("SINGLET_PILEUP_SIGBLOCK_KB");
+        if (c.capKb) setenv("SINGLET_PILEUP_SIGBLOCK_CAP_KB", c.capKb, 1); else unsetenv("SINGLET_PILEUP_SIGBLOCK_CAP_KB");
+        for (const char* sw : {"SINGLET_PILEUP_CELLTAB", "SINGLET_PILEUP_PIN", "SINGLET_PILEUP_PIPE", "SINGLET_PILEUP_D2HPIN"}) unsetenv(sw);
+        for (const char* p = c.off; *p; p++) setenv(*p == 'C' ? "SINGLET_PILEUP_CELLTAB" : *p == 'P' ? "SINGLET_PILEUP_PIN" : *p == 'I' ? "SINGLET_PILEUP_PIPE" : "SINGLET_PILEUP_D2HPIN", "0", 1);
         PileupOutput po;
         const bool ok = runOnce(pi, po);
         CHECK(ok, c.name);
         if (!ok) { rc = 1; continue; }
         const int k = partsOf(po.log), nb = blocksOf(po.log);
         std::cout << "  " << label << " / " << c.name << ": " << k << " cell partitions, " << nb << " signature blocks, peak " << po.peakGB << " GB (unstreamed " << ref.peakGB << " GB)\n";
-        const bool wantBlocks = c.stream == nullptr && (c.sigblock == nullptr);
+        const bool wantBlocks = c.stream == nullptr && ((c.sigblock != nullptr && strcmp(c.sigblock, "1") == 0) || (c.sigblock == nullptr && c.capKb != nullptr));
+        if (c.sigblock == nullptr && c.stream == nullptr)
+            CHECK(po.log.find(wantBlocks ? "does not fit whole, blocked" : "fits whole") != std::string::npos, "the auto estimate chose the layout the case expects");
         CHECK(po.log.find("pileup stream on") != std::string::npos, "the log says the stream is on");
         CHECK(po.log.find(wantBlocks ? "sigblock on" : "sigblock off") != std::string::npos, "the log says the signature blocks are on / off as asked");
         CHECK(k >= c.minParts, "the expected number of partitions");
@@ -205,19 +215,34 @@ int runCases(const char* label, const PileupInput& pi, const Case* cases, size_t
 
 int run() {
     const Case cases[] = {
-        //   name                                          stream   sigblock  parts    budgetKb sigKb   minParts minBlocks
+        //   name                                          stream   sigblock  parts    budgetKb sigKb   minParts minBlocks capKb  off
         {"stream only (SIGBLOCK=0), default",              nullptr, "0",      nullptr, nullptr, nullptr, 1, 0},
         {"stream only (SIGBLOCK=0), K 7",                  nullptr, "0",      "7",     nullptr, nullptr, 7, 0},
-        {"stream + sigblock, default",                     nullptr, nullptr,  nullptr, nullptr, nullptr, 1, 1},
-        {"stream + sigblock, K 1",                         nullptr, nullptr,  "1",     nullptr, nullptr, 1, 1},
-        {"stream + sigblock, K 7",                         nullptr, nullptr,  "7",     nullptr, nullptr, 7, 1},
-        {"stream + sigblock, K 16",                        nullptr, nullptr,  "16",    nullptr, nullptr, 16, 1},
-        {"stream + sigblock, tiny partition budget 400 KB", nullptr, nullptr, nullptr, "400",   nullptr, 3, 1},
-        {"stream + sigblock, tiny partition budget 150 KB", nullptr, nullptr, nullptr, "150",   nullptr, 3, 1},
-        {"sigblock blocks of 4 KB, K 1",                   nullptr, nullptr,  "1",     nullptr, "4",     1, 3},
-        {"sigblock blocks of 4 KB, K 7",                   nullptr, nullptr,  "7",     nullptr, "4",     7, 3},
-        {"sigblock blocks of 1 KB, K 16",                  nullptr, nullptr,  "16",    nullptr, "1",     16, 8},
-        {"sigblock blocks of 2 KB, tiny partition budget", nullptr, nullptr,  nullptr, "300",   "2",     3, 5},
+        {"stream only (SIGBLOCK=0), tiny partition budget 400 KB", nullptr, "0", nullptr, "400", nullptr, 3, 0},
+        {"stream only, K 7, all four host switches off",   nullptr, "0",      "7",     nullptr, nullptr, 7, 0, nullptr, "CPID"},
+        {"stream only, K 7, CELLTAB=0",                    nullptr, "0",      "7",     nullptr, nullptr, 7, 0, nullptr, "C"},
+        {"stream only, K 7, PIN=0",                        nullptr, "0",      "7",     nullptr, nullptr, 7, 0, nullptr, "P"},
+        {"stream only, K 7, PIPE=0",                       nullptr, "0",      "7",     nullptr, nullptr, 7, 0, nullptr, "I"},
+        {"stream only, K 7, D2HPIN=0",                     nullptr, "0",      "7",     nullptr, nullptr, 7, 0, nullptr, "D"},
+        {"stream only, tiny budget 400 KB, CELLTAB=0",     nullptr, "0",      nullptr, "400",   nullptr, 3, 0, nullptr, "C"},
+        {"auto, small input fits whole",                   nullptr, nullptr,  nullptr, nullptr, nullptr, 1, 0},
+        {"auto, small input fits whole, K 7",              nullptr, nullptr,  "7",     nullptr, nullptr, 7, 0},
+        {"auto, tiny arena estimate: blocked, default",    nullptr, nullptr,  nullptr, nullptr, nullptr, 1, 1, "64"},
+        {"auto, tiny arena estimate: blocked, K 7",        nullptr, nullptr,  "7",     nullptr, nullptr, 7, 1, "64"},
+        {"stream + sigblock (=1), default",                nullptr, "1",      nullptr, nullptr, nullptr, 1, 1},
+        {"stream + sigblock, K 1",                         nullptr, "1",      "1",     nullptr, nullptr, 1, 1},
+        {"stream + sigblock, K 7",                         nullptr, "1",      "7",     nullptr, nullptr, 7, 1},
+        {"stream + sigblock, K 16",                        nullptr, "1",      "16",    nullptr, nullptr, 16, 1},
+        {"stream + sigblock, tiny partition budget 400 KB", nullptr, "1",     nullptr, "400",   nullptr, 3, 1},
+        {"stream + sigblock, tiny partition budget 150 KB", nullptr, "1",     nullptr, "150",   nullptr, 3, 1},
+        {"stream + sigblock, tiny budget 400 KB, CELLTAB=0", nullptr, "1",    nullptr, "400",   nullptr, 3, 1, nullptr, "C"},
+        {"stream + sigblock, K 7, all four host switches off", nullptr, "1",  "7",     nullptr, nullptr, 7, 1, nullptr, "CPID"},
+        {"stream + sigblock, K 7, PIN=0",                  nullptr, "1",      "7",     nullptr, nullptr, 7, 1, nullptr, "P"},
+        {"stream + sigblock, K 7, D2HPIN=0",               nullptr, "1",      "7",     nullptr, nullptr, 7, 1, nullptr, "D"},
+        {"sigblock blocks of 4 KB, K 1",                   nullptr, "1",      "1",     nullptr, "4",     1, 3},
+        {"sigblock blocks of 4 KB, K 7",                   nullptr, "1",      "7",     nullptr, "4",     7, 3},
+        {"sigblock blocks of 1 KB, K 16",                  nullptr, "1",      "16",    nullptr, "1",     16, 8},
+        {"sigblock blocks of 2 KB, tiny partition budget", nullptr, "1",      nullptr, "300",   "2",     3, 5},
     };
     const size_t nc = sizeof(cases) / sizeof(cases[0]);
     int rc = 0;
