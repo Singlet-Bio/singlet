@@ -2,6 +2,15 @@
 
 All notable changes to the singlet project.
 
+## [1.3.9] — bacterial and fungal species keep their own ids in the non-host screen
+
+The bacterial and the fungal sketch index both number their species from 1, and the engine joined them without an offset.
+Every bacterial record was published under kingdom FUNGAL, and fungal ITS or rRNA hits with an id up to 10,995 were counted
+under the bacterium with that id. The fungal ids are now read with bit 30 set when the two indexes are joined, on the CPU and in
+the GPU classify kernel, so each species has one id, one name and one kingdom. The index files are not rebuilt and output ids
+stay the id in the species' own index. Count tables, cell calls and every file outside the non-host tables and members equal
+1.3.8. The `nonhost_confirmed_reads` member writes the fungal bit in the species key of a confirmed fungus.
+
 ## [1.3.8] — concurrent end-of-run stages and a bounded pileup host half
 
 Two speed changes on 1.3.7 with byte-identical outputs. The end-of-run stages (cell calling, ambient, doublets, donor
