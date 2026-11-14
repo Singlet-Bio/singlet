@@ -2200,6 +2200,11 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::cerr << "[allsite] export " << secs(e0, clk::now()) << " s: donor calls " << secs(e0, e1) << ", store build " << secs(e1, e2)
                   << ", allele_delta.bin " << t_bin << ", cells.tsv.gz " << t_ctsv << ", sites.tsv.gz " << t_sites << ", donors_allsite.vcf.gz " << t_dvcf
                   << ", cells_allsite.vcf.gz " << t_cvcf << " (files written side by side)\n";
+        if (allsite::astm::on()) {   // SINGLET_ALLSITE_TIMING: the same steps at millisecond precision (from the end of demux's assignment to here)
+            char b[640]; std::snprintf(b, sizeof b, "[allsite-step] export (files, uncalled store, json; wall): total %.3f s, donor calls %.3f, store build %.3f, allele_delta.bin %.3f, cells.tsv.gz %.3f, sites.tsv.gz %.3f, donors_allsite.vcf.gz %.3f, cells_allsite.vcf.gz %.3f\n",
+                                       secs(e0, clk::now()), secs(e0, e1), secs(e1, e2), t_bin, t_ctsv, t_sites, t_dvcf, t_cvcf);
+            std::cerr << b << std::flush;
+        }
         allsite_rule = allsite::kStoreRule; allsite_donors = K;
         std::cerr << "[allsite] stored " << allsite::kStoreRule << ": " << stats.cells << " called cells (" << stats.assigned << " with a donor), " << stats.sites
                   << " sites; entries " << stats.entries << " of " << stats.full_entries << ", " << stats.bytes << " bytes, " << (stats.cells ? stats.bytes / stats.cells : 0)
