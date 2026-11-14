@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <new>
 #include <unordered_map>
+#include <map>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -675,7 +676,7 @@ static D2H* g_d2h = nullptr;   // set by mapDistinct while it runs (runLane's co
 
 // rt/maphold: a lane's packed results copied to the host on a thread (the D2H stream) beside the next lane's kernels. The lane's device
 // buffers are freed, on the calling thread, when the copy is joined (before the next lane's own copy and at the end of gpuPart, before any
-// result is read). SINGLET_ENGINE_GPU_LANED2H=0: as before; =check: also a synchronous copy of the same buffers, compared when joined.
+// result is read). SINGLET_ENGINE_GPU_LANED2H: default off (=0, as before); =1 on; =check: also a synchronous copy of the same buffers, compared when joined.
 static void dfree(void* p);   // defined with the budget below
 struct PendD2H {
     std::thread th; bool on = false, ok = true, check = false, freeDev = false; std::string err;
@@ -745,10 +746,29 @@ static void dfree(void* p) {
     cudaFree(p);
 }
 // thrust's temporaries through the tally (thrust::cuda::par(alloc): same stream and synchronisation as thrust::device)
+// rt/maphold: while g_tpoolOn (the lane kernels, only with SINGLET_ENGINE_GPU_LANED2H on) freed temporaries are kept and reused instead of
+// cudaFree'd, so the main thread does no device-wide synchronising free while the lane copy thread issues its calls; tpoolFlush frees them.
+static bool g_tpoolOn = false;
+static std::multimap<u64, void*> g_tfree;      // size -> block
+static std::unordered_map<void*, u64> g_tsize; // pooled blocks' sizes
+static void tpoolFlush() { for (auto& kv : g_tfree) { g_tsize.erase(kv.second); dfree(kv.second); } g_tfree.clear(); }
 struct TAlloc {
     typedef char value_type;
-    char* allocate(std::ptrdiff_t n) { void* p = nullptr; if (dmalv(&p, (u64)n) != cudaSuccess) throw std::bad_alloc(); return (char*)p; }
-    void deallocate(char* p, size_t) { dfree(p); }
+    char* allocate(std::ptrdiff_t n) {
+        if (g_tpoolOn) {
+            auto it = g_tfree.lower_bound((u64)n);
+            if (it != g_tfree.end() && it->first <= 2 * (u64)n + 4096) { void* p = it->second; g_tfree.erase(it); return (char*)p; }
+            void* p = nullptr; if (dmalv(&p, (u64)n) != cudaSuccess) throw std::bad_alloc();
+            g_tsize[p] = (u64)n; return (char*)p;
+        }
+        void* p = nullptr; if (dmalv(&p, (u64)n) != cudaSuccess) throw std::bad_alloc(); return (char*)p;
+    }
+    void deallocate(char* p, size_t) {
+        auto it = g_tsize.find(p);
+        if (g_tpoolOn && it != g_tsize.end()) { g_tfree.insert({it->second, (void*)p}); return; }
+        if (it != g_tsize.end()) g_tsize.erase(it);
+        dfree(p);
+    }
 };
 static TAlloc g_talloc;
 #define TP thrust::cuda::par(g_talloc)
@@ -782,6 +802,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0); L.off.resize(n + 1); L.off[0] = 0;   // off: every entry copied below
     if (n == 0) return true;
     NB = std::min<u64>(NB, n);
+    struct TPool { bool on; TPool() { const char* e = std::getenv("SINGLET_ENGINE_GPU_LANED2H"); on = e && e[0] != '0'; g_tpoolOn = on; } ~TPool() { if (on) { g_tpoolOn = false; tpoolFlush(); } } } tPool;   // rt/maphold: thrust temporaries pooled during the lane
     // E17: every buffer through the budget's tally (dmal / dfree); Work and the batch buffers are freed before the results are packed
     uint32_t* dIdx; uint8_t *dOut, *dSt, *dBst; uint16_t* dLen; Work<C>* dWork; ReadBuf<C::LREAD>* dRbuf; u64 *dNent, *dBase; uint32_t* dBits;
     EG_CK(dmal(&dIdx, n * 4)); EG_CK(cudaMemcpy(dIdx, idx.data(), n * 4, cudaMemcpyHostToDevice));
@@ -916,7 +937,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         EG_CK(cudaGetLastError());
         L.out.resize(total);
         const char* ldE = std::getenv("SINGLET_ENGINE_GPU_LANED2H");
-        if (asyncCopy && g_d2h && !(ldE && ldE[0] == '0') && total > 0) {
+        if (asyncCopy && g_d2h && ldE && ldE[0] != '0' && total > 0) {
             EG_CK(cudaStreamSynchronize(0));   // k_pack is done: the thread's copies need no wait on the legacy stream
             g_pend.ok = true; g_pend.err.clear(); g_pend.check = ldE && std::string(ldE) == "check"; g_pend.freeDev = !keepDev;
             g_pend.dPacked = dPacked; g_pend.dPoff = dPoff; g_pend.hOut = L.out.data(); g_pend.hOff = L.off.data(); g_pend.total = total; g_pend.n = n;
@@ -934,6 +955,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     }
     EG_CK(d2h(L.status.data(), dSt, n)); EG_CK(d2h(L.len.data(), dLen, n * 2));
     dfree(dOut); dfree(dSt); dfree(dLen);
+    if (deferCopy) { g_tpoolOn = false; tpoolFlush(); }   // no cudaFree from here on until the copy is joined
     if (deferCopy) {   // after the frees above (cudaFree waits for the device): the copy runs beside whatever the caller launches next
         int dv = 0; cudaGetDevice(&dv);
         g_pend.on = true;
