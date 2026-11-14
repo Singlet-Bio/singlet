@@ -27,6 +27,7 @@
 #include <tuple>
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <mutex>
 #include <chrono>
 #include <cstdio>
@@ -3459,8 +3460,8 @@ public:
             const auto w0 = std::chrono::steady_clock::now();
             if (a->t.joinable()) a->t.join();
             a->joined = true;
-            std::cerr << "[allsite] async: waited " << std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count()
-                      << " s at first use (pass " << a->sec << " s)\n";
+            std::cerr << "[allsite] async: waited " << std::round(std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count() * 100) / 100
+                      << " s at first use (pass " << std::round(a->sec * 100) / 100 << " s)\n";
             e = a->ep; a->ep = nullptr;
         }
         if (e) std::rethrow_exception(e);
