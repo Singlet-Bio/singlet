@@ -173,6 +173,14 @@ inline bool demux_autok_fast() {
     const int o = demux_autok_fast_override();
     return o >= 0 ? o != 0 : env_on;
 }
+// SINGLET_DEMUX_AUTOK_SPREAD=0: the restarts of an auto-K evaluation get threads / restarts (rounded down) threads each, as before
+// (fast path only; with the fast path off this is off too).
+inline int& demux_autok_spread_override() { static int v = -1; return v; }
+inline bool demux_autok_spread() {
+    static const bool env_on = [] { const char* e = std::getenv("SINGLET_DEMUX_AUTOK_SPREAD"); return !(e && std::atoi(e) == 0); }();
+    const int o = demux_autok_spread_override();
+    return demux_autok_fast() && (o >= 0 ? o != 0 : env_on);
+}
 inline bool demux_pool_enabled() {
     static const bool env_on = [] { const char* e = std::getenv("SINGLET_DEMUX_POOL"); return !(e && std::atoi(e) == 0); }();
     return demux_autok_fast() && env_on;
@@ -1603,14 +1611,16 @@ static VBResult fit_vb_k(
     const CoveredSNPData& cov, int K, const DonorDemuxConfig& cfg,
     const std::vector<int>& kinds, int max_iter_pre, int max_iter,
     int threads, const PcaCache* pca, uint64_t seed_base, bool quiet,
-    std::vector<VBResult>* all_out = nullptr)
+    std::vector<VBResult>* all_out = nullptr, bool spread_threads = false)
 {
     const int n_inits = std::max(1, static_cast<int>(kinds.size()));
     std::vector<VBResult> init_results(n_inits);
     const int nw = std::max(1, std::min(threads, n_inits));
     // Each restart runs on its share of the threads: one restart (every K=1 fit) used to run its pre-iterations on one thread while
     // the others sat idle. The fit does not depend on the thread count (parallel_det_chunks), so outputs are unchanged.
-    const int per_t = std::max(1, threads / nw);
+    // spread_threads: round the share up, so a K evaluation with 4 threads and 3 restarts gives each restart 2 threads (the restarts
+    // of a wave are what ends it, and its other evaluations leave cores idle) instead of 1. Thread counts never change a fit.
+    const int per_t = std::max(1, spread_threads ? (threads + nw - 1) / nw : threads / nw);
 
     get_snp_major(cov, threads);   // built once, with all threads, before the restarts that share it start
     std::atomic<int> next_restart{0};
@@ -2319,6 +2329,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
               << cfg.k_select_min_snp_cells << " cells), K in 1.." << kmax << "\n";
 
     const bool fast = demux_autok_fast();
+    const bool spread = demux_autok_spread();
     const auto t_setup = std::chrono::steady_clock::now();
     PcaCache pca[2];
     const int n_pcs = pca_dims_for_k(kmax);
@@ -2380,7 +2391,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
                                                     : std::vector<int>(cfg.k_select_inits, 2);
             VBResult fit = fit_vb_k(D[f], K, fcfg, kinds, std::min(cfg.max_iter_pre, 30),
                                     cfg.k_select_max_iter, fcfg.threads, &pca[f],
-                                    cfg.seed + 31ULL * (f + 1), true);
+                                    cfg.seed + 31ULL * (f + 1), true, nullptr, spread);
             std::vector<double> lps, lpp;
             make_log_priors(mean_donor_weights(fit.id_prob, K), delta, lps, lpp);
             // Genotypes from the training half; the second round drops likely doublets
@@ -2477,7 +2488,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
         }
     }
     std::cerr << "[demux] auto-K: setup " << setup_s << " s (SNP-major + PCA, both folds), later PCA " << pca_ext_s << " s, fast="
-              << (fast ? 1 : 0) << "\n";
+              << (fast ? 1 : 0) << " spread=" << (spread ? 1 : 0) << "\n";
     std::cerr << "[demux] auto-K: selected K=" << best_v << " in "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
               << " s\n";
