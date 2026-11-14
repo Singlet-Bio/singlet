@@ -26,7 +26,7 @@ struct State {
 };
 inline State& st() { static State* s = new State; return *s; }
 inline bool enabled() {
-    static const bool on = [] { const char* e = std::getenv("SINGLET_MAP2_POOL"); return !(e && e[0] == '0'); }();
+    static const bool on = [] { const char* e = std::getenv("SINGLET_MAP2_POOL"); return e && e[0] == '1'; }();   // opt-in (=1): node pairs 815766-815830 showed no map2 hold gain
     return on;
 }
 inline size_t capBytes() {
