@@ -20,13 +20,13 @@ outside $W/jobs/gpu-runtime, never delete others' files. The account may hold 2 
 another; that is expected.
 
 ## Build (no push needed)
-In the worktree: `git diff c5436ec7 -- src include CMakeLists.txt > /tmp/<name>.diff` (committed and uncommitted changes against v1.3.8), send it to
+In the worktree: `git diff c5436ec7 -- src include CMakeLists.txt bench/gpu/m5/stitch.cuh > /tmp/<name>.diff` (committed and uncommitted changes against v1.3.8), send it to
 $W/jobs/gpu-runtime/patches/<name>.diff, then
 `cd $W/jobs/gpu-runtime && BASE=e0824b214dd146cf4dffa332a7e73a2b1f33a9bb PATCH=$PWD/patches/<name>.diff NAME=<name> TESTS=1 sbatch rt_build.sbatch`
 -> bin/<name>/singlet-gpu, BUILD.txt, ctest-full.txt (must end "100% tests passed"). A name is built once: use <name>-2, -3 for rebuilds. Before submitting, check that patches/<name>.diff and bin/<name> do not already exist (another agent may use a similar name); after the build, compare the md5 of the patch on Clipper with your local diff.
 Compile errors are in $W/logs/rt-build-<job>.out. There is no local compiler, and a build waits in the queue, so check before
 sending: no string literal broken across lines (a `\n` typed in an edit can land as a real newline; twice so far), with e.g.
-`git diff c5436ec7 -- src include | grep -nE '^\+.*"[^"]*$'` and read every hit.
+`git diff c5436ec7 -- src include bench/gpu/m5 | grep -nE '^\+.*"[^"]*$'` and read every hit.
 
 ## Identity gate (every change to src/ or include/)
 `cd $W/jobs/gpu-pr2 && sbatch -p short-gpu --nice=0 --exclude=g050 --gres=gpu:quadro_rtx_8000:1 -c 18 --mem=170G --time=03:59:00 --export="ALL,CUDA_VISIBLE_DEVICES=0,SINGLET_ENGINE_GPU_MIN_CC=70,BINDIR=$W/jobs/gpu-runtime/bin/<name>,BRANCH=gpu/w4-v137,ALLOW_NO_EMBED=1,KEEPOUT=1,SINGLET_HLA=defer,T=18,SAMPLES=pbmc2m pbmc10m pbmc1k_v3 pbmc1k_v2 pbmc1k_cite_v3 pbmc5p_v1 neuron1k_v3 nuclei2k_v2,MODES=cpu gpu,PAIRS=cpu:gpu,REFD=$W/jobs/gpu-campaign/ref-rel138-e0824b21" pr2-gate.sbatch`

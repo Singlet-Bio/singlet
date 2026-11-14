@@ -10,6 +10,7 @@
 // It redevelops the ledger of perf/nvtx-host-ranges (a210148e, engine_gpu.cu only), which the staging merge of the Fable line dropped.
 #pragma once
 #include <cuda_runtime.h>
+#include "singlet/nvtx.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -78,7 +79,8 @@ inline void report(const char* phase, double wall) {
 // one top-level GPU function: its rows are printed and cleared when it returns
 struct Phase {
     const char* name; double t0;
-    explicit Phase(const char* n) : name(n), t0(on() ? now() : 0) {}
+    ::singlet::NvtxRange nv;   // NVTX range "phase: <name>" (SINGLET_NVTX=1 under nsys; nothing otherwise)
+    explicit Phase(const char* n) : name(n), t0(on() ? now() : 0), nv(("phase: " + std::string(n)).c_str()) {}
     ~Phase() { if (on()) report(name, now() - t0); }
 };
 
