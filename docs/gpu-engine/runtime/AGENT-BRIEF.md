@@ -23,7 +23,7 @@ another; that is expected.
 In the worktree: `git diff c5436ec7 -- src include CMakeLists.txt > /tmp/<name>.diff` (committed and uncommitted changes against v1.3.8), send it to
 $W/jobs/gpu-runtime/patches/<name>.diff, then
 `cd $W/jobs/gpu-runtime && BASE=e0824b214dd146cf4dffa332a7e73a2b1f33a9bb PATCH=$PWD/patches/<name>.diff NAME=<name> TESTS=1 sbatch rt_build.sbatch`
--> bin/<name>/singlet-gpu, BUILD.txt, ctest-full.txt (must end "100% tests passed"). A name is built once: use <name>-2, -3 for rebuilds.
+-> bin/<name>/singlet-gpu, BUILD.txt, ctest-full.txt (must end "100% tests passed"). A name is built once: use <name>-2, -3 for rebuilds. Before submitting, check that patches/<name>.diff and bin/<name> do not already exist (another agent may use a similar name); after the build, compare the md5 of the patch on Clipper with your local diff.
 Compile errors are in $W/logs/rt-build-<job>.out. There is no local compiler, and a build waits in the queue, so check before
 sending: no string literal broken across lines (a `\n` typed in an edit can land as a real newline; twice so far), with e.g.
 `git diff c5436ec7 -- src include | grep -nE '^\+.*"[^"]*$'` and read every hit.
