@@ -99,6 +99,14 @@ namespace m5 {
 typedef unsigned long long u64;
 typedef long long i64;
 typedef u64 uint;     // STAR's `uint` is 64-bit (IncludeDefine.h)
+// rt/lanes: device-side switches for the lane kernels' latency fixes, set by the engine from SINGLET_LANE_* (a host build runs the plain
+// code). bit 0 (SINGLET_LANE_FASTCOPY): Tr::copyFrom as batched loads then stores; bit 2 (SINGLET_LANE_FASTSJ): the junction scans of
+// stitchAlignToTranscript load a position's bytes together; bit 3 (SINGLET_LANE_NOINLINE_COPY): that copy as one out-of-line function;
+// bit 4 (SINGLET_LANE_NOINLINE_EXT): finalizeTranscript's two extendAlign calls share one out-of-line copy. Each gives the same results
+// as the plain code.
+#ifdef __CUDACC__
+__device__ __constant__ unsigned m5_fast = 5u;
+#endif
 
 constexpr int scoreMatch = 1;
 constexpr u64 MARK_FRAG_SPACER_BASE = 11;
@@ -267,7 +275,42 @@ template <int NEX> struct Tr {
     }
     // the copy STAR makes (Transcript operator=), restricted to the live exon rows: rows >= nExons are never read before
     // stitching writes them (stitchAlignToTranscript writes a row's 5 fields and its junction fields when it adds the exon)
+#if defined(__CUDA_ARCH__) && defined(M5_TR32)
+    // rt/lanes: the same copy with the two objects declared distinct (__restrict__), so the loads of a group are issued together before its
+    // stores (the plain version stores a field before the next load because source and destination may overlap: every call site
+    // copies between two different transcripts). The scalar block (intronMotifs .. nAnchor, every field of the transcript but the
+    // arrays) is moved as 32-bit words in groups of 8, then the live exon rows.
+    static __device__ __forceinline__ void copyFast(Tr* __restrict__ d, const Tr* __restrict__ s) {
+        constexpr size_t OFF = offsetof(Tr, intronMotifs), NB = sizeof(Tr) - OFF;
+        static_assert(OFF % 4 == 0 && NB % 4 == 0, "scalar block of Tr in whole words");
+        const uint32_t* sp = reinterpret_cast<const uint32_t*>(reinterpret_cast<const char*>(s) + OFF);
+        uint32_t* dp = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(d) + OFF);
+        constexpr int NW = (int)(NB / 4);
+        #pragma unroll
+        for (int k0 = 0; k0 < NW; k0 += 8) {
+            uint32_t t[8];
+            #pragma unroll
+            for (int k = 0; k < 8; k++) if (k0 + k < NW) t[k] = sp[k0 + k];
+            #pragma unroll
+            for (int k = 0; k < 8; k++) if (k0 + k < NW) dp[k0 + k] = t[k];
+        }
+        const uint ne = s->nExons < (uint)NEX ? (uint)s->nExons : (uint)NEX;
+        for (uint i = 0; i < ne; i++) {
+            const ExRow e = s->exons[i];
+            const sfield a0 = s->shiftSJ[i][0], a1 = s->shiftSJ[i][1];
+            const int c = s->canonSJ[i]; const uint8_t an = s->sjAnnot[i], st = s->sjStr[i];
+            d->exons[i] = e; d->shiftSJ[i][0] = a0; d->shiftSJ[i][1] = a1;
+            d->canonSJ[i] = c; d->sjAnnot[i] = an; d->sjStr[i] = st;
+        }
+    }
+#endif
+#if defined(__CUDA_ARCH__) && defined(M5_TR32)
+    static __device__ __noinline__ void copyFastNI(Tr* __restrict__ d, const Tr* __restrict__ s) { copyFast(d, s); }
+#endif
     HD void copyFrom(const Tr& o) {
+#if defined(__CUDA_ARCH__) && defined(M5_TR32)
+        if (m5_fast & 1u) { if (m5_fast & 8u) copyFastNI(this, &o); else copyFast(this, &o); return; }
+#endif
         nExons = o.nExons; iFrag = o.iFrag;
         rStart = o.rStart; roStart = o.roStart; rLength = o.rLength; gStart = o.gStart; gLength = o.gLength; cStart = o.cStart;
         Chr = o.Chr; Str = o.Str; roStr = o.roStr; primaryFlag = o.primaryFlag;
@@ -926,6 +969,17 @@ HD inline bool extendAlign(const char* R, const char* G, uint rStart, uint gStar
     }
     return trA->extendL > 0;
 }
+#ifdef __CUDA_ARCH__
+// rt/lanes (SINGLET_LANE_NOINLINE_EXT): finalizeTranscript's two extensions call one out-of-line copy of extendAlign instead of two inlined
+// ones (the kernels' instruction footprint: "no instruction" stalls are a third of lane A's warp stalls)
+__device__ __noinline__ bool extendAlignNI(const char* R, const char* G, uint rStart, uint gStart, int dR, int dG, uint L, uint Lprev, uint nMMprev,
+                                           uint nMMmax, double pMMmax, bool extendToEnd, Ext* trA) {
+    return extendAlign(R, G, rStart, gStart, dR, dG, L, Lprev, nMMprev, nMMmax, pMMmax, extendToEnd, trA);
+}
+#define M5_EXTALIGN(...) ((m5_fast & 16u) ? extendAlignNI(__VA_ARGS__) : extendAlign(__VA_ARGS__))
+#else
+#define M5_EXTALIGN(...) extendAlign(__VA_ARGS__)
+#endif
 // Transcript::add of an extension result (reset() Transcript: only maxScore, nMatch, nMM are non-zero)
 template <class T> HD inline void addExt(T& t, const Ext& e) { t.maxScore += e.maxScore; t.nMatch += e.nMatch; t.nMM += e.nMM; }
 
@@ -995,12 +1049,43 @@ template <class T, int NEX> HD inline int stitchAlignToTranscript(uint rAend, ui
                 int jR1 = 1;
                 do {
                     jR1--;
+#ifdef __CUDA_ARCH__
+                    if (m5_fast & 4u) {   // rt/lanes SINGLET_LANE_FASTSJ: the three bytes loaded together, not one dependent test after another
+                        const char rv = R[rAend + jR1], gb = G[gBstart1 + jR1], ga = G[gAend + jR1];
+                        if (rv != gb && gb < 4 && rv == ga) Score1 -= scoreMatch;
+                        continue;
+                    }
+#endif
                     if (R[rAend + jR1] != G[gBstart1 + jR1] && G[gBstart1 + jR1] < 4 && R[rAend + jR1] == G[gAend + jR1]) Score1 -= scoreMatch;
                 } while (Score1 + P.scoreStitchSJshift >= 0 && int(trA->exons[trA->nExons - 1][EX_L]) + jR1 > 1);
                 int maxScore2 = -999999;
                 Score1 = 0;
                 int jPen = 0;
                 do {
+#ifdef __CUDA_ARCH__
+                    if (m5_fast & 4u) {   // rt/lanes SINGLET_LANE_FASTSJ: the six bytes of the position loaded together, then the same tests
+                        const char rv = R[rAend + jR1], ga = G[gAend + jR1], gb = G[gBstart1 + jR1];
+                        const char ga1 = G[gAend + jR1 + 1], ga2 = G[gAend + jR1 + 2], gbm = G[gBstart1 + jR1 - 1];
+                        if (rv == ga && rv != gb) Score1 += scoreMatch;
+                        if (rv != ga && rv == gb) Score1 -= scoreMatch;
+                        int jCan1 = -1;
+                        int jPen1 = 0;
+                        int Score2 = Score1;
+                        if (Del >= P.alignIntronMin) {
+                            if (ga1 == 2 && ga2 == 3 && gbm == 0 && gb == 2) { jCan1 = 1; }
+                            else if (ga1 == 1 && ga2 == 3 && gbm == 0 && gb == 1) { jCan1 = 2; }
+                            else if (ga1 == 2 && ga2 == 1 && gbm == 0 && gb == 2) { jCan1 = 3; jPen1 = P.scoreGapGCAG; }
+                            else if (ga1 == 1 && ga2 == 3 && gbm == 2 && gb == 1) { jCan1 = 4; jPen1 = P.scoreGapGCAG; }
+                            else if (ga1 == 0 && ga2 == 3 && gbm == 0 && gb == 1) { jCan1 = 5; jPen1 = P.scoreGapATAC; }
+                            else if (ga1 == 2 && ga2 == 3 && gbm == 0 && gb == 3) { jCan1 = 6; jPen1 = P.scoreGapATAC; }
+                            else { jCan1 = 0; jPen1 = P.scoreGapNoncan; }
+                            Score2 += jPen1;
+                        }
+                        if (maxScore2 < Score2) { maxScore2 = Score2; jR = jR1; jCan = jCan1; jPen = jPen1; }
+                        jR1++;
+                        continue;
+                    }
+#endif
                     if (R[rAend + jR1] == G[gAend + jR1] && R[rAend + jR1] != G[gBstart1 + jR1]) Score1 += scoreMatch;
                     if (R[rAend + jR1] != G[gAend + jR1] && R[rAend + jR1] == G[gBstart1 + jR1]) Score1 -= scoreMatch;
                     int jCan1 = -1;
@@ -1225,7 +1310,7 @@ template <class S> HD inline bool finalizeTranscript(const Params& P, const Geno
             if (trA.rStart > 0) {
                 trAstep1.extendL = 0; trAstep1.maxScore = 0; trAstep1.nMatch = 0; trAstep1.nMM = 0;
                 uint imate = trA.exons[0][EX_iFrag];
-                if (extendAlign(R, gv.G, trA.rStart - 1, trA.gStart - 1, -1, -1, trA.rStart, tR2 - trA.rStart + 1,
+                if (M5_EXTALIGN(R, gv.G, trA.rStart - 1, trA.gStart - 1, -1, -1, trA.rStart, tR2 - trA.rStart + 1,
                                 trA.nMM, w.outFilterMismatchNmaxTotal, P.outFilterMismatchNoverLmax,
                                 P.alignEndsTypeExt[imate][(int)(trA.Str != imate)], &trAstep1)) {
                     addExt(trA, trAstep1);
@@ -1240,7 +1325,7 @@ template <class S> HD inline bool finalizeTranscript(const Params& P, const Geno
             if (tR2 < Lread) {
                 trAstep1.extendL = 0; trAstep1.maxScore = 0; trAstep1.nMatch = 0; trAstep1.nMM = 0;
                 uint imate = trA.exons[trA.nExons - 1][EX_iFrag];
-                if (extendAlign(R, gv.G, tR2 + 1, tG2 + 1, +1, +1, Lread - tR2 - 1, tR2 - trA.rStart + 1,
+                if (M5_EXTALIGN(R, gv.G, tR2 + 1, tG2 + 1, +1, +1, Lread - tR2 - 1, tR2 - trA.rStart + 1,
                                 trA.nMM, w.outFilterMismatchNmaxTotal, P.outFilterMismatchNoverLmax,
                                 P.alignEndsTypeExt[imate][(int)(imate == trA.Str)], &trAstep1)) {
                     addExt(trA, trAstep1);

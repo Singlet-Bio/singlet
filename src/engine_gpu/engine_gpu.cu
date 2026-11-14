@@ -614,6 +614,17 @@ __global__ void k_copy_status(const uint8_t* s, uint8_t* dst, u64 n) {
 }
 typedef LaneWork<8, 8, 8> LWM;   // lane M's per-lane stitching context (m5's LWM: its own capacities, no fallback)
 static int g_wthreads = 128;     // k_p3w block size (m5 --wthreads)
+// rt/lanes: the lane kernels' latency fixes (stitch.cuh m5_fast): SINGLET_LANE_FASTCOPY (Tr::copyFrom with batched loads), SINGLET_LANE_FASTSJ
+// (junction scans loading a position's bytes together), each default on, =0 the plain code; SINGLET_LANE_NOINLINE_COPY / _EXT (out-of-line
+// copy / extendAlign); set once per device before the kernels run
+static void laneFastInit() {
+    static bool done[16] = {};
+    int dev = 0; cudaGetDevice(&dev);
+    if (dev < 0 || dev >= 16 || done[dev]) return;
+    auto onD = [](const char* k, bool d) { const char* v = std::getenv(k); return v ? v[0] != '0' : d; };
+    const unsigned f = (onD("SINGLET_LANE_FASTCOPY", true) ? 1u : 0u) | (onD("SINGLET_LANE_FASTSJ", true) ? 4u : 0u) | (onD("SINGLET_LANE_NOINLINE_COPY", false) ? 8u : 0u) | (onD("SINGLET_LANE_NOINLINE_EXT", false) ? 16u : 0u);
+    if (cudaMemcpyToSymbol(m5::m5_fast, &f, sizeof f) == cudaSuccess) done[dev] = true;
+}
 
 struct ToU64 { __host__ __device__ u64 operator()(uint16_t x) const { return (u64)x; } };
 // out packed: read k at off[k], len[k] bytes. E8 (keepDev): the packed bytes and offsets also stay on the device (dOut, dOff; freed by the caller)
@@ -758,6 +769,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     L.status.assign(n, (uint8_t)Status::Overflow); L.len.assign(n, 0); L.off.resize(n + 1); L.off[0] = 0;   // off: every entry copied below
     if (n == 0) return true;
     NB = std::min<u64>(NB, n);
+    laneFastInit();
     // E17: every buffer through the budget's tally (dmal / dfree); Work and the batch buffers are freed before the results are packed
     uint32_t* dIdx; uint8_t *dOut, *dSt, *dBst; uint16_t* dLen; Work<C>* dWork; ReadBuf<C::LREAD>* dRbuf; u64 *dNent, *dBase; uint32_t* dBits;
     EG_CK(dmal(&dIdx, n * 4)); EG_CK(cudaMemcpy(dIdx, idx.data(), n * 4, cudaMemcpyHostToDevice));
