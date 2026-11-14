@@ -154,6 +154,11 @@ bool soloKeepRecordsPart(const SoloParams& S, const SoloModel& M, const e6::RecP
                          u64 r0, u64 m, std::string& log);
 void soloKeepRecordsEnd(double ms);
 void soloKeepRelease();   // joins soloKeepToHost's thread first
+// rt/holds: SINGLET_SOLO_DEFERFREE: while on (this thread), soloKeepRelease queues the page-locked host arrays instead of freeing them; the flush frees
+// them (call it after the device unlock). SINGLET_MAP2_POOL: soloKeepModelFlush frees the device copy of the model kept between record parts
+void soloDeferHostFrees(bool on);
+void soloFlushDeferredHostFrees(int device);
+void soloKeepModelFlush();
 // E15: start the thread that moves the kept arrays to page-locked host memory (on `device`); when a step fails they stay on the device
 void soloKeepToHost(int device);
 // soloRun(device) on the kept arrays (on `device`, selected for the calling thread; back from the host first after soloKeepToHost) plus the
