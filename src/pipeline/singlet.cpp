@@ -1843,16 +1843,10 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             if (!fungal_db_path.empty()) {
                 std::cerr << "[nonhost] Loading fungal index" << what << ": " << fungal_db_path << "\n";
                 MinSketchIndex fung_idx = load(fungal_db_path);
-                // Record all species_ids from the fungal index before merging
-                fungal_species_ids.clear();
-                for (uint32_t sid = 0;
-                     sid < static_cast<uint32_t>(fung_idx.n_species_names()); ++sid)
-                    if (!fung_idx.species_name(sid).empty())
-                        fungal_species_ids.insert(sid);
-                if (!have_microbial)
-                    microbial_idx = std::move(fung_idx);
-                else
-                    microbial_idx = MinSketchIndex::merge(microbial_idx, fung_idx);
+                // Joined with a bacterial index, the fungal ids are read with kFungalIdBit set (both files number their species
+                // from 1; the engine used to pool a bacterium and a fungus that share an id); fungal_species_ids holds the ids as
+                // the joined index returns them (nonhost_screener.h)
+                singlet::nonhost::join_fungal_index(microbial_idx, have_microbial, std::move(fung_idx), fungal_species_ids);
             }
 
             // If no viral DB, the viral slot is an empty index (correct k/w still needed)
@@ -1870,7 +1864,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // Species name of an engine species key (nonhost_em.h): a microbial key names a microbial species, any other key a
         // viral one, so a virus and a microbe that share an id keep their own names (D-100)
         auto species_name_lookup = [&](uint32_t key) -> std::string {
-            return singlet::nonhost::is_microbial_key(key) ? microbial_idx.species_name(singlet::nonhost::raw_species_id(key))
+            return singlet::nonhost::is_microbial_key(key) ? microbial_idx.species_name(singlet::nonhost::microbial_id(key))
                                                            : viral_idx.species_name(key);
         };
         using singlet::nonhost::raw_species_id;

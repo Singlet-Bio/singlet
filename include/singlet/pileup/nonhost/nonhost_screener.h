@@ -72,6 +72,20 @@ struct NonHostHit {
     NonHostCategory category   = NonHostCategory::UNKNOWN;
 };
 
+// Joins the fungal index into the microbial one. Both the bacterial and the fungal index file number their species from 1, so when a
+// bacterial index is already in `microbial` the fungal ids are read with kFungalIdBit set (MinSketchIndex::merge) and `fungal_ids` holds
+// them in that form; without a bacterial index the fungal index is the microbial one and its ids stay as they are. The files are not
+// changed. Used by the engine's index loader and by the tests.
+inline void join_fungal_index(MinSketchIndex& microbial, bool have_bacterial, MinSketchIndex&& fung,
+                              std::unordered_set<uint32_t>& fungal_ids) {
+    const uint32_t id_or = have_bacterial ? kFungalIdBit : 0u;
+    fungal_ids.clear();
+    for (uint32_t sid = 0; sid < static_cast<uint32_t>(fung.n_species_names()); ++sid)
+        if (!fung.species_name(sid).empty()) fungal_ids.insert(sid | id_or);
+    if (!have_bacterial) microbial = std::move(fung);
+    else microbial = MinSketchIndex::merge(microbial, fung, id_or);
+}
+
 class NonHostScreener {
 public:
     // viral_idx      : MinSketchIndex built from viral reference sequences

@@ -161,6 +161,9 @@ __global__ void k_sum(const uint32_t* np, const uint64_t* qoff, uint64_t Q, cons
         tot64[i] = s;
     }
 }
+// fungal ids are returned with this bit set, as MinSketchIndex::merge(bacterial, fungal, kFungalIdBit) reads them on the CPU: both files
+// number their species from 1 (min_sketch.h, kFungalIdBit)
+constexpr uint32_t kFungalIdBit = 0x40000000u;
 // one key per (read, minimizer, entry) in the CPU's insertion sequence: viral segment first (minimizers ascending, entries in file
 // order), then the microbial segment (per minimizer: bacterial entries, then fungal entries - std::merge puts a before b)
 __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* lo, const uint32_t* len, DevIndex v, DevIndex b,
@@ -173,7 +176,7 @@ __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, co
             for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | v.e[lo[q] + t].sid; vals[pos] = (uint32_t)pos; }
         for (uint64_t q = q0; q < q1; ++q) {
             for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | b.e[lo[Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
-            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | f.e[lo[2 * Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | f.e[lo[2 * Q + q] + t].sid | kFungalIdBit; vals[pos] = (uint32_t)pos; }
         }
     }
 }

@@ -15,7 +15,7 @@
 // File (little endian):
 //   "SNCR" u8 version=2 u8 cb_len u8 umi_len u8 pad
 //   u32 n_species u32 n_reads u32 n_dropped_n u32 n_excluded_host
-//   n_species x u32 species key (ascending): the id in its own index, with bit 31 set for a microbial species (nonhost_em.h,
+//   n_species x u32 species key (ascending): the id in its own index, with bit 31 set for a microbial species and bit 30 as well for a fungal one (nonhost_em.h,
 //               D-100), so a virus and a microbe that share an id stay apart. Version 1 wrote untagged ids.
 //   n_reads x { u16 species_index, u8 len, u64 cb (2 bits/base, first base in the high bits), u32 umi, ceil(len/4) bytes seq (first
 //               base in the high bits of byte 0) }
