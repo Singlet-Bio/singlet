@@ -466,6 +466,7 @@ struct Prefetch {
 }  // namespace
 
 bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
+    SINGLET_NVTX("phase: allsite");
     const auto T0 = std::chrono::steady_clock::now();
     out = AD::Output{};
     out.contigs.resize(in.contigs.size());
