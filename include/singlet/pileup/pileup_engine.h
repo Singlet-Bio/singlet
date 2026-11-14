@@ -3460,8 +3460,7 @@ public:
             if (a->t.joinable()) a->t.join();
             a->joined = true;
             std::cerr << "[allsite] async: waited " << std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count()
-                      << " s at first use (pass " << a->sec << " s)
-";
+                      << " s at first use (pass " << a->sec << " s)\n";
             e = a->ep; a->ep = nullptr;
         }
         if (e) std::rethrow_exception(e);
