@@ -1,0 +1,102 @@
+{
+ "cellplex10k": {
+  "1": {
+   "min_umi": 1,
+   "n_universe": 1053538,
+   "n_called_v2": 13301,
+   "lower": 31,
+   "retain_total": 4694.999999999999,
+   "n_ambient": 45000,
+   "n_tested": 3344,
+   "recall_truth_cells": 0.1483,
+   "precision": 0.9987,
+   "recall": 0.8304,
+   "f1": 0.9068
+  },
+  "2": {
+   "min_umi": 2,
+   "n_universe": 268355,
+   "n_called_v2": 13301,
+   "lower": 31,
+   "retain_total": 4694.999999999999,
+   "n_ambient": 45000,
+   "n_tested": 3344,
+   "recall_truth_cells": 0.1483,
+   "precision": 0.9987,
+   "recall": 0.8304,
+   "f1": 0.9068
+  },
+  "3": {
+   "min_umi": 3,
+   "n_universe": 131415,
+   "n_called_v2": 13301,
+   "lower": 31,
+   "retain_total": 4694.999999999999,
+   "n_ambient": 45000,
+   "n_tested": 3344,
+   "recall_truth_cells": 0.1483,
+   "precision": 0.9987,
+   "recall": 0.8304,
+   "f1": 0.9068
+  },
+  "5": {
+   "min_umi": 5,
+   "n_universe": 102442,
+   "n_called_v2": 13301,
+   "lower": 31,
+   "retain_total": 4694.999999999999,
+   "n_ambient": 45000,
+   "n_tested": 3344,
+   "recall_truth_cells": 0.1483,
+   "precision": 0.9987,
+   "recall": 0.8304,
+   "f1": 0.9068
+  }
+ },
+ "nuclei_poc": {
+  "1": {
+   "min_umi": 1,
+   "n_universe": 587606,
+   "n_called_v2": 14889,
+   "lower": 80,
+   "retain_total": 1084.0000000000005,
+   "n_ambient": 45000,
+   "n_tested": 32447,
+   "recall_truth_cells": 0.9933,
+   "share_calls_outside_authors_set_T": 0.3063
+  },
+  "2": {
+   "min_umi": 2,
+   "n_universe": 313129,
+   "n_called_v2": 14889,
+   "lower": 80,
+   "retain_total": 1084.0000000000005,
+   "n_ambient": 45000,
+   "n_tested": 32447,
+   "recall_truth_cells": 0.9933,
+   "share_calls_outside_authors_set_T": 0.3063
+  },
+  "3": {
+   "min_umi": 3,
+   "n_universe": 231048,
+   "n_called_v2": 14889,
+   "lower": 80,
+   "retain_total": 1084.0000000000005,
+   "n_ambient": 45000,
+   "n_tested": 32447,
+   "recall_truth_cells": 0.9933,
+   "share_calls_outside_authors_set_T": 0.3063
+  },
+  "5": {
+   "min_umi": 5,
+   "n_universe": 195301,
+   "n_called_v2": 14889,
+   "lower": 80,
+   "retain_total": 1084.0000000000005,
+   "n_ambient": 45000,
+   "n_tested": 32447,
+   "recall_truth_cells": 0.9933,
+   "share_calls_outside_authors_set_T": 0.3063
+  }
+ }
+}
