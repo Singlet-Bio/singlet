@@ -16,7 +16,10 @@
 //     src/engine_gpu/nonhost_gpu.cu: page-locked host memory, its own CUDA context on device D). A sample's non-host step sends its reads
 //     to it (SINGLET_NONHOST_SERVER) while it holds its device slot, and gets the same arrays back; on any failure it loads the index
 //     itself. The pool's own process never initialises CUDA (a forked child could not use a context of its parent's).
-// Then a stream: up to --workers samples in flight, the next started as soon as one ends. Each sample's stdout and stderr go to
+// Then a stream: up to --workers samples in flight, the next started as soon as one ends and the memory rule admits it (v1.4.0,
+// include/singlet/pipeline/pool_admission.h: each sample's projected peak host memory from its depth and chemistry; a sample starts only
+// when everything in flight in the job still fits the job's memory budget, and one larger than the budget runs alone;
+// SINGLET_POOL_MEM_RULE=0 turns it off). Each sample's stdout and stderr go to
 // <report>/<i>.log with a unix-time prefix per line; on its end the pool records wall, user + system core-s and peak RSS (wait4: the
 // sample's process and every descendant it waited for) and the exit status or signal in <report>/samples.tsv and <report>/<i>.time
 // (the fields of /usr/bin/time -v). A sample that crashes or is killed is recorded and the stream goes on; the pool exits when the queue
@@ -53,6 +56,7 @@
 #include <vector>
 
 #include "star_api.h"
+#include "singlet/pipeline/pool_admission.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
 #endif
@@ -505,7 +509,36 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     std::vector<Run> runs(items.size());
     std::vector<int> freeSlots;
     for (int s = workers - 1; s >= 0; --s) freeSlots.push_back(s);
-    size_t next = 0, active = 0, failed = 0;
+    size_t active = 0, failed = 0;
+    // ---- v1.4.0 memory-aware start rule (pool_admission.h; SINGLET_POOL_MEM_RULE=0 turns it off)
+    namespace pa = singlet::pool_admission;
+    const bool memRule = pa::rule_on(), backfill = pa::backfill_on();
+    pa::Model model = pa::Model::from_env();
+    const std::string ldir = pa::default_ledger_dir();
+    const double limitGb = pa::limit_gb(), budgetCfg = pa::env_or("SINGLET_POOL_MEM_BUDGET_GB", 0), baseCfg = pa::env_or("SINGLET_POOL_MEM_BASE_GB", 0);
+    double myBase = 0, lastLedger = 0, headSince = 0;
+    int headIdx = -1, waitNoted = -1;
+    std::vector<pa::SampleInfo> info(items.size());
+    std::vector<double> liveGb(items.size(), 0.0);
+    std::vector<int> pending;
+    for (const Item& it : items) pending.push_back(it.idx);
+    if (memRule) {
+        int unknown = 0;
+        for (const Item& it : items) { info[it.idx] = pa::read_1fq_info(it.fq); if (!info[it.idx].known) ++unknown; }
+        plog("memory rule: on (peak = %.1f GB + %.3f GB/M pairs, 5' %.3f GB/M pairs; job limit %.0f GB; %s; ledger %s)%s", model.a_gb, model.b3_gb,
+             model.b5_gb, limitGb, budgetCfg > 0 ? fmt("budget %.0f GB (SINGLET_POOL_MEM_BUDGET_GB)", budgetCfg).c_str() : "budget 0.9 x limit - base",
+             ldir.c_str(), unknown ? fmt("; %d samples without a readable .1fq header count as 500 M pairs", unknown).c_str() : "");
+    } else plog("memory rule: off (SINGLET_POOL_MEM_RULE=0)");
+    auto staticProj = [&](int i) { return pa::projected_peak_gb(info[i].known ? info[i].mpairs : 500.0, info[i].five_prime, model); };
+    auto projOf = [&](int i) { return std::max(staticProj(i), 1.05 * liveGb[i]); };
+    auto onEnd = [&](int i, double peakGb) {
+        if (!memRule || !info[i].known) return;
+        const double was = pa::projected_peak_gb(info[i].mpairs, info[i].five_prime, model);
+        if (pa::learn(model, info[i].mpairs, info[i].five_prime, peakGb))
+            plog("memory rule: item %d peaked at %.1f GB, above its projection %.1f GB: the %s slope is now %.3f GB/M pairs", i, peakGb, was,
+                 info[i].five_prime ? "5'" : "3'", info[i].five_prime ? model.b5_gb : model.b3_gb);
+        liveGb[i] = 0;
+    };
     std::map<pid_t, int> byPid;
     unsigned long long pairsAll = 0;
     double firstStart = 0, lastEnd = 0;
@@ -619,20 +652,79 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         plog("end item %d (pid %d): %s, wall %.1f s, core-s %.1f, peak RSS %.1f GB, %.2f M pairs%s", r.idx, (int) pid,
              sg ? fmt("killed by signal %d (%s)", sg, strsignal(sg)).c_str() : fmt("exit %d", ex).c_str(), r.t1 - r.t0, us + ss,
              ru.ru_maxrss / 1048576.0, pairs / 1e6, r.killed ? " (timed out)" : "");
+        onEnd(r.idx, ru.ru_maxrss / 1048576.0);
     };
     double lastStartAt = 0, lastSample = 0;
     bool admitNoted = false;
     const double sampPeriod = env_num("SINGLET_POOL_MEMSAMPLE", 0);
     FILE* msf = sampPeriod > 0 ? fopen((report + "/memsamp.tsv").c_str(), "a") : nullptr;
     const double stagger = env_num("SINGLET_POOL_STAGGER_S", 0), memFloor = env_num("SINGLET_POOL_MEM_FLOOR_GB", 0);
-    while (next < items.size() || active > 0) {
+    // the job's view under the ledger lock: other pools' samples in flight, their reservations and base; this pool's entry is rewritten
+    auto ownEntry = [&](double headGb, double since) {
+        pa::PoolEntry pe;
+        pe.pid = self;
+        for (auto& kv : byPid) pe.items.push_back(projOf(kv.second));
+        pe.head_gb = headGb; pe.head_since = since; pe.base_gb = myBase;
+        return pe;
+    };
+    auto publish = [&](double headGb, double since) {   // the caller holds the lock (or the ledger is unusable)
+        if (!pa::write_ledger(ldir, ownEntry(headGb, since))) { }
+        lastLedger = wall_now();
+    };
+    // one admission attempt: starts at most one sample; true when one started
+    auto admitOne = [&]() -> bool {
+        pa::LedgerLock lk(ldir);
+        std::vector<pa::PoolEntry> others;
+        if (lk.ok()) for (auto& pe : pa::read_ledger(ldir)) if (pe.pid != self) others.push_back(pe);
+        double inflight = 0, otherBase = 0;
+        size_t n = 0;
+        for (auto& kv : byPid) { inflight += projOf(kv.second); ++n; }
+        for (auto& pe : others) { for (double g : pe.items) { inflight += g; ++n; } otherBase = std::max(otherBase, pe.base_gb); }
+        if (baseCfg <= 0 && myBase <= 0 && n == 0) myBase = pa::used_gb();   // nothing in flight in the job: what the pools hold themselves
+        const double base = baseCfg > 0 ? baseCfg : (std::max(myBase, otherBase) > 0 ? std::max(myBase, otherBase) : 45.0);
+        double budget = budgetCfg > 0 ? budgetCfg : 0.9 * limitGb - base;
+        if (budget <= 0) budget = 0.5 * limitGb;
+        const int head = pending.front();
+        if (head != headIdx) { headIdx = head; headSince = wall_now(); }
+        double older = 0;   // reservations of other pools' heads that waited longer than this pool's head
+        for (auto& pe : others)
+            if (pe.head_gb > 0 && (pe.head_since < headSince || (pe.head_since == headSince && pe.pid < self))) older += std::min(pe.head_gb, budget);
+        const double hp = projOf(head);
+        int pick = -1;
+        pa::Verdict v = pa::decide(budget, inflight, n, older, hp);
+        if (v != pa::Verdict::Wait) pick = 0;
+        else if (backfill)
+            for (size_t k = 1; k < pending.size(); ++k)
+                if (pa::decide(budget, inflight, n, older + std::min(hp, budget), projOf(pending[k])) == pa::Verdict::Start) { pick = (int) k; v = pa::Verdict::Start; break; }
+        if (pick < 0) {
+            if (waitNoted != head) {
+                plog("memory rule: item %d (projected %.1f GB) waits: %zu in flight in the job with %.1f GB projected, %.1f GB reserved by older heads, budget %.1f GB",
+                     head, hp, n, inflight, older, budget);
+                waitNoted = head;
+            }
+            publish(hp, headSince);
+            return false;
+        }
+        const int idx = pending[pick];
+        pending.erase(pending.begin() + pick);
+        const double cp = projOf(idx);
+        plog("memory rule: start item %d (%s%.0f M pairs%s, projected %.1f GB)%s: %zu in flight with %.1f GB projected, budget %.1f GB", idx,
+             info[idx].five_prime ? "5', " : "", info[idx].known ? info[idx].mpairs : 500.0, info[idx].known ? "" : " assumed", cp,
+             v == pa::Verdict::StartAlone ? " ALONE: its projection exceeds the budget" : (pick > 0 ? fmt(" as backfill beside head item %d", head).c_str() : ""),
+             n, inflight, budget);
+        start(items[idx]);
+        if (pick == 0) { headIdx = -1; waitNoted = -1; }
+        publish(pick > 0 ? hp : 0.0, headSince);   // after a backfill start the head still waits
+        return true;
+    };
+    while (!pending.empty() || active > 0) {
         if (g_stop) {
             plog("stopping: signal received; the samples in flight are killed");
             for (auto& kv : byPid) kill(-kv.first, SIGKILL);
-            next = items.size();
+            pending.clear();
             g_stop = 0;
         }
-        while (active < (size_t) workers && next < items.size()) {
+        while (active < (size_t) workers && !pending.empty()) {
             // rt/hostmem admission: a start waits while another item of this pool started less than SINGLET_POOL_STAGGER_S ago (the items of a first
             // wave would otherwise all reach their memory-heavy phases together) or while the node's available memory is under SINGLET_POOL_MEM_FLOOR_GB
             if (active > 0 && ((stagger > 0 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor))) {
@@ -640,8 +732,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 break;
             }
             admitNoted = false;
+            if (memRule) {
+                if (!admitOne()) break;
+            } else {
+                start(items[pending.front()]);
+                pending.erase(pending.begin());
+            }
             lastStartAt = wall_now();
-            start(items[next++]);
         }
         // logs, then the ends
         std::vector<struct pollfd> pf;
@@ -664,6 +761,19 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 continue;
             }
             finish(p, st, ru);
+        }
+        if (memRule && wall_now() - lastLedger >= 5.0) {   // live sizes of the samples in flight, and this pool's entry for the other pools
+            for (auto& kv : byPid) {
+                const double g = pa::group_rss_gb(kv.first);
+                if (g > liveGb[kv.second]) {
+                    if (1.05 * g > staticProj(kv.second) && 1.05 * liveGb[kv.second] <= staticProj(kv.second))
+                        plog("memory rule: item %d holds %.1f GB, above its projection: it now counts at its measured size", kv.second, g);
+                    liveGb[kv.second] = g;
+                }
+            }
+            pa::LedgerLock lk(ldir);
+            const bool waiting = !pending.empty() && headIdx >= 0 && waitNoted == headIdx;
+            publish(waiting ? projOf(headIdx) : 0.0, headSince);
         }
         if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); }
         if (timeout > 0) {
@@ -692,6 +802,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     plog("queue drained: %zu samples, %zu failed; span %.1f s (first start to last end), %.2f M pairs, %.3f M pairs/s; start-up %.1f s",
          items.size(), failed, span, pairsAll / 1e6, span > 0 ? pairsAll / 1e6 / span : 0.0, tReady - tStart);
     if (msf != nullptr) fclose(msf);
+    if (memRule) { pa::LedgerLock lk(ldir); unlink((ldir + "/" + std::to_string((long) self) + ".tsv").c_str()); }
     fclose(stsv);
     fclose(pids);
     fclose(g_plog);

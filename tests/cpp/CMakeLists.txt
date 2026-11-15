@@ -162,6 +162,7 @@ add_pileup_test(test_protocol_confidence_override)
 
 # ATAC tests
 add_pileup_test(test_stall_watchdog)
+add_pileup_test(test_pool_admission)   # gpu-pool memory-aware start rule: model, decisions, ledger, a simulated 375 GB job
 add_pileup_test(test_nonhost_sample)
 add_pileup_test(test_nonhost_fastscan)
 add_pileup_test(test_nonhost_events)
