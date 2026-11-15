@@ -1157,7 +1157,124 @@ inline bool ingRecord(uint64 r, E10Rec &x) {
     x.seq[1] = o.data() + aS1; x.seqLen[1] = L1; x.qual[1] = o.data() + aQ1; x.qualLen[1] = L1;
     return true;
 }
+// E22 (SINGLET_ENGINE_GPU_EARLY_RELEASE; 0 off, check: keep the planes and compare, else on): with level 5's background thread, the packed planes
+// (seq, quality, barcode read, offsets: 19 GiB at 300 M pairs) were held through STAR's loop for that thread's two readers: the Unmapped.out
+// records (the reads with an unmapped record) and the RNA Q30 adjustment. The adjustment now runs before the thread starts (all mapping
+// threads, a byte table over the 2-bit quality codes), and the records' reads are copied into a compact store indexed by their sorted read
+// ids, after which the planes are freed before STAR's loop starts.
+inline int earlyMode() {
+    static const int v = [] {
+        const char *e = getenv("SINGLET_ENGINE_GPU_EARLY_RELEASE");
+        if (e == nullptr || e[0] == 0) return 1;
+        if (std::strcmp(e, "0") == 0) return 0;
+        if (std::strcmp(e, "check") == 0) return 2;
+        return 1;
+    }();
+    return v;
+}
+struct LateStore {
+    bool on = false, built = false, check = false;
+    uint64 n = 0;
+    std::vector<uint32_t> ids;                         // the reads kept, ascending
+    singlet_engine_gpu::NoInitVector<uint64> sOff, qOff, name;   // per kept read: first base in seq, first byte in qual (n + 1 each); the name's number
+    singlet_engine_gpu::NoInitVector<uint8_t> seq, qual;   // numeric codes (one byte per base); 2-bit quality codes, 4 per byte, each read from a byte
+    singlet_engine_gpu::NoInitVector<uint64_t> r1;     // r1w words per kept read
+    uint32 r1L = 0, r1w = 0;
+    uint8_t qualPhred[4] = {37, 37, 37, 37};
+    std::atomic<uint64> served{0}, bad{0};
+    uint64 bytes() const { return ids.size() * 4 + (sOff.size() + qOff.size() + name.size() + r1.size()) * 8 + seq.size() + qual.size(); }
+    void freeData() {
+        on = false;
+        std::vector<uint32_t>().swap(ids);
+        singlet_engine_gpu::NoInitVector<uint64>().swap(sOff); singlet_engine_gpu::NoInitVector<uint64>().swap(qOff); singlet_engine_gpu::NoInitVector<uint64>().swap(name);
+        singlet_engine_gpu::NoInitVector<uint8_t>().swap(seq); singlet_engine_gpu::NoInitVector<uint8_t>().swap(qual);
+        singlet_engine_gpu::NoInitVector<uint64_t>().swap(r1);
+    }
+} late;
+// copies the reads (ascending ids) the late readers need out of the planes
+bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+    if (!ingOn) { why = "no packed reads"; return false; }
+    if (!std::is_sorted(reads.begin(), reads.end())) { why = "the unmapped reads are not in read order"; return false; }
+    const uint64 n = reads.size();
+    late.ids = reads; late.n = n;
+    late.sOff.resize(n + 1); late.qOff.resize(n + 1);
+    late.sOff[0] = late.qOff[0] = 0;
+    for (uint64 k = 0; k < n; k++) {
+        const uint64 r = reads[k];
+        if (r >= ing.n) { why = "read " + std::to_string(r) + " beyond the packed reads"; late.freeData(); return false; }
+        const uint64 L = ingOff[r + 1] - ingOff[r];
+        late.sOff[k + 1] = late.sOff[k] + L; late.qOff[k + 1] = late.qOff[k] + (L + 3) / 4;
+    }
+    late.r1L = ing.r1L; late.r1w = ing.r1w;
+    for (int c = 0; c < 4; c++) late.qualPhred[c] = ing.qualPhred[c];
+    late.seq.resize(late.sOff[n]); late.qual.resize(late.qOff[n]); late.r1.resize(n * ing.r1w); late.name.resize(n);
+    const int T = (int) std::max<uint64>(1, std::min<uint64>((uint64) std::max(1, nThreads), n / 4096 + 1));
+    std::vector<std::thread> th;
+    for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+        for (uint64 k = n * t / T, e = n * (t + 1) / T; k < e; k++) {
+            const uint64 r = reads[k], s0 = ingOff[r], L = ingOff[r + 1] - s0;
+            const uint32 b = ing.block(r);
+            ingPs->get(s0, L, (char *) late.seq.data() + late.sOff[k]);
+            late.name[k] = ing.name(b, r);
+            uint8_t *q = late.qual.data() + late.qOff[k];
+            for (uint64 j = 0; j < (L + 3) / 4; j++) {
+                unsigned v = 0;
+                for (uint64 c = 0; c < 4 && 4 * j + c < L; c++) v |= (unsigned) ing.qcode(b, s0 + 4 * j + c) << (2 * c);
+                q[j] = (uint8_t) v;
+            }
+            if (ing.r1w > 0) std::memcpy(late.r1.data() + k * ing.r1w, ing.r1.data() + r * ing.r1w, (size_t) ing.r1w * 8);
+        }
+    });
+    for (auto &x : th) x.join();
+    late.on = true; late.built = true;
+    return true;
+}
+// the same record text as ingRecord, from the compact store
+inline bool lateRecord(uint64 r, E10Rec &x) {
+    const size_t k = (size_t) (std::lower_bound(late.ids.begin(), late.ids.end(), (uint32_t) r) - late.ids.begin());
+    if (r >= (1ull << 32) || k >= late.ids.size() || late.ids[k] != (uint32_t) r) return false;
+    static const char kNt[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+    std::string &o = x.own;
+    char nb[24];
+    const int nl = (int) (std::to_chars(nb, nb + sizeof(nb), (unsigned long long) late.name[k]).ptr - nb);
+    const uint64 L = late.sOff[k + 1] - late.sOff[k], L1 = late.r1L;
+    const uint64 idLen = 2 + (uint64) nl;
+    const size_t aS0 = idLen, aQ0 = aS0 + L, aS1 = aQ0 + L, aQ1 = aS1 + L1;
+    o.resize(aQ1 + L1);
+    char *w = &o[0];
+    w[0] = '@'; w[1] = 'r'; std::memcpy(w + 2, nb, nl);
+    const uint8_t *sq = late.seq.data() + late.sOff[k];
+    for (uint64 j = 0; j < L; j++) w[aS0 + j] = kNt[sq[j] & 7];
+    {
+        char qc[4];
+        for (int c = 0; c < 4; c++) qc[c] = (char) (late.qualPhred[c] + 33);
+        const uint8_t *qb = late.qual.data() + late.qOff[k];
+        for (uint64 j = 0; j < L; j++) w[aQ0 + j] = qc[(qb[j >> 2] >> (2 * (j & 3))) & 3];
+    }
+    {
+        const uint64_t *rw = late.r1.data() + k * late.r1w;
+        char *s = w + aS1;
+        for (uint32 j = 0; j < L1; rw++) {
+            uint64_t v = *rw;
+            for (uint32 e = std::min<uint32>(L1, j + 21); j < e; j++, v >>= 3) *s++ = kNt[v & 7];
+        }
+    }
+    std::memset(w + aQ1, 'F', L1);
+    x.id = o.data(); x.idLen = idLen; x.filter = 'N';
+    x.seq[0] = o.data() + aS0; x.seqLen[0] = L; x.qual[0] = o.data() + aQ0; x.qualLen[0] = L;
+    x.seq[1] = o.data() + aS1; x.seqLen[1] = L1; x.qual[1] = o.data() + aQ1; x.qualLen[1] = L1;
+    return true;
+}
 inline bool e10Record(uint64 r, E10Rec &x) {
+    if (late.on) {
+        if (!late.check) return lateRecord(r, x);
+        // check: the planes' record is served; the store's must equal it byte for byte
+        thread_local E10Rec y;
+        if (!ingRecord(r, x)) return false;
+        late.served++;
+        if (!lateRecord(r, y) || y.own != x.own) late.bad++;
+        return true;
+    }
     if (ingOn) return ingRecord(r, x);
     for (int k = 0; k < 2; k++) {
         const char *m = e10f.m[k], *end = m + e10f.len[k];
@@ -1319,6 +1436,21 @@ bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
     if (ingOn ? ing.n != N : (e10f.m[0] == nullptr || e10f.at[0].size() != N)) { why = "the cDNA file is not mapped"; return false; }
     std::vector<uint64> dq(T, 0), dn(T, 0), nNo(T, 0), nCl(T, 0);
     std::vector<int> bad(T, 0);
+    // E22: the count over a span of a read from a byte table of the 2-bit quality codes (earlyMode() 2 also runs the base loop and compares)
+    const bool fast = ingOn && earlyMode() != 0, verify = fast && earlyMode() == 2;
+    bool isq[4] = {false, false, false, false};
+    uint8_t lut[256];
+    if (ingOn) for (int c = 0; c < 4; c++) isq[c] = (unsigned) ing.qualPhred[c] + 33 >= q30;
+    for (int v = 0; v < 256; v++) lut[v] = (uint8_t) (isq[v & 3] + isq[(v >> 2) & 3] + isq[(v >> 4) & 3] + isq[v >> 6]);
+    auto cnt = [&](uint32 b, uint64 pos, uint64 len) -> uint64 {   // bases [pos, pos + len) of seq (one read's)
+        const uint64 k = pos - ing.baseAt[b];
+        const uint8_t *qb = ing.qual.data() + ing.qualAt[b];
+        uint64 i = 0, c = 0;
+        for (; i < len && ((k + i) & 3) != 0; i++) c += isq[(qb[(k + i) >> 2] >> (2 * ((k + i) & 3))) & 3];
+        for (; i + 4 <= len; i += 4) c += lut[qb[(k + i) >> 2]];
+        for (; i < len; i++) c += isq[(qb[(k + i) >> 2] >> (2 * ((k + i) & 3))) & 3];
+        return c;
+    };
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
         const char *m = e10f.m[0], *end = m + e10f.len[0];
@@ -1336,10 +1468,19 @@ bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
                 const uint32 b = ing.block(r);
                 const uint64 s0 = rec ? std::min<uint64>(c5, L) : 0, s1 = rec ? (L >= c3 ? L - c3 : 0) : 0;
                 uint64 h = 0, hs = 0, ns = 0;
-                for (uint64 j = 0; j < L; j++) {
-                    const uint64 x = (unsigned) ing.qualPhred[ing.qcode(b, s0q + j)] + 33 >= q30;
-                    h += x;
-                    if (j >= s0 && j < s1) { hs += x; ns++; }
+                if (fast) {
+                    h = cnt(b, s0q, L);
+                    if (s1 > s0) { hs = cnt(b, s0q + s0, s1 - s0); ns = s1 - s0; }
+                }
+                if (!fast || verify) {
+                    uint64 h2 = 0, hs2 = 0, ns2 = 0;
+                    for (uint64 j = 0; j < L; j++) {
+                        const uint64 x = (unsigned) ing.qualPhred[ing.qcode(b, s0q + j)] + 33 >= q30;
+                        h2 += x;
+                        if (j >= s0 && j < s1) { hs2 += x; ns2++; }
+                    }
+                    if (fast && (h2 != h || hs2 != hs || ns2 != ns)) { bad[t] = 2; return; }
+                    h = h2; hs = hs2; ns = ns2;
                 }
                 dq[t] += h - hs; dn[t] += L - ns;
                 continue;
@@ -1362,6 +1503,7 @@ bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
         }
     });
     for (auto &x : th) x.join();
+    for (int t = 0; t < T; t++) if (bad[t] == 2) { why = "E22: the RNA Q30 byte-table count differs from the base loop"; return false; }
     for (int t = 0; t < T; t++) if (bad[t]) { why = "a cDNA quality line could not be read back"; return false; }
     for (int t = 0; t < T; t++) { e11.q30Rna -= dq[t]; e11.nRna -= dn[t]; e11.nNoRec += nNo[t]; e11.nClipped += nCl[t]; }
     e11.sAdj = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -2023,12 +2165,46 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                                    EXIT_CODE_INPUT_FILES, P);
             }
             if (g_e10Level == 5 && e16bgOn) {   // E16 bg: Unmapped.out's records and the RNA Q30 adjustment beside STAR's loop
+                // E22: the adjustment first, on every mapping thread, and the records' reads copied out of the planes, which are then freed
+                // (with the --chimeric soft-clip route below, which reads other reads from the planes, nothing changes)
+                bool adjDone = false;
+                const bool softclipRoute = P.singletSoftclipMin > 0 && P.inOut->outSoftclipStream[0].is_open();
+                if (earlyMode() != 0 && ingOn && !softclipRoute) {
+                    const auto te = std::chrono::steady_clock::now();
+                    std::string w5;
+                    if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
+                                                            EXIT_CODE_INPUT_FILES, P);
+                    adjDone = true;
+                    singlet_tail::mark("prefill: RNA Q30 adjustment done (E22, before the background thread)");
+                    std::string wl;
+                    const auto tb = std::chrono::steady_clock::now();
+                    const double G = 1073741824.0;
+                    if (lateBuild(e16bg.reads, (int) P.runThreadN, wl)) {
+                        const double sB = std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
+                        late.check = earlyMode() == 2;
+                        const double gSeq = (in.pseq ? in.pseq->w.size() : 0) / G, gOff = in.off.size() * 8 / G, gQual = ing.qual.size() / G, gR1 = ing.r1.size() * 8 / G;
+                        const long uc = in.pseq.use_count();
+                        if (!late.check) {
+                            in.pseq.reset(); singlet_engine_gpu::NoInitVector<uint64_t>().swap(in.off);
+                            ingRelease();
+                        }
+                        const double sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count() - sB;
+                        P.inOut->logMain << "ENGINE_GPU: E22 early release: " << (late.check ? "CHECK mode, planes kept (would release " : "released ")
+                                         << gSeq + gOff + gQual + gR1 << " GiB" << (late.check ? ")" : "") << " of host planes (seq " << gSeq << ", quality " << gQual << ", barcode read " << gR1
+                                         << ", offsets " << gOff << "; seq use_count " << uc << ") after the RNA Q30 adjustment (" << std::chrono::duration<double>(tb - te).count()
+                                         << " s); compact store " << late.bytes() / G << " GiB for " << late.n << " unmapped reads of " << g_handoffNReads << " (built " << sB
+                                         << " s, planes freed in " << sR << " s)\n" << std::flush;
+                        singlet_tail::mark("prefill: E22 early release: %s", late.check ? "check mode" : "planes freed");
+                    } else {
+                        P.inOut->logMain << "ENGINE_GPU: E22 early release not used (" << wl << "): the planes stay until the background thread is done\n" << std::flush;
+                    }
+                }
                 e16bg.on = true;
-                e16bg.th = std::thread([&P]() {
+                e16bg.th = std::thread([&P, adjDone]() {
                     const auto a = std::chrono::steady_clock::now();
                     e16bg.okU = e10FormatUnmapped(P, e16bg.reads, 4, e16bg.out, e16bg.whyU);
                     const auto b = std::chrono::steady_clock::now();
-                    e16bg.okR = e11RnaAdjust(P, e16bg.whyR, 4);
+                    e16bg.okR = adjDone ? true : e11RnaAdjust(P, e16bg.whyR, 4);
                     e16bg.sU = std::chrono::duration<double>(b - a).count();
                     e16bg.sR = std::chrono::duration<double>(std::chrono::steady_clock::now() - b).count();
                     singlet_tail::mark("prefill (bg): %zu Unmapped.out records formatted in %.3f s, RNA Q30 adjustment %.3f s", e16bg.reads.size(), e16bg.sU, e16bg.sR);
@@ -2257,6 +2433,15 @@ void seqCacheGpuAfterMapping(Parameters &P, ReadAlignChunk **RAchunk) {
                                       std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
         if (!e16bg.okR) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + e16bg.whyR + "\n", std::cerr, P.inOut->logMain,
                                       EXIT_CODE_INPUT_FILES, P);
+        if (late.built) {   // E22
+            if (late.check) {
+                P.inOut->logMain << "ENGINE_GPU: E22 check: " << late.served.load() << " reads served, " << late.bad.load() << " differ between the compact store and the planes\n" << std::flush;
+                if (late.bad.load() != 0)
+                    exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E22): the compact store differs from the packed planes for " + std::to_string(late.bad.load())
+                                  + " of " + std::to_string(late.served.load()) + " reads\n", std::cerr, P.inOut->logMain, EXIT_CODE_INPUT_FILES, P);
+            }
+            late.freeData();
+        }
         e10PutUnmapped(P, e16bg.out);
         std::vector<uint32_t>().swap(e16bg.reads);
         if (e16bg.ingHeld) { ingRelease(); e16bg.ingHeld = false; }   // E13's packed reads, kept for the thread

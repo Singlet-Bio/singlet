@@ -137,6 +137,11 @@ if(SINGLET_BUILD_PIPELINE)
         endif()
         # no fused multiply-add: the port's double arithmetic must round as STAR's does on the host
         target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false>)
+        # stitch.cuh clock64() phase counters (Work::clk, statistics only; nothing reads them): compiled out unless SINGLET_ENGINE_GPU_CLK=ON
+        option(SINGLET_ENGINE_GPU_CLK "Compile the stitch phase clock64() counters into the GPU engine" OFF)
+        if(NOT SINGLET_ENGINE_GPU_CLK)
+            target_compile_definitions(singlet_engine_gpu PRIVATE M5_NOCLK)
+        endif()
         target_include_directories(singlet_engine_gpu PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
         target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads ${CMAKE_DL_LIBS} PRIVATE OpenMP::OpenMP_CXX)

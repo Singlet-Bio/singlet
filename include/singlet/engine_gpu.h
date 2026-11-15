@@ -528,11 +528,8 @@ inline void unlockDevice(int lockFd) {
 }
 // a slot of one given device (E11: the sample's second, short use of the device that holds its kept Solo inputs, after STAR's loop): the first
 // free slot, or a wait for slot (pid mod slots). *lockFd is closed by unlockDevice.
-inline void lockDeviceSlot(int device, int* lockFd) {
-    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
-    const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
+inline void lockDeviceSlotImpl(int device, int* lockFd, int slots) {
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
-    *lockFd = -1;
     if (!lockWaitFixed()) { int d = device; *lockFd = pollSlots({device}, slots, false, &d); return; }
     admitTurnstile(device);
     for (int k = 0; k < slots; k++) {
@@ -542,6 +539,16 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     }
     *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
+}
+inline void lockDeviceSlot(int device, int* lockFd) {
+    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
+    const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
+    *lockFd = -1;
+    { singlet::NvtxRange nvWait("device lock: wait (relock/Solo)"); lockDeviceSlotImpl(device, lockFd, slots); }
+    if (*lockFd >= 0) {   // NVTX: the hold of this slot, ended by unlockDevice
+        const unsigned long long id = singlet::nvtx_start("device lock: held (relock/Solo)");
+        if (id) { std::lock_guard<std::mutex> g(lockRangesMutex()); lockRanges()[*lockFd] = id; }
+    }
 }
 // SL step 2: `want` slots of `device` (see admitOn above): the first free slots, collected under the device's admission gate; after waitS
 // seconds with at least one slot it keeps what it has. Returns the number of slots held (*lockFd is the first; unlockDevice releases them all).

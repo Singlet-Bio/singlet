@@ -293,6 +293,8 @@ add_pileup_test(test_encode_autodetect_whitelist)
 add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_demux_fixedpoint)   # exact fixed-point exit of the VB loop: bitwise equal to the full loop
+add_pileup_test(test_demux_autok_fast)   # fast auto-K path (progressive PCA, wider waves, pool) bitwise equal to the earlier path
 add_pileup_test(test_donor_genotype_call)
 add_pileup_test(test_genotype_export)
 add_pileup_test(test_allsite)
@@ -306,6 +308,7 @@ if(TARGET singlet_engine_gpu)
     target_compile_definitions(test_allsite_gpu PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
 add_pileup_test(test_allsite_kernel)
+add_pileup_test(test_allsite_gather)   # the device route host gather: look-ahead prefetch walk against the plain walk (SINGLET_ALLSITE_GATHER_PF=0)
 add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
 add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
 add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features

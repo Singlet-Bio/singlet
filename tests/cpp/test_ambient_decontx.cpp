@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <numeric>
 #include <vector>
@@ -194,6 +195,42 @@ int main() {
     cfg.threads = 3;
     AmbientCorrectionResult R3 = correct_ambient_gene_level(S.counts, S.cell_idx, cfg);
     CHECK(R3.corrected.data == R.corrected.data, "identical output with 3 threads");
+
+    // ensemble: shared salt-independent preparation (default) vs per-member preparation (SINGLET_AMBIENT_SHARED_PREP=0)
+    // must agree bit for bit, with and without the low-depth core split
+    {
+        auto set_shared = [](bool on) {
+#ifdef _WIN32
+            _putenv_s("SINGLET_AMBIENT_SHARED_PREP", on ? "1" : "0");
+#else
+            setenv("SINGLET_AMBIENT_SHARED_PREP", on ? "1" : "0", 1);
+#endif
+        };
+        SplitMix64 kr(99);
+        std::vector<uint64_t> keys(S.counts.ncols);
+        for (auto& k : keys) k = kr.next();
+        for (double lowfrac : {0.1, 1.0}) {
+            AmbientDecontConfig ce = cfg;
+            ce.threads = 8;
+            ce.ensemble = 5;
+            ce.barcode_keys = &keys;
+            ce.low_depth_frac = lowfrac;
+            set_shared(true);
+            AmbientCorrectionResult Ra = correct_ambient_gene_level(S.counts, S.cell_idx, ce);
+            set_shared(false);
+            AmbientCorrectionResult Rb = correct_ambient_gene_level(S.counts, S.cell_idx, ce);
+            set_shared(true);
+            bool eq = Ra.ok && Rb.ok && Ra.method == Rb.method && Ra.corrected.indices == Rb.corrected.indices &&
+                      Ra.corrected.data == Rb.corrected.data && Ra.n_clusters == Rb.n_clusters &&
+                      Ra.n_low_depth_cells == Rb.n_low_depth_cells;
+            for (size_t i = 0; i < Ra.contam.size() && eq; ++i)
+                eq = Ra.contam[i].rho == Rb.contam[i].rho && Ra.contam[i].cluster == Rb.contam[i].cluster &&
+                     Ra.contam[i].n_removed == Rb.contam[i].n_removed;
+            CHECK(eq, lowfrac < 0.5 ? "ensemble: shared prep == per-member prep (bitwise)"
+                                    : "ensemble: shared prep == per-member prep (bitwise, low-depth split)");
+            if (lowfrac > 0.5) CHECK(Ra.n_low_depth_cells > 0, "ensemble: low-depth split exercised");
+        }
+    }
 
     // no empty droplets -> identity, rho 0
     {

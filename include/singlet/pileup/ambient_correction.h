@@ -47,6 +47,8 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -293,9 +295,35 @@ inline void orthonormalize(std::vector<double>& M, size_t rows, size_t k) {
 
 /// Deterministic quick clustering of the cells: log1p(CP10k), top-variance genes, PCA (subspace iteration on the
 /// implicitly centred sparse matrix), k-means++ and Lloyd. Returns cluster ids in [0, K); sets K.
-inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecontConfig& cfg,
-                                           unsigned threads, uint32_t& K_out)
+/// SINGLET_AMBIENT_TIMING=1: stderr timing lines for the ambient fit (members, shared prep).
+inline bool ambient_timing() {
+    static const bool on = [] { const char* e = std::getenv("SINGLET_AMBIENT_TIMING"); return e && *e && *e != '0'; }();
+    return on;
+}
+/// SINGLET_AMBIENT_SHARED_PREP=0: every ensemble member redoes the salt-independent preparation (the pre-hoist behaviour).
+inline bool ambient_shared_prep() {
+    const bool on = [] { const char* e = std::getenv("SINGLET_AMBIENT_SHARED_PREP"); return !(e && *e == '0'); }();
+    return on;
+}
+inline double ambient_now() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+/// The part of quick_cluster that does not read cfg.cluster_salt (nor the seed): cluster count, HVG selection and the
+/// sparse log-normalised HVG matrix. Computed once per ensemble; every member's arithmetic on it is unchanged.
+struct ClusterPrep {
+    uint32_t K = 1;        // cluster count before empty-cluster relabelling
+    bool trivial = false;  // quick_cluster returns all-zero labels with K_out = 1
+    size_t H = 0, kp = 0;
+    std::vector<size_t> hptr;
+    std::vector<uint32_t> hidx;
+    std::vector<float> hval;
+    std::vector<double> mu;
+};
+
+inline ClusterPrep prepare_cluster(const CellMat& X, const AmbientDecontConfig& cfg)
 {
+    ClusterPrep P;
     const size_t n = X.n_cells, G = X.n_genes;
     uint32_t K = cfg.n_clusters;
     if (K == 0) {
@@ -303,9 +331,8 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
         else K = static_cast<uint32_t>(std::clamp<long>(std::lround(std::sqrt(static_cast<double>(n) / 20.0)), 2, 24));
     }
     if (K > n) K = static_cast<uint32_t>(n);
-    K_out = std::max<uint32_t>(K, 1);
-    std::vector<uint32_t> cl(n, 0);
-    if (K <= 1 || n < 4 || G == 0) { K_out = 1; return cl; }
+    P.K = K;
+    if (K <= 1 || n < 4 || G == 0) { P.trivial = true; return P; }
 
     // log-normalised values per nnz, gene mean / variance (serial: fixed summation order)
     std::vector<double> s1(G, 0.0), s2(G, 0.0);
@@ -326,15 +353,16 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
         if (ndet[g] >= 3) cand.push_back(static_cast<uint32_t>(g));
     }
     const size_t H = std::min<size_t>(cfg.n_hvg, cand.size());
-    if (H < 2) { K_out = 1; return cl; }
+    if (H < 2) { P.trivial = true; return P; }
     std::stable_sort(cand.begin(), cand.end(), [&](uint32_t a, uint32_t b) { return var[a] > var[b]; });
     cand.resize(H);
     std::vector<int32_t> hmap(G, -1);
     for (size_t h = 0; h < H; ++h) hmap[cand[h]] = static_cast<int32_t>(h);
 
     // sparse HVG matrix S (cells x entries), centred implicitly by mu
-    std::vector<size_t> hptr(n + 1, 0);
-    std::vector<uint32_t> hidx; std::vector<float> hval;
+    std::vector<size_t>& hptr = P.hptr;
+    std::vector<uint32_t>& hidx = P.hidx; std::vector<float>& hval = P.hval;
+    hptr.assign(n + 1, 0);
     for (size_t j = 0; j < n; ++j) {
         const double scale = X.tot[j] > 0 ? 1e4 / X.tot[j] : 0.0;
         for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e) {
@@ -345,10 +373,34 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
         }
         hptr[j + 1] = hidx.size();
     }
-    std::vector<double> mu(H);
-    for (size_t h = 0; h < H; ++h) mu[h] = mean[cand[h]];
+    P.mu.resize(H);
+    for (size_t h = 0; h < H; ++h) P.mu[h] = mean[cand[h]];
+    P.H = H;
+    P.kp = std::min<size_t>({cfg.n_pcs, H, n > 1 ? n - 1 : 1});
+    return P;
+}
 
-    const size_t kp = std::min<size_t>({cfg.n_pcs, H, n > 1 ? n - 1 : 1});
+inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecontConfig& cfg,
+                                           unsigned threads, uint32_t& K_out, const ClusterPrep* pre = nullptr)
+{
+    const size_t n = X.n_cells;
+    const bool tm = ambient_timing();
+    const double t_a = tm ? ambient_now() : 0.0;
+    ClusterPrep local;
+    if (!pre) { local = prepare_cluster(X, cfg); pre = &local; }
+    const double t_b = tm ? ambient_now() : 0.0;
+    uint32_t K = pre->K;
+    K_out = std::max<uint32_t>(K, 1);
+    std::vector<uint32_t> cl(n, 0);
+    if (pre->trivial) { K_out = 1; return cl; }
+    const size_t H = pre->H, kp = pre->kp;
+    const std::vector<size_t>& hptr = pre->hptr;
+    const std::vector<uint32_t>& hidx = pre->hidx;
+    const std::vector<float>& hval = pre->hval;
+    const std::vector<double>& mu = pre->mu;
+    struct Tm { bool on, shared; double a, b; size_t n; ~Tm() { if (on)
+        std::fprintf(stderr, "[ambient-timing] quick_cluster n=%zu prep_s=%.3f prep=%s cluster_s=%.3f\n", n, b - a,
+                     shared ? "shared" : "own", ambient_now() - b); } } tmr{tm, pre != &local, t_a, t_b, n};
     SplitMix64 rng(cfg.seed);
     const bool keyed = X.key.size() == n;   // R10b: draws from each cell's barcode
     auto ukey = [&](size_t j, uint64_t salt) {
@@ -567,50 +619,82 @@ inline void round_native(const CellMat& X, const std::vector<double>& nat, unsig
 }
 } // namespace ambient_detail
 
-inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::vector<double>& a,
-                                 const AmbientDecontConfig& cfg, AmbientCorrectionResult& R,
-                                 std::vector<uint32_t>& corrected_vals, std::vector<double>* nat_out = nullptr)
-{
-    using namespace ambient_detail;
-    const size_t n = X.n_cells, G = X.n_genes;
-    unsigned thr = cfg.threads ? cfg.threads : std::max(1u, std::thread::hardware_concurrency());
+namespace ambient_detail {
+/// Everything of decontx_ambient_core up to the clustering that does not read cfg.cluster_salt: the core / low-depth
+/// split, the core sub-matrix and quick_cluster's preparation. Built once per ensemble.
+struct CorePrep {
+    std::vector<char> low;
+    size_t n_low = 0;
+    std::vector<uint32_t> core;
+    CellMat Xc;           // core cells (only when n_low > 0)
+    ClusterPrep cp;       // preparation for X (n_low == 0) or Xc
+};
 
+inline CorePrep prepare_core(const CellMat& X, const AmbientDecontConfig& cfg)
+{
+    CorePrep P;
+    const size_t n = X.n_cells;
+    P.low.assign(n, 0);
     // Core / low-depth split: barcodes far below the typical cell depth look like soup and would form their own
     // "native" profile, so clusters and cluster statistics come from the core cells only; low-depth cells are attached
     // to the most likely cluster afterwards and get their own rho.
-    std::vector<char> low(n, 0);
-    size_t n_low = 0;
     if (cfg.low_depth_frac > 0.0 && n >= 80) {
         std::vector<double> t(X.tot);
         std::nth_element(t.begin(), t.begin() + static_cast<std::ptrdiff_t>(n / 2), t.end());
         const double floor_depth = cfg.low_depth_frac * t[n / 2];
-        for (size_t j = 0; j < n; ++j) if (X.tot[j] < floor_depth) { low[j] = 1; ++n_low; }
-        if (n - n_low < 40) { std::fill(low.begin(), low.end(), 0); n_low = 0; }
+        for (size_t j = 0; j < n; ++j) if (X.tot[j] < floor_depth) { P.low[j] = 1; ++P.n_low; }
+        if (n - P.n_low < 40) { std::fill(P.low.begin(), P.low.end(), 0); P.n_low = 0; }
     }
-    R.n_low_depth_cells = static_cast<uint32_t>(n_low);
-
-    uint32_t K = 1;
-    std::vector<uint32_t> cl(n, 0);
-    if (n_low == 0) {
-        cl = quick_cluster(X, cfg, thr, K);
+    if (P.n_low == 0) {
+        P.cp = prepare_cluster(X, cfg);
     } else {
-        CellMat Xc;
+        CellMat& Xc = P.Xc;
         Xc.n_genes = X.n_genes;
-        std::vector<uint32_t> core;
         Xc.ptr.push_back(0);
         for (size_t j = 0; j < n; ++j) {
-            if (low[j]) continue;
-            core.push_back(static_cast<uint32_t>(j));
+            if (P.low[j]) continue;
+            P.core.push_back(static_cast<uint32_t>(j));
             Xc.gene.insert(Xc.gene.end(), X.gene.begin() + static_cast<std::ptrdiff_t>(X.ptr[j]), X.gene.begin() + static_cast<std::ptrdiff_t>(X.ptr[j + 1]));
             Xc.val.insert(Xc.val.end(), X.val.begin() + static_cast<std::ptrdiff_t>(X.ptr[j]), X.val.begin() + static_cast<std::ptrdiff_t>(X.ptr[j + 1]));
             Xc.ptr.push_back(Xc.gene.size());
             Xc.tot.push_back(X.tot[j]);
             if (X.key.size() == n) Xc.key.push_back(X.key[j]);
         }
-        Xc.n_cells = static_cast<uint32_t>(core.size());
-        const std::vector<uint32_t> clc = quick_cluster(Xc, cfg, thr, K);
-        for (size_t i = 0; i < core.size(); ++i) cl[core[i]] = clc[i];
+        Xc.n_cells = static_cast<uint32_t>(P.core.size());
+        P.cp = prepare_cluster(Xc, cfg);
     }
+    return P;
+}
+} // namespace ambient_detail
+
+inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::vector<double>& a,
+                                 const AmbientDecontConfig& cfg, AmbientCorrectionResult& R,
+                                 std::vector<uint32_t>& corrected_vals, std::vector<double>* nat_out = nullptr,
+                                 const ambient_detail::CorePrep* shared = nullptr)
+{
+    using namespace ambient_detail;
+    const size_t n = X.n_cells, G = X.n_genes;
+    unsigned thr = cfg.threads ? cfg.threads : std::max(1u, std::thread::hardware_concurrency());
+    const bool tm = ambient_timing();
+    const double t_start = tm ? ambient_now() : 0.0;
+
+    CorePrep own;
+    if (!shared) own = prepare_core(X, cfg);
+    const double t_prepped = tm ? ambient_now() : 0.0;
+    const CorePrep& cpr = shared ? *shared : own;
+    const std::vector<char>& low = cpr.low;
+    const size_t n_low = cpr.n_low;
+    R.n_low_depth_cells = static_cast<uint32_t>(n_low);
+
+    uint32_t K = 1;
+    std::vector<uint32_t> cl(n, 0);
+    if (n_low == 0) {
+        cl = quick_cluster(X, cfg, thr, K, &cpr.cp);
+    } else {
+        const std::vector<uint32_t> clc = quick_cluster(cpr.Xc, cfg, thr, K, &cpr.cp);
+        for (size_t i = 0; i < cpr.core.size(); ++i) cl[cpr.core[i]] = clc[i];
+    }
+    const double t_clustered = tm ? ambient_now() : 0.0;
     R.n_clusters = K;
 
     // per-cluster membership of the core cells (ascending order -> fixed summation order)
@@ -914,6 +998,10 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
         for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e) kept += corrected_vals[e];
         c.n_removed = static_cast<uint32_t>(static_cast<uint64_t>(X.tot[j]) - kept);
     }
+    if (tm)
+        std::fprintf(stderr, "[ambient-timing] member salt=%llu prep=%s own_prep_s=%.3f cluster_s=%.3f fit_s=%.3f\n",
+                     static_cast<unsigned long long>(cfg.cluster_salt), shared ? "shared" : "own", t_prepped - t_start,
+                     t_clustered - t_prepped, ambient_now() - t_clustered);
 }
 
 /// End-to-end: gene-level count matrix of ALL barcodes -> ambient profile, per-cell rho, corrected matrix.
@@ -987,6 +1075,13 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
         // (cluster_salt = member); rho and the expected native counts are averaged, then rounded once.
         const unsigned thr = cfg.threads ? cfg.threads : std::max(1u, std::thread::hardware_concurrency());
         std::vector<double> nat_sum(X.gene.size(), 0.0), rho_sum(X.n_cells, 0.0);
+        // salt-independent preparation (core split, HVG matrix) once for all members; SINGLET_AMBIENT_SHARED_PREP=0: per member
+        const double t_sp = ambient_timing() ? ambient_now() : 0.0;
+        ambient_detail::CorePrep shared_prep;
+        const bool use_shared = ambient_shared_prep();
+        if (use_shared) shared_prep = ambient_detail::prepare_core(X, cfg);
+        if (use_shared && ambient_timing())
+            std::fprintf(stderr, "[ambient-timing] shared_prep_s=%.3f n=%u\n", ambient_now() - t_sp, static_cast<unsigned>(X.n_cells));
         // Members run side by side, each on thr / workers threads: a member's fit does not depend on its thread count
         // (parallel_for writes one slot per index, the PCA sums over fixed blocks), and its expected native counts and rho
         // are added to the sums in member order 0, 1, ..., so the sums are the ones the one-at-a-time loop made. Parts of
@@ -1008,7 +1103,7 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
                 Rm.profile = R.profile;
                 std::vector<uint32_t> cv;
                 std::vector<double> nat;
-                decontx_ambient_core(X, R.profile.gene_fractions, cm, Rm, cv, &nat);
+                decontx_ambient_core(X, R.profile.gene_fractions, cm, Rm, cv, &nat, use_shared ? &shared_prep : nullptr);
                 std::unique_lock<std::mutex> lk(mu);
                 turn.wait(lk, [&] { return next_add == m; });
                 for (size_t e = 0; e < nat.size(); ++e) nat_sum[e] += nat[e];
