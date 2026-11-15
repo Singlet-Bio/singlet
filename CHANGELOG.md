@@ -2,6 +2,16 @@
 
 All notable changes to the singlet project.
 
+## [1.4.0] — a faster GPU runtime and a memory-aware start rule
+
+The GPU runtime work measured on Clipper comes into the engine. On one H100 node running 300 M-pair 3' samples, the node rate
+rose 42% with the integrated changes and 56% with the host-memory controls at four samples per GPU, while the job's host
+memory fell from about 460 GB to 375 GB. The GPU pileup now streams in partitions and signature blocks, so the deepest samples
+fit the 94 GB card. `singlet gpu-pool` starts a sample only when its projected peak host memory, from depth and chemistry, fits
+beside everything already in flight in the job; a sample larger than the job's budget runs alone. Count tables and every count
+member equal 1.3.9. Each change has an environment switch whose `=0` restores the 1.3.9 path (`SINGLET_POOL_MEM_RULE=0` for the
+start rule).
+
 ## [1.3.9] — bacterial and fungal species keep their own ids in the non-host screen
 
 The bacterial and the fungal sketch index both number their species from 1, and the engine joined them without an offset.

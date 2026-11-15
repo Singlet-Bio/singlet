@@ -1,5 +1,9 @@
 # singlet (R) — NEWS
 
+## singlet 1.4.0
+
+Version aligned with the Python package for the GPU runtime update.
+
 ## singlet 1.3.9
 
 Version aligned with the Python package for the non-host species id fix.
