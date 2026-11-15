@@ -16,6 +16,7 @@
 #include "singlet/thread_name.h"
 #include "hostloop_gpu.h"  // E10: per-read entries and the per-read products of STAR's loop (SINGLET_ENGINE_GPU_E2E >= 2)
 #include "solo_gpu.h"      // E11: STARsolo's inputs kept on the device for soloRun after STAR's loop (SINGLET_ENGINE_GPU_E2E=5)
+#include "devpool.h"     // rt/holds: SINGLET_MAP2_POOL
 #include <cuda_runtime.h>
 #include <cuda.h>   // types of the driver's virtual memory functions (shared_index.cuh); the functions come from cudaGetDriverEntryPoint, no libcuda link
 #include <thrust/device_ptr.h>
@@ -3367,6 +3368,8 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         if (nRec == 0 || out.readRecord.size() != n) { why = "no records"; return false; }
         if (nRec >= 0xFFFFFFFFull) { why = "more records than 32-bit indices"; return false; }
         g_bud.at = "records";
+        singlet_devpool::Scope devPoolScope("map2 records pass");   // rt/holds: SINGLET_MAP2_POOL
+        struct KeepModelGuard { ~KeepModelGuard() { e9::soloKeepModelFlush(); } } keepModelGuard;
         const e6::RecParams RP = makeRP();
         struct DB { void* p = nullptr; ~DB() { dfree(p); } };
         auto dalc = [&](DB& b, u64 bytes) -> bool { if (dmalv(&b.p, bytes + 64) != cudaSuccess) { cudaGetLastError(); b.p = nullptr; return false; } return true; };

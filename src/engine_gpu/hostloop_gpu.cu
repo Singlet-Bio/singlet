@@ -15,6 +15,8 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/tuple.h>
 #include <thrust/functional.h>
+#include <thrust/system/cuda/execution_policy.h>
+#include "devpool.h"   // rt/holds: SINGLET_MAP2_POOL
 #include <algorithm>
 #include <cstring>
 #include <vector>
@@ -267,7 +269,7 @@ struct HookRead {
     __device__ bool operator()(uint64_t i) const { return rr[i] != 0xFFFFFFFFu && (E[i].flags & 4u); }
 };
 
-struct DevBufs { std::vector<void*> p; ~DevBufs() { for (void* x : p) cudaFree(x); } };
+struct DevBufs { std::vector<void*> p; ~DevBufs() { for (void* x : p) singlet_devpool::pFree(x); } };
 
 } // namespace
 
@@ -301,8 +303,8 @@ bool r11(const uint64_t* dAux, uint32_t nw, uint64_t n, const uint64_t* dWL, uin
 
 bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOff, const uint64_t* dSOff, uint64_t nRec, const uint32_t* dRR, uint64_t n,
               e6::ReadEntry* dEnt, uint64_t* dMask, bool outSJ, bool sjAll, E10& out, std::string& err, uint64_t genomeEnd) {
-    DevBufs db;
-    auto dal = [&](uint64_t bytes) -> void* { void* p = nullptr; if (cudaMalloc(&p, bytes + 64) != cudaSuccess) { cudaGetLastError(); return nullptr; } db.p.push_back(p); return p; };
+    DevBufs db; singlet_devpool::ThrustAlloc ta;
+    auto dal = [&](uint64_t bytes) -> void* { void* p = nullptr; if (singlet_devpool::pAlloc(&p, bytes + 64) != cudaSuccess) { cudaGetLastError(); return nullptr; } db.p.push_back(p); return p; };
     cudaEvent_t e0, e1; cudaEventCreate(&e0); cudaEventCreate(&e1); cudaEventRecord(e0);
     uint32_t* mult = (uint32_t*)dal(nRec * 4); uint8_t* rm = (uint8_t*)dal(nRec); uint8_t* ru = (uint8_t*)dal(nRec); uint32_t* nJ = (uint32_t*)dal(nRec * 4);
     uint64_t* jOff = (uint64_t*)dal((nRec + 1) * 8);
@@ -322,7 +324,7 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
     out.nOddRec = st[E10::S_N];
     // junctions: entries, (key, record) duplicates merged (the in-read rule: one count, the larger overhang), then per key summed and maxed
     HL_CK(cudaMemset(jOff, 0, 8));
-    thrust::inclusive_scan(thrust::device_ptr<uint32_t>(nJ), thrust::device_ptr<uint32_t>(nJ + nRec), thrust::device_ptr<uint64_t>(jOff + 1));
+    thrust::inclusive_scan(thrust::cuda::par(ta), thrust::device_ptr<uint32_t>(nJ), thrust::device_ptr<uint32_t>(nJ + nRec), thrust::device_ptr<uint64_t>(jOff + 1));
     uint64_t nE = 0;
     HL_CK(cudaMemcpy(&nE, jOff + nRec, 8, cudaMemcpyDeviceToHost));
     out.nSJentries = nE; out.nSJ = 0; out.sj.clear();
@@ -341,12 +343,12 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
             return false;
         }
         thrust::device_ptr<uint64_t> K(keys); thrust::device_ptr<uint32_t> R(recs), V(vals);
-        thrust::stable_sort_by_key(K, K + nE, thrust::make_zip_iterator(thrust::make_tuple(R, V)));   // record order kept within a key
+        thrust::stable_sort_by_key(thrust::cuda::par(ta), K, K + nE, thrust::make_zip_iterator(thrust::make_tuple(R, V)));   // record order kept within a key
         uint64_t* k1 = (uint64_t*)dal(nE * 8); uint32_t* r1 = (uint32_t*)dal(nE * 4); uint32_t* v1 = (uint32_t*)dal(nE * 4);
         if (!k1 || !r1 || !v1) { err = "out of device memory (E10 junctions)"; return false; }
         auto kr = thrust::make_zip_iterator(thrust::make_tuple(K, R));
         auto kr1 = thrust::make_zip_iterator(thrust::make_tuple(thrust::device_ptr<uint64_t>(k1), thrust::device_ptr<uint32_t>(r1)));
-        auto e1r = thrust::reduce_by_key(kr, kr + nE, V, kr1, thrust::device_ptr<uint32_t>(v1), KeyRecEq(), MaxU32());
+        auto e1r = thrust::reduce_by_key(thrust::cuda::par(ta), kr, kr + nE, V, kr1, thrust::device_ptr<uint32_t>(v1), KeyRecEq(), MaxU32());
         const uint64_t nU = (uint64_t)(e1r.second - thrust::device_ptr<uint32_t>(v1));
         uint32_t* cU = (uint32_t*)dal(nU * 4); uint32_t* cM = (uint32_t*)dal(nU * 4);
         uint64_t* k2 = keys; uint32_t* cU2 = recs; uint32_t* cM2 = vals; uint32_t* v2 = (uint32_t*)dal(nU * 4);   // reuse the entry buffers for the output
@@ -354,7 +356,7 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
         k_sjcounts<<<(unsigned)((nU + 255) / 256), 256>>>(nU, r1, ru, mult, cU, cM);
         auto in3 = thrust::make_zip_iterator(thrust::make_tuple(thrust::device_ptr<uint32_t>(cU), thrust::device_ptr<uint32_t>(cM), thrust::device_ptr<uint32_t>(v1)));
         auto out3 = thrust::make_zip_iterator(thrust::make_tuple(thrust::device_ptr<uint32_t>(cU2), thrust::device_ptr<uint32_t>(cM2), thrust::device_ptr<uint32_t>(v2)));
-        auto e2r = thrust::reduce_by_key(thrust::device_ptr<uint64_t>(k1), thrust::device_ptr<uint64_t>(k1 + nU), in3, thrust::device_ptr<uint64_t>(k2), out3,
+        auto e2r = thrust::reduce_by_key(thrust::cuda::par(ta), thrust::device_ptr<uint64_t>(k1), thrust::device_ptr<uint64_t>(k1 + nU), in3, thrust::device_ptr<uint64_t>(k2), out3,
                                          thrust::equal_to<uint64_t>(), SumSumMax());
         const uint64_t nJu = (uint64_t)(e2r.first - thrust::device_ptr<uint64_t>(k2));
         std::vector<uint64_t> hk(nJu); std::vector<uint32_t> hu(nJu), hm(nJu), hv(nJu);
@@ -379,23 +381,23 @@ bool products(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* dBOf
     {
         thrust::counting_iterator<uint64_t> c0(0);
         UnmappedRead pu{dRR, rm};
-        const uint64_t nUm = (uint64_t)thrust::count_if(thrust::device, c0, c0 + n, pu);
+        const uint64_t nUm = (uint64_t)thrust::count_if(thrust::cuda::par(ta), c0, c0 + n, pu);
         out.unmappedReads.resize(nUm);
         if (nUm) {
             uint64_t* li = (uint64_t*)dal(nUm * 8);
             if (!li) { err = "out of device memory (E10 lists)"; return false; }
-            thrust::copy_if(thrust::device, c0, c0 + n, thrust::device_ptr<uint64_t>(li), pu);
+            thrust::copy_if(thrust::cuda::par(ta), c0, c0 + n, thrust::device_ptr<uint64_t>(li), pu);
             std::vector<uint64_t> h(nUm);
             HL_CK(cudaMemcpy(h.data(), li, nUm * 8, cudaMemcpyDeviceToHost));
             for (uint64_t k = 0; k < nUm; k++) out.unmappedReads[k] = (uint32_t)h[k];
         }
         HookRead ph{dRR, dEnt};
-        const uint64_t nH = dEnt ? (uint64_t)thrust::count_if(thrust::device, c0, c0 + n, ph) : 0;   // E17: without dEnt, the caller makes the list
+        const uint64_t nH = dEnt ? (uint64_t)thrust::count_if(thrust::cuda::par(ta), c0, c0 + n, ph) : 0;   // E17: without dEnt, the caller makes the list
         out.hookReads.resize(nH);
         if (nH) {
             uint64_t* li = (uint64_t*)dal(nH * 8);
             if (!li) { err = "out of device memory (E10 lists)"; return false; }
-            thrust::copy_if(thrust::device, c0, c0 + n, thrust::device_ptr<uint64_t>(li), ph);
+            thrust::copy_if(thrust::cuda::par(ta), c0, c0 + n, thrust::device_ptr<uint64_t>(li), ph);
             HL_CK(cudaMemcpy(out.hookReads.data(), li, nH * 8, cudaMemcpyDeviceToHost));
         }
     }

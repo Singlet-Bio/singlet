@@ -2982,11 +2982,25 @@ public:
         pin.nCells = static_cast<uint32_t>(per_cell_reads_.size()); pin.nCellsQc = static_cast<uint32_t>(per_cell_qc_.size());
         pin.nWl = static_cast<uint32_t>(wl_umi_counts_.size());
         pin.keepPinned = keepPinned;
+        // rt/holds (SINGLET_HANDOFF_PINCACHE, default on; =0: everything inside the hold as before): where the pool pins the device
+        // (SINGLET_ENGINE_GPU_DEVICE) the region's cudaHostRegister runs before the device lock is taken, and the per-read ranges are unlocked after
+        // the unlock; the region is a new memfd mapping per item, so a registration cannot be kept from one item to the next
+        void* preReg = nullptr;
+        {
+            const char* pc = std::getenv("SINGLET_HANDOFF_PINCACHE");
+            const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
+            if (!(pc != nullptr && pc[0] == '0') && dv != nullptr && dv[0] != 0) {
+                preReg = singlet_engine_gpu::e2ePreRegister(R, std::atoi(dv), keepPinned && singlet_tail::cut("trim"));
+                pin.preReg = preReg; pin.deferUnpin = keepPinned;
+            }
+        }
         int lock_fd = -1;
         const int device = singlet_engine_gpu::lockDevice(&lock_fd);
         singlet_tail::mark("parent: hand-off pass: device lock taken");
         const bool ok = singlet_engine_gpu::e2ePass(pin, device, table, o);
         singlet_engine_gpu::unlockDevice(lock_fd);
+        if (o.unpinLater) { singlet_engine_gpu::e2eUnpinLater(o.unpinLater, device); o.unpinLater = nullptr; }
+        singlet_engine_gpu::e2ePreRegisterRelease(preReg);
         singlet_tail::mark("parent: hand-off pass: e2ePass returned (%s)", o.log.c_str());
         if (!ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << o.log << "\n"; return false; }
         if (deferRrna) { nRrnaOut = 0; sROut = -1; return true; }

@@ -17,6 +17,8 @@
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 #include <thrust/unique.h>
+#include <thrust/system/cuda/execution_policy.h>
+#include "devpool.h"   // rt/holds: SINGLET_MAP2_POOL
 #include <algorithm>
 #include "singlet/gpu_ledger.h"   // last: it wraps cudaMemcpy / cudaMemcpyAsync (SINGLET_ENGINE_GPU_TRACE=1)
 
@@ -127,7 +129,7 @@ bool buildRecords(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* 
     out.nRec = nRec;
     if (nRec == 0) return true;
     const unsigned T = 256, G = (unsigned)((nRec + T - 1) / T);
-    Cnt4* dCnt; RG_CK(cudaMalloc(&dCnt, (nRec + 1) * sizeof(Cnt4)));
+    Cnt4* dCnt; RG_CK(singlet_devpool::pAlloc(&dCnt, (nRec + 1) * sizeof(Cnt4)));
     RG_CK(cudaMemset(dCnt + nRec, 0, sizeof(Cnt4)));
     { unsigned long long z[4] = {0, 0, 0, 0}; RG_CK(cudaMemcpyToSymbol(g_st, z, sizeof z)); }
     Ev ev;
@@ -136,28 +138,28 @@ bool buildRecords(const e6::RecParams& P, const uint8_t* dBlob, const uint64_t* 
     RG_CK(cudaGetLastError());
     out.msCount = ev.stop();
     ev.start();
-    thrust::exclusive_scan(thrust::device_ptr<Cnt4>(dCnt), thrust::device_ptr<Cnt4>(dCnt + nRec + 1), thrust::device_ptr<Cnt4>(dCnt), Cnt4{0, 0, 0, 0},
+    singlet_devpool::ThrustAlloc ta; thrust::exclusive_scan(thrust::cuda::par(ta), thrust::device_ptr<Cnt4>(dCnt), thrust::device_ptr<Cnt4>(dCnt + nRec + 1), thrust::device_ptr<Cnt4>(dCnt), Cnt4{0, 0, 0, 0},
                            Cnt4Add());
     out.msScan = ev.stop();
     Cnt4 tot; RG_CK(cudaMemcpy(&tot, dCnt + nRec, sizeof tot, cudaMemcpyDeviceToHost));
     { unsigned long long s[4]; RG_CK(cudaMemcpyFromSymbol(s, g_st, sizeof s)); out.nMateGap = s[0]; out.nNoExon = s[1]; out.nBadBest = s[2]; out.nMapped = s[3]; }
-    if (tot.a > 0xFFFFFFFFull || tot.o > 0xFFFFFFFFull) { cudaFree(dCnt); err = "more than 2^32 alignments or CIGAR ops (AlnRec / SigRec offsets are 32-bit)"; return false; }
+    if (tot.a > 0xFFFFFFFFull || tot.o > 0xFFFFFFFFull) { singlet_devpool::pFree(dCnt); err = "more than 2^32 alignments or CIGAR ops (AlnRec / SigRec offsets are 32-bit)"; return false; }
     out.nAln = tot.a; out.nOps = tot.o; out.nSeq = tot.s; out.nBytes = wantBytes ? tot.b : 0;
-    RG_CK(cudaMalloc(&out.sigs, nRec * sizeof(SigRec))); RG_CK(cudaMalloc(&out.alns, std::max<u64>(1, tot.a) * sizeof(AlnRec)));
-    RG_CK(cudaMalloc(&out.ops, std::max<u64>(1, tot.o) * 4)); RG_CK(cudaMalloc(&out.seq, std::max<u64>(1, tot.s)));
-    if (wantBytes) { RG_CK(cudaMalloc(&out.bytes, std::max<u64>(1, tot.b))); RG_CK(cudaMalloc(&out.bytesOff, (nRec + 1) * 8)); }
-    if (wantNm) RG_CK(cudaMalloc(&out.nm, std::max<u64>(1, tot.a) * 2));
+    RG_CK(singlet_devpool::pAlloc(&out.sigs, nRec * sizeof(SigRec))); RG_CK(singlet_devpool::pAlloc(&out.alns, std::max<u64>(1, tot.a) * sizeof(AlnRec)));
+    RG_CK(singlet_devpool::pAlloc(&out.ops, std::max<u64>(1, tot.o) * 4)); RG_CK(singlet_devpool::pAlloc(&out.seq, std::max<u64>(1, tot.s)));
+    if (wantBytes) { RG_CK(singlet_devpool::pAlloc(&out.bytes, std::max<u64>(1, tot.b))); RG_CK(singlet_devpool::pAlloc(&out.bytesOff, (nRec + 1) * 8)); }
+    if (wantNm) RG_CK(singlet_devpool::pAlloc(&out.nm, std::max<u64>(1, tot.a) * 2));
     ev.start();
     k_fill<<<G, T>>>(P, dBlob, dBlobOff, dSeq, dSeqOff, nRec, dChrStart, dCnt, out.sigs, out.alns, out.ops, out.seq, out.bytes, out.bytesOff, out.nm);
     RG_CK(cudaGetLastError());
     out.msFill = ev.stop();
     RG_CK(cudaDeviceSynchronize());
-    cudaFree(dCnt);
+    singlet_devpool::pFree(dCnt);
     return true;
 }
 
 void release(DeviceRecords& r) {
-    cudaFree(r.sigs); cudaFree(r.alns); cudaFree(r.ops); cudaFree(r.seq); cudaFree(r.bytes); cudaFree(r.bytesOff); cudaFree(r.nm);
+    singlet_devpool::pFree(r.sigs); singlet_devpool::pFree(r.alns); singlet_devpool::pFree(r.ops); singlet_devpool::pFree(r.seq); singlet_devpool::pFree(r.bytes); singlet_devpool::pFree(r.bytesOff); singlet_devpool::pFree(r.nm);
     r = DeviceRecords();
 }
 
@@ -392,6 +394,10 @@ struct RegionPin {
     void unpinOther() { for (auto& x : other) cudaHostUnregister(x.first); other.clear(); }
     void unpinAll() { unpinOther(); for (auto& x : rec) cudaHostUnregister(x.first); rec.clear(); }
 };
+// rt/holds (SINGLET_HANDOFF_PINCACHE): the region's ranges page-locked by e2ePreRegister before the device lock; e2ePass takes them over
+struct PreReg { RegionPin RP; int device = -1; bool pinned = false, taken = false; double sec = 0; };
+// the per-read ranges e2ePass left locked (E2EPassIn::deferUnpin) for e2eUnpinLater, after the device unlock
+struct PinLater { std::vector<std::pair<uint8_t*, u64>> other; };
 // device buffers of one e2ePass call, freed on every return
 struct PassBufs {
     std::vector<void*> p;
@@ -412,7 +418,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     const u64 n = H.nReads, nRec = H.nRec, nAln = H.nAln, nOps = H.nOps;
     bool pinned = false;
     RegionPin RP;
-    double e16reg = 0, e16pre = -1, e16dl = -1;
+    double e16reg = 0, e16pre = -1, e16dl = -1, e16regPre = -1;
     auto fail = [&](const char* what, cudaError_t e) {
         out.log += std::string(what) + ": " + cudaGetErrorString(e) + "; ";
         if (pinned) RP.unpinAll();
@@ -437,8 +443,14 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         // E16 "regpar" (keepPinned, level 5): this process's mapping of the region populated by several threads before the page-locking
         if (in.keepPinned && singlet_tail::cut("regpar")) { e16Touch(R.base, std::min<u64>(R.cap, H.used), false); e16pre = now() - tu; }
         const double tr = now();
-        pinned = RP.pin(R, H, in.keepPinned && singlet_tail::cut("trim"));
+        PreReg* const pre = (PreReg*) in.preReg;
+        if (pre && pre->pinned && !pre->taken && pre->device == device) { RP = pre->RP; pinned = true; pre->taken = true; pre->RP = RegionPin(); }
+        else {
+            if (pre && pre->pinned && !pre->taken) { cudaSetDevice(pre->device); pre->RP.unpinAll(); pre->taken = true; cudaSetDevice(device); }   // locked in another device's context
+            pinned = RP.pin(R, H, in.keepPinned && singlet_tail::cut("trim"));
+        }
         e16reg = now() - tr;
+        if (pre) e16regPre = pre->sec;
         EP_CK(B.alloc(dS, nRec * 16)); EP_CK(cudaMemcpy(dS, R.at<uint8_t>(H.oSigs), nRec * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dA, nAln * 16)); EP_CK(cudaMemcpy(dA, R.at<uint8_t>(H.oAlns), nAln * 16, cudaMemcpyHostToDevice));
         EP_CK(B.alloc(dOps, nOps * 4)); EP_CK(cudaMemcpy(dOps, R.at<uint8_t>(H.oOps), nOps * 4, cudaMemcpyHostToDevice));
@@ -591,7 +603,15 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         if (nCh > 1) out.log += "read chunks " + std::to_string(nCh) + " of " + std::to_string(m0) + " (P3-MEM-03); ";
     }
 #undef EP_CK
-    { const double tq = now(); if (pinned) { if (!in.keepPinned) RP.unpinAll(); else RP.unpinOther(); } e16unreg = now() - tq; }
+    {
+        const double tq = now();
+        if (pinned) {
+            if (!in.keepPinned) RP.unpinAll();
+            else if (in.deferUnpin && !RP.other.empty()) { PinLater* L = new PinLater; L->other.swap(RP.other); out.unpinLater = L; }   // after the unlock
+            else RP.unpinOther();
+        }
+        e16unreg = now() - tq;
+    }
     out.totalAln = pc[PC_ALN]; out.secondary = pc[PC_SEC]; out.rrnaSampled = pc[PC_RSAMP]; out.rrnaHook = pc[PC_RHOOK]; out.chrm = pc[PC_CHRM];
     out.noBarcode = pc[PC_NOBC]; out.barcoded = pc[PC_BARCODED]; out.multimapper = pc[PC_MULTI]; out.lowMapq = pc[PC_LOWMAPQ];
     out.nDone = pc[PC_DONE]; out.nUnwritten = pc[PC_UNWRITTEN]; out.nBigClip = pc[PC_BIGCLIP]; out.nNoHook = pc[PC_NOHOOK]; out.nNoKey = pc[PC_NOKEY];
@@ -609,11 +629,39 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     snprintf(b, sizeof b, "; e16: context %.3f s, register %.3f s, unregister %.3f s, free + reset %.3f s%s", e16ctx, e16reg, e16unreg, e16reset,
              in.keepPinned ? (pinned ? " (region and kept reads stay page-locked)" : " (region NOT page-locked)") : "");
     out.log += b;
+    if (e16regPre >= 0) { snprintf(b, sizeof b, ", region page-locked before the device lock %.3f s%s", e16regPre, out.unpinLater ? ", per-read ranges unlocked after the unlock" : ""); out.log += b; }
     if (e16pre >= 0 || e16dl >= 0) {
         snprintf(b, sizeof b, ", region populated in parallel %.3f s, kept reads' arrays touched in parallel %.3f s", e16pre, e16dl);
         out.log += b;
     }
     return true;
+}
+
+void* e2ePreRegister(const E2ERegion& R, int device, bool split) {
+    const double t0 = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    cudaInitDevice(device, cudaDeviceScheduleBlockingSync, singlet_engine_gpu::gpuInitFlags());
+    cudaGetLastError();
+    if (cudaSetDevice(device) != cudaSuccess) { cudaGetLastError(); return nullptr; }
+    cudaFree(0);
+    PreReg* P = new PreReg;
+    P->device = device;
+    P->pinned = P->RP.pin(R, *R.hdr(), split);
+    P->sec = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count() - t0;
+    return P;
+}
+void e2ePreRegisterRelease(void* h) {
+    PreReg* P = (PreReg*) h;
+    if (!P) return;
+    if (P->pinned && !P->taken) { cudaSetDevice(P->device); P->RP.unpinAll(); }
+    delete P;
+}
+void e2eUnpinLater(void* h, int device) {
+    PinLater* L = (PinLater*) h;
+    if (!L) return;
+    if (device >= 0 && cudaSetDevice(device) != cudaSuccess) cudaGetLastError();
+    for (auto& x : L->other) cudaHostUnregister(x.first);
+    cudaGetLastError();
+    delete L;
 }
 
 } // namespace singlet_engine_gpu

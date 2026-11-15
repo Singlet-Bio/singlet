@@ -65,6 +65,30 @@ double wall_now() {
     return (double) ts.tv_sec + (double) ts.tv_nsec * 1e-9;
 }
 
+double env_num(const char* name, double dflt) {
+    const char* e = std::getenv(name);
+    return (e != nullptr && e[0] != 0) ? std::atof(e) : dflt;
+}
+// GB the node (and this job's cgroup, when it has a limit) can still hand out without evicting anything but page cache
+double avail_gb() {
+    double a = 1e9;
+    std::ifstream mi("/proc/meminfo");
+    std::string k, u;
+    double v = 0;
+    while (mi >> k >> v >> u) if (k == "MemAvailable:") { a = v / 1048576.0; break; }
+    std::ifstream cl("/proc/self/cgroup");
+    std::string line;
+    if (std::getline(cl, line)) {
+        const size_t c = line.rfind(':');
+        const std::string base = "/sys/fs/cgroup" + (c == std::string::npos ? std::string() : line.substr(c + 1));
+        std::ifstream mx(base + "/memory.max"), cu(base + "/memory.current");
+        std::string m;
+        double cur = 0;
+        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) a = std::min(a, (std::atof(m.c_str()) - cur) / 1073741824.0);
+    }
+    return a;
+}
+
 FILE* g_plog = nullptr;
 void plog(const char* fmt, ...) {
     char msg[2048];
@@ -139,6 +163,46 @@ unsigned long long proc_starttime(pid_t pid) {
     for (int i = 3; i <= 22 && (in >> tok); ++i)
         if (i == 22) return std::strtoull(tok.c_str(), nullptr, 10);
     return 0;
+}
+
+// rt/hostmem sampler (SINGLET_POOL_MEMSAMPLE=<period s>): every period one line per process of the pool, its server and each sample's process
+// group (the sample, its STAR child and probes): `unix-time item pid comm RssAnon RssFile RssShmem` (kB; item -1: the pool, -2: its server).
+// comm is the main thread's name, which the pipeline sets per phase. The counters are /proc/<pid>/status's (no page-table walk).
+void memsample_write(FILE* out, pid_t self, pid_t srv, const std::map<pid_t, int>& byPid) {
+    const long now = (long) time(nullptr);
+    if (DIR* d = opendir("/proc")) {
+        while (struct dirent* e = readdir(d)) {
+            if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+            const pid_t p = (pid_t) std::atoi(e->d_name);
+            int item = -9;
+            if (p == self) item = -1;
+            else if (p == srv) item = -2;
+            else {
+                std::ifstream f("/proc/" + std::string(e->d_name) + "/stat");
+                std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                const size_t r = s.rfind(')');
+                if (r == std::string::npos) continue;
+                std::istringstream in(s.substr(r + 2));
+                std::string st, ppid, pg;
+                in >> st >> ppid >> pg;
+                auto it = byPid.find((pid_t) std::atoi(pg.c_str()));
+                if (it != byPid.end()) item = it->second;
+            }
+            if (item == -9) continue;
+            std::ifstream f("/proc/" + std::string(e->d_name) + "/status");
+            std::string l, comm;
+            long an = 0, fi = 0, sh = 0;
+            while (std::getline(f, l)) {
+                if (l.rfind("Name:", 0) == 0) { comm = l.substr(5); comm.erase(0, comm.find_first_not_of(" \t")); }
+                else if (l.rfind("RssAnon:", 0) == 0) an = std::atol(l.c_str() + 8);
+                else if (l.rfind("RssFile:", 0) == 0) fi = std::atol(l.c_str() + 8);
+                else if (l.rfind("RssShmem:", 0) == 0) sh = std::atol(l.c_str() + 9);
+            }
+            if (an + fi + sh > 262144) fprintf(out, "%ld\t%d\t%d\t%s\t%ld\t%ld\t%ld\n", now, item, (int) p, comm.c_str(), an, fi, sh);
+        }
+        closedir(d);
+    }
+    fflush(out);
 }
 
 // "Number of input reads |	66601652" of STAR's Log.final.out in the sample's output directory (0 if absent)
@@ -556,6 +620,11 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
              sg ? fmt("killed by signal %d (%s)", sg, strsignal(sg)).c_str() : fmt("exit %d", ex).c_str(), r.t1 - r.t0, us + ss,
              ru.ru_maxrss / 1048576.0, pairs / 1e6, r.killed ? " (timed out)" : "");
     };
+    double lastStartAt = 0, lastSample = 0;
+    bool admitNoted = false;
+    const double sampPeriod = env_num("SINGLET_POOL_MEMSAMPLE", 0);
+    FILE* msf = sampPeriod > 0 ? fopen((report + "/memsamp.tsv").c_str(), "a") : nullptr;
+    const double stagger = env_num("SINGLET_POOL_STAGGER_S", 0), memFloor = env_num("SINGLET_POOL_MEM_FLOOR_GB", 0);
     while (next < items.size() || active > 0) {
         if (g_stop) {
             plog("stopping: signal received; the samples in flight are killed");
@@ -563,7 +632,17 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             next = items.size();
             g_stop = 0;
         }
-        while (active < (size_t) workers && next < items.size()) start(items[next++]);
+        while (active < (size_t) workers && next < items.size()) {
+            // rt/hostmem admission: a start waits while another item of this pool started less than SINGLET_POOL_STAGGER_S ago (the items of a first
+            // wave would otherwise all reach their memory-heavy phases together) or while the node's available memory is under SINGLET_POOL_MEM_FLOOR_GB
+            if (active > 0 && ((stagger > 0 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor))) {
+                if (!admitNoted) { plog("admission: the next item waits (stagger %.0f s, memory floor %.0f GB, available %.0f GB)", stagger, memFloor, avail_gb()); admitNoted = true; }
+                break;
+            }
+            admitNoted = false;
+            lastStartAt = wall_now();
+            start(items[next++]);
+        }
         // logs, then the ends
         std::vector<struct pollfd> pf;
         std::vector<int> who;
@@ -586,6 +665,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             finish(p, st, ru);
         }
+        if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); }
         if (timeout > 0) {
             const double t = wall_now();
             for (auto& kv : byPid) {
@@ -611,6 +691,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double span = lastEnd > firstStart ? lastEnd - firstStart : 0;
     plog("queue drained: %zu samples, %zu failed; span %.1f s (first start to last end), %.2f M pairs, %.3f M pairs/s; start-up %.1f s",
          items.size(), failed, span, pairsAll / 1e6, span > 0 ? pairsAll / 1e6 / span : 0.0, tReady - tStart);
+    if (msf != nullptr) fclose(msf);
     fclose(stsv);
     fclose(pids);
     fclose(g_plog);

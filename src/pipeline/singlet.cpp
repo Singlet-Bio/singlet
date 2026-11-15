@@ -37,6 +37,9 @@
 #include <fcntl.h>
 #include <set>
 #include <fstream>
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 #include <zlib.h>
 #include <atomic>
 #include <functional>
@@ -10201,6 +10204,18 @@ static int singlet_main(int argc, char* argv[]) {
     }
 
     mem_mark("after pileup run");
+    {   // rt/hostmem (SINGLET_MALLOC_TRIM, default on, =0 off): free heap pages of the pileup and the GPU hand-off go back to the system before the
+        // export (they stay mapped in a thread's arena otherwise); no value changes
+        const char* mt = std::getenv("SINGLET_MALLOC_TRIM");
+        if (!(mt && mt[0] == '0')) {
+            const auto t0 = std::chrono::steady_clock::now();
+#ifdef __GLIBC__
+            malloc_trim(0);
+#endif
+            std::cerr << "[mem] malloc_trim after the pileup run: " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+            mem_mark("after malloc_trim");
+        }
+    }
     if (stats.total_reads == 0) {
         std::cerr << "[singlet] ERROR: No reads processed\n";
         return 1;
