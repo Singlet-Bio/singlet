@@ -122,6 +122,14 @@ if(TARGET singlet_engine_gpu)
     target_link_libraries(test_gpu_pileup_te PRIVATE singlet_engine_gpu)
     target_compile_definitions(test_gpu_pileup_te PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
+# The GPU pileup's streamed layout (SINGLET_PILEUP_STREAM) against SINGLET_PILEUP_STREAM=0 on a synthetic input, with a forced K and with a tiny
+# per-partition budget (many partitions). SKIP (77) without a GPU build or a CUDA device.
+if(TARGET singlet_engine_gpu)
+    add_pileup_test(test_gpu_pileup_stream)
+    set_tests_properties(test_gpu_pileup_stream PROPERTIES SKIP_RETURN_CODE 77)
+    target_link_libraries(test_gpu_pileup_stream PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_pileup_stream PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
 # Solo's two-pass counting (read chunks, key buckets; e9::soloRunTwoPass) against the one-shot device path on synthetic reads, field by field.
 # Built where the GPU engine library exists (a pipeline build with a CUDA compiler); prints SKIP and exits 77 without a usable CUDA device.
 if(TARGET singlet_engine_gpu)
