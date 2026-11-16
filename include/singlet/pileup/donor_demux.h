@@ -2326,6 +2326,9 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                 const double var = std::max(1e-12, (s2 / cnt_m - mean * mean) * cnt_m / (cnt_m - 1.0));
                 z = mean / std::sqrt(var / (0.5 * cnt_m));   // cells are counted once per half
                 pass = mean > cfg.k_select_sep_min && z > cfg.k_select_sep_z;
+                if (std::getenv("SINGLET_DEMUX_GENODBG"))
+                    std::cerr << "[demux] llrdbg K=" << K << " round " << round << " comp " << m << " cells " << cnt_m / 2
+                              << " mean_llr " << mean << " z " << z << (pass ? " pass" : " FAIL") << "\n";
             }
             if (!pass && z < worst_z) { worst_z = z; worst = m; }
         }
