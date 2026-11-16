@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "python"))
 
 LQC = os.environ.get("LQC", "/mnt/projects/debruinz_project/debruinz/singlet/latent_qc")
 DATA, SCORES = f"{LQC}/dbl/data", f"{LQC}/dbl/scores"
-PKG = ("sdfl", "sdflc", "atlas_knn", "atlas_entropy")
+PKG = ("sdfl", "sdflc", "atlas_knn", "atlas_entropy", "scrub")
 
 
 def load_counts(name):
@@ -61,6 +61,7 @@ def _rss_mb():
 def cmd_feats(a):
     from singlet.features import doublet as D
     from singlet.features import doublet_atlas as DA
+    from singlet.features import doublet_scrub as DSC
     from singlet.features import doublet_sdfl as DS
 
     enc = DA.Atlas.load()
@@ -74,8 +75,10 @@ def cmd_feats(a):
         w1, c1 = time.perf_counter(), time.process_time()
         F.update(DS.score(X, ("a", "c")))
         w2, c2 = time.perf_counter(), time.process_time()
+        F["scrub"] = DSC.score(X)
+        w3, c3 = time.perf_counter(), time.process_time()
         cost[n] = dict(n_cells=int(X.shape[0]), atlas_wall=round(w1 - w0, 2), atlas_cpu=round(c1 - c0, 2),
-                       sdfl_wall=round(w2 - w1, 2), sdfl_cpu=round(c2 - c1, 2))
+                       sdfl_wall=round(w2 - w1, 2), sdfl_cpu=round(c2 - c1, 2), scrub_wall=round(w3 - w2, 2), scrub_cpu=round(c3 - c2, 2))
         np.savez(out / f"{n}.npz", **{m: np.asarray(F[m]) for m in PKG})
         print(n, cost[n], flush=True)
     (out / "cost.json").write_text(json.dumps(cost, indent=1))

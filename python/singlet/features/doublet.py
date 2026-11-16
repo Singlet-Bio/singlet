@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
 """Feature set ``doublet``: ``doublet/score_v2``, a frozen cross-study stacker of doublet evidence (docs/cell_features.md section 8).
 
-Per sample, seven within-sample rank-normalised inputs (``rank / n`` of each, over the sample's called cells)::
+Per sample, eight within-sample rank-normalised inputs (``rank / n`` of each, over the sample's called cells)::
 
     umi           log1p total counts          genes       log1p detected genes
     prod          the engine's doublet score (``doublet_scores.tsv`` of the run directory, column doublet_score)
     sdfl, sdflc   artificial-doublet scorers without R (doublet_sdfl.py), linear in cells
     atlas_knn, atlas_entropy   features of a 0.5 MB encoder distilled from the atlas cell type network (doublet_atlas.py)
+    scrub          the Scrublet score (doublet_scrub.py, a port of Scrublet, MIT)
 
-feed a ``HistGradientBoostingClassifier`` (max_iter 300, learning_rate 0.05, max_leaf_nodes 15, l2 1.0, random_state 0) trained once
+feed a ``HistGradientBoostingClassifier`` (max_iter 100, learning_rate 0.05, max_leaf_nodes 6, l2 20.0, random_state 0) trained once
 on the 17 real-label datasets (genotype, hashtag, MULTI-seq and species doublets), each dataset weighted equally, on the inputs as
 this package computes them. The score is the predicted probability (float32 in [0, 1], higher = more doublet-like).
 
@@ -32,9 +33,9 @@ from .registry import Feature
 
 FEATURE_SET = "doublet"
 SCORE_VERSION = "v2"
-INPUTS = ("umi", "genes", "prod", "sdfl", "sdflc", "atlas_knn", "atlas_entropy")
+INPUTS = ("umi", "genes", "prod", "sdfl", "sdflc", "atlas_knn", "atlas_entropy", "scrub")
 HGB_PARAMS = dict(
-    max_iter=300, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=0
+    max_iter=100, learning_rate=0.05, max_leaf_nodes=6, l2_regularization=20.0, random_state=0
 )
 MIN_CELLS = (
     200  # fewer called cells: no score (k-means, PCA and the neighbour features need a population)
@@ -242,7 +243,7 @@ def method_version() -> str:
 
     m = stacker().meta
     return (
-        f"singlet-features={__version__};doublet=score_{SCORE_VERSION};stacker=hgb300/{m['content_hash'][:8]}"
+        f"singlet-features={__version__};doublet=score_{SCORE_VERSION};stacker=hgb100/{m['content_hash'][:8]}"
         f"(sklearn {m['sklearn_version_trained']});inputs={','.join(INPUTS)};encoder={atlas().content_hash()[:8]};"
         f"atlas=ref{DA.REF_CAP}x{DA.SIM_RATIO},k{DA.K_MULT};sdfl=a,c/cap{DS.FAST.cap};min_cells={MIN_CELLS}"
     )
@@ -257,8 +258,8 @@ def features() -> List[Feature]:
             label="Doublet score (v2)",
             description=(
                 "Probability from a frozen cross-study stacker (gradient-boosted trees, trained on 17 real-label datasets) of "
-                "the within-sample ranks of the engine's doublet score, depth, genes, two atlas-encoder features and two "
-                "artificial-doublet scorers; higher = more doublet-like. A within-sample ranking, not a calibrated doublet "
+                "the within-sample ranks of the engine's doublet score, depth, genes, two atlas-encoder features, two "
+                "artificial-doublet scorers and the Scrublet score; higher = more doublet-like. A within-sample ranking, not a calibrated doublet "
                 "rate. For single-donor samples; genotype doublets of pooled donors are authoritative."
             ),
             method="stacked-hgb-rank",
@@ -309,7 +310,8 @@ def compute_inputs(
     *,
     timings: Optional[dict] = None,
 ) -> Dict[str, np.ndarray]:
-    """The seven raw inputs of one sample (numpy / scipy / scikit-learn only)."""
+    """The eight raw inputs of one sample (numpy / scipy / scikit-learn only)."""
+    from . import doublet_scrub as DSC
     from . import doublet_sdfl as DS
 
     enc = atlas()
@@ -325,11 +327,15 @@ def compute_inputs(
     F.update(DS.score(X, ("a", "c")))
     if timings is not None:
         timings["sdfl_s"] = time.perf_counter() - t
+    t = time.perf_counter()
+    F["scrub"] = DSC.score(X)
+    if timings is not None:
+        timings["scrub_s"] = time.perf_counter() - t
     return F
 
 
 def score_inputs(F: Dict[str, np.ndarray]) -> np.ndarray:
-    """Stacker score from the seven raw inputs of one sample (cells with a non-finite input get NaN)."""
+    """Stacker score from the eight raw inputs of one sample (cells with a non-finite input get NaN)."""
     n = len(F["umi"])
     out = np.full(n, np.nan, np.float32)
     ok = np.ones(n, bool)
@@ -344,7 +350,7 @@ def score_inputs(F: Dict[str, np.ndarray]) -> np.ndarray:
 def score_sample(sample, *, timings: Optional[dict] = None):
     """Score one sample (a SampleInput-like object with ``X``, ``gene_names``, ``gene_ids``, ``species`` and the engine's
     per-cell doublet score as ``prod_doublet_score``, aligned to the rows of ``X``). Returns ``(values, extra)`` where
-    ``values = {"score_v2": float32 array}`` and ``extra`` holds the seven inputs (diagnostics, never written to a sidecar)."""
+    ``values = {"score_v2": float32 array}`` and ``extra`` holds the eight inputs (diagnostics, never written to a sidecar)."""
     X = sp.csr_matrix(sample.X, dtype=np.float32)
     n = X.shape[0]
     prod = getattr(sample, "prod_doublet_score", None)

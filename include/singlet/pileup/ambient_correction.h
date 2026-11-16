@@ -200,8 +200,10 @@ struct AmbientDecontConfig {
                                         ///< libraries: 0.61 and 0.70 on nuclei2k_v2 and the Gaublomme library, against <= 0.33 on seven cell libraries),
                                         ///< the soup cannot be told from native expression (the pool is nuclear debris: rho 12x too high on Xist
                                         ///< truth, 25% of every nucleus's UMIs removed), so no estimate is made: rho NA, corrected = raw. 0 = off
-    double   low_depth_frac = 0.1;      ///< cells below this fraction of the median depth (the ambient-like barcodes a
-                                        ///< permissive cell caller keeps) are kept out of clustering and cluster statistics
+    double   low_depth_frac = 0.3;      ///< cells below this fraction of the median depth (the ambient-like barcodes a
+                                        ///< permissive cell caller keeps) are kept out of clustering and cluster statistics. 0.1 until D-163:
+                                        ///< the shallow third of hgmm1k_v3 formed its own inflated clusters (low-depth bias 0.41 against truth,
+                                        ///< 0.06 at 0.3; hgmm1k_v2 0.20 to 0.11; 0.25 gives 0.21 and 0.4 gives 0.00, so the gain is not a knife edge above 0.3)
     uint32_t cell_iters       = 30;     ///< per-cell EM iterations
     uint32_t threads          = 0;      ///< 0 = hardware_concurrency (results do not depend on it)
 };
