@@ -2225,8 +2225,7 @@ static void genotype_same_pairs(const AlleleTables& T, const DonorDemuxConfig& c
             }
             if (std::getenv("SINGLET_DEMUX_GENODBG"))
                 std::cerr << "[demux] genodbg K=" << K << " pair " << a << "," << b << " typed " << typed << " diff " << diff
-                          << " both_hom " << both_hom << " opp_hom " << opp_hom << "
-";
+                          << " both_hom " << both_hom << " opp_hom " << opp_hom << "\n";
             if (typed < cfg.k_select_geno_dist_sites) continue;
             const double d = static_cast<double>(diff) / typed;
             if (dist_out) (*dist_out)[static_cast<size_t>(a) * K + b] = d;
