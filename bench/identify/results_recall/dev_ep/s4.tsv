@@ -1,0 +1,14 @@
+id	verdict	protocol	protocol_tag	action	top_family	top_support	spots	route	bytes	seconds	ambiguous_with	error	barcode_source	hint_used
+GSM5472074	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	5.96954			reads	0
+GSM6430151	multiome_gex	10x-arc-gex	10x-arc-gex	process	multiome_gex	0.94198	200000	sra	-1	5.47656			reads	0
+GSM7336426	droplet_5p	10x-5p-v2	10x-5p-v2	process	droplet_5p	0.77236	200000	sra	-1	3.53121			reads	0
+SRS5091285	droplet_3p	10x-3p-v2	10x-3p-v2	process	droplet_3p	0.98244	66082	endpoint:bam	8388608	3.9542			bam_tags	0
+GSM5341104	droplet_3p	10x-3p-v2	10x-3p-v2	process	droplet_3p	0.9716	200000	sra	-1	3.47162			reads	0
+mereu_Dropseq_N701	droplet_other	dropseq-like	dropseq	defer	droplet_other	0.8	200000	sra	-1	5.97123			reads	0
+mereu_QUARTZseq_P5S8	plate_barcoded	quartzseq2	quartzseq2	defer	plate_barcoded	0.85	200000	sra	-1	2.84862			reads	0
+mereu_inDrop_SP021_024015	droplet_other	indrop	indrop	process	droplet_other	0.819923	200000	sra	-1	3.28462			reads	0
+ding_Cortex2_bulk	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	5.04001			reads	0
+ding_PBMC1.011719V3_10X_B	droplet_3p	10x-3p-v3	10x-3p-v3	process	droplet_3p	0.97968	200000	sra	-1	73.3166			reads	0
+feat_SRR8281308	feature_barcode	10x-3p-v2	cite-adt	classify_only	feature_barcode	0.933945	200000	sra	-1	8.21924			reads	0
+visium_V1_Mouse_Brain_Sagittal_Anterior	visium	10x-visium	10x-visium	process	visium	0.97052	200000	fastq	16384000	1.22002			reads	0
+multiome_gex_pbmc_10k	multiome_gex	10x-arc-gex	10x-arc-gex	process	multiome_gex	0.95484	200000	fastq	15138816	0.307232			reads	0

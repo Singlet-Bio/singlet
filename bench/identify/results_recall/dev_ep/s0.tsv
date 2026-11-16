@@ -1,0 +1,13 @@
+id	verdict	protocol	protocol_tag	action	top_family	top_support	spots	route	bytes	seconds	ambiguous_with	error	barcode_source	hint_used
+GSM5704176	barcode_read_missing	tag-3p		defer	barcode_read_missing	0.85	200000	sra	-1	2.97965			reads	0
+GSM6564302	bulk_rna	bulk	generic-negative	defer	bulk_rna	0.31	200000	sra	-1	52.4158			reads	1
+GSM8158578	rna_no_barcode	undetermined		defer	rna_no_barcode	0.6	200000	sra	-1	4.54697			reads	0
+SRS5091328	droplet_3p	10x-3p-v2	10x-3p-v2	process	droplet_3p	0.965994	41199	endpoint:bam	8388608	3.63989			bam_tags	0
+mereu_10XV3_AN4492	droplet_3p	10x-3p-v3	10x-3p-v3	process	droplet_3p	0.96988	200000	sra	-1	3.18628			reads	0
+mereu_ICELL8_SP021_022	plate_barcoded	icell8	icell8	defer	plate_barcoded	0.916836	200000	sra	-1	6.78597			reads	0
+mereu_SCRBseq_N703	plate_barcoded	marsseq2	marsseq2	defer	plate_barcoded	0.65	200000	sra	-1	2.16448			reads	0
+ding_Mixture2.SM2_103117p3_C1	smartseq	smartseq2-like	smartseq2	defer	smartseq	0.31	200000	sra	-1	3.54602			reads	0
+ding_PBMC2.SeqWell_S3_2	droplet_other	dropseq-like	dropseq	defer	droplet_other	0.8	200000	sra	-1	26.0819			reads	0
+ding_Cortex2.DroNcSeq_3A	droplet_other	dropseq-like	dropseq	defer	droplet_other	0.8	200000	sra	-1	23.404			reads	0
+feat_SRR9159911	feature_barcode	10x-5p-v2	cite-adt	classify_only	feature_barcode	0.936263	200000	sra	-1	5.40282			reads	0
+atac_pbmc_5k_nextgem	atac	10x-atac	scatac	classify_only	atac	0.9837	200000	fastq	17629184	0.370157			reads	0

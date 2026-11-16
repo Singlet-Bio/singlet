@@ -1,0 +1,3 @@
+id	verdict	protocol	protocol_tag	action	top_family	top_support	spots	route	bytes	seconds	ambiguous_with	error	barcode_source	hint_used
+SRS5091328	droplet_3p	10x-3p-v2	10x-3p-v2	process	droplet_3p	0.965994	41199	endpoint:bam	8388608	3.80418			bam_tags	0
+kang_C	droplet_3p	10x-3p-v1	10x-3p-v1	process	droplet_3p	0.982977	49639	endpoint:bam	8388608	3.57826			bam_tags	0
