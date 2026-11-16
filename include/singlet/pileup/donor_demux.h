@@ -73,6 +73,11 @@ struct DonorDemuxConfig {
     double k_select_sep_min = 1.0;     // ... and the mean log-lik ratio per cell must exceed this (nats)
     double k_select_z = 4.0;           // more donors are accepted only if held-out log-lik improves, paired z above this
     double k_select_min_gain = 200.0;  // ... and by at least this many nats in total (about 10 cells' worth of a donor)
+    // Genotype-distance check (after vireo's donor_select, mode "distance"): two components whose genotypes agree at nearly
+    // every well-covered SNP are one donor in two cell states (allelic expression and ambient differ by state), not two donors.
+    // Unrelated donors disagree at about 30% of covered SNPs, so the cut sits far below that. 0 turns the check off.
+    double k_select_geno_dist_min = 0.10; // components closer than this (fraction of discordant SNP classes) are merged
+    int    k_select_geno_dist_sites = 200; // ... judged only when at least this many SNPs are confidently typed in both
     int   k_select_patience = 3;       // stop after this many consecutive K without more distinct donors
     // ── Single-donor screen (auto-K only) ──────────────────────────────────
     // Before the full K search, test K=1 against K=2 on a small subsample. When K=1 wins the
@@ -2192,6 +2197,38 @@ struct KSelectRow {
     double seconds = 0.0;
 };
 
+// Pairs of components with the same genotypes. The posterior allele fraction F of each donor at each SNP is classed hom-ref
+// (< 0.15), het (0.35..0.65) or hom-alt (> 0.85); SNPs whose class is unclear in either donor (thin coverage) are skipped. The
+// distance is the fraction of the remaining SNPs where the classes differ (vireo's donor_select uses the mean absolute
+// difference of the genotype posteriors in the same role). Fewer than cfg.k_select_geno_dist_sites typed SNPs: no verdict.
+static void genotype_same_pairs(const AlleleTables& T, const DonorDemuxConfig& cfg,
+                                std::vector<char>& same, std::vector<double>* dist_out = nullptr)
+{
+    const int K = T.K, ns = T.ns;
+    same.assign(static_cast<size_t>(K) * K, 0);
+    if (dist_out) dist_out->assign(static_cast<size_t>(K) * K, -1.0);
+    if (cfg.k_select_geno_dist_min <= 0.0) return;
+    std::vector<signed char> cls(static_cast<size_t>(ns) * K);
+    for (size_t i = 0; i < cls.size(); ++i) {
+        const float f = T.F[i];
+        cls[i] = f < 0.15f ? 0 : f > 0.85f ? 2 : (f > 0.35f && f < 0.65f) ? 1 : -1;
+    }
+    for (int a = 0; a < K; ++a)
+        for (int b = a + 1; b < K; ++b) {
+            long typed = 0, diff = 0;
+            for (int j = 0; j < ns; ++j) {
+                const int ca = cls[static_cast<size_t>(j) * K + a], cb = cls[static_cast<size_t>(j) * K + b];
+                if (ca < 0 || cb < 0) continue;
+                ++typed;
+                diff += ca != cb;
+            }
+            if (typed < cfg.k_select_geno_dist_sites) continue;
+            const double d = static_cast<double>(diff) / typed;
+            if (dist_out) (*dist_out)[static_cast<size_t>(a) * K + b] = d;
+            if (d < cfg.k_select_geno_dist_min) same[static_cast<size_t>(a) * K + b] = 1;
+        }
+}
+
 // Number of components of a K-model that are real, distinct donors, judged on held-out cells.
 // half_ll[((2i + h) * W) + x] (W = K + K(K-1)/2): log-lik of cell i from its even (h=0) / odd
 // (h=1) observations under hypothesis x = single donor k, or donor pair (a<b) in row-major order.
@@ -2205,7 +2242,8 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                                   const std::vector<double>& lps,
                                   const std::vector<double>& lpp,
                                   const DonorDemuxConfig& cfg,
-                                  std::vector<char>* alive_out = nullptr)
+                                  std::vector<char>* alive_out = nullptr,
+                                  const std::vector<char>* same_geno = nullptr)   // K*K: 1 = genotypes identical
 {
     PhaseScope ph_valid(kPhValid);
     const int npair = K * (K - 1) / 2;
@@ -2235,6 +2273,11 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                                static_cast<int>(std::ceil(cfg.min_donor_frac * n)));
     std::vector<char> alive(K, 1);
     for (int k = 0; k < K; ++k) alive[k] = cnt[k] >= min_n;
+    if (same_geno) {   // identical genotypes: keep the larger component, drop the other
+        for (int a = 0; a < K; ++a)
+            for (int b = a + 1; b < K; ++b)
+                if ((*same_geno)[static_cast<size_t>(a) * K + b] && alive[a] && alive[b]) alive[cnt[a] >= cnt[b] ? b : a] = 0;
+    }
 
     for (int round = 0; round < K; ++round) {
         int n_alive = 0;
@@ -2412,7 +2455,24 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             std::vector<float> half;
             score_cells(D[1 - f], test, T, lps, lpp, fcfg.threads, sc, nullptr, &half);
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
-            valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
+            std::vector<char> same_geno;
+            std::vector<double> gdist;
+            if (K >= 2) {
+                genotype_same_pairs(T, cfg, same_geno, &gdist);
+                double dmin = 2.0;
+                int nsame = 0;
+                for (int a = 0; a < K; ++a)
+                    for (int b = a + 1; b < K; ++b) {
+                        const double d = gdist[static_cast<size_t>(a) * K + b];
+                        if (d >= 0.0) dmin = std::min(dmin, d);
+                        nsame += same_geno[static_cast<size_t>(a) * K + b];
+                    }
+                std::cerr << "[demux] auto-K K=" << K << " fold " << f << ": closest genotype distance "
+                          << (dmin <= 1.0 ? dmin : -1.0) << ", pairs with identical genotypes " << nsame << "
+";
+            }
+            valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg, nullptr,
+                                                               same_geno.empty() ? nullptr : &same_geno);
         };
         if (kthreads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
