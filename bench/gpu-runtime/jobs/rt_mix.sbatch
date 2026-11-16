@@ -165,6 +165,10 @@ echo "  per sample: n items, pairs/item, item wall mean/min/max (s), core-s mean
 awk -F'\t' 'NR==FNR{ it[$1" "$2]=$3; next } FNR>1{ match($4,/\/c[01]\.[0-9]+\//); k=substr($4,RSTART+2,RLENGTH-3); split(k,x,"."); s=it[x[1]" "x[2]]; if(s=="") s="?";
   n[s]++; w[s]+=$7; c[s]+=$10; pr[s]=$14; if(mn[s]==""||$7<mn[s]) mn[s]=$7; if($7>mxw[s]) mxw[s]=$7; if($11>rs[s]) rs[s]=$11; if($12==0) ok[s]++ }
   END{ for(s in n) printf "  SAMPLE %-14s n=%-3d pairs=%7.1fM wall mean %5.0f min %5.0f max %5.0f core_s %7.0f core_s/Mpair %5.2f rss %5.1f ok=%d/%d\n", s,n[s],pr[s]/1e6,w[s]/n[s],mn[s],mxw[s],c[s]/n[s],c[s]/n[s]/(pr[s]/1e6),rs[s],ok[s],n[s] }' $A/items.tsv $A/samples.all | sort | tee -a $R
+# per depth class (pairs per item: shallow < 200M, mid 200M to < 600M, deep >= 600M): the rate the node would have if it ran only that class at
+# this concurrency (2 GPUs x K items in flight: pairs / (sum of item walls / (2K))), item wall and core-s per item and per Mpair
+awk -F'\t' -v k=$K 'FNR>1{ c=($14<200e6?"shallow":($14<600e6?"mid":"deep")); n[c]++; p[c]+=$14; w[c]+=$7; cs[c]+=$10; tp+=$14 }
+  END{ for(c in n) printf "  CLASS %-8s items=%-3d pairs=%8.1fM (%4.1f%% of pairs) item wall mean %5.0f s, core-s per item %6.0f, core-s/Mpair %5.2f, implied node rate at 2xK=%d in flight %6.2f Mpairs/s (pairs/item-wall %.3f Mpairs/s per item)\n", c,n[c],p[c]/1e6,100*p[c]/tp,w[c]/n[c],cs[c]/n[c],cs[c]/(p[c]/1e6),2*k,2*k*p[c]/1e6/w[c],p[c]/1e6/w[c] }' $A/samples.all | sort -r | tee -a $R
 # widen / unified memory / fallback lines of the items' logs (star_Log.out), per sample
 for d in 0 1; do for ((j = 0; j < ${nj[$d]}; j++)); do f=$A/flags.c$d.$j.log; [ -s $f ] && echo "$(awk -F'\t' -v d=$d -v j=$j '$1==d&&$2==j{print $3}' $A/items.tsv) c$d.$j $(wc -l < $f)"; done; done > $A/flags.items
 echo "  flag lines (widen|unified memory|managed|fallback|OOM|cudaMalloc) in item logs: $(awk '{s+=$3} END{print s+0}' $A/flags.items) in $(wc -l < $A/flags.items) items" | tee -a $R
