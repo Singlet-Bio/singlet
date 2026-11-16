@@ -12,6 +12,8 @@ BINNAME=${BINNAME:-rel138-e0824b21}; S=${S:-d300_3p}; K=${K:-4}; T=${T:-6}; N=${
 BIN=${BIN:-$W/jobs/gpu-pr2/bin2/$BINNAME/singlet-gpu}; GD=$REF/GRCh38-2024-A; NCPU=$(nproc); MEMSTOP=${MEMSTOP:-660}; LIM=${LIM:-4500}
 O=$W/jobs/gpu-runtime/results/rt-node-$SLURM_JOB_ID-$TAG; A=$O; mkdir -p $O; SCR=/tmp/$USER-rtnode-$SLURM_JOB_ID; mkdir -p $SCR/data $SCR/run
 R=$O/results.txt; T0JOB=$(date +%s)
+# node state at start (runs 815809/815810, 815871/815872 were disturbed by memory outside the job): MemFree, shmem, /dev/shm and /tmp use
+{ echo "node at start: $(hostname) $(awk '/MemFree|^Shmem:|^Cached:/{printf "%s %d GB; ", $1, $2/1048576}' /proc/meminfo)"; df -h /dev/shm /tmp 2>/dev/null | awk 'NR>1{printf "  %s used %s of %s\n", $6, $3, $2}'; } > $O/node_start.txt
 export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=3600 SINGLET_REF_BASE=$REF PATH=$W/envs/pbench/bin:$PATH SINGLET_ALLSITE_TIMING=1
 export SINGLET_GPU_PILEUP=on SINGLET_ENGINE_GPU_E2E=5 SINGLET_ENGINE_GPU_INGEST=1 SINGLET_ENGINE_GPU_MIN_CC=70
 export SINGLET_GPU_SHARED_INDEX=1 SINGLET_ENGINE_GPU_SLOTS=$SLOTS SINGLET_ENGINE_GPU_MEM_GB=$MEMGB
