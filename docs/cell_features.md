@@ -182,17 +182,18 @@ libraries (the modalities vocabulary marks them; most atlas samples have none):
 
 ## 8. `doublet/score_v2`: a frozen cross-study doublet stacker (numpy model, 0.6 MB)
 
-Code `python/singlet/features/doublet.py` (+ `doublet_atlas.py`, `doublet_sdfl.py`, `doublet_util.py`), model in the package
+Code `python/singlet/features/doublet.py` (+ `doublet_atlas.py`, `doublet_sdfl.py`, `doublet_scrub.py`, `doublet_util.py`), model in the package
 (`data/doublet_v2_stacker.{npz,json}`, `data/doublet_v2_encoder.npz`; 615 KB together), jobs `scripts/doublet_v2.py` +
 `scripts/doublet_v2.sbatch`, encoder build `scripts/doublet_encoder_select.py` + `scripts/doublet_encoder_distill.py` (build time
 only, needs torch and the cell type network), tests `tests/python/test_doublet_v2.py`. Study and recipe: `docs/latent-doublet-ambient.md`
 (branch study/latent-qc) and `bench/expression_sota/doublets/` (branch claude/expression-sota-31cf6d). No R, no torch, nothing to
 download: numpy, scipy and scikit-learn (the stacker itself is evaluated in numpy).
 
-**Accuracy in one sentence: a statistical tie with scDblFinder, at a small size.** Leave-one-study-out mean AUPRC over the 17
-real-label datasets is 0.5537 against 0.5587 for scDblFinder: difference -0.0050, 95% CI [-0.022, +0.011] over datasets and
-[-0.033, +0.005] clustered by study. It is 0.017 below the earlier stacker that calls the 77 MB cell type network (0.5707), and 0.011
-above a stacker without any atlas feature (0.5430).
+**Accuracy in one sentence: a statistical tie with scDblFinder, at a small size.** Since D-163 the stacker takes the Scrublet score
+(`doublet_scrub.py`, a port of Scrublet) as an eighth input and is a smaller model (100 trees, 6 leaves, l2 20). Leave-one-study-out mean
+AUPRC over the 17 real-label datasets is 0.5634 against 0.5587 for scDblFinder: difference +0.0047, 95% CI [-0.0085, +0.019] over
+datasets and [-0.0134, +0.0112] clustered by study (before: 0.5537, -0.0050, [-0.022, +0.011], [-0.0326, +0.0047]). The development
+lower bound is still below the -0.01 enforcement margin; the held-out libraries are not rescored here. `bench/calls-sota/doublets/`.
 
 **What is written.** Feature set `doublet`, one feature `doublet/score_v2` (float32 in [0, 1], higher = more doublet-like; NaN = not
 computed), one row per called cell sorted by `col`, through the same writer, guard and registry as the sets above (`comparable =

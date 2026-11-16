@@ -1,5 +1,5 @@
 {
- "content_hash": "54bd13abb9b179d289a63723b8f672a90c23d4d1ac2fcc005bb33e07fe4cddc9",
+ "content_hash": "ed5850096caeaf585662d12a521e1cf09c78d509be7a70d4f5cac7830db6a7f9",
  "encoder_content_hash": "8ecf307b17413d5c9a760ed996791cb688e5cc81a26609c1f50b10da60955ea1",
  "feature_order": [
   "umi",
@@ -8,13 +8,14 @@
   "sdfl",
   "sdflc",
   "atlas_knn",
-  "atlas_entropy"
+  "atlas_entropy",
+  "scrub"
  ],
  "hgb_params": {
-  "l2_regularization": 1.0,
+  "l2_regularization": 20.0,
   "learning_rate": 0.05,
-  "max_iter": 300,
-  "max_leaf_nodes": 15,
+  "max_iter": 100,
+  "max_leaf_nodes": 6,
   "random_state": 0
  },
  "n_train_cells": 181976,
