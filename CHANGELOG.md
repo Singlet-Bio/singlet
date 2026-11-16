@@ -2,7 +2,7 @@
 
 All notable changes to the singlet project.
 
-## [Unreleased] — single-donor libraries are no longer split into several donors
+## [Unreleased] â€” single-donor libraries are no longer split into several donors
 
 Auto-K in the donor demultiplexer now merges components whose genotypes agree. Two components are one donor when fewer than
 10% of their confidently typed SNPs (at least 200) differ in genotype class, the role of vireo's donor_select distance. A T-cell
