@@ -670,26 +670,6 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
         info.seconds = cli_detail::now_s() - t0;
         push_ep("ena_fastq_ftp", sp, info);
     }
-    {   // ENA submitted_ftp
-        SourceInfo info;
-        std::vector<HeadSpot> sp;
-        const auto urls = ena_submitted(acc);
-        const double t0 = cli_detail::now_s();
-        bool was_bam = false;
-        if (urls.empty()) info.error = "ENA lists no submitted files";
-        else if (std::any_of(urls.begin(), urls.end(), [](const std::string& u) { return cli_detail::looks_like_bam_url(u); })) {
-            const std::string bu = *std::find_if(urls.begin(), urls.end(), [](const std::string& u) { return cli_detail::looks_like_bam_url(u); });
-            auto ev = std::make_shared<bam::Evidence>();
-            BamCtx bc{&lists, &opt, ev.get()};
-            head_bam_ranged(bu, n, sp, info, &bc);
-            push_bam("ena_submitted_ftp", bu, sp, info, ev);
-            was_bam = true;
-        } else { std::vector<std::string> g; for (const auto& u : urls) if (u.size() < 4 || u.compare(u.size() - 4, 4, ".bai") != 0) g.push_back(u); std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
-        if (!was_bam) {
-            info.seconds = cli_detail::now_s() - t0;
-            push_ep("ena_submitted_ftp", sp, info);
-        }
-    }
     {   // SRA original-format objects (SDL locate service)
         const auto files = sdl_original_files(acc);
         if (files.empty()) {
@@ -722,6 +702,34 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
             info.seconds = cli_detail::now_s() - t0;
             push_ep("sra_original:fastq(" + std::to_string(fq.size()) + " files)", sp, info);
         }
+    }
+    {   // ENA submitted_ftp: skipped when the NCBI S3 copy above already gave a usable BAM head (3.6 to 3.9 s against 92 to 175 s over ENA FTP)
+        if (bam_best && !bam_best->spots.empty()) {
+            EndpointRec e;
+            e.name = "ena_submitted_ftp";
+            e.note = "not read: the NCBI S3 copy of the original BAM already gave a usable head";
+            out.push_back(e);
+        } else
+        {
+        SourceInfo info;
+        std::vector<HeadSpot> sp;
+        const auto urls = ena_submitted(acc);
+        const double t0 = cli_detail::now_s();
+        bool was_bam = false;
+        if (urls.empty()) info.error = "ENA lists no submitted files";
+        else if (std::any_of(urls.begin(), urls.end(), [](const std::string& u) { return cli_detail::looks_like_bam_url(u); })) {
+            const std::string bu = *std::find_if(urls.begin(), urls.end(), [](const std::string& u) { return cli_detail::looks_like_bam_url(u); });
+            auto ev = std::make_shared<bam::Evidence>();
+            BamCtx bc{&lists, &opt, ev.get()};
+            head_bam_ranged(bu, n, sp, info, &bc);
+            push_bam("ena_submitted_ftp", bu, sp, info, ev);
+            was_bam = true;
+        } else { std::vector<std::string> g; for (const auto& u : urls) if (u.size() < 4 || u.compare(u.size() - 4, 4, ".bai") != 0) g.push_back(u); std::sort(g.begin(), g.end()); if (g.size() > 4) g.resize(4); head_fastq_segments(g, n, sp, info); }
+        if (!was_bam) {
+            info.seconds = cli_detail::now_s() - t0;
+            push_ep("ena_submitted_ftp", sp, info);
+        }
+    }
     }
     return out;
 }
