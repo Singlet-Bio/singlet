@@ -7,6 +7,7 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -191,6 +192,20 @@ inline bool noinitHugepage() {
     static const bool on = [] { const char* e = std::getenv("SINGLET_NOINIT_HUGEPAGE"); return !(e && e[0] == '0'); }();
     return on;
 }
+// rt/hostmem (SINGLET_THP_MINFREE_GB, default 48, 0 = always ask): a huge-page request (MADV_HUGEPAGE) makes the faulting thread compact memory
+// itself when no 2 MB block is free (THP defrag = madvise). On a node whose free memory is gone (file cache of other tenants, pinned pages) that
+// was the livelock of 815877, 816398, 816401 (system time 30x user time, compaction stalls in the 100,000s). Below the free-memory floor an array
+// of 64 MB or more is allocated without the request: small pages, no compaction. Read once per large allocation (a few dozen per sample).
+inline bool thpFreeOk() {
+    static const double floorGb = [] { const char* e = std::getenv("SINGLET_THP_MINFREE_GB"); return (e && e[0]) ? std::atof(e) : 48.0; }();
+    if (floorGb <= 0) return true;
+    FILE* f = std::fopen("/proc/meminfo", "r");
+    if (f == nullptr) return true;
+    char l[128]; double kb = -1;
+    while (std::fgets(l, sizeof l, f)) if (std::strncmp(l, "MemFree:", 8) == 0) { kb = std::atof(l + 8); break; }
+    std::fclose(f);
+    return kb < 0 || kb / 1048576.0 >= floorGb;
+}
 template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U> struct rebind { using other = NoInitAlloc<U>; };
     NoInitAlloc() = default;
@@ -200,7 +215,7 @@ template <class T> struct NoInitAlloc : std::allocator<T> {
 #if defined(__linux__)
         const std::size_t b = n * sizeof(T);
         constexpr std::uintptr_t H = std::uintptr_t(2) << 20;
-        if (b >= (std::size_t(64) << 20) && noinitHugepage()) {
+        if (b >= (std::size_t(64) << 20) && noinitHugepage() && thpFreeOk()) {
             const std::uintptr_t a = (reinterpret_cast<std::uintptr_t>(p) + H - 1) & ~(H - 1), e = (reinterpret_cast<std::uintptr_t>(p) + b) & ~(H - 1);
             if (e > a) madvise(reinterpret_cast<void*>(a), e - a, MADV_HUGEPAGE);
         }
