@@ -125,6 +125,7 @@ static void apply_kv(singlet::DonorDemuxConfig& cfg, const std::string& k, const
     else if (k == "k_select_sep_z") cfg.k_select_sep_z = d;
     else if (k == "k_select_z") cfg.k_select_z = d;
     else if (k == "k_select_geno_dist_min") cfg.k_select_geno_dist_min = d;
+    else if (k == "k_select_exclude_mhc") cfg.k_select_exclude_mhc = i != 0;
     else if (k == "k_select_min_gain") cfg.k_select_min_gain = d;
     else if (k == "k_select_sep_min") cfg.k_select_sep_min = d;
     else if (k == "n_ward_inits") cfg.n_ward_inits = i;
