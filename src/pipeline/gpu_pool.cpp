@@ -647,7 +647,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     // rt/hostmem SINGLET_POOL_MEMADMIT (default on, =0 off): node-wide admission by a per-item host-memory estimate. The pools of a node (one per GPU)
     // publish, once a second, what their items in flight can still allocate (estimate minus what they hold) in /dev/shm/singlet-pool-mem-<job>-<uid>/<pid>;
     // the decision and the registration of a start are made under a flock, so two pools cannot both take the last room. An item starts when
-    //   free now (MemFree + SINGLET_POOL_CACHE_SHARE (0) of the file cache, which other tenants' load makes slow to reclaim)
+    //   free now (MemFree + SINGLET_POOL_CACHE_SHARE (0.25) of the file cache, which other tenants' load makes slow to reclaim)
     //   - what every pool's items can still allocate - the item's estimate - the estimate of a waiting item of another pool that waited longer
     //   >= SINGLET_POOL_MEM_RESERVE_GB (100).
     // Estimate (SINGLET_POOL_ITEM_GB overrides): 11.5 GB per GB of .1fq + 8: d300_3p (6.0 GB file) peaks at 77 GB private (planes, aux, region, per-read
@@ -656,7 +656,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     // (SINGLET_POOL_MEMADMIT_MAXWAIT_S, 1800): then it starts, with a log line. The page cache of an input is dropped when the item has decoded
     // it (SINGLET_POOL_DROP_INPUT_CACHE, default on) and, for the clean pages, at pool start.
     const bool memAdmit = env_num("SINGLET_POOL_MEMADMIT", 1) != 0;
-    const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0),
+    const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0.25),
                  memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 100), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
     const bool dropInput = env_num("SINGLET_POOL_DROP_INPUT_CACHE", 1) != 0;
     // SINGLET_POOL_SKIP_AHEAD (16, 0 = strict queue order): while the head of the queue waits for room, an item among the next 16 that fits starts instead,
