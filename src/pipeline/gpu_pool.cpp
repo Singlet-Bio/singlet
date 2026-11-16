@@ -639,15 +639,15 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
              sg ? fmt("killed by signal %d (%s)", sg, strsignal(sg)).c_str() : fmt("exit %d", ex).c_str(), r.t1 - r.t0, us + ss,
              ru.ru_maxrss / 1048576.0, pairs / 1e6, r.killed ? " (timed out)" : "");
     };
-    double lastStartAt = 0, lastSample = 0;
+    double lastStartAt = 0, lastSample = 0, lastStartEst = 0;   // lastStartEst: the estimate (GB) of the item started last: the stagger is for items of 50 GB and more
     bool admitNoted = false;
     const double sampPeriod = env_num("SINGLET_POOL_MEMSAMPLE", 0);
     FILE* msf = sampPeriod > 0 ? fopen((report + "/memsamp.tsv").c_str(), "a") : nullptr;
-    const double stagger = env_num("SINGLET_POOL_STAGGER_S", 0), memFloor = env_num("SINGLET_POOL_MEM_FLOOR_GB", 0), frontMax = env_num("SINGLET_POOL_FRONT_MAX", 0);
+    const double stagger = env_num("SINGLET_POOL_STAGGER_S", 40), memFloor = env_num("SINGLET_POOL_MEM_FLOOR_GB", 0), frontMax = env_num("SINGLET_POOL_FRONT_MAX", 0);
     // rt/hostmem SINGLET_POOL_MEMADMIT (default on, =0 off): node-wide admission by a per-item host-memory estimate. The pools of a node (one per GPU)
     // publish, once a second, what their items in flight can still allocate (estimate minus what they hold) in /dev/shm/singlet-pool-mem-<job>-<uid>/<pid>;
     // the decision and the registration of a start are made under a flock, so two pools cannot both take the last room. An item starts when
-    //   free now (MemFree + SINGLET_POOL_CACHE_SHARE (0.25) of the file cache, which other tenants' load makes slow to reclaim)
+    //   free now (MemFree + SINGLET_POOL_CACHE_SHARE (0) of the file cache, which other tenants' load makes slow to reclaim)
     //   - what every pool's items can still allocate - the item's estimate - the estimate of a waiting item of another pool that waited longer
     //   >= SINGLET_POOL_MEM_RESERVE_GB (100).
     // Estimate (SINGLET_POOL_ITEM_GB overrides): 11.5 GB per GB of .1fq + 8: d300_3p (6.0 GB file) peaks at 77 GB private (planes, aux, region, per-read
@@ -656,7 +656,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     // (SINGLET_POOL_MEMADMIT_MAXWAIT_S, 1800): then it starts, with a log line. The page cache of an input is dropped when the item has decoded
     // it (SINGLET_POOL_DROP_INPUT_CACHE, default on) and, for the clean pages, at pool start.
     const bool memAdmit = env_num("SINGLET_POOL_MEMADMIT", 1) != 0;
-    const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0.25),
+    const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0),
                  memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 100), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
     const bool dropInput = env_num("SINGLET_POOL_DROP_INPUT_CACHE", 1) != 0;
     // SINGLET_POOL_SKIP_AHEAD (16, 0 = strict queue order): while the head of the queue waits for room, an item among the next 16 that fits starts instead,
@@ -782,7 +782,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             // holding a device slot; the items beyond it are in their tail (CPU work, a third of the host memory), where an extra sample earns its place
             size_t front = 0;
             if (frontMax > 0) for (const Run& r : runs) if (r.pid > 0 && !r.done && r.front) ++front;
-            if (active > 0 && ((stagger > 0 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor) || (frontMax > 0 && front >= (size_t) frontMax))) {
+            if (active > 0 && ((stagger > 0 && lastStartEst >= 50 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor) || (frontMax > 0 && front >= (size_t) frontMax))) {
                 if (!admitNoted) { plog("admission: the next item waits (%zu in the front half of at most %.0f, stagger %.0f s, memory floor %.0f GB, available %.0f GB)", front, frontMax, stagger, memFloor, avail_gb()); admitNoted = true; }
                 break;
             }
@@ -814,7 +814,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                         if (pick < items.size()) {
                             plog("memory admission: item %d starts ahead of the waiting item %d (%.0f s)", items[pick].idx, items[next].idx, now - memWaitSince);
                             taken[pick] = 1;
-                            lastStartAt = wall_now();
+                            lastStartAt = wall_now(); lastStartEst = itemEst[items[pick].idx];
                             start(items[pick]);
                             continue;
                         }
@@ -825,7 +825,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 memWaitSince = 0; memWaitNoted = false;
             }
             admitNoted = false;
-            lastStartAt = wall_now();
+            lastStartAt = wall_now(); lastStartEst = itemEst[items[next].idx];
             taken[next] = 1;
             start(items[next]);
             while (next < items.size() && taken[next]) ++next;

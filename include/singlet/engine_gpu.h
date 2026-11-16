@@ -192,19 +192,37 @@ inline bool noinitHugepage() {
     static const bool on = [] { const char* e = std::getenv("SINGLET_NOINIT_HUGEPAGE"); return !(e && e[0] == '0'); }();
     return on;
 }
-// rt/hostmem (SINGLET_THP_MINFREE_GB, default 48, 0 = always ask): a huge-page request (MADV_HUGEPAGE) makes the faulting thread compact memory
-// itself when no 2 MB block is free (THP defrag = madvise). On a node whose free memory is gone (file cache of other tenants, pinned pages) that
-// was the livelock of 815877, 816398, 816401 (system time 30x user time, compaction stalls in the 100,000s). Below the free-memory floor an array
-// of 64 MB or more is allocated without the request: small pages, no compaction. Read once per large allocation (a few dozen per sample).
+// rt/hostmem (SINGLET_THP_POLICY: auto (default), on, off): a huge-page request (MADV_HUGEPAGE) makes the faulting thread compact memory itself
+// when no 2 MB block is free (THP defrag = madvise). On a node whose memory is full of other tenants' file cache that was the livelock of
+// 815877, 816398, 816401, 816549 and of the first 18 minutes of mix 816547 (memory pressure 95 %, 25 cores in the kernel, MemFree 100 GB);
+// the same mix start with the request left out (816710): pressure 0 %, no compaction stall, a fifth of the system time. auto: an array of 64 MB
+// or more is allocated without the request when MemFree is under SINGLET_THP_MINFREE_GB (48), or the file cache (Cached - Shmem) is over
+// SINGLET_THP_MAXCACHE_GB (200), or the memory pressure "full" avg10 is over 1 %. Read once per large allocation (a few dozen per sample).
 inline bool thpFreeOk() {
-    static const double floorGb = [] { const char* e = std::getenv("SINGLET_THP_MINFREE_GB"); return (e && e[0]) ? std::atof(e) : 48.0; }();
-    if (floorGb <= 0) return true;
-    FILE* f = std::fopen("/proc/meminfo", "r");
-    if (f == nullptr) return true;
-    char l[128]; double kb = -1;
-    while (std::fgets(l, sizeof l, f)) if (std::strncmp(l, "MemFree:", 8) == 0) { kb = std::atof(l + 8); break; }
-    std::fclose(f);
-    return kb < 0 || kb / 1048576.0 >= floorGb;
+    static const int policy = [] { const char* e = std::getenv("SINGLET_THP_POLICY"); return (e && std::strcmp(e, "on") == 0) ? 1 : (e && std::strcmp(e, "off") == 0) ? 2 : 0; }();
+    static const double minFree = [] { const char* e = std::getenv("SINGLET_THP_MINFREE_GB"); return (e && e[0]) ? std::atof(e) : 48.0; }();
+    static const double maxCache = [] { const char* e = std::getenv("SINGLET_THP_MAXCACHE_GB"); return (e && e[0]) ? std::atof(e) : 200.0; }();
+    if (policy == 1) return true;
+    if (policy == 2) return false;
+    char l[160];
+    if (FILE* f = std::fopen("/proc/meminfo", "r")) {
+        double freeKb = -1, cachedKb = 0, shmKb = 0;
+        while (std::fgets(l, sizeof l, f)) {
+            if (std::strncmp(l, "MemFree:", 8) == 0) freeKb = std::atof(l + 8);
+            else if (std::strncmp(l, "Cached:", 7) == 0) cachedKb = std::atof(l + 7);
+            else if (std::strncmp(l, "Shmem:", 6) == 0) shmKb = std::atof(l + 6);
+        }
+        std::fclose(f);
+        if (freeKb >= 0 && freeKb / 1048576.0 < minFree) return false;
+        if ((cachedKb - shmKb) / 1048576.0 > maxCache) return false;
+    }
+    if (FILE* f = std::fopen("/proc/pressure/memory", "r")) {
+        while (std::fgets(l, sizeof l, f)) {
+            if (std::strncmp(l, "full ", 5) == 0) { const char* a = std::strstr(l, "avg10="); if (a != nullptr && std::atof(a + 6) > 1.0) { std::fclose(f); return false; } }
+        }
+        std::fclose(f);
+    }
+    return true;
 }
 template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U> struct rebind { using other = NoInitAlloc<U>; };
