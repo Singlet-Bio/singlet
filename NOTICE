@@ -20,6 +20,12 @@ data/fusion/arriba/LICENSE: the chimeric table applies Arriba's blacklist (black
 scripts/fetch_arriba_blacklist.sh, not stored in git). Arriba and its database files are MIT-licensed, copyright Deutsches
 Krebsforschungszentrum and Sebastian Uhrig. Uhrig S et al., Genome Research 31:448-460 (2021), doi:10.1101/gr.257246.119.
 
+The donor demultiplexer (include/singlet/pileup/donor_demux.h) reimplements the variational Bayes binomial mixture and the
+genotype doublet model of vireo (Huang et al., Genome Biology 20:273, 2019, github.com/single-cell-genetics/vireo),
+Apache License 2.0. Vireo and souporcell (Heaton et al., Nature Methods 17:615-620, 2020, MIT License) take the number of
+donors as an input and have no rule for rejecting spurious clusters; the MHC guard of the auto-K search is Singlet's own and
+no souporcell code is used.
+
 Third-party code
 ----------------
 src/star/ is STAR 2.7.11b by Alexander Dobin (https://github.com/alexdobin/STAR), MIT license: src/star/LICENSE.STAR.

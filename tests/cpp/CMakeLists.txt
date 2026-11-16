@@ -303,6 +303,7 @@ add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
 add_pileup_test(test_demux_fixedpoint)   # exact fixed-point exit of the VB loop: bitwise equal to the full loop
 add_pileup_test(test_demux_autok_fast)   # fast auto-K path (progressive PCA, wider waves, pool) bitwise equal to the earlier path
+add_pileup_test(test_demux_mhc)   # the extended MHC is left out of the auto-K search
 add_pileup_test(test_donor_genotype_call)
 add_pileup_test(test_genotype_export)
 add_pileup_test(test_allsite)
