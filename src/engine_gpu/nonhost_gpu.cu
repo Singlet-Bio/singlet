@@ -510,7 +510,8 @@ struct FileId {
 bool zeroCopyOn() { const char* e = std::getenv("SINGLET_NONHOST_ZEROCOPY"); return e && e[0] == '1'; }
 // rt/xfer: SINGLET_NONHOST_OVERLAP (default on; =0 off): the device copy is made on a thread while the request's reads are received
 bool overlapOn() { const char* e = std::getenv("SINGLET_NONHOST_OVERLAP"); return !(e && e[0] == '0'); }
-struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; Entry* hd = nullptr; uint32_t* dir = nullptr; uint64_t dirN = 0; };
+struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; Entry* hd = nullptr; uint32_t* dir = nullptr; uint64_t dirN = 0;
+                   uint64_t mapLen = 0; bool peer = false; };   // mapLen: h is a page-locked mapping of the node's shared copy (share_acquire), not a cudaHostAlloc
 void read_pinned(const std::string& path, off_t base, uint64_t total, char* dst, int threads) {
     int fd = open(path.c_str(), O_RDONLY);
     if (fd < 0) throw "cannot open " + path;
@@ -525,15 +526,119 @@ void read_pinned(const std::string& path, off_t base, uint64_t total, char* dst,
         }
     });
     for (auto& x : th) x.join();
+    // rt/hostmem (SINGLET_NONHOST_DROPCACHE, default on, =0 off): the server keeps this copy for its life; the file's page cache (up to 25 GB for the
+    // three indexes, once per file however many pools) is dropped
+    { const char* dc = std::getenv("SINGLET_NONHOST_DROPCACHE"); if (!bad && !(dc && dc[0] == '0')) posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); }
     close(fd);
     if (bad) throw "read failed: " + path;
+}
+// rt/hostmem: one host copy of an index for every server of the node (SINGLET_NONHOST_SHARE, default on, =0 off). Each pool forks its own server,
+// and each held the three indexes (25 GB) in page-locked memory: 50 GB for two pools. The first server to need a file reads it into a memfd
+// (anonymous shared memory), then listens on a Unix socket named by the file's identity; the others connect, receive the memfd with SCM_RIGHTS, map
+// it and page-lock their mapping (cudaHostRegister), so the node holds one copy. A flock on a lock file per file serialises "look for a listener,
+// else load and listen". Any failure on the way: the caller's own cudaHostAlloc copy, as before. The bytes, the device copies and the answers
+// are the same.
+bool shareOn() { const char* e = std::getenv("SINGLET_NONHOST_SHARE"); return !(e && e[0] == '0'); }
+int memfd_new(const char* name) {
+#ifndef __NR_memfd_create
+#if defined(__x86_64__)
+#define __NR_memfd_create 319
+#elif defined(__aarch64__)
+#define __NR_memfd_create 279
+#endif
+#endif
+#ifdef __NR_memfd_create
+    return (int)syscall(__NR_memfd_create, name, 1u /* MFD_CLOEXEC */);
+#else
+    (void)name; return -1;
+#endif
+}
+// a memfd holding `total` bytes of `file` from `base` (this process's own, or a peer's); -1 on any failure. The caller closes the descriptor.
+int share_acquire(const std::string& file, off_t base, uint64_t total, int threads, const FileId& id, bool& peer) {
+    peer = false;
+    uint64_t h = 1469598103934665603ull;
+    auto mix = [&](const void* p, size_t n) { for (size_t i = 0; i < n; ++i) { h ^= ((const unsigned char*)p)[i]; h *= 1099511628211ull; } };
+    mix(file.data(), file.size()); mix(&id.dev, sizeof id.dev); mix(&id.ino, sizeof id.ino); mix(&id.size, sizeof id.size); mix(&id.mtime, sizeof id.mtime);
+    mix(&base, sizeof base); mix(&total, sizeof total);
+    char hx[32]; snprintf(hx, sizeof hx, "%016llx", (unsigned long long)h);
+    const std::string stem = "/tmp/singlet-nhshare-" + std::to_string((unsigned)getuid()) + "-" + hx, sp = stem + ".sock", lp = stem + ".lock";
+    struct sockaddr_un a{};
+    a.sun_family = AF_UNIX;
+    if (sp.size() >= sizeof a.sun_path) return -1;
+    strcpy(a.sun_path, sp.c_str());
+    const int lk = open(lp.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (lk < 0) return -1;
+    struct Unlock { int fd; ~Unlock() { flock(fd, LOCK_UN); close(fd); } } unlock{lk};
+    if (flock(lk, LOCK_EX) != 0) return -1;
+    {   // a listener: a peer already holds the file
+        const int c = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        if (c >= 0) {
+            struct timeval tv{60, 0};
+            setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+            int got = -1;
+            if (connect(c, (struct sockaddr*)&a, sizeof a) == 0) {
+                uint64_t sz = 0;
+                struct iovec iov = {&sz, sizeof sz};
+                char cb[CMSG_SPACE(sizeof(int))];
+                memset(cb, 0, sizeof cb);
+                struct msghdr m{};
+                m.msg_iov = &iov; m.msg_iovlen = 1; m.msg_control = cb; m.msg_controllen = sizeof cb;
+                if (recvmsg(c, &m, MSG_CMSG_CLOEXEC) == (ssize_t)sizeof sz && sz == total) {
+                    struct cmsghdr* cm = CMSG_FIRSTHDR(&m);
+                    if (cm && cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_RIGHTS) memcpy(&got, CMSG_DATA(cm), sizeof(int));
+                }
+                struct stat st{};
+                if (got >= 0 && (fstat(got, &st) != 0 || (uint64_t)st.st_size != total)) { close(got); got = -1; }
+            }
+            close(c);
+            if (got >= 0) { peer = true; return got; }
+        }
+    }
+    const int fd = memfd_new("singlet-nhidx");
+    if (fd < 0 || ftruncate(fd, (off_t)total) != 0) { if (fd >= 0) close(fd); return -1; }
+    void* mp = mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mp == MAP_FAILED) { close(fd); return -1; }
+    try { read_pinned(file, base, total, (char*)mp, threads); } catch (...) { munmap(mp, total); close(fd); return -1; }
+    munmap(mp, total);
+    const int ls = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (ls >= 0) {
+        unlink(sp.c_str());
+        if (bind(ls, (struct sockaddr*)&a, sizeof a) == 0 && listen(ls, 16) == 0) {
+            chmod(sp.c_str(), 0600);
+            const int sfd = dup(fd);
+            if (sfd >= 0) std::thread([ls, sfd, total]() {   // serves the memfd for the life of the process
+                for (;;) {
+                    const int c = accept4(ls, nullptr, nullptr, SOCK_CLOEXEC);
+                    if (c < 0) { if (errno == EINTR) continue; break; }
+                    uint64_t sz = total;
+                    struct iovec iov = {&sz, sizeof sz};
+                    char cb[CMSG_SPACE(sizeof(int))];
+                    memset(cb, 0, sizeof cb);
+                    struct msghdr m{};
+                    m.msg_iov = &iov; m.msg_iovlen = 1; m.msg_control = cb; m.msg_controllen = sizeof cb;
+                    struct cmsghdr* cm = CMSG_FIRSTHDR(&m);
+                    cm->cmsg_level = SOL_SOCKET; cm->cmsg_type = SCM_RIGHTS; cm->cmsg_len = CMSG_LEN(sizeof(int));
+                    memcpy(CMSG_DATA(cm), &sfd, sizeof(int));
+                    sendmsg(c, &m, MSG_NOSIGNAL);
+                    close(c);
+                }
+            }).detach();
+            else close(ls);
+        } else close(ls);
+    }
+    return fd;
 }
 struct Resident {
     HostIndex v, b, f;
     FileId bloomId; uint64_t nbits = 0, nw = 0; uint64_t* bloom = nullptr;
     bool ok = false; double seconds = 0; uint64_t bytes = 0;
     void clear() {
-        for (HostIndex* x : {&v, &b, &f}) { if (x->h) cudaFreeHost(x->h); if (x->dir) cudaFreeHost(x->dir); *x = HostIndex(); }
+        for (HostIndex* x : {&v, &b, &f}) {
+            if (x->h && x->mapLen) { cudaHostUnregister(x->h); munmap(x->h, x->mapLen); }
+            else if (x->h) cudaFreeHost(x->h);
+            if (x->dir) cudaFreeHost(x->dir);
+            *x = HostIndex();
+        }
         if (bloom) cudaFreeHost(bloom);
         bloom = nullptr; nbits = nw = 0; bloomId = FileId(); ok = false; bytes = 0;
     }
@@ -551,9 +656,25 @@ struct Resident {
             if (path.empty()) return;
             x.n = index_header(path, x.B);
             if (x.n == 0) return;
-            NH_CK(cudaHostAlloc((void**)&x.h, x.n * sizeof(Entry), zc ? cudaHostAllocMapped : cudaHostAllocDefault));
-            if (zc) NH_CK(cudaHostGetDevicePointer((void**)&x.hd, (void*)x.h, 0));
-            read_pinned(path, 32, x.n * sizeof(Entry), (char*)x.h, threads);
+            bool shared = false;
+            if (!zc && shareOn()) {   // rt/hostmem: the node's one copy (a peer server's memfd, or this one's own, served to the peers)
+                const uint64_t tot = x.n * sizeof(Entry);
+                int sfd = share_acquire(path, 32, tot, threads, x.id, x.peer);
+                if (sfd >= 0) {
+                    void* m = mmap(nullptr, tot, PROT_READ | PROT_WRITE, MAP_SHARED, sfd, 0);
+                    close(sfd);
+                    if (m != MAP_FAILED) {
+                        if (cudaHostRegister(m, tot, cudaHostRegisterDefault) == cudaSuccess) { x.h = (Entry*)m; x.mapLen = tot; shared = true; }
+                        else { cudaGetLastError(); munmap(m, tot); }
+                    }
+                }
+                if (!shared) fprintf(stderr, "[nhsrv] shared copy of %s not used: this server holds its own\n", path.c_str());
+            }
+            if (!shared) {
+                NH_CK(cudaHostAlloc((void**)&x.h, x.n * sizeof(Entry), zc ? cudaHostAllocMapped : cudaHostAllocDefault));
+                if (zc) NH_CK(cudaHostGetDevicePointer((void**)&x.hd, (void*)x.h, 0));
+                read_pinned(path, 32, x.n * sizeof(Entry), (char*)x.h, threads);
+            }
             bytes += x.n * sizeof(Entry);
         };
         one(p.viral, v); one(p.bacterial, b); one(p.fungal, f);

@@ -63,6 +63,22 @@ procsnap() {  # every 5 s, per process of the job's cgroup: pid ppid comm utime+
     sleep 5
   done >> $A/procs.snap
 }
+memsnap() {  # SMAPS=1: every ${SMAPS_EVERY:-20} s the cgroup's memory.stat and, per process above 4 GB RSS, its mappings above 1 GB (addr perms path rss pss anon, kB) and the rest summed
+  local p r
+  while :; do
+    { echo "S $(date +%s)"; echo "C $(awk '$1=="anon"||$1=="file"||$1=="shmem"||$1=="file_mapped"||$1=="kernel"||$1=="pagetables"||$1=="slab"||$1=="unevictable"{printf "%s=%.1f ", $1, $2/1073741824}' $CG/memory.stat)"
+      echo "M $(awk '/^(Shmem|Cached|Mapped|AnonPages|Mlocked|Unevictable|HugePages_Total|Hugepagesize):/{printf "%s%s ", $1, $2}' /proc/meminfo)"
+      for p in $(mypids); do
+        r=$(awk '/^VmRSS/{print $2}' /proc/$p/status 2>/dev/null); [ "${r:-0}" -gt 4000000 ] || continue
+        echo "P $p $(cat /proc/$p/comm) ppid=$(awk '/^PPid/{print $2}' /proc/$p/status) rss_kB=$r"
+        awk 'function fl() { if (hdr != "") { if (rss > 1048576) print "m", hdr, rss, pss, anon; else { oR += rss; oP += pss; oA += anon } } }
+             /^[0-9a-f]+-[0-9a-f]+ / { fl(); hdr = $1 " " $2 " " (NF >= 6 ? $6 : "-"); rss = pss = anon = 0; next }
+             /^Rss:/ { rss = $2 } /^Pss:/ { pss = $2 } /^Anonymous:/ { anon = $2 }
+             END { fl(); print "o", oR, oP, oA }' /proc/$p/smaps 2>/dev/null
+      done; } >> $A/smaps.agg
+    sleep ${SMAPS_EVERY:-20}
+  done
+}
 hashset() {  # out_dir -> per-file md5 list on stdout (the wave-4 set)
   local d=$1 f; for f in private/allsite/allele_delta.bin private/allsite/cells.tsv.gz private/allsite/sites.tsv.gz private/allsite/store.json \
       private/genotype/cells.vcf.gz private/genotype/cells_allsite.vcf.gz private/genotype/donors_allsite.vcf.gz star_Solo.out/Gene/raw/matrix.mtx \
@@ -88,6 +104,7 @@ echo "######## $TAG: 2 GPUs x K=$K in flight, T=$T, $N items per GPU, kill at ${
 nvidia-smi dmon -s pucm -d 1 -o DT > $A/dmon.txt 2>&1 &
 sampler & SMP=$!
 procsnap & PSN=$!
+[ "${SMAPS:-0}" = 1 ] && { memsnap & MSN=$!; }
 st=$(date +%s); pids=()
 for d in 0 1; do
   PRE=""; [ "${NUMA:-0}" = 1 ] && PRE="numactl --cpunodebind=$d --preferred=$d"   # NUMA=1: the pool of GPU d and its samples on NUMA node d (cores, and memory by preference)
@@ -107,9 +124,9 @@ while :; do
   sleep 5
 done
 wait "${pids[@]}" 2>/dev/null
-en=$(date +%s); sleep 2; kill $SMP $PSN 2>/dev/null; killmine TERM "nvidia-smi dmon"
+en=$(date +%s); sleep 2; kill $SMP $PSN ${MSN:-} 2>/dev/null; killmine TERM "nvidia-smi dmon"
 for d in 0 1; do for ((j = 0; j < N; j++)); do [ -e $A/reaped.c$d.$j ] || { : > $A/reaped.c$d.$j; reap $d $j & }; done; done
-for p in $(jobs -p); do [ "$p" = "$SMP" ] || [ "$p" = "$PSN" ] || wait $p 2>/dev/null; done
+for p in $(jobs -p); do [ "$p" = "$SMP" ] || [ "$p" = "$PSN" ] || [ "$p" = "${MSN:-}" ] || wait $p 2>/dev/null; done
 
 # ---------------------------------------------------------------- summary
 cat $A/pool0/samples.tsv > $A/samples.all 2>/dev/null; tail -n +2 $A/pool1/samples.tsv >> $A/samples.all 2>/dev/null
