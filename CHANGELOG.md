@@ -12,6 +12,13 @@ beside everything already in flight in the job; a sample larger than the job's b
 member equal 1.3.9. Each change has an environment switch whose `=0` restores the 1.3.9 path (`SINGLET_POOL_MEM_RULE=0` for the
 start rule).
 
+### Calls (D-163)
+
+Ambient: the shallow cells that stay out of the cluster fits are now those below 30% of the median depth (was 10%). On hgmm1k_v3 the
+lowest-depth-third bias against the cross-species truth falls from 0.41 to 0.06 (hgmm1k_v2 0.20 to 0.11); the ambient files change,
+no count output does. Doublets: `doublet/score_v2` takes the Scrublet score (MIT port, credited in NOTICE) as an eighth input, with a
+smaller stacker; development leave-one-study-out difference to scDblFinder +0.005, study-clustered lower bound -0.013 (was -0.033).
+
 ## [1.3.9] — bacterial and fungal species keep their own ids in the non-host screen
 
 The bacterial and the fungal sketch index both number their species from 1, and the engine joined them without an offset.

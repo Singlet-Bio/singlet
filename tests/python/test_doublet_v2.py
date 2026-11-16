@@ -333,3 +333,22 @@ def test_package_reproduces_the_stored_inputs():
         s = DS.score(X, ("a", "c"))
         for k in ("sdfl", "sdflc"):
             assert spearmanr(s[k], z[k])[0] > 0.999, (n, k)
+
+
+def test_scrub_ranks_planted_doublets_and_is_deterministic():
+    """The Scrublet port scores summed-profile cells above the singlets they came from (planted fixture) and repeats exactly."""
+    import scipy.sparse as sps
+
+    from singlet.features import doublet_scrub as DSC
+
+    rng = np.random.default_rng(1)
+    G, n = 400, 900
+    prof = rng.dirichlet(np.full(G, 0.05), 3)
+    ct = rng.integers(0, 3, n)
+    X = rng.poisson(prof[ct] * 3000).astype(np.float32)
+    a, b = rng.integers(0, n, 60), rng.integers(0, n, 60)
+    D = X[a] + X[b]
+    M = sps.csr_matrix(np.vstack([X, D]))
+    s = DSC.score(M)
+    assert np.array_equal(s, DSC.score(M))
+    assert s[n:].mean() > s[:n].mean()

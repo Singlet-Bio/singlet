@@ -28,3 +28,7 @@ include/singlet/pileup/tx_compat.h (intron rule 16384) ports alignToTranscript's
 src/star/Transcriptome_classifyAlign.cpp, and intron rule 32768 (kStarGene, pileup_engine.h and the GPU pileup's
 k_annotate / k_resolve) ports Transcriptome::classifyAlign's per-read gene set with SoloReadFeature::record's
 one-gene rule (src/star/SoloReadFeature_record.cpp).
+
+python/singlet/features/doublet_scrub.py ports the method of Scrublet (Wolock SL, Lopez R, Klein AM, Cell Systems 8:281-291, 2019;
+github.com/swolock/scrublet), MIT License, Copyright (c) 2018 Samuel L Wolock: observed-cell normalisation, the v-score gene filter, simulated doublets,
+PCA, the nearest-neighbour doublet score. It feeds the doublet stacker (doublet/score_v2).
