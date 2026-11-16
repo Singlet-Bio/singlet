@@ -248,9 +248,6 @@ constexpr uint32_t kUmiGeneVelo     = 1024;
 /// ambiguous winners go too (implies kUmiGeneVelo). A UMI seen in two genes is weak evidence for either, and without a junction
 /// nothing ties the winner to its gene's mRNA. On hgmm5k_v3 this removes the wrong-species excess over STARsolo GeneFull.
 constexpr uint32_t kUmiGeneSpliced  = 2048;
-/// Molecule labels as STARsolo Velocyto decides them (see DirectionalUmiStore::label_of): a molecule with an exon-only read and an
-/// intron-touching read is ambiguous, not unspliced. Off by default; the GPU pileup does not implement it (the CPU pileup runs).
-constexpr uint32_t kVelocytoLabels  = 65536;
 constexpr uint32_t kMoleculeRules   = kUmiGene | kUmiGeneAll | kUmiGeneCR;
 }  // namespace intron_rule
 
@@ -532,7 +529,6 @@ public:
         edit_baseq_ = config_.edit_baseq();
         if (const char* r = std::getenv("SINGLET_INTRON_RULES"))
             config_.intron_rules = static_cast<uint32_t>(std::strtoul(r, nullptr, 0));
-        DirectionalUmiStore::set_velocyto_labels((config_.intron_rules & intron_rule::kVelocytoLabels) != 0);
         if (const char* d = std::getenv("SINGLET_MOLECULE_DUMP")) molecule_dump_ = d;
     }
 

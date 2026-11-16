@@ -428,13 +428,7 @@ public:
     enum class MoleculeLabel : uint8_t { Spliced, Unspliced, Ambiguous };
 
     /// flags: OR of kRead* over the molecule's reads; diag: OR of kDiag* (only kDiagSpliced is read here).
-    /// intron_rule::kVelocytoLabels (set once by the pileup engine; off by default): a molecule with an intron-touching read AND an exon-only
-    /// read is ambiguous, as STARsolo Velocyto classes a UMI whose reads fit both an exon-only and an intron-only model
-    /// (SoloFeature_countVelocyto: exonModel && intronModel). Unspliced then needs intron evidence and no exon-only read.
-    static inline bool velocyto_labels_ = false;
-    static void set_velocyto_labels(bool on) { velocyto_labels_ = on; }
     static MoleculeLabel label_of(uint8_t flags, uint8_t diag) {
-        if (velocyto_labels_ && (flags & kReadIntron) && (flags & kReadExonOnly)) return MoleculeLabel::Ambiguous;
         if (flags & kReadIntron) return MoleculeLabel::Unspliced;
         return (diag & kDiagSpliced) ? MoleculeLabel::Spliced : MoleculeLabel::Ambiguous;
     }
