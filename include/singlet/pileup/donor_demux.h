@@ -2468,8 +2468,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
                         nsame += same_geno[static_cast<size_t>(a) * K + b];
                     }
                 std::cerr << "[demux] auto-K K=" << K << " fold " << f << ": closest genotype distance "
-                          << (dmin <= 1.0 ? dmin : -1.0) << ", pairs with identical genotypes " << nsame << "
-";
+                          << (dmin <= 1.0 ? dmin : -1.0) << ", pairs with identical genotypes " << nsame << "\n";
             }
             valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg, nullptr,
                                                                same_geno.empty() ? nullptr : &same_geno);

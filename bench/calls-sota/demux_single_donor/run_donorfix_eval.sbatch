@@ -27,7 +27,11 @@ for b in $BRANCHES; do
   for g in $LIBS kang_b1A; do
     if [ $g = kang_b1A ]; then d=$W/bench/rescore-v135/kang_b1A/out; else d=$W/pilot/$g/s1cpu_0ea48783/out; fi
     mkdir -p $O/$n/$g
-    $S/$n/harness --1pz $d $O/$n/$g 16 auto -1 > $O/$n/$g/log.txt 2>&1
+    if [ $g = kang_b1A ]; then   # stored allele counts as mtx, called cells from cell_calls.tsv (is_cell)
+      CALLS_COL=is_cell $S/$n/harness $d/private/snp_ad.mtx.gz $d/private/snp_dp.mtx.gz $d/private/snp_ad_barcodes.tsv.gz $d/cell_calls.tsv $O/$n/$g 16 auto -1 > $O/$n/$g/log.txt 2>&1
+    else
+      $S/$n/harness --1pz $d $O/$n/$g 16 auto -1 > $O/$n/$g/log.txt 2>&1
+    fi
     echo "$g: $(grep -E 'selected K|harness\] auto' $O/$n/$g/log.txt | tr '\n' ' ')"
     [ $g != kang_b1A ] && args+=("$O/$n/$g/auto/donor_assignments.tsv:$g")
   done
