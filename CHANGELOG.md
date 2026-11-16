@@ -2,6 +2,15 @@
 
 All notable changes to the singlet project.
 
+## [Unreleased] — one subject is no longer split into several donors
+
+The donor demultiplexer split the T cells of a single subject (GSM5130155) into three donors, each distinct on held-out cells.
+All of the structure sat in the extended MHC (GRCh38 chr6:28.5-33.5 Mb): 76 of the 98 SNPs on which the components
+disagreed were there, and without those SNPs the held-out likelihood gained 0.0004 nats per cell from a second donor. HLA reads follow each cell's expression and
+mapping ambiguity, not its genotype. When the auto-K search finds several donors it now searches again without the MHC SNPs
+and reports one donor if nothing is left; support outside the MHC keeps the first answer. The final fit and every output use all SNPs.
+Donor labels are stored metadata: no count table, cell call or other published file changes.
+
 ## [1.4.0] — a faster GPU runtime and a memory-aware start rule
 
 The GPU runtime work measured on Clipper comes into the engine. On one H100 node running 300 M-pair 3' samples, the node rate
