@@ -73,6 +73,13 @@ struct DonorDemuxConfig {
     double k_select_sep_min = 1.0;     // ... and the mean log-lik ratio per cell must exceed this (nats)
     double k_select_z = 4.0;           // more donors are accepted only if held-out log-lik improves, paired z above this
     double k_select_min_gain = 200.0;  // ... and by at least this many nats in total (about 10 cells' worth of a donor)
+    // MHC guard (select_k_mhc_guarded): when the K search finds several donors, a second search ignores the SNPs of the extended
+    // MHC (GRCh38 chr6:28,510,120-33,480,577). Reads there map to a handful of paralogous, highly polymorphic genes, so the allele
+    // counts follow the expression level and mapping ambiguity of each cell, not its genotype: the T cells of one subject
+    // (GSM5130155) split into three donors on those SNPs alone. If nothing is left outside the MHC the library is one donor.
+    // The final fit, the genotype outputs and the doublet model use every SNP. run_demux_by_species fills the mask.
+    bool k_select_exclude_mhc = true;
+    const std::vector<uint8_t>* k_select_skip_snp = nullptr;   // 1 = left out of the K search; indexed by original SNP row
     int   k_select_patience = 3;       // stop after this many consecutive K without more distinct donors
     // ── Single-donor screen (auto-K only) ──────────────────────────────────
     // Before the full K search, test K=1 against K=2 on a small subsample. When K=1 wins the
@@ -1680,7 +1687,8 @@ struct ReducedSNPs {
 };
 
 static ReducedSNPs reduce_snps(const CoveredSNPData& src,
-                               const std::vector<int>& cells, int min_cells)
+                               const std::vector<int>& cells, int min_cells,
+                               const std::vector<uint8_t>* skip_covered = nullptr)   // optional: 1 = leave this covered SNP out
 {
     PhaseScope ph_reduce(kPhReduce);
     std::vector<int32_t> cnt(src.n_covered_snps, 0);
@@ -1690,7 +1698,7 @@ static ReducedSNPs reduce_snps(const CoveredSNPData& src,
     ReducedSNPs r;
     int n = 0;
     for (int j = 0; j < src.n_covered_snps; ++j)
-        if (cnt[j] >= min_cells) { map[j] = n++; r.to_src.push_back(j); }
+        if (cnt[j] >= min_cells && !(skip_covered && (*skip_covered)[j])) { map[j] = n++; r.to_src.push_back(j); }
     r.data.n_covered_snps = n;
     r.data.n_cells = static_cast<int>(cells.size());
     r.data.cells.resize(cells.size());
@@ -2190,6 +2198,7 @@ struct KSelectRow {
     int    valid = 0;           // distinct donors among the K components (min over folds)
     bool   accepted = false;    // this K raised the best count
     double seconds = 0.0;
+    int    n = 0;               // cells scored
 };
 
 // Number of components of a K-model that are real, distinct donors, judged on held-out cells.
@@ -2311,7 +2320,18 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
         return 1;
     }
 
-    ReducedSNPs red = reduce_snps(cov, idx, cfg.k_select_min_snp_cells);
+    std::vector<uint8_t> skip_cov;
+    if (cfg.k_select_skip_snp && static_cast<int>(cov.covered_to_original.size()) == cov.n_covered_snps) {
+        skip_cov.assign(cov.n_covered_snps, 0);
+        size_t n_skip = 0;
+        for (int j = 0; j < cov.n_covered_snps; ++j) {
+            const size_t o = static_cast<size_t>(cov.covered_to_original[j]);
+            if (o < cfg.k_select_skip_snp->size() && (*cfg.k_select_skip_snp)[o]) { skip_cov[j] = 1; ++n_skip; }
+        }
+        if (n_skip) std::cerr << "[demux] auto-K: " << n_skip << " MHC SNPs left out of the K search" << std::string(1, char(10));
+        else skip_cov.clear();
+    }
+    ReducedSNPs red = reduce_snps(cov, idx, cfg.k_select_min_snp_cells, skip_cov.empty() ? nullptr : &skip_cov);
     const int ns = red.data.n_covered_snps;
     // Two halves sharing the reduced SNP space; global position i = 2*j + f
     CoveredSNPData D[2];
@@ -2455,7 +2475,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (double v : ll) mean += v;
             mean /= n;
             KSelectRow row;
-            row.K = K; row.ll_per_cell = mean;
+            row.K = K; row.ll_per_cell = mean; row.n = n;
             row.valid = std::min(valid_f[0], valid_f[1]);
             if (!prev_ll.empty()) {   // paired gain over the best accepted model so far
                 double md = 0.0, m2 = 0.0;
@@ -2505,6 +2525,32 @@ static bool screen_single_donor_k1(const CoveredSNPData& cov, const DonorDemuxCo
     scfg.k_select_patience = 1;
     std::vector<KSelectRow> trace;
     return select_k_heldout(cov, scfg, &trace) <= 1;
+}
+
+// Auto-K with the MHC guard. The search runs on every SNP. When it finds several donors and the mask of MHC SNPs is set,
+// it runs again without those SNPs. If the second search finds one donor and no K >= 2 improves the held-out likelihood
+// outside the MHC (paired z above cfg.k_select_z and at least cfg.k_select_min_gain nats in total), the structure lives in
+// the MHC alone, where allele counts follow each cell's HLA expression and mapping ambiguity and not its genotype, and the
+// library is one donor. Any support outside the MHC, or a second search that also finds several donors, keeps the first
+// answer, so a low-depth pool whose donors are visible mostly through HLA reads is not collapsed.
+static int select_k_mhc_guarded(const CoveredSNPData& cov, const DonorDemuxConfig& cfg,
+                                std::vector<KSelectRow>* trace = nullptr)
+{
+    if (!cfg.k_select_skip_snp) return select_k_heldout(cov, cfg, trace);
+    DonorDemuxConfig c0 = cfg;
+    c0.k_select_skip_snp = nullptr;
+    const int k0 = select_k_heldout(cov, c0, trace);
+    if (k0 <= 1) return k0;
+    std::vector<KSelectRow> t1;
+    const int k1 = select_k_heldout(cov, cfg, &t1);
+    if (k1 >= 2) return k0;
+    bool support = false;
+    for (const auto& r : t1)
+        if (r.K >= 2 && r.z > cfg.k_select_z && r.gain * r.n >= cfg.k_select_min_gain) support = true;
+    std::cerr << "[demux] auto-K MHC guard: " << k0 << " donors on all SNPs, " << k1 << " outside the MHC, "
+              << (support ? "other structure outside the MHC: keeping " + std::to_string(k0)
+                          : std::string("no structure outside the MHC: one donor")) << std::endl;
+    return support ? k0 : 1;
 }
 
 // ============================================================================
@@ -2762,7 +2808,7 @@ inline DemuxResult run_demux(
         demux_result.screened_single = true;
     } else if (cfg.fast_k_select) {
         // Held-out likelihood search (see select_k_heldout)
-        k_candidates.push_back(select_k_heldout(cov_use, cfg, &demux_result.k_selection));
+        k_candidates.push_back(select_k_mhc_guarded(cov_use, cfg, &demux_result.k_selection));
     } else {
         for (int K = 1; K <= cfg.max_donors; ++K) k_candidates.push_back(K);
     }
@@ -3021,6 +3067,18 @@ inline DemuxResult run_demux(
 // cells, called cells with depth in both species are cross-species doublets, and the donor ids are concatenated (human
 // first). Any other panel goes straight to run_demux, so single-species outputs are unchanged.
 // ============================================================================
+inline bool snp_in_mhc(const std::string& name) {
+    // "chr6:32000000:A>G", optionally behind a "<reference>___" prefix (the barnyard panel)
+    size_t b = name.rfind("___");
+    if (b != std::string::npos && name.compare(0, 9, "GRCh38___") != 0) return false;   // mouse and other references
+    b = (b == std::string::npos) ? 0 : b + 3;
+    if (name.compare(b, 5, "chr6:") != 0 && name.compare(b, 2, "6:") != 0) return false;
+    const size_t c1 = name.find(':', b);
+    if (c1 == std::string::npos) return false;
+    const long pos = std::atol(name.c_str() + c1 + 1);
+    return pos >= 28510120L && pos <= 33480577L;
+}
+
 inline int snp_species_of(const std::string& name) {
     if (name.rfind("GRCh38___", 0) == 0) return 0;
     if (name.rfind("GRCm39___", 0) == 0) return 1;
@@ -3036,10 +3094,18 @@ inline DemuxResult run_demux_by_species(
     uint32_t n_snps, uint32_t n_cells,
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint16_t* ad_data, uint64_t ad_nnz,
     const int32_t* dp_indptr, const int32_t* dp_indices, const uint16_t* dp_data, uint64_t dp_nnz,
-    const DonorDemuxConfig& cfg, const std::vector<uint32_t>& cell_indices,
+    const DonorDemuxConfig& cfg_in, const std::vector<uint32_t>& cell_indices,
     const std::vector<std::string>& snp_names,
     float species_min_share = 0.9f)    // share of a barcode's SNP depth that names its species; below it in both: mixed
 {
+    // MHC SNPs stay out of the K search (see DonorDemuxConfig::k_select_exclude_mhc); the mask is in original SNP rows
+    DonorDemuxConfig cfg = cfg_in;
+    std::vector<uint8_t> mhc_orig;
+    if (cfg.k_select_exclude_mhc && !cfg.k_select_skip_snp && snp_names.size() == n_snps) {
+        mhc_orig.assign(n_snps, 0);
+        for (uint32_t i = 0; i < n_snps; ++i) mhc_orig[i] = snp_in_mhc(snp_names[i]) ? 1 : 0;
+        cfg.k_select_skip_snp = &mhc_orig;
+    }
     std::vector<int8_t> sp_of(n_snps, -1);
     uint32_t n_sp[2] = {0, 0};
     if (snp_names.size() == n_snps)
@@ -3099,6 +3165,13 @@ inline DemuxResult run_demux_by_species(
         subset(s, ad_indptr, ad_indices, ad_data, rmap, aip, aix, adt);
         subset(s, dp_indptr, dp_indices, dp_data, rmap, dip, dix, ddt);
         const uint32_t ns = static_cast<uint32_t>(sub_to_orig[s].size());
+        std::vector<uint8_t> mhc_sub;
+        DonorDemuxConfig cfg_s = cfg;
+        if (cfg.k_select_skip_snp) {
+            mhc_sub.assign(ns, 0);
+            for (uint32_t r = 0; r < ns; ++r) mhc_sub[r] = (*cfg.k_select_skip_snp)[static_cast<size_t>(sub_to_orig[s][r])];
+            cfg_s.k_select_skip_snp = &mhc_sub;
+        }
         const size_t min_fit = static_cast<size_t>(2 * cfg.min_donor_cells);
         std::cerr << "[demux] species " << (s == 0 ? "human" : "mouse") << ": " << called_sp[s].size() << " called cells\n";
         if (called_sp[s].empty()) { part[s].n_donors_k = 0; part[s].assignments.assign(n_cells, {-1, 0.0f, 0.0f, "unassigned", "cell"}); continue; }
@@ -3106,7 +3179,7 @@ inline DemuxResult run_demux_by_species(
             part[s] = make_single_donor_result(ns, n_cells, aip.data(), aix.data(), adt.data(), dip.data(), dix.data(), ddt.data());
         else
             part[s] = run_demux(ns, n_cells, aip.data(), aix.data(), adt.data(), aix.size(),
-                                dip.data(), dix.data(), ddt.data(), dix.size(), cfg, called_sp[s]);
+                                dip.data(), dix.data(), ddt.data(), dix.size(), cfg_s, called_sp[s]);
     }
 
     // merge: human donors 0..Kh-1, mouse donors Kh..Kh+Km-1
