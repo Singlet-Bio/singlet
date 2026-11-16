@@ -73,17 +73,13 @@ struct DonorDemuxConfig {
     double k_select_sep_min = 1.0;     // ... and the mean log-lik ratio per cell must exceed this (nats)
     double k_select_z = 4.0;           // more donors are accepted only if held-out log-lik improves, paired z above this
     double k_select_min_gain = 200.0;  // ... and by at least this many nats in total (about 10 cells' worth of a donor)
-    // MHC exclusion: the K search ignores SNPs in the extended MHC (GRCh38 chr6:28,510,120-33,480,577). Reads there map to a
-    // handful of paralogous, highly polymorphic genes, so the allele counts follow expression level and mapping ambiguity of
-    // each cell, not its genotype; a single donor's T cells split into three components on those SNPs alone. The final fit,
-    // the genotype outputs and the doublet model still use every SNP. run_demux_by_species fills the mask (original SNP rows).
+    // MHC guard (select_k_mhc_guarded): when the K search finds several donors, a second search ignores the SNPs of the extended
+    // MHC (GRCh38 chr6:28,510,120-33,480,577). Reads there map to a handful of paralogous, highly polymorphic genes, so the allele
+    // counts follow the expression level and mapping ambiguity of each cell, not its genotype: the T cells of one subject
+    // (GSM5130155) split into three donors on those SNPs alone. If nothing is left outside the MHC the library is one donor.
+    // The final fit, the genotype outputs and the doublet model use every SNP. run_demux_by_species fills the mask.
     bool k_select_exclude_mhc = true;
     const std::vector<uint8_t>* k_select_skip_snp = nullptr;   // 1 = left out of the K search; indexed by original SNP row
-    // Genotype-distance check (after vireo's donor_select, mode "distance"): two components whose genotypes agree at nearly
-    // every well-covered SNP are one donor in two cell states (allelic expression and ambient differ by state), not two donors.
-    // Unrelated donors disagree at about 30% of covered SNPs, so the cut sits far below that. 0 turns the check off.
-    double k_select_geno_dist_min = 0.10; // components closer than this (fraction of discordant SNP classes) are merged
-    int    k_select_geno_dist_sites = 200; // ... judged only when at least this many SNPs are confidently typed in both
     int   k_select_patience = 3;       // stop after this many consecutive K without more distinct donors
     // ── Single-donor screen (auto-K only) ──────────────────────────────────
     // Before the full K search, test K=1 against K=2 on a small subsample. When K=1 wins the
@@ -2202,43 +2198,8 @@ struct KSelectRow {
     int    valid = 0;           // distinct donors among the K components (min over folds)
     bool   accepted = false;    // this K raised the best count
     double seconds = 0.0;
+    int    n = 0;               // cells scored
 };
-
-// Pairs of components with the same genotypes. The posterior allele fraction F of each donor at each SNP is classed hom-ref
-// (< 0.15), het (0.35..0.65) or hom-alt (> 0.85); SNPs whose class is unclear in either donor (thin coverage) are skipped. The
-// distance is the fraction of the remaining SNPs where the classes differ (vireo's donor_select uses the mean absolute
-// difference of the genotype posteriors in the same role). Fewer than cfg.k_select_geno_dist_sites typed SNPs: no verdict.
-static void genotype_same_pairs(const AlleleTables& T, const DonorDemuxConfig& cfg,
-                                std::vector<char>& same, std::vector<double>* dist_out = nullptr)
-{
-    const int K = T.K, ns = T.ns;
-    same.assign(static_cast<size_t>(K) * K, 0);
-    if (dist_out) dist_out->assign(static_cast<size_t>(K) * K, -1.0);
-    if (cfg.k_select_geno_dist_min <= 0.0) return;
-    std::vector<signed char> cls(static_cast<size_t>(ns) * K);
-    for (size_t i = 0; i < cls.size(); ++i) {
-        const float f = T.F[i];
-        cls[i] = f < 0.15f ? 0 : f > 0.85f ? 2 : (f > 0.35f && f < 0.65f) ? 1 : -1;
-    }
-    for (int a = 0; a < K; ++a)
-        for (int b = a + 1; b < K; ++b) {
-            long typed = 0, diff = 0, both_hom = 0, opp_hom = 0;
-            for (int j = 0; j < ns; ++j) {
-                const int ca = cls[static_cast<size_t>(j) * K + a], cb = cls[static_cast<size_t>(j) * K + b];
-                if (ca < 0 || cb < 0) continue;
-                ++typed;
-                diff += ca != cb;
-                if (ca != 1 && cb != 1) { ++both_hom; opp_hom += ca != cb; }
-            }
-            if (std::getenv("SINGLET_DEMUX_GENODBG"))
-                std::cerr << "[demux] genodbg K=" << K << " pair " << a << "," << b << " typed " << typed << " diff " << diff
-                          << " both_hom " << both_hom << " opp_hom " << opp_hom << "\n";
-            if (typed < cfg.k_select_geno_dist_sites) continue;
-            const double d = static_cast<double>(diff) / typed;
-            if (dist_out) (*dist_out)[static_cast<size_t>(a) * K + b] = d;
-            if (d < cfg.k_select_geno_dist_min) same[static_cast<size_t>(a) * K + b] = 1;
-        }
-}
 
 // Number of components of a K-model that are real, distinct donors, judged on held-out cells.
 // half_ll[((2i + h) * W) + x] (W = K + K(K-1)/2): log-lik of cell i from its even (h=0) / odd
@@ -2253,8 +2214,7 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                                   const std::vector<double>& lps,
                                   const std::vector<double>& lpp,
                                   const DonorDemuxConfig& cfg,
-                                  std::vector<char>* alive_out = nullptr,
-                                  const std::vector<char>* same_geno = nullptr)   // K*K: 1 = genotypes identical
+                                  std::vector<char>* alive_out = nullptr)
 {
     PhaseScope ph_valid(kPhValid);
     const int npair = K * (K - 1) / 2;
@@ -2284,11 +2244,6 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                                static_cast<int>(std::ceil(cfg.min_donor_frac * n)));
     std::vector<char> alive(K, 1);
     for (int k = 0; k < K; ++k) alive[k] = cnt[k] >= min_n;
-    if (same_geno) {   // identical genotypes: keep the larger component, drop the other
-        for (int a = 0; a < K; ++a)
-            for (int b = a + 1; b < K; ++b)
-                if ((*same_geno)[static_cast<size_t>(a) * K + b] && alive[a] && alive[b]) alive[cnt[a] >= cnt[b] ? b : a] = 0;
-    }
 
     for (int round = 0; round < K; ++round) {
         int n_alive = 0;
@@ -2333,9 +2288,6 @@ static int count_valid_components(const std::vector<float>& half_ll, int n, int 
                 const double var = std::max(1e-12, (s2 / cnt_m - mean * mean) * cnt_m / (cnt_m - 1.0));
                 z = mean / std::sqrt(var / (0.5 * cnt_m));   // cells are counted once per half
                 pass = mean > cfg.k_select_sep_min && z > cfg.k_select_sep_z;
-                if (std::getenv("SINGLET_DEMUX_GENODBG"))
-                    std::cerr << "[demux] llrdbg K=" << K << " round " << round << " comp " << m << " cells " << cnt_m / 2
-                              << " mean_llr " << mean << " z " << z << (pass ? " pass" : " FAIL") << "\n";
             }
             if (!pass && z < worst_z) { worst_z = z; worst = m; }
         }
@@ -2480,23 +2432,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             std::vector<float> half;
             score_cells(D[1 - f], test, T, lps, lpp, fcfg.threads, sc, nullptr, &half);
             for (int j = 0; j < D[1 - f].n_cells; ++j) ll[2 * j + (1 - f)] = sc[j].ll_marg;
-            std::vector<char> same_geno;
-            std::vector<double> gdist;
-            if (K >= 2) {
-                genotype_same_pairs(T, cfg, same_geno, &gdist);
-                double dmin = 2.0;
-                int nsame = 0;
-                for (int a = 0; a < K; ++a)
-                    for (int b = a + 1; b < K; ++b) {
-                        const double d = gdist[static_cast<size_t>(a) * K + b];
-                        if (d >= 0.0) dmin = std::min(dmin, d);
-                        nsame += same_geno[static_cast<size_t>(a) * K + b];
-                    }
-                std::cerr << "[demux] auto-K K=" << K << " fold " << f << ": closest genotype distance "
-                          << (dmin <= 1.0 ? dmin : -1.0) << ", pairs with identical genotypes " << nsame << "\n";
-            }
-            valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg, nullptr,
-                                                               same_geno.empty() ? nullptr : &same_geno);
+            valid_f[f] = (K == 1) ? 1 : count_valid_components(half, D[1 - f].n_cells, K, lps, lpp, cfg);
         };
         if (kthreads >= 2) {   // the folds share nothing they write (ll[] by fold parity, valid_f[f]), K = 1 included
             std::thread t1(do_fold, 1);
@@ -2539,7 +2475,7 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
             for (double v : ll) mean += v;
             mean /= n;
             KSelectRow row;
-            row.K = K; row.ll_per_cell = mean;
+            row.K = K; row.ll_per_cell = mean; row.n = n;
             row.valid = std::min(valid_f[0], valid_f[1]);
             if (!prev_ll.empty()) {   // paired gain over the best accepted model so far
                 double md = 0.0, m2 = 0.0;
@@ -2589,6 +2525,32 @@ static bool screen_single_donor_k1(const CoveredSNPData& cov, const DonorDemuxCo
     scfg.k_select_patience = 1;
     std::vector<KSelectRow> trace;
     return select_k_heldout(cov, scfg, &trace) <= 1;
+}
+
+// Auto-K with the MHC guard. The search runs on every SNP. When it finds several donors and the mask of MHC SNPs is set,
+// it runs again without those SNPs. If the second search finds one donor and no K >= 2 improves the held-out likelihood
+// outside the MHC (paired z above cfg.k_select_z and at least cfg.k_select_min_gain nats in total), the structure lives in
+// the MHC alone, where allele counts follow each cell's HLA expression and mapping ambiguity and not its genotype, and the
+// library is one donor. Any support outside the MHC, or a second search that also finds several donors, keeps the first
+// answer, so a low-depth pool whose donors are visible mostly through HLA reads is not collapsed.
+static int select_k_mhc_guarded(const CoveredSNPData& cov, const DonorDemuxConfig& cfg,
+                                std::vector<KSelectRow>* trace = nullptr)
+{
+    if (!cfg.k_select_skip_snp) return select_k_heldout(cov, cfg, trace);
+    DonorDemuxConfig c0 = cfg;
+    c0.k_select_skip_snp = nullptr;
+    const int k0 = select_k_heldout(cov, c0, trace);
+    if (k0 <= 1) return k0;
+    std::vector<KSelectRow> t1;
+    const int k1 = select_k_heldout(cov, cfg, &t1);
+    if (k1 >= 2) return k0;
+    bool support = false;
+    for (const auto& r : t1)
+        if (r.K >= 2 && r.z > cfg.k_select_z && r.gain * r.n >= cfg.k_select_min_gain) support = true;
+    std::cerr << "[demux] auto-K MHC guard: " << k0 << " donors on all SNPs, " << k1 << " outside the MHC, "
+              << (support ? "other structure outside the MHC: keeping " + std::to_string(k0)
+                          : std::string("no structure outside the MHC: one donor")) << std::endl;
+    return support ? k0 : 1;
 }
 
 // ============================================================================
@@ -2846,7 +2808,7 @@ inline DemuxResult run_demux(
         demux_result.screened_single = true;
     } else if (cfg.fast_k_select) {
         // Held-out likelihood search (see select_k_heldout)
-        k_candidates.push_back(select_k_heldout(cov_use, cfg, &demux_result.k_selection));
+        k_candidates.push_back(select_k_mhc_guarded(cov_use, cfg, &demux_result.k_selection));
     } else {
         for (int K = 1; K <= cfg.max_donors; ++K) k_candidates.push_back(K);
     }
@@ -3108,6 +3070,7 @@ inline DemuxResult run_demux(
 inline bool snp_in_mhc(const std::string& name) {
     // "chr6:32000000:A>G", optionally behind a "<reference>___" prefix (the barnyard panel)
     size_t b = name.rfind("___");
+    if (b != std::string::npos && name.compare(0, 9, "GRCh38___") != 0) return false;   // mouse and other references
     b = (b == std::string::npos) ? 0 : b + 3;
     if (name.compare(b, 5, "chr6:") != 0 && name.compare(b, 2, "6:") != 0) return false;
     const size_t c1 = name.find(':', b);

@@ -2,15 +2,6 @@
 
 All notable changes to the singlet project.
 
-## [Unreleased] — single-donor libraries are no longer split into several donors
-
-Auto-K in the donor demultiplexer now merges components whose genotypes agree. Two components are one donor when fewer than
-10% of their confidently typed SNPs (at least 200) differ in genotype class, the role of vireo's donor_select distance. A T-cell
-library from one subject (GSM5130155) had been split into three donors, each distinct on held-out cells, because allelic
-expression and ambient RNA differ between cell states; the three components differ at 1 to 5% of typed SNPs, against 20% or
-about 20% between the closest real donors of the Kang pool. `DonorDemuxConfig::k_select_geno_dist_min = 0` restores the earlier
-rule. Donor labels are stored metadata: no count table, cell call or other published file changes.
-
 ## [1.4.0] — a faster GPU runtime and a memory-aware start rule
 
 The GPU runtime work measured on Clipper comes into the engine. On one H100 node running 300 M-pair 3' samples, the node rate
