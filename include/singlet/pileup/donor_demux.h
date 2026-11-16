@@ -2215,13 +2215,18 @@ static void genotype_same_pairs(const AlleleTables& T, const DonorDemuxConfig& c
     }
     for (int a = 0; a < K; ++a)
         for (int b = a + 1; b < K; ++b) {
-            long typed = 0, diff = 0;
+            long typed = 0, diff = 0, both_hom = 0, opp_hom = 0;
             for (int j = 0; j < ns; ++j) {
                 const int ca = cls[static_cast<size_t>(j) * K + a], cb = cls[static_cast<size_t>(j) * K + b];
                 if (ca < 0 || cb < 0) continue;
                 ++typed;
                 diff += ca != cb;
+                if (ca != 1 && cb != 1) { ++both_hom; opp_hom += ca != cb; }
             }
+            if (std::getenv("SINGLET_DEMUX_GENODBG"))
+                std::cerr << "[demux] genodbg K=" << K << " pair " << a << "," << b << " typed " << typed << " diff " << diff
+                          << " both_hom " << both_hom << " opp_hom " << opp_hom << "
+";
             if (typed < cfg.k_select_geno_dist_sites) continue;
             const double d = static_cast<double>(diff) / typed;
             if (dist_out) (*dist_out)[static_cast<size_t>(a) * K + b] = d;
