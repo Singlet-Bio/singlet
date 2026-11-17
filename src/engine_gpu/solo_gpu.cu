@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1106,18 +1107,35 @@ bool soloRunTwoPass(const SoloParams& S, const SoloModel& M, const SoloRecs& R, 
     ::singlet::gpu_ledger::Phase ledger_phase("solo");
     g_lastOOM = false;
     double headroom = 1.0;
+    // rt/devoom: when even the smallest chunks and buckets do not fit, the card is full for the moment (other samples' processes, the non-host
+    // server): wait (SINGLET_SOLO_OOM_WAIT_S, default 120 s, 2 s steps) and try again before the caller falls back to the host path
+    double oomWaitS = 120, oomWaited = 0; int nWaits = 0;
+    if (const char* ow = getenv("SINGLET_SOLO_OOM_WAIT_S")) oomWaitS = std::max(0.0, atof(ow));
     for (int attempt = 0;; attempt++) {
         std::string lg;
         try {
             out = SoloResult{};
             soloTwoPassOnce(S, M, R, Rd, out, lg, opt, headroom);
             log += lg;
+            if (nWaits) {
+                char wb[160]; snprintf(wb, sizeof wb, "soloRun(two-pass): OOM recovery: succeeded after %d waits (%.0f s) at chunks and buckets of 1/%.0f the size\n", nWaits, oomWaited, 1.0 / headroom);
+                log += wb; fputs((std::string("[engine_gpu] ") + wb).c_str(), stderr); fflush(stderr);
+            }
             return true;
         } catch (const DevOOM& e) {
             cudaGetLastError();
             if (attempt < 3 && !opt.chunkReads && !opt.bucketKeys && !opt.bucketTarget) {   // sized from the free memory: try half the size
                 headroom *= 0.5;
                 log += std::string("soloRun(two-pass): ") + e.what() + "; retrying with chunks and buckets of half the size\n";
+                continue;
+            }
+            if (!opt.chunkReads && !opt.bucketKeys && !opt.bucketTarget && oomWaited < oomWaitS) {
+                if (nWaits++ % 15 == 0) {
+                    const std::string m = std::string("soloRun(two-pass): OOM recovery: ") + e.what() + "; waiting for memory held by other processes (up to " + std::to_string((int) oomWaitS) + " s)\n";
+                    log += m; fputs((std::string("[engine_gpu] ") + m).c_str(), stderr); fflush(stderr);
+                }
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                oomWaited += 2;
                 continue;
             }
             g_lastOOM = true;

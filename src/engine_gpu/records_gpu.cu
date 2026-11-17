@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <cstring>
 #include <thread>
+#include <new>
+#include <string>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
@@ -164,18 +166,35 @@ void release(DeviceRecords& r) {
 }
 
 bool distinctBarcodes(const uint32_t* dReadRecord, const e6::ReadEntry* dE, uint64_t nReads, uint32_t cbL, std::vector<uint64_t>& keys, float& ms,
-                      std::string& err) {
+                      std::string& err, bool* oom) {
     keys.clear(); ms = 0;
+    if (oom) *oom = false;
     if (nReads == 0) return true;
-    u64* dK; RG_CK(cudaMalloc(&dK, nReads * 8));
+    // rt/devoom: a failed allocation (this one, or thrust's sort temporaries, which throw) is reported through *oom, nothing is leaked or thrown:
+    // the caller retries on fewer reads
+    u64* dK = nullptr;
+    { const cudaError_t e = cudaMalloc(&dK, nReads * 8);
+      if (e != cudaSuccess) { cudaGetLastError(); if (oom && e == cudaErrorMemoryAllocation) *oom = true; err = std::string("cudaMalloc(distinct CR keys): ") + cudaGetErrorString(e); return false; } }
     Ev ev; ev.start();
     k_crkeys<<<(unsigned)((nReads + 255) / 256), 256>>>(dReadRecord, dE, nReads, cbL, dK);
-    thrust::sort(thrust::device_ptr<u64>(dK), thrust::device_ptr<u64>(dK + nReads));
-    const u64 nU = (u64)(thrust::unique(thrust::device_ptr<u64>(dK), thrust::device_ptr<u64>(dK + nReads)) - thrust::device_ptr<u64>(dK));
+    u64 nU = 0;
+    try {
+        const cudaError_t el = cudaGetLastError();
+        if (el != cudaSuccess) { cudaFree(dK); if (oom && el == cudaErrorMemoryAllocation) *oom = true; err = std::string("k_crkeys launch: ") + cudaGetErrorString(el); return false; }
+        thrust::sort(thrust::device_ptr<u64>(dK), thrust::device_ptr<u64>(dK + nReads));
+        nU = (u64)(thrust::unique(thrust::device_ptr<u64>(dK), thrust::device_ptr<u64>(dK + nReads)) - thrust::device_ptr<u64>(dK));
+    } catch (const std::exception& ex) {
+        cudaGetLastError(); cudaFree(dK);
+        const std::string w = ex.what();
+        if (oom && (w.find("memory") != std::string::npos || w.find("bad_alloc") != std::string::npos)) *oom = true;
+        err = std::string("thrust (distinct CR keys): ") + w;
+        return false;
+    }
     ms = ev.stop();
     keys.resize(nU);
-    RG_CK(cudaMemcpy(keys.data(), dK, nU * 8, cudaMemcpyDeviceToHost));
-    cudaFree(dK);
+    { const cudaError_t e = cudaMemcpy(keys.data(), dK, nU * 8, cudaMemcpyDeviceToHost);
+      cudaFree(dK);
+      if (e != cudaSuccess) { err = std::string("cudaMemcpy(distinct CR keys): ") + cudaGetErrorString(e); return false; } }
     if (!keys.empty() && keys.back() == ~0ULL) keys.pop_back();   // reads without a record
     return true;
 }
@@ -403,7 +422,23 @@ struct PassBufs {
     std::vector<void*> p;
     template <class T> cudaError_t alloc(T*& d, u64 bytes) { void* v = nullptr; cudaError_t e = cudaMalloc(&v, bytes + 16); if (e == cudaSuccess) p.push_back(v); d = (T*) v; return e; }
     void release() { for (void* v : p) cudaFree(v); p.clear(); }
+    size_t mark() const { return p.size(); }
+    void rollback(size_t mk) { while (p.size() > mk) { cudaFree(p.back()); p.pop_back(); } }   // rt/devoom: the buffers allocated since mark()
     ~PassBufs() { release(); }
+};
+// rt/devoom: thrust's scan temporaries from a buffer allocated up front (the pass allocates nothing between its chunks)
+struct ScanAlloc {
+    typedef char value_type;
+    char* base; size_t cap; size_t used = 0; int live = 0;
+    ScanAlloc(char* b, size_t c) : base(b), cap(c) {}
+    char* allocate(std::ptrdiff_t n) {
+        const size_t sz = ((size_t) n + 255) & ~(size_t) 255;
+        if (used + sz <= cap) { char* p = base + used; used += sz; live++; return p; }
+        void* p = nullptr;
+        if (cudaMalloc(&p, (size_t) n) != cudaSuccess) { cudaGetLastError(); throw std::bad_alloc(); }
+        return (char*) p;
+    }
+    void deallocate(char* p, size_t) { if (p >= base && p < base + cap) { if (--live == 0) used = 0; } else cudaFree(p); }
 };
 }
 
@@ -438,6 +473,69 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
     // P3-MEM-03: the records stay on the device; the reads' arrays (record map, entries, masks) and the kept reads go through by read chunks
     // of m0 reads, all at once when they fit (as before). SINGLET_E2E_PASS_CHUNK forces a chunk size.
     u64 m0 = std::max<u64>(n, 1), nCh = 1;
+    uint8_t* dScan = nullptr; const size_t kScanBytes = 64ull << 20;
+    u64 upAt = ~0ull, upM = 0; bool qUp = false;   // the chunk whose reads are on the device (first read, count), and whether its masks are
+    // rt/devoom: no sample may fail on device memory. The card is shared (the other slot's items, the shared index, the non-host server), so any
+    // allocation can fail at any time. Every allocation of the pass therefore recovers: the per-read buffers retry with half the reads per chunk
+    // (down to mFloor), and at the floor, or for buffers that cannot shrink, the pass waits (bounded: SINGLET_E2E_OOM_WAIT_S, default 300 s) for
+    // memory held by other processes and tries again. The chunk size never changes a result. One stderr line per recovery.
+    const u64 mFloor = 1ull << 20;
+    double oomWaitMax = 300, oomWaited = 0; int nRecov = 0, nWaitLines = 0;
+    if (const char* v = getenv("SINGLET_E2E_OOM_WAIT_S")) oomWaitMax = std::max(0.0, atof(v));
+    auto memNote = [&](const std::string& what) {
+        size_t f = 0, t = 0;
+        if (cudaMemGetInfo(&f, &t) != cudaSuccess) { cudaGetLastError(); f = t = 0; }
+        char b[480];
+        snprintf(b, sizeof b, "OOM recovery %d: %s (device free %llu MiB of %llu MiB)", ++nRecov, what.c_str(), (unsigned long long) (f >> 20), (unsigned long long) (t >> 20));
+        fprintf(stderr, "[e2ePass] %s\n", b); fflush(stderr);
+        out.log += std::string(b) + "; ";
+    };
+    auto oomWait = [&](const char* what) -> bool {   // false: the bounded wait is spent
+        if (oomWaited >= oomWaitMax) return false;
+        if (nWaitLines++ % 30 == 0) memNote(std::string("waiting for memory held by other processes: ") + what + " (waited " + std::to_string((int) oomWaited) + " s of " + std::to_string((int) oomWaitMax) + ")");
+        const double tw = now();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        oomWaited += now() - tw;
+        return true;
+    };
+    auto recover = [&](cudaError_t e, const char* what, bool shrink) -> bool {   // true: try again
+        if (e != cudaErrorMemoryAllocation) return false;
+        cudaGetLastError();
+        if (shrink && m0 > mFloor) {
+            const u64 nm = std::max<u64>(mFloor, m0 / 2);
+            memNote(std::string(what) + " out of memory: " + std::to_string(m0) + " -> " + std::to_string(nm) + " reads per chunk");
+            m0 = nm; upAt = ~0ull; upM = 0; qUp = false;
+            return true;
+        }
+        return oomWait(what);
+    };
+    // a launch that fails for lack of device memory (a module loaded lazily at its first launch, local memory) did not run: launch it again
+    auto launchRetry = [&](auto&& launch, const char* what) -> cudaError_t {
+        for (;;) {
+            launch();
+            const cudaError_t e = cudaGetLastError();
+            if (e != cudaErrorMemoryAllocation || !oomWait(what)) return e;
+        }
+    };
+    size_t mkRec = 0;   // PassBufs mark after the records
+    // test hook: SINGLET_E2E_OOM_INJECT=k makes the first k allocation steps (the records, the per-read buffers, the tables) fail as if the card were full
+    int injectLeft = 0;
+    if (const char* v = getenv("SINGLET_E2E_OOM_INJECT")) injectLeft = std::max(0, atoi(v));
+    auto allocA = [&](u64 m) -> cudaError_t {   // the buffers that scale with the chunk
+        cudaError_t e;
+        if (injectLeft > 0) { injectLeft--; return cudaErrorMemoryAllocation; }
+        if ((e = B.alloc(dRR, m * 4)) != cudaSuccess) return e;
+        if ((e = B.alloc(dE, m * 24)) != cudaSuccess) return e;
+        dQ = nullptr;
+        if (H.oQMask && (e = B.alloc(dQ, m * QB)) != cudaSuccess) return e;
+        if ((e = B.alloc(dKeep, m * 4)) != cudaSuccess) return e;
+        if ((e = B.alloc(dPos, m * 4)) != cudaSuccess) return e;
+        if ((e = B.alloc(dOut, m * 16)) != cudaSuccess) return e;
+        if ((e = B.alloc(dClip, m * 4)) != cudaSuccess) return e;
+        if ((e = B.alloc(dLowq, m * QB)) != cudaSuccess) return e;
+        if ((e = B.alloc(dScan, kScanBytes)) != cudaSuccess) return e;
+        return cudaSuccess;
+    };
     {   // the region's records to the device: page-locked in place when the driver allows it (the pages exist: the STAR child wrote them)
         const double tu = now();
         // E16 "regpar" (keepPinned, level 5): this process's mapping of the region populated by several threads before the page-locking
@@ -451,36 +549,62 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         }
         e16reg = now() - tr;
         if (pre) e16regPre = pre->sec;
-        EP_CK(B.alloc(dS, nRec * 16)); EP_CK(cudaMemcpy(dS, R.at<uint8_t>(H.oSigs), nRec * 16, cudaMemcpyHostToDevice));
-        EP_CK(B.alloc(dA, nAln * 16)); EP_CK(cudaMemcpy(dA, R.at<uint8_t>(H.oAlns), nAln * 16, cudaMemcpyHostToDevice));
-        EP_CK(B.alloc(dOps, nOps * 4)); EP_CK(cudaMemcpy(dOps, R.at<uint8_t>(H.oOps), nOps * 4, cudaMemcpyHostToDevice));
-        EP_CK(B.alloc(dNm, nAln * 2)); EP_CK(cudaMemcpy(dNm, R.at<uint8_t>(H.oNm), nAln * 2, cudaMemcpyHostToDevice));
+        for (;;) {   // the records (a fixed size): a failed allocation waits for memory other processes hold
+            B.rollback(0);
+            cudaError_t e = injectLeft > 0 ? (injectLeft--, cudaErrorMemoryAllocation) : B.alloc(dS, nRec * 16);
+            if (e == cudaSuccess) e = cudaMemcpy(dS, R.at<uint8_t>(H.oSigs), nRec * 16, cudaMemcpyHostToDevice);
+            if (e == cudaSuccess) e = B.alloc(dA, nAln * 16);
+            if (e == cudaSuccess) e = cudaMemcpy(dA, R.at<uint8_t>(H.oAlns), nAln * 16, cudaMemcpyHostToDevice);
+            if (e == cudaSuccess) e = B.alloc(dOps, nOps * 4);
+            if (e == cudaSuccess) e = cudaMemcpy(dOps, R.at<uint8_t>(H.oOps), nOps * 4, cudaMemcpyHostToDevice);
+            if (e == cudaSuccess) e = B.alloc(dNm, nAln * 2);
+            if (e == cudaSuccess) e = cudaMemcpy(dNm, R.at<uint8_t>(H.oNm), nAln * 2, cudaMemcpyHostToDevice);
+            if (e == cudaSuccess) break;
+            if (!recover(e, "the hand-off records", false)) return fail("B.alloc(hand-off records)", e);
+        }
+        mkRec = B.mark();
         // per read on the device: record map, entry, mask, keep flag, scan, kept read, clip, kept mask, and the CR sort's keys and their buffer
         const u64 perRead = 4 + 24 + (H.oQMask ? QB : 0) + 4 + 4 + 16 + 4 + QB + 16;
         const u64 fixedB = (u64) in.nCells * 4 + (u64) in.nCellsQc * 32 + (u64) in.nWl * 4 + (4ull << 30);   // cell tables, CR table, margin
+        const u64 resident = nRec * 16 + nAln * 18 + nOps * 4;
         size_t freeB = 0, totB = 0;
         if (cudaMemGetInfo(&freeB, &totB) != cudaSuccess) { cudaGetLastError(); freeB = 0; }
+        const u64 slotBud = totB ? (u64) singlet_engine_gpu::memBudget((u64) totB) : 0;
         const char* fc = getenv("SINGLET_E2E_PASS_CHUNK");
         if (fc && atoll(fc) > 0) m0 = (u64) atoll(fc);
-        else if (n && freeB && (u64) freeB < fixedB + n * perRead) m0 = std::max<u64>(1ull << 20, ((u64) freeB > fixedB ? (u64) freeB - fixedB : 0) / perRead);
+        else if (n && freeB && (u64) freeB < fixedB + n * perRead) {
+            // when the reads do not fit at once: the chunk from the free memory as before, and within the slot's budget (the free memory is not
+            // this process's alone: the other slot, the shared index and the non-host server take theirs while the pass runs)
+            m0 = ((u64) freeB > fixedB ? (u64) freeB - fixedB : 0) / perRead;
+            if (slotBud) m0 = std::min<u64>(m0, slotBud > resident + fixedB ? (slotBud - resident - fixedB) / perRead : 0);
+            m0 = std::max<u64>(mFloor, m0);
+        }
         m0 = std::max<u64>(1, std::min<u64>(m0, std::max<u64>(n, 1)));
-        nCh = n ? (n + m0 - 1) / m0 : 1;
-        EP_CK(B.alloc(dRR, m0 * 4)); EP_CK(B.alloc(dE, m0 * 24));
-        if (H.oQMask) EP_CK(B.alloc(dQ, m0 * QB));
+        {
+            char sb[320];
+            snprintf(sb, sizeof sb, "device free %llu MiB of %llu MiB after the records (%llu MiB), slot budget %llu MiB, first chunk %llu reads; ",
+                     (unsigned long long) (freeB >> 20), (unsigned long long) (totB >> 20), (unsigned long long) (resident >> 20), (unsigned long long) (slotBud >> 20), (unsigned long long) m0);
+            out.log += sb;
+        }
+        for (;;) {
+            B.rollback(mkRec);
+            const cudaError_t e = allocA(m0);
+            if (e == cudaSuccess) break;
+            if (!recover(e, "the per-read buffers", true)) return fail("B.alloc(per-read buffers)", e);
+        }
         out.msUpload = (now() - tu) * 1e3;
     }
     const uint8_t* hRR = R.at<uint8_t>(H.oReadRecord);
     const uint8_t* hE = R.at<uint8_t>(H.oEntries);
     const uint8_t* hQ = H.oQMask ? R.at<uint8_t>(H.oQMask) : nullptr;
-    u64 upAt = ~0ull; bool qUp = false;   // the chunk whose reads are on the device, and whether its masks are
     auto upChunk = [&](u64 i0, u64 m, bool q) -> cudaError_t {
         const double t = now();
         cudaError_t e = cudaSuccess;
-        if (upAt != i0) {
-            upAt = ~0ull; qUp = false;
+        if (upAt != i0 || upM < m) {
+            upAt = ~0ull; upM = 0; qUp = false;
             if ((e = RP.h2d(dRR, hRR + i0 * 4, m * 4)) != cudaSuccess) return e;
             if ((e = RP.h2d(dE, hE + i0 * 24, m * 24)) != cudaSuccess) return e;
-            upAt = i0;
+            upAt = i0; upM = m;
         }
         if (q && hQ && !qUp) { if ((e = RP.h2d(dQ, hQ + i0 * QB, m * QB)) != cudaSuccess) return e; qUp = true; }
         out.msUpload += (now() - t) * 1e3;
@@ -491,41 +615,66 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         const double tk = now();
         std::string err;
         float ms = 0;
-        for (u64 i0 = 0; i0 < n; i0 += m0) {
-            const u64 m = std::min(m0, n - i0);
+        // rt/devoom: its sort needs 16 bytes per read beyond the pass's buffers: sub-chunks of at most 2^27 reads, halved when that fails
+        u64 msub = std::min<u64>(m0, 1ull << 27); const u64 msubFloor = 1ull << 16; int nCalls = 0;
+        for (u64 i0 = 0; i0 < n;) {
+            const u64 m = std::min(msub, n - i0);
             EP_CK(upChunk(i0, m, false));
             std::vector<uint64_t> kc;
-            if (!singlet_records_gpu::distinctBarcodes(dRR, dE, m, H.cbL, kc, ms, err)) { out.log += err + "; "; if (pinned) RP.unpinAll(); return false; }
-            if (nCh == 1) keys.swap(kc); else keys.insert(keys.end(), kc.begin(), kc.end());
+            bool oom = false;
+            if (!singlet_records_gpu::distinctBarcodes(dRR, dE, m, H.cbL, kc, ms, err, &oom)) {
+                if (oom) {
+                    if (m > msubFloor) { msub = std::max<u64>(msubFloor, m / 2); memNote("distinct CRs out of memory: " + std::to_string(m) + " -> " + std::to_string(msub) + " reads per call"); continue; }
+                    if (oomWait("distinct CRs")) continue;
+                }
+                out.log += err + "; "; if (pinned) RP.unpinAll(); return false;
+            }
+            if (nCalls++ == 0) keys.swap(kc); else keys.insert(keys.end(), kc.begin(), kc.end());
+            i0 += m;
         }
-        if (nCh > 1) { std::sort(keys.begin(), keys.end()); keys.erase(std::unique(keys.begin(), keys.end()), keys.end()); }
+        if (nCalls > 1) { std::sort(keys.begin(), keys.end()); keys.erase(std::unique(keys.begin(), keys.end()), keys.end()); }
         out.msKeys = (now() - tk) * 1e3;
         const double tt = now();
         vals.assign(keys.size(), E2ECrVal{-2, -1, 0});
         crTable(keys, vals);
         out.msTable = (now() - tt) * 1e3;
         out.nKeys = keys.size();
-        EP_CK(B.alloc(dK, keys.size() * 8)); EP_CK(B.alloc(dV, vals.size() * sizeof(e6::CrVal)));
-        if (!keys.empty()) {
-            EP_CK(cudaMemcpy(dK, keys.data(), keys.size() * 8, cudaMemcpyHostToDevice));
-            EP_CK(cudaMemcpy(dV, vals.data(), vals.size() * sizeof(e6::CrVal), cudaMemcpyHostToDevice));
+    }
+    {   // the CR table and the per-cell tables; when they do not fit, the per-read buffers go too and come back smaller
+        const u64 nc = in.nCells, nq = in.nCellsQc, nw = in.nWl;
+        auto allocB = [&]() -> cudaError_t {
+            cudaError_t e;
+            if (injectLeft > 0) { injectLeft--; return cudaErrorMemoryAllocation; }
+#define AB_CK(x) do { e = (x); if (e != cudaSuccess) return e; } while (0)
+            AB_CK(B.alloc(dK, keys.size() * 8)); AB_CK(B.alloc(dV, vals.size() * sizeof(e6::CrVal)));
+            if (!keys.empty()) {
+                AB_CK(cudaMemcpy(dK, keys.data(), keys.size() * 8, cudaMemcpyHostToDevice));
+                AB_CK(cudaMemcpy(dV, vals.data(), vals.size() * sizeof(e6::CrVal), cudaMemcpyHostToDevice));
+            }
+            AB_CK(B.alloc(dCellR, nc * 4)); AB_CK(cudaMemset(dCellR, 0, nc * 4 + 4));
+            AB_CK(B.alloc(dCellU, nq * 4)); AB_CK(cudaMemset(dCellU, 0, nq * 4 + 4));
+            AB_CK(B.alloc(dCellM, nq * 4)); AB_CK(cudaMemset(dCellM, 0, nq * 4 + 4));
+            AB_CK(B.alloc(dCellMis, nq * 8)); AB_CK(cudaMemset(dCellMis, 0, nq * 8 + 8));
+            AB_CK(B.alloc(dCellB, nq * 8)); AB_CK(cudaMemset(dCellB, 0, nq * 8 + 8));
+            AB_CK(B.alloc(dWl, nw * 4)); AB_CK(cudaMemset(dWl, 0, nw * 4 + 4));
+#undef AB_CK
+            return cudaSuccess;
+        };
+        cudaError_t e = allocB();
+        while (e != cudaSuccess) {
+            if (!recover(e, "the CR table and cell tables", true)) return fail("B.alloc(CR table, cell tables)", e);
+            B.rollback(mkRec); upAt = ~0ull; upM = 0; qUp = false;
+            e = allocA(m0);
+            if (e == cudaSuccess) e = allocB();
         }
     }
+    nCh = n ? (n + m0 - 1) / m0 : 1;
     const unsigned T = 256;
     PassDev d{};
     unsigned long long pc[PC_N] = {};
     double e16unreg = 0, e16reset = 0;
     u64 nKeep = 0;
     {
-        const u64 nc = in.nCells, nq = in.nCellsQc, nw = in.nWl;
-        EP_CK(B.alloc(dCellR, nc * 4)); EP_CK(cudaMemset(dCellR, 0, nc * 4 + 4));
-        EP_CK(B.alloc(dCellU, nq * 4)); EP_CK(cudaMemset(dCellU, 0, nq * 4 + 4));
-        EP_CK(B.alloc(dCellM, nq * 4)); EP_CK(cudaMemset(dCellM, 0, nq * 4 + 4));
-        EP_CK(B.alloc(dCellMis, nq * 8)); EP_CK(cudaMemset(dCellMis, 0, nq * 8 + 8));
-        EP_CK(B.alloc(dCellB, nq * 8)); EP_CK(cudaMemset(dCellB, 0, nq * 8 + 8));
-        EP_CK(B.alloc(dWl, nw * 4)); EP_CK(cudaMemset(dWl, 0, nw * 4 + 4));
-        EP_CK(B.alloc(dKeep, m0 * 4)); EP_CK(B.alloc(dPos, m0 * 4));
-        EP_CK(B.alloc(dOut, m0 * 16)); EP_CK(B.alloc(dClip, m0 * 4)); EP_CK(B.alloc(dLowq, m0 * QB));
         d.qw = QW; d.sigs = dS; d.alns = dA; d.ops = dOps; d.nm = dNm;
         d.pp = e6::PassParams{H.cbL, H.umiL, in.chrmTid, in.minMapq, in.cbc ? 1u : 0u, in.wlOn ? 1u : 0u, in.wlPend ? 1u : 0u};
         d.keys = dK; d.vals = dV; d.nKeys = keys.size();
@@ -542,10 +691,15 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
             EP_CK(upChunk(i0, m, true));
             const double te = now();
             d.rr = dRR; d.E = dE; d.Q = dQ; d.n = m; d.i0 = i0;
-            k_pass_eval<<<G, T>>>(d, dKeep);
-            EP_CK(cudaGetLastError());
+            EP_CK(launchRetry([&] { k_pass_eval<<<G, T>>>(d, dKeep); }, "k_pass_eval"));
             EP_CK(cudaMemcpyFromSymbol(pc, g_pc, sizeof pc));
-            thrust::exclusive_scan(thrust::device_ptr<uint32_t>(dKeep), thrust::device_ptr<uint32_t>(dKeep + m), thrust::device_ptr<uint32_t>(dPos));
+            {   // the scan's temporaries come from the buffer allocated up front (thrust's own would be a cudaMalloc here); the scan can be repeated
+                for (;;) {
+                    ScanAlloc sa((char*) dScan, kScanBytes);
+                    try { thrust::exclusive_scan(thrust::cuda::par(sa), thrust::device_ptr<uint32_t>(dKeep), thrust::device_ptr<uint32_t>(dKeep + m), thrust::device_ptr<uint32_t>(dPos)); break; }
+                    catch (const std::exception&) { cudaGetLastError(); if (!oomWait("the keep scan")) return fail("thrust::exclusive_scan", cudaErrorMemoryAllocation); }
+                }
+            }
             uint32_t lastP = 0, lastK = 0;
             EP_CK(cudaMemcpy(&lastP, dPos + m - 1, 4, cudaMemcpyDeviceToHost)); EP_CK(cudaMemcpy(&lastK, dKeep + m - 1, 4, cudaMemcpyDeviceToHost));
             const u64 mKeep = (u64) lastP + lastK;
@@ -553,10 +707,14 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
             const double ts = now();
             const u64 nPend = pc[PC_PEND] - pend0, nRhost = pc[PC_RHOST] - rhost0;
             pend0 = pc[PC_PEND]; rhost0 = pc[PC_RHOST];
-            EP_CK(B.alloc(dPend, nPend * 8)); EP_CK(B.alloc(dRhost, nRhost * 8));
+            for (;;) {   // per chunk (the counts come from the eval): waits for memory, the chunk cannot shrink now
+                cudaError_t e = B.alloc(dPend, nPend * 8);
+                if (e == cudaSuccess) e = B.alloc(dRhost, nRhost * 8);
+                if (e == cudaSuccess) break;
+                if (!recover(e, "the pending and rRNA lists", false)) return fail("B.alloc(dPend, dRhost)", e);
+            }
             { unsigned long long z[2] = {0, 0}; EP_CK(cudaMemcpyToSymbol(g_app, z, sizeof z)); }
-            k_pass_scatter<<<G, T>>>(d, dKeep, dPos, dOut, dClip, dLowq, dPend, nPend, dRhost, nRhost);
-            EP_CK(cudaGetLastError());
+            EP_CK(launchRetry([&] { k_pass_scatter<<<G, T>>>(d, dKeep, dPos, dOut, dClip, dLowq, dPend, nPend, dRhost, nRhost); }, "k_pass_scatter"));
             EP_CK(cudaDeviceSynchronize());
             out.msScatter += (now() - ts) * 1e3;
             const double td = now();
@@ -601,6 +759,7 @@ bool e2ePass(const E2EPassIn& in, int device, const std::function<void(const std
         for (u64 k = 0; k < nPendAll; k++) out.wlPending[k] = {pend[2 * k], pend[2 * k + 1]};
         out.msDownload += (now() - td) * 1e3;
         if (nCh > 1) out.log += "read chunks " + std::to_string(nCh) + " of " + std::to_string(m0) + " (P3-MEM-03); ";
+        if (nRecov) out.log += "OOM recoveries " + std::to_string(nRecov) + ", waited " + std::to_string((int) oomWaited) + " s (rt/devoom); ";
     }
 #undef EP_CK
     {
