@@ -649,7 +649,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     // the decision and the registration of a start are made under a flock, so two pools cannot both take the last room. An item starts when
     //   free now (MemFree + SINGLET_POOL_CACHE_SHARE (0.25) of the file cache, which other tenants' load makes slow to reclaim)
     //   - what every pool's items can still allocate - the item's estimate - the estimate of a waiting item of another pool that waited longer
-    //   >= SINGLET_POOL_MEM_RESERVE_GB (100).
+    //   >= SINGLET_POOL_MEM_RESERVE_GB (40: MemFree min was 29 GB at pressure 0 % with THP auto, 816788).
     // Estimate (SINGLET_POOL_ITEM_GB overrides): 11.5 GB per GB of .1fq + 8: d300_3p (6.0 GB file) peaks at 77 GB private (planes, aux, region, per-read
     // tables), d1000_3p (24.9 GB) at 285 GB (rt-deep 815819). An item in its tail (after the engine's "[engine_gpu] level" line) is counted at
     // 40 % of the estimate. An item with nothing else running on the node always starts, whatever its size (it runs alone). The wait is bounded
@@ -657,7 +657,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     // it (SINGLET_POOL_DROP_INPUT_CACHE, default on) and, for the clean pages, at pool start.
     const bool memAdmit = env_num("SINGLET_POOL_MEMADMIT", 1) != 0;
     const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0.25),
-                 memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 100), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
+                 memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 40), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
     const bool dropInput = env_num("SINGLET_POOL_DROP_INPUT_CACHE", 1) != 0;
     // SINGLET_POOL_SKIP_AHEAD (16, 0 = strict queue order): while the head of the queue waits for room, an item among the next 16 that fits starts instead,
     // for at most SINGLET_POOL_SKIP_GRACE_S (900) of the head's wait; after that only the head is tried, and another pool's head that waited that long is served first
@@ -666,7 +666,14 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     std::vector<double> itemEst(items.size(), 0);
     for (const Item& it : items) {
         struct stat st{};
-        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : (stat(it.fq.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0) * 11.5 + 8.0;
+        // rt/hostmem2: the item's host peak (GB of its process group's RssAnon + RssShmem, minus the pool's genome that its STAR child maps), fitted on the 110 items
+        // of mix3 816788 (peak of the per-item sum in memsamp.tsv against the reads in the .1fq header): peak = a + b x reads (M). Least squares gave
+        // 48.2 + 0.2235 x (rmse 13.6 GB, worst under-prediction 30.3 GB: d500s_3p), the margin adds 30 GB, the genome comes off (-16.4): a = 61.8, b = 0.2235.
+        // The reads are the u32 at byte 20 of the .1fq header ("1FQ\0" magic); without a header, the file size: 11.6 GB per GB + 43.6 (envelope of the 16 samples).
+        double reads = 0;
+        if (FILE* hf = fopen(it.fq.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) reads = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+        const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
+        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 : (stat(it.fq.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0) * 11.6 + 43.6;
     }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
@@ -782,7 +789,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             // holding a device slot; the items beyond it are in their tail (CPU work, a third of the host memory), where an extra sample earns its place
             size_t front = 0;
             if (frontMax > 0) for (const Run& r : runs) if (r.pid > 0 && !r.done && r.front) ++front;
-            if (active > 0 && ((stagger > 0 && lastStartEst >= 50 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor) || (frontMax > 0 && front >= (size_t) frontMax))) {
+            if (active > 0 && ((stagger > 0 && lastStartEst >= 100 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor) || (frontMax > 0 && front >= (size_t) frontMax))) {
                 if (!admitNoted) { plog("admission: the next item waits (%zu in the front half of at most %.0f, stagger %.0f s, memory floor %.0f GB, available %.0f GB)", front, frontMax, stagger, memFloor, avail_gb()); admitNoted = true; }
                 break;
             }

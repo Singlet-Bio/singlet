@@ -196,12 +196,12 @@ inline bool noinitHugepage() {
 // when no 2 MB block is free (THP defrag = madvise). On a node whose memory is full of other tenants' file cache that was the livelock of
 // 815877, 816398, 816401, 816549 and of the first 18 minutes of mix 816547 (memory pressure 95 %, 25 cores in the kernel, MemFree 100 GB);
 // the same mix start with the request left out (816710): pressure 0 %, no compaction stall, a fifth of the system time. auto: an array of 64 MB
-// or more is allocated without the request when MemFree is under SINGLET_THP_MINFREE_GB (48), or the file cache (Cached - Shmem) is over
-// SINGLET_THP_MAXCACHE_GB (200), or the memory pressure "full" avg10 is over 1 %. Read once per large allocation (a few dozen per sample).
+// or more is allocated without the request when MemFree is under SINGLET_THP_MINFREE_GB (48), or (only when SINGLET_THP_MAXCACHE_GB is set above 0, off by default: it cost 12-15 % at K=3, 816991 vs 816992) the file cache (Cached - Shmem) is over
+// SINGLET_THP_MAXCACHE_GB, or the memory pressure "full" avg10 is over 1 %. Read once per large allocation (a few dozen per sample).
 inline bool thpFreeOk() {
     static const int policy = [] { const char* e = std::getenv("SINGLET_THP_POLICY"); return (e && std::strcmp(e, "on") == 0) ? 1 : (e && std::strcmp(e, "off") == 0) ? 2 : 0; }();
     static const double minFree = [] { const char* e = std::getenv("SINGLET_THP_MINFREE_GB"); return (e && e[0]) ? std::atof(e) : 48.0; }();
-    static const double maxCache = [] { const char* e = std::getenv("SINGLET_THP_MAXCACHE_GB"); return (e && e[0]) ? std::atof(e) : 200.0; }();
+    static const double maxCache = [] { const char* e = std::getenv("SINGLET_THP_MAXCACHE_GB"); return (e && e[0]) ? std::atof(e) : 0.0; }();
     if (policy == 1) return true;
     if (policy == 2) return false;
     char l[160];
@@ -214,7 +214,7 @@ inline bool thpFreeOk() {
         }
         std::fclose(f);
         if (freeKb >= 0 && freeKb / 1048576.0 < minFree) return false;
-        if ((cachedKb - shmKb) / 1048576.0 > maxCache) return false;
+        if (maxCache > 0 && (cachedKb - shmKb) / 1048576.0 > maxCache) return false;
     }
     if (FILE* f = std::fopen("/proc/pressure/memory", "r")) {
         while (std::fgets(l, sizeof l, f)) {
