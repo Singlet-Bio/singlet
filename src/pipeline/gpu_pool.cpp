@@ -253,6 +253,8 @@ struct Run {
     double t0 = 0, t1 = 0, killAt = 0;
     bool done = false, killed = false;
     bool front = true;   // rt/hostmem: in the front half (from the start until the engine's "[engine_gpu] level" line: the packed planes and aux are freed by then)
+    bool plateau = false;   // rt/phaseadmit: the all-site pass has been joined ("[allsite] async: waited"): host memory is on its tail plateau and no longer grows with depth
+    mutable double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
     bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
 };
 
@@ -272,6 +274,7 @@ void pump(Run& r, bool eof) {
         while ((e = r.partial.find('\n', s)) != std::string::npos) {
             if (r.log) fprintf(r.log, "%ld %.*s\n", t, (int) (e - s), r.partial.data() + s);
             if (r.front && r.partial.compare(s, 19, "[engine_gpu] level ") == 0) r.front = false;
+            if (!r.plateau && r.partial.compare(s, 24, "[allsite] async: waited ") == 0) r.plateau = true;
             if (!r.decoded) { const size_t dp = r.partial.find("decoded into the packed buffers", s); if (dp != std::string::npos && dp < e) r.decoded = true; }
             s = e + 1;
         }
@@ -659,6 +662,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0.25),
                  memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 40), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
     const bool dropInput = env_num("SINGLET_POOL_DROP_INPUT_CACHE", 1) != 0;
+    // rt/phaseadmit SINGLET_POOL_PHASE_ADMIT (default on, =0 restores the admission above exactly): an item whose all-site pass is joined (the "[allsite] async: waited" line;
+    // the STAR child has exited, the planes and the hand-off pass are long gone) sits on a tail plateau that does not grow with depth: its charge drops from 40 % of its
+    // estimate to min(that, SINGLET_POOL_TAIL_GB). Fitted on memsamp of mix4 817054 (anon+shmem of the item's process group, 10 s after the line): d2600 38, d1000 65,
+    // d1000s 61, d700s 49, d500s 38, d300 17 GB, so 80 = the largest plus a margin of 15. What the item holds is never charged less (the charge is on top of what MemFree already lost).
+    // The head item is re-tested at every loop turn (200 ms) while a slot is free, with the pool's own charges recomputed from /proc then, so a drop admits it at once.
+    const bool phaseAdmit = env_num("SINGLET_POOL_PHASE_ADMIT", 1) != 0;
+    const double tailGb = env_num("SINGLET_POOL_TAIL_GB", 80);
     // SINGLET_POOL_SKIP_AHEAD (16, 0 = strict queue order): while the head of the queue waits for room, an item among the next 16 that fits starts instead,
     // for at most SINGLET_POOL_SKIP_GRACE_S (900) of the head's wait; after that only the head is tried, and another pool's head that waited that long is served first
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
@@ -749,7 +759,11 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         for (const Run& r : runs) {
             if (r.pid <= 0 || r.done) continue;
             ++act;
-            const double held = std::max(0.0, cur[r.idx] - sharedGb), want = itemEst[r.idx] * (r.front ? 1.0 : 0.4);
+            const double held = std::max(0.0, cur[r.idx] - sharedGb);
+            double want = itemEst[r.idx] * (r.front ? 1.0 : 0.4);
+            if (phaseAdmit && r.plateau) want = std::min(want, tailGb);
+            if (phaseAdmit && r.charge > 0 && want < r.charge - 0.5) plog("phase drop: item %d charge %.0f -> %.0f GB (holds %.0f GB)", r.idx, r.charge, want, held);
+            if (phaseAdmit) r.charge = want;
             rem += std::max(0.0, want - held);
         }
         gateOwnRem = rem; gateOwnAct = act;
