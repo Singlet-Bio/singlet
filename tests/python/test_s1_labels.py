@@ -342,12 +342,16 @@ def test_load_s2_has_the_labels(labelled, env):
     root, s = labelled
     key = s.truth["GSM9000001"]["key"]
     ad = client.load(str(root.joinpath(*key.split("/"))))
-    assert {"cell_type", "sex_chrom", "called_ed", "don_donor_id", "don_prob_max"} <= set(ad.obs.columns)
+    assert {"cell_type", "sex_chrom", "called_ed", "don_donor_id", "don_prob_max"} <= set(
+        ad.obs.columns
+    )
     assert "qc_doublet_score" not in ad.obs.columns and not set(L.CALL_LAYER) & set(ad.obs.columns)
     full = client.load(str(root.joinpath(*key.split("/"))), include_unvalidated=True)
     assert set(L.CALL_LAYER) <= set(full.obs.columns)
     st = client.open_study(s.manifest["gse"], base=str(root))
-    dbl = st.cells("don_cell_status == 'doublet'", samples=["GSM9000001"])  # the hidden calls still filter
+    dbl = st.cells(
+        "don_cell_status == 'doublet'", samples=["GSM9000001"]
+    )  # the hidden calls still filter
     assert dbl.n_obs > 0 and "don_cell_status" not in dbl.obs.columns
 
 

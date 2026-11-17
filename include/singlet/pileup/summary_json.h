@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "../version.h"
+
 namespace singlet {
 
 /// Comprehensive pipeline run metrics.
@@ -31,9 +33,9 @@ struct PipelineSummary {
     std::string protocol;           ///< legacy/internal; kept for backward compat
     std::string organism;           ///< legacy/internal; kept for backward compat
     std::string singlet_version;
-    /// Pipeline source-tree git sha (set from $SINGLET_GIT_SHA env at export time).
+    /// Pipeline source-tree git sha (compiled in; $SINGLET_GIT_SHA overrides at export time).
     /// Empty string when unset — emitted verbatim for traceability.
-    std::string git_sha;
+    std::string git_sha = singlet::git_commit();   ///< the compiled-in commit (version.h); export.h lets SINGLET_GIT_SHA override it
     /// sha256 of state/reference-manifest-v1.yaml (set from $SINGLET_REF_MANIFEST_SHA).
     /// Empty string when unset.
     std::string reference_manifest_sha256;

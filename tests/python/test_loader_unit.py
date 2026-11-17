@@ -246,7 +246,10 @@ class TestLoadSample:
         """Without a local catalog load_sample calls load(), never touching the codec (issue 73)."""
         from singlet._loader import load_sample
 
-        with patch("singlet._loader._read_pz_record") as reader, patch("singlet._loader.load") as load:
+        with (
+            patch("singlet._loader._read_pz_record") as reader,
+            patch("singlet._loader.load") as load,
+        ):
             load.return_value = "adata"
             assert load_sample("GSM4120733", genes=["A"]) == "adata"
         reader.assert_not_called()

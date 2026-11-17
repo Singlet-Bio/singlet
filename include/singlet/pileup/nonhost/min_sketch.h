@@ -61,6 +61,11 @@ inline uint64_t murmurhash64A(uint64_t key) {
 
 // ── Binary structures ────────────────────────────────────────────────────────
 
+// The bacterial and fungal index files both number their species from 1. When they are joined into one microbial index the fungal
+// ids are read with this bit set (merge(a, b, kFungalIdBit)), so a bacterium and a fungus that share an id stay two species. The id in
+// its own index is id & ~kFungalIdBit; the files themselves are unchanged.
+constexpr uint32_t kFungalIdBit = 0x40000000u;
+
 struct MinSketchEntry {       // 16 bytes per entry in the flat sorted vector
     uint64_t kmer_hash;       // canonical k-mer hash (murmurhash64A of min(fwd, rc))
     uint32_t species_id;      // which species this minimizer came from
@@ -232,28 +237,45 @@ public:
     // Union of two finalized indexes (requires same k/w). The result does not copy
     // the entries: it holds both indexes' sorted runs (sharing their memory maps),
     // and every query adds up the runs, which gives the counts a merged index would.
-    static MinSketchIndex merge(const MinSketchIndex& a, const MinSketchIndex& b) {
+    // b_id_or != 0 reads every species id of b with those bits set (queries return id | b_id_or) and keeps b's names apart
+    // under the same ids, so two indexes that number their species from 1 do not share an id. b_id_or == 0 is the plain union.
+    static MinSketchIndex merge(const MinSketchIndex& a, const MinSketchIndex& b, uint32_t b_id_or = 0) {
         if (a.k_ != b.k_ || a.w_ != b.w_)
             throw std::runtime_error("MinSketchIndex::merge: k/w mismatch");
+        if (b_id_or != 0 && (a.species_names_.size() >= b_id_or || b.species_names_.size() >= b_id_or ||
+                             !a.hi_names_.empty() || !b.hi_names_.empty()))
+            throw std::runtime_error("MinSketchIndex::merge: species ids reach the namespace bit");
         MinSketchIndex out(a.k_, a.w_);
         for (const MinSketchIndex* src : {&a, &b}) {
-            out.blocks_.insert(out.blocks_.end(), src->blocks_.begin(), src->blocks_.end());
+            const uint32_t id_or = (src == &b) ? b_id_or : 0u;
+            for (const auto& sb : src->blocks_) {
+                if (id_or == 0 && sb->id_or == 0) { out.blocks_.push_back(sb); continue; }
+                auto blk = std::make_shared<Block>();   // a view of the same run with its own id bits; keeps the source alive
+                blk->p = sb->p; blk->n = sb->n; blk->id_or = sb->id_or | id_or; blk->keep = sb;
+                out.blocks_.push_back(std::move(blk));
+            }
             if (!src->entries_.empty()) {   // owned run: share a copy
                 auto blk = std::make_shared<Block>();
                 blk->owned = src->entries_;
                 blk->p = blk->owned.data();
                 blk->n = blk->owned.size();
+                blk->id_or = id_or;
                 out.blocks_.push_back(std::move(blk));
             }
         }
-        // Merge species names: a's names take precedence; b fills in gaps
+        // Merge species names: a's names take precedence; b fills in gaps (plain union), or b's names go under the namespace bits
         out.species_names_ = a.species_names_;
-        for (uint32_t sid = 0; sid < static_cast<uint32_t>(b.species_names_.size()); ++sid) {
-            if (b.species_names_[sid].empty()) continue;
-            if (sid >= static_cast<uint32_t>(out.species_names_.size()))
-                out.species_names_.resize(sid + 1);
-            if (out.species_names_[sid].empty())
-                out.species_names_[sid] = b.species_names_[sid];
+        if (b_id_or != 0) {
+            out.hi_bit_ = b_id_or;
+            out.hi_names_ = b.species_names_;
+        } else {
+            for (uint32_t sid = 0; sid < static_cast<uint32_t>(b.species_names_.size()); ++sid) {
+                if (b.species_names_[sid].empty()) continue;
+                if (sid >= static_cast<uint32_t>(out.species_names_.size()))
+                    out.species_names_.resize(sid + 1);
+                if (out.species_names_[sid].empty())
+                    out.species_names_[sid] = b.species_names_[sid];
+            }
         }
         return out;
     }
@@ -266,14 +288,14 @@ public:
             const std::vector<uint64_t>& mins) const {
         std::unordered_map<uint32_t, uint32_t> hits;
         for (uint64_t h : mins) {
-            for_each_run([&](const MinSketchEntry* p, size_t n) {
+            for_each_run([&](const MinSketchEntry* p, size_t n, uint32_t id_or) {
                 const MinSketchEntry* end = p + n;
                 const MinSketchEntry* lo = std::lower_bound(p, end, h,
                     [](const MinSketchEntry& e, uint64_t val) {
                         return e.kmer_hash < val;
                     });
                 for (auto it = lo; it != end && it->kmer_hash == h; ++it)
-                    hits[it->species_id]++;
+                    hits[it->species_id | id_or]++;
             });
         }
         return hits;
@@ -304,8 +326,8 @@ public:
             std::vector<std::unordered_map<uint32_t, uint32_t>>& results) const {
 
         if (flat_mins.empty()) return;
-        for_each_run([&](const MinSketchEntry* run, size_t n_run) {
-            batch_query_run(run, n_run, flat_mins, results);
+        for_each_run([&](const MinSketchEntry* run, size_t n_run, uint32_t id_or) {
+            batch_query_run(run, n_run, id_or, flat_mins, results);
         });
     }
 
@@ -327,7 +349,7 @@ public:
             while (b > 0 && b < nq && flat_mins[b].first == flat_mins[b - 1].first) ++b;
             qb[i] = b;
         }
-        for_each_run([&](const MinSketchEntry* run, size_t n_run) {
+        for_each_run([&](const MinSketchEntry* run, size_t n_run, uint32_t id_or) {
             const size_t base = out.size();
             out.resize(base + ns);
             if (n_run == 0) return;
@@ -355,7 +377,7 @@ public:
                     while (di < n_run && run[di].kmer_hash == qh) ++di;
                     for (size_t qj = qs; qj < qi; ++qj)
                         for (size_t dj = ds; dj < di; ++dj)
-                            ev.push_back((static_cast<uint64_t>(flat_mins[qj].second) << 32) | run[dj].species_id);
+                            ev.push_back((static_cast<uint64_t>(flat_mins[qj].second) << 32) | (run[dj].species_id | id_or));
                 }
             };
             const size_t nth = std::min<size_t>(std::max(1, nt), ns);
@@ -373,7 +395,7 @@ public:
 
 private:
     static void batch_query_run(
-            const MinSketchEntry* entries_, size_t n_run,
+            const MinSketchEntry* entries_, size_t n_run, uint32_t id_or,
             const std::vector<std::pair<uint64_t, uint32_t>>& flat_mins,
             std::vector<std::unordered_map<uint32_t, uint32_t>>& results) {
         if (n_run == 0) return;
@@ -398,7 +420,7 @@ private:
             // Record all (read, species) cross-pairs for this hash value
             for (size_t qj = qi_start; qj < qi; ++qj)
                 for (size_t dj = di_start; dj < di; ++dj)
-                    results[flat_mins[qj].second][entries_[dj].species_id]++;
+                    results[flat_mins[qj].second][entries_[dj].species_id | id_or]++;
         }
     }
 
@@ -407,6 +429,7 @@ public:
     // ── Serialization ────────────────────────────────────────────────────────
 
     void save(const std::string& path) const {
+        if (hi_bit_ != 0) throw std::runtime_error("MinSketchIndex::save: a namespaced union is not saved: " + path);
         std::ofstream f(path, std::ios::binary);
         if (!f) throw std::runtime_error("MinSketchIndex::save: cannot write: " + path);
         MinSketchHeader hdr{};
@@ -545,6 +568,10 @@ public:
     }
     const std::string& species_name(uint32_t species_id) const {
         static const std::string empty_name;
+        if (hi_bit_ != 0 && (species_id & hi_bit_) != 0) {   // a name of the second index of a namespaced union
+            const uint32_t own = species_id & ~hi_bit_;
+            return own < static_cast<uint32_t>(hi_names_.size()) ? hi_names_[own] : empty_name;
+        }
         if (species_id >= static_cast<uint32_t>(species_names_.size())) return empty_name;
         return species_names_[species_id];
     }
@@ -557,6 +584,8 @@ private:
         const MinSketchEntry* p = nullptr;
         size_t n = 0;
         std::vector<MinSketchEntry> owned;
+        uint32_t id_or = 0;                  // bits set on every species id of this run when it is read (kFungalIdBit)
+        std::shared_ptr<Block> keep;         // the run this one views (a union with id bits shares the memory map)
         void* map_base = nullptr;
         size_t map_len = 0;
         Block() = default;
@@ -571,8 +600,8 @@ private:
 
     template <class Fn>
     void for_each_run(Fn&& fn) const {
-        if (!entries_.empty()) fn(entries_.data(), entries_.size());
-        for (const auto& blk : blocks_) fn(blk->p, blk->n);
+        if (!entries_.empty()) fn(entries_.data(), entries_.size(), 0u);
+        for (const auto& blk : blocks_) fn(blk->p, blk->n, blk->id_or);
     }
 
 #ifndef _WIN32
@@ -634,6 +663,8 @@ private:
     std::vector<MinSketchEntry>           entries_;       // sorted by kmer_hash
     std::unordered_map<uint32_t,uint32_t> species_count_; // per-species entry counter
     std::vector<std::string>              species_names_; // species_id → name from FASTA header
+    uint32_t                              hi_bit_ = 0;    // namespace bit of a merge(a, b, bit): ids with it set name hi_names_
+    std::vector<std::string>              hi_names_;      // names of b (own ids) in a namespaced union
     int k_ = 21;
     int w_ = 11;
 };

@@ -62,7 +62,11 @@ def _handler(
             if path == "/_stats":  # the recorder, for clients in another process (the R tests)
                 with rec.lock:
                     body = json.dumps(
-                        {"requests": len(rec.log), "bytes": sum(r[4] for r in rec.log), "max_inflight": rec.max_inflight}
+                        {
+                            "requests": len(rec.log),
+                            "bytes": sum(r[4] for r in rec.log),
+                            "max_inflight": rec.max_inflight,
+                        }
                     ).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -189,8 +193,12 @@ if __name__ == "__main__":
     ap.add_argument("--range-status", type=int, default=206)
     ap.add_argument("--ignore-range", action="store_true")
     ap.add_argument("--delay", type=float, default=0.0)
-    ap.add_argument("--ttl", type=float, default=0.0, help="exit after this many seconds (0: never)")
-    ap.add_argument("--url-file", help="also write the base URL to this file (written whole, then renamed)")
+    ap.add_argument(
+        "--ttl", type=float, default=0.0, help="exit after this many seconds (0: never)"
+    )
+    ap.add_argument(
+        "--url-file", help="also write the base URL to this file (written whole, then renamed)"
+    )
     a = ap.parse_args()
     rec = Recorder()
     Base = _handler(os.path.abspath(a.root), rec, a.ignore_range, None, a.range_status, a.delay)

@@ -51,9 +51,14 @@ def check(root=ROOT):
         print(f"FAIL: {rec} is for source hash {r.get('source_hash')}, this checkout is {sh}")
         return 1
     bad = [f"{ds}:{ax}" for ds, d in r.get("datasets", {}).items() for ax, v in d.get("axes", {}).items() if v.get("verdict") == "FAIL"]
-    if r.get("gate") != "PASS" or bad or not r.get("datasets"):
+    acc = r.get("accepted") or {}
+    accepted = set(acc.get("axes", [])) if acc.get("decision") else set()
+    bad = [b for b in bad if b not in accepted]
+    if (r.get("gate") != "PASS" and not accepted) or bad or not r.get("datasets"):
         print(f"FAIL: gate record {rec} says {r.get('gate')}; axes worse than STARsolo beyond their CI: {', '.join(bad) or 'none listed'}")
         return 1
+    if accepted:
+        print(f"note: owner-accepted misses ({acc['decision']}): {', '.join(sorted(accepted))}")
     print(f"PASS: counting sources {sh[:16]} gated against STARsolo at commit {r.get('commit', '?')[:12]} ({r.get('date', '?')})")
     for ds, d in r["datasets"].items():
         for ax, v in d["axes"].items():

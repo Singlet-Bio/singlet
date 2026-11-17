@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: MIT
 """scripts/build_fusion_catalog.py: open sources only (COSMIC and gene-family pairs dropped), ordered CTAT pairs, unordered Mitelman pairs."""
+
 import gzip
 import importlib.util
-import io
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("build_fusion_catalog", ROOT / "scripts" / "build_fusion_catalog.py")
+spec = importlib.util.spec_from_file_location(
+    "build_fusion_catalog", ROOT / "scripts" / "build_fusion_catalog.py"
+)
 B = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(B)
 
@@ -30,19 +32,29 @@ def test_catalog(tmp_path):
     with zipfile.ZipFile(mz, "w") as z:
         z.writestr("MCGENE.TXT.DATA", MCGENE)
     rows = B.build(str(dat), str(mz))
-    assert rows[("BCR", "ABL1")] == [{"ChimerKB", "Mitelman"}, 1]  # Cosmic dropped, Mitelman merged with the reversed pair
+    assert rows[("BCR", "ABL1")] == [
+        {"ChimerKB", "Mitelman"},
+        1,
+    ]  # Cosmic dropped, Mitelman merged with the reversed pair
     assert ("ABL1", "BCR") not in rows
     assert rows[("PAR1", "PAR2")][0] == {"DGD_PARALOGS"}
-    assert ("GENEX", "GENEY") not in rows and ("FAM1", "FAM2") not in rows and ("SAME", "SAME") not in rows
+    assert (
+        ("GENEX", "GENEY") not in rows
+        and ("FAM1", "FAM2") not in rows
+        and ("SAME", "SAME") not in rows
+    )
     assert rows[("A", "B")] == [{"Mitelman"}, 0] and rows[("B", "C")] == [{"Mitelman"}, 0]
     assert ("X", "Y") not in rows  # clinical association row
     assert rows[("+NUP214", "ABL1")][0] == {"Mitelman"}
     out = tmp_path / "cat.tsv.gz"
     B.main(["--ctat", str(dat), "--mitelman", str(mz), "--out", str(out)])
     text = gzip.decompress(out.read_bytes()).decode()
-    lines = [l for l in text.splitlines() if not l.startswith("#")]
-    assert not any("cosmic" in l.lower() for l in lines)
-    assert lines[0] == "gene_a\tgene_b\tsources\tordered" and "BCR\tABL1\tChimerKB,Mitelman\t1" in lines
+    lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
+    assert not any("cosmic" in ln.lower() for ln in lines)
+    assert (
+        lines[0] == "gene_a\tgene_b\tsources\tordered"
+        and "BCR\tABL1\tChimerKB,Mitelman\t1" in lines
+    )
     out2 = tmp_path / "cat2.tsv.gz"
     B.main(["--ctat", str(dat), "--mitelman", str(mz), "--out", str(out2)])
     assert out.read_bytes() == out2.read_bytes()

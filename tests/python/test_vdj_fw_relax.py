@@ -1,4 +1,5 @@
 """Terminal anchor of the V(D)J assembly graph: a mutated Phe118 codon is accepted only with fw_relax."""
+
 import os
 import sys
 
@@ -53,7 +54,9 @@ def test_mutated_phe_chain_is_assembled_and_productive():
     from singlet.adt import seq as S
     from singlet.vdj import assemble as A
 
-    sys.path.insert(0, os.path.dirname(__file__))   # tests/python is a package: run from the repo root, the sibling needs its directory
+    sys.path.insert(
+        0, os.path.dirname(__file__)
+    )  # tests/python is a package: run from the repo root, the sibling needs its directory
     import test_vdj_assemble as T
 
     segs = T.make_segments()
@@ -71,10 +74,21 @@ def test_mutated_phe_chain_is_assembled_and_productive():
     assert lacking and all(t[0].endswith("GTT") for t in lacking.values())
 
     def run(**kw):
-        res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
-                            params=A.Params(threads=2, **kw), log=lambda *a: None)
+        res = A.run_library(
+            [],
+            [],
+            ref=ref,
+            cb_len=16,
+            umi_len=10,
+            whitelist_codes=np.sort(wl),
+            chunks=[(r1, r2)],
+            params=A.Params(threads=2, **kw),
+            log=lambda *a: None,
+        )
         k = res.contigs[res.contigs.kept & res.contigs.productive]
-        return {(b[:-2], c): n for b, c, n in k[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
+        return {
+            (b[:-2], c): n for b, c, n in k[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)
+        }
 
     on = run(asm_fw_relax=True, fw_mut_productive=True)
     off = run(asm_fw_relax=False, fw_mut_productive=False)
@@ -82,4 +96,6 @@ def test_mutated_phe_chain_is_assembled_and_productive():
     assert sum(off.get(k) == t[0] for k, t in lacking.items()) == 0
     # chains with a canonical Phe/Trp118 are unchanged
     other = {k: t for k, t in truth.items() if t[2] not in mutated}
-    assert sum(on.get(k) == t[0] for k, t in other.items()) >= sum(off.get(k) == t[0] for k, t in other.items())
+    assert sum(on.get(k) == t[0] for k, t in other.items()) >= sum(
+        off.get(k) == t[0] for k, t in other.items()
+    )

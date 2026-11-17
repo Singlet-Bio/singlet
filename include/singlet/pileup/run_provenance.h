@@ -15,9 +15,7 @@
 #include <utility>
 #include <vector>
 
-#ifndef SINGLET_GIT_COMMIT
-#define SINGLET_GIT_COMMIT "unknown"
-#endif
+#include "../version.h"   // singlet::git_commit(): the compiled-in commit, SINGLET_GIT_SHA overriding it
 
 namespace singlet {
 
@@ -200,7 +198,7 @@ inline std::string outputs_inventory_json(const std::string& out_dir) {
 
 struct RunProvenance {
     std::string engine_version;
-    std::string engine_commit = SINGLET_GIT_COMMIT;
+    std::string engine_commit = singlet::git_commit();
     std::string binary_sha256;
     std::string reference_build;
     std::string genome_dir;

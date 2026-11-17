@@ -336,30 +336,55 @@ class TestMachineTextScrub:
 
     def test_published_provenance_and_star_log_carry_no_paths_or_hosts(self, results, tmp_path):
         out_dir = results / GOOD / "out"
-        (out_dir / "provenance.json").write_text(json.dumps({
-            "host": {"node": "g008.clipper.gvsu.edu", "ram_gb": 31.7},
-            "references": {"gtf": {"path": "/mnt/projects/lab/user/ref/GRCh38/genes.gtf",
-                                   "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/x.gtf.gz"}},
-            "cmd": "/mnt/home/user/bin/STAR --genomeDir /mnt/projects/lab/user/ref/star_2.7.11b",
-        }))
+        (out_dir / "provenance.json").write_text(
+            json.dumps(
+                {
+                    "host": {"node": "g008.clipper.gvsu.edu", "ram_gb": 31.7},
+                    "references": {
+                        "gtf": {
+                            "path": "/mnt/projects/lab/user/ref/GRCh38/genes.gtf",
+                            "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/x.gtf.gz",
+                        }
+                    },
+                    "cmd": "/mnt/home/user/bin/STAR --genomeDir /mnt/projects/lab/user/ref/star_2.7.11b",
+                }
+            )
+        )
         (out_dir / "star_Log.out").write_text(
             "STAR --genomeDir /mnt/projects/lab/user/ref/star_2.7.11b --readFilesIn /dev/null\n"
             "outFileNamePrefix   /tmp/user-804306/s/out//star_ ~RE-DEFINED\n"
-            "hostname g008.clipper.gvsu.edu\n")
+            "hostname g008.clipper.gvsu.edu\n"
+        )
         out = tmp_path / "scrub.singlet"
         with pytest.warns(UserWarning):
-            bundle_mod.pack_gse(GSE, results, "unused.parquet", out, verbose=False,
-                                _catalog_df=_catalog(GOOD, GOOD2, HOLLOW))
+            bundle_mod.pack_gse(
+                GSE,
+                results,
+                "unused.parquet",
+                out,
+                verbose=False,
+                _catalog_df=_catalog(GOOD, GOOD2, HOLLOW),
+            )
         with zipfile.ZipFile(out) as zf:
             prov = zf.read(f"samples/{GOOD}/provenance.json").decode()
             log = zf.read(f"samples/{GOOD}/star_Log.out").decode()
         for text in (prov, log):
-            assert "/mnt/" not in text and "/tmp/" not in text and "gvsu" not in text and "user" not in text
+            assert (
+                "/mnt/" not in text
+                and "/tmp/" not in text
+                and "gvsu" not in text
+                and "user" not in text
+            )
         doc = json.loads(prov)
         assert doc["host"] == {"ram_gb": 31.7}
-        assert doc["references"]["gtf"] == {"path": "genes.gtf", "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/x.gtf.gz"}
+        assert doc["references"]["gtf"] == {
+            "path": "genes.gtf",
+            "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/x.gtf.gz",
+        }
         assert doc["cmd"] == "STAR --genomeDir star_2.7.11b"
-        assert "--genomeDir star_2.7.11b --readFilesIn /dev/null" in log and "star_ ~RE-DEFINED" in log
+        assert (
+            "--genomeDir star_2.7.11b --readFilesIn /dev/null" in log and "star_ ~RE-DEFINED" in log
+        )
 
 
 class TestAmbientCorrectedMatrixNotPacked:
@@ -371,7 +396,9 @@ class TestAmbientCorrectedMatrixNotPacked:
         (out_dir / "ambient_contamination.tsv").write_text("barcode\tfraction\nAAAC\t0.02\n")
         (out_dir / "ambient_profile.tsv").write_text("gene\tp\nAAA\t0.5\nBBB\t0.5\n")
         out = tmp_path / "ambient.singlet"
-        bundle_mod.pack_gse(GSE, results, "unused.parquet", out, verbose=False, _catalog_df=_catalog(GOOD, GOOD2))
+        bundle_mod.pack_gse(
+            GSE, results, "unused.parquet", out, verbose=False, _catalog_df=_catalog(GOOD, GOOD2)
+        )
         with zipfile.ZipFile(out) as zf:
             names = zf.namelist()
         assert not any("ambient_corrected_counts" in n for n in names)

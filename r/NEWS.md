@@ -1,5 +1,9 @@
 # singlet (R) — NEWS
 
+## singlet 1.3.9
+
+Version aligned with the Python package for the non-host species id fix.
+
 ## singlet 1.3.8
 
 Version aligned with the Python package for the Research Beta engine update.

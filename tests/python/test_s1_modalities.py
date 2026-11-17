@@ -429,6 +429,8 @@ def test_ambient_corrected_counts_load_only_on_request(ambient_dir, env, mmap_lo
     path = str(pathlib.Path(root).joinpath(*t["key"].split("/")))
     assert "ambient_corrected" not in _layers(client.load(path))
     one = client.load(path, modalities="ambient")
-    assert _layers(one) == ["ambient_corrected"] and _same(one.layers["ambient_corrected"], t["ambient_g"][:, cols].T)
+    assert _layers(one) == ["ambient_corrected"] and _same(
+        one.layers["ambient_corrected"], t["ambient_g"][:, cols].T
+    )
     with pytest.raises(client.ModalityUnavailable):
         st.to_anndata([G3], modalities="ambient_corrected")

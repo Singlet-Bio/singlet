@@ -677,9 +677,27 @@ def test_s1_producer_refuses_a_hollow_object(tmp_path):
 def _publish_ns(**kw):
     import argparse
 
-    base = dict(apply=True, gse="G", io_threads=1, blas_threads=1, migrate_timeout=1, verify_timeout=1, rows_dir="r",
-                ledger_dir="l", readback="none", public="b", commit="", policy=None, study_log_dir=None, migrate_cmd=None,
-                verify_cmd=None, pythonpath=None, local_root="x", part_size_mib=None, retry_sleep=None)
+    base = dict(
+        apply=True,
+        gse="G",
+        io_threads=1,
+        blas_threads=1,
+        migrate_timeout=1,
+        verify_timeout=1,
+        rows_dir="r",
+        ledger_dir="l",
+        readback="none",
+        public="b",
+        commit="",
+        policy=None,
+        study_log_dir=None,
+        migrate_cmd=None,
+        verify_cmd=None,
+        pythonpath=None,
+        local_root="x",
+        part_size_mib=None,
+        retry_sleep=None,
+    )
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -691,21 +709,46 @@ def test_s1_publish_forwards_the_label_options_to_the_transcoder(tmp_path):
 
     assert "--labels" not in PUB.run_args(_publish_ns(), "G", Path("/tmp/x"))
     side = tmp_path / "d.zip"
-    args = PUB.run_args(_publish_ns(labels=True, af="af.parquet", labels_timeout=60.0, labels_max_gb=8.0,
-                                    restricted_sidecar=str(side)), "G", Path("/tmp/x"))
+    args = PUB.run_args(
+        _publish_ns(
+            labels=True,
+            af="af.parquet",
+            labels_timeout=60.0,
+            labels_max_gb=8.0,
+            restricted_sidecar=str(side),
+        ),
+        "G",
+        Path("/tmp/x"),
+    )
     assert "--labels" in args and args[args.index("--labels-timeout") + 1] == "60.0"
     assert args[args.index("--labels-max-gb") + 1] == "8.0"
     assert args[args.index("--af") + 1] == str(Path("af.parquet").resolve())
-    assert json.loads(args[args.index("--migrate-args") + 1]) == ["--restricted-sidecar", str(side.resolve())]
+    assert json.loads(args[args.index("--migrate-args") + 1]) == [
+        "--restricted-sidecar",
+        str(side.resolve()),
+    ]
 
 
 def test_s1_publish_refuses_a_depth_zip_without_labels_or_inside_the_store(tmp_path, capsys):
     sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
     import s1_publish as PUB
 
-    base = ["G", "--results", str(tmp_path), "--catalog", "c.parquet", "--local-root", str(tmp_path / "lr")]
-    for extra, msg in ((["--restricted-sidecar", str(tmp_path / "d.zip")], "add --labels"),
-                       (["--labels", "--restricted-sidecar", str(tmp_path / "lr" / "d.zip")], "must not live under")):
+    base = [
+        "G",
+        "--results",
+        str(tmp_path),
+        "--catalog",
+        "c.parquet",
+        "--local-root",
+        str(tmp_path / "lr"),
+    ]
+    for extra, msg in (
+        (["--restricted-sidecar", str(tmp_path / "d.zip")], "add --labels"),
+        (
+            ["--labels", "--restricted-sidecar", str(tmp_path / "lr" / "d.zip")],
+            "must not live under",
+        ),
+    ):
         try:
             PUB.main(base + extra)
         except SystemExit as e:
@@ -730,20 +773,43 @@ def test_s1_producer_depth_sidecar_holds_only_coverage_tables(tmp_path):
     (parked / "private" / "donor").mkdir(parents=True)
     (parked / "private" / "donor" / "donor0_coverage.tsv").write_text("x")
     ho = tmp_path / "ho.json"
-    ho.write_text(json.dumps({"samples": [{"gsm": "GSM1", "state": "done", "out_dir": str(out)},
-                                          {"gsm": "GSM2", "state": "parked", "out_dir": str(parked)}]}))
+    ho.write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {"gsm": "GSM1", "state": "done", "out_dir": str(out)},
+                    {"gsm": "GSM2", "state": "parked", "out_dir": str(parked)},
+                ]
+            }
+        )
+    )
     z = tmp_path / "priv" / "G.depth.zip"
     assert P.depth_sidecar(str(ho), str(z)) == 2
-    assert sorted(zipfile.ZipFile(z).namelist()) == ["samples/GSM1/donor/donor0_coverage.tsv",
-                                                     "samples/GSM1/donor/donor1_coverage.tsv"]
-    ho.write_text(json.dumps({"samples": [{"gsm": "GSM2", "state": "parked", "out_dir": str(parked)}]}))
-    assert P.depth_sidecar(str(ho), str(tmp_path / "q" / "z.zip")) == 0 and not (tmp_path / "q").exists()
-    proot = tmp_path / "private" / "G"  # the orchestrator's hand-off names only <private_root>/<GSE>
+    assert sorted(zipfile.ZipFile(z).namelist()) == [
+        "samples/GSM1/donor/donor0_coverage.tsv",
+        "samples/GSM1/donor/donor1_coverage.tsv",
+    ]
+    ho.write_text(
+        json.dumps({"samples": [{"gsm": "GSM2", "state": "parked", "out_dir": str(parked)}]})
+    )
+    assert (
+        P.depth_sidecar(str(ho), str(tmp_path / "q" / "z.zip")) == 0
+        and not (tmp_path / "q").exists()
+    )
+    proot = (
+        tmp_path / "private" / "G"
+    )  # the orchestrator's hand-off names only <private_root>/<GSE>
     (proot / "GSM3" / "donor").mkdir(parents=True)
     (proot / "GSM3" / "donor" / "donor0_coverage.tsv").write_text("x")
     (proot / "GSM3" / "donor" / "donor0.vcf").write_text("x")
-    ho.write_text(json.dumps({"private": {"root": str(proot)},
-                              "samples": [{"gsm": "GSM3", "state": "done", "out_dir": str(tmp_path / "o3")}]}))
+    ho.write_text(
+        json.dumps(
+            {
+                "private": {"root": str(proot)},
+                "samples": [{"gsm": "GSM3", "state": "done", "out_dir": str(tmp_path / "o3")}],
+            }
+        )
+    )
     z3 = tmp_path / "r" / "z.zip"
     assert P.depth_sidecar(str(ho), str(z3)) == 1
     assert zipfile.ZipFile(z3).namelist() == ["samples/GSM3/donor/donor0_coverage.tsv"]
@@ -777,8 +843,23 @@ def test_s1_producer_passes_labels_and_deletes_the_depth_zip(tmp_path, monkeypat
     monkeypatch.setattr(P, "copy_store", lambda root, gse, work: 0)
     scratch = tmp_path / "scr"
     scratch.mkdir()
-    assert P.main(["G", str(ho), str(tmp_path / "w"), "--catalog", "c", "--af", "af.parquet", "--scratch", str(scratch),
-                   "--keep"]) == 0
+    assert (
+        P.main(
+            [
+                "G",
+                str(ho),
+                str(tmp_path / "w"),
+                "--catalog",
+                "c",
+                "--af",
+                "af.parquet",
+                "--scratch",
+                str(scratch),
+                "--keep",
+            ]
+        )
+        == 0
+    )
     cmd = seen["cmd"]
     assert "--labels" in cmd and cmd[cmd.index("--af") + 1] == "af.parquet"
     assert not os.path.exists(seen["side"]) and not os.path.exists(os.path.dirname(seen["side"]))
@@ -790,5 +871,16 @@ def test_s1_producer_passes_labels_and_deletes_the_depth_zip(tmp_path, monkeypat
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(P.subprocess, "run", plain_run)
-    P.main(["G", str(ho), str(tmp_path / "w"), "--catalog", "c", "--no-labels", "--scratch", str(scratch)])
+    P.main(
+        [
+            "G",
+            str(ho),
+            str(tmp_path / "w"),
+            "--catalog",
+            "c",
+            "--no-labels",
+            "--scratch",
+            str(scratch),
+        ]
+    )
     assert "--labels" not in seen["cmd"]

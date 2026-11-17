@@ -1,0 +1,75 @@
+{
+ "cellplex10k": {
+  "class": "H",
+  "lenient": {
+   "n_decided": 16057,
+   "n_truth_cells": 15982,
+   "tools": {
+    "singlet": {
+     "n_called": 14208,
+     "precision": 0.9977,
+     "recall": 0.8869,
+     "f1": 0.9391
+    },
+    "emptydrops": {
+     "n_called": 13150,
+     "precision": 0.9995,
+     "recall": 0.8224,
+     "f1": 0.9023,
+     "f1_singlet_minus_ci": [
+      0.0346,
+      0.039
+     ]
+    }
+   },
+   "matched": {
+    "singlet": {
+     "recall_at_N": 0.9955
+    },
+    "emptydrops": {
+     "recall_at_N": 0.9955,
+     "recall_singlet_minus": 0.0,
+     "recall_singlet_minus_ci": [
+      0.0,
+      0.0
+     ]
+    }
+   }
+  },
+  "strict": {
+   "n_decided": 16201,
+   "n_truth_cells": 16120,
+   "tools": {
+    "singlet": {
+     "n_called": 14268,
+     "precision": 0.9973,
+     "recall": 0.8828,
+     "f1": 0.9366
+    },
+    "emptydrops": {
+     "n_called": 13162,
+     "precision": 0.9995,
+     "recall": 0.8161,
+     "f1": 0.8985,
+     "f1_singlet_minus_ci": [
+      0.0359,
+      0.0403
+     ]
+    }
+   },
+   "matched": {
+    "singlet": {
+     "recall_at_N": 0.9952
+    },
+    "emptydrops": {
+     "recall_at_N": 0.9952,
+     "recall_singlet_minus": 0.0,
+     "recall_singlet_minus_ci": [
+      0.0,
+      0.0
+     ]
+    }
+   }
+  }
+ }
+}

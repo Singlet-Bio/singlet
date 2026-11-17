@@ -192,7 +192,9 @@ def _codon_at(codes, a, L, st, which, relax):
             c0, c1, c2 = codes[a + q], codes[a + q + 1], codes[a + q + 2]
             if c0 > 3 or c1 > 3 or c2 > 3:
                 return -1
-            stop = c0 == 3 and ((c1 == 0 and (c2 == 0 or c2 == 2)) or (c1 == 2 and c2 == 0))  # TAA TAG TGA
+            stop = c0 == 3 and (
+                (c1 == 0 and (c2 == 0 or c2 == 2)) or (c1 == 2 and c2 == 0)
+            )  # TAA TAG TGA
             if not stop and codes[a + q + 3] == 2 and codes[a + q + 4] == 2:
                 if q + 11 <= L and not (codes[a + q + 9] == 2 and codes[a + q + 10] == 2):
                     return -1

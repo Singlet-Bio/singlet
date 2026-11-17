@@ -73,7 +73,9 @@ def build_members(
     contigs, gex_barcodes: Sequence[str], library: Dict, counting: Dict, reference: Dict
 ) -> Dict[str, tuple]:
     """-> {name: ('stored', body bytes, None, meta)}."""
-    c = with_columns(contigs, gex_barcodes)   # every assembled contig, kept or not: reads are not retained, re-pairing needs the support
+    c = with_columns(
+        contigs, gex_barcodes
+    )  # every assembled contig, kept or not: reads are not retained, re-pairing needs the support
     c = c.sort_values(
         ["col", "barcode", "chain", "umis"], ascending=[True, True, True, False]
     ).reset_index(drop=True)
