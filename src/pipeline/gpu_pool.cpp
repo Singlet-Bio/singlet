@@ -254,7 +254,7 @@ struct Run {
     bool done = false, killed = false;
     bool front = true;   // rt/hostmem: in the front half (from the start until the engine's "[engine_gpu] level" line: the packed planes and aux are freed by then)
     bool plateau = false;   // rt/phaseadmit: the all-site pass has been joined ("[allsite] async: waited"): host memory is on its tail plateau and no longer grows with depth
-    double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
+    mutable double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
     bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
 };
 
