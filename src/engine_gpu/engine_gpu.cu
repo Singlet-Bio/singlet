@@ -804,6 +804,52 @@ static cudaError_t dmalv(void** p, u64 b) {
     return e;
 }
 template <class T> static inline cudaError_t dmal(T** p, u64 b) { return dmalv((void**)p, b); }
+// rt/devoom: the card is shared with other samples' processes, the shared index and the non-host server, so free memory can run short for a
+// moment under any allocation. A failed allocation waits (SINGLET_ENGINE_GPU_OOM_WAIT_S, default 120 s in all, 1 s steps) for memory those
+// hold and tries again, with one stderr line per recovery, instead of failing the whole mapDistinct (the caller's retry redoes the reads phase
+// after waits of 15, 30 and 45 s). Nothing changes in what is computed.
+static double oomWaitBudgetS() {
+    static const double v = [] { const char* e = std::getenv("SINGLET_ENGINE_GPU_OOM_WAIT_S"); return e ? std::max(0.0, std::atof(e)) : 120.0; }();
+    return v;
+}
+static void oomWaitNote(const char* what, double waited, bool done) {
+    size_t f = 0, t = 0; if (cudaMemGetInfo(&f, &t) != cudaSuccess) { cudaGetLastError(); f = t = 0; }
+    fprintf(stderr, "[engine_gpu] OOM recovery: %s %s after %.0f s (device free %llu MiB of %llu MiB)\n", what, done ? "succeeded" : "still short of memory",
+            waited, (unsigned long long) (f >> 20), (unsigned long long) (t >> 20));
+    fflush(stderr);
+}
+template <class T> static inline cudaError_t dmalw(T** p, u64 b) {
+    cudaError_t e = dmalv((void**) p, b);
+    if (e != cudaErrorMemoryAllocation) return e;
+    cudaGetLastError();
+    const double t0 = now();
+    char w[96]; snprintf(w, sizeof w, "allocation of %llu MiB at %s", (unsigned long long) (b >> 20), g_bud.at.c_str());
+    oomWaitNote(w, 0, false);
+    while (e == cudaErrorMemoryAllocation && now() - t0 < oomWaitBudgetS()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        e = dmalv((void**) p, b);
+        if (e == cudaErrorMemoryAllocation) cudaGetLastError();
+    }
+    if (e == cudaSuccess) oomWaitNote(w, now() - t0, true);
+    return e;
+}
+// a kernel launch the driver cannot serve for lack of device memory (a module loaded lazily at its first launch, local memory) did not run:
+// launch it again after a wait (same budget), one line per recovery. Returns the last launch's error (consumed from cudaGetLastError).
+template <class F> static cudaError_t launchw(const char* what, F&& launch) {
+    launch();
+    cudaError_t e = cudaGetLastError();
+    if (e != cudaErrorMemoryAllocation) return e;
+    const double t0 = now();
+    char w[96]; snprintf(w, sizeof w, "%s launch", what);
+    oomWaitNote(w, 0, false);
+    while (e == cudaErrorMemoryAllocation && now() - t0 < oomWaitBudgetS()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        launch();
+        e = cudaGetLastError();
+    }
+    if (e == cudaSuccess) oomWaitNote(w, now() - t0, true);
+    return e;
+}
 static void dfree(void* p) {
     std::lock_guard<std::mutex> lk(g_allocMu);
     if (p == nullptr) return;
@@ -893,34 +939,34 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     std::vector<uint32_t*> sBits(S, nullptr); std::vector<u64> sBitsCap(S, (u64)1 << 20);   // per slot: the windows' bit set and its size (words)
     uint32_t*& dBits = sBits[0]; u64& bitsCap = sBitsCap[0];
     std::vector<uint32_t*> retiredAll;   // outgrown bit sets of the slots (freed with the rest after the kernels)
-    EG_CK(dmal(&dIdx, n * 4)); EG_CK(cudaMemcpy(dIdx, idx.data(), n * 4, cudaMemcpyHostToDevice));
-    EG_CK(dmal(&dOut, n * (u64)C::NBLOB)); EG_CK(dmal(&dSt, n)); EG_CK(dmal(&dLen, n * 2));
-    EG_CK(dmal(&dWork, NB * sizeof(Work<C>))); EG_CK(cudaMemset(dWork, 0, NB * sizeof(Work<C>)));
-    EG_CK(dmal(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(dmal(&dBst, NB));
-    EG_CK(dmal(&dNent, NB * 8)); EG_CK(dmal(&dBase, NB * 8));
-    for (int h = 0; h < S; h++) EG_CK(dmal(&sBits[h], sBitsCap[h] * 4));
+    EG_CK(dmalw(&dIdx, n * 4)); EG_CK(cudaMemcpy(dIdx, idx.data(), n * 4, cudaMemcpyHostToDevice));
+    EG_CK(dmalw(&dOut, n * (u64)C::NBLOB)); EG_CK(dmalw(&dSt, n)); EG_CK(dmalw(&dLen, n * 2));
+    EG_CK(dmalw(&dWork, NB * sizeof(Work<C>))); EG_CK(cudaMemset(dWork, 0, NB * sizeof(Work<C>)));
+    EG_CK(dmalw(&dRbuf, NB * sizeof(ReadBuf<C::LREAD>))); EG_CK(dmalw(&dBst, NB));
+    EG_CK(dmalw(&dNent, NB * 8)); EG_CK(dmalw(&dBase, NB * 8));
+    for (int h = 0; h < S; h++) EG_CK(dmalw(&sBits[h], sBitsCap[h] * 4));
     // COMPACT (lane B, SINGLET_BOLD_WSHRINK): the aligns' pool (room for the largest single read, else g_waSlice per read in flight), the reads' needs,
     // their rows' starts, the pending flags, the scan keys and a counter
     m5::uint* dPool = nullptr; u64 *dNeed = nullptr, *dWb = nullptr, *dWkey = nullptr; uint8_t* dPend = nullptr; unsigned long long* dWcnt = nullptr; u64 poolAl = 0;
     std::atomic<u64> nRounds{0}, nDeferred{0};
     if constexpr (C::COMPACT) {
         poolAl = std::max<u64>(NBh * (u64)g_waSlice, (u64)C::NW * C::NWA);   // per slot
-        EG_CK(dmal(&dPool, (u64)S * poolAl * WA_SIZE * sizeof(m5::uint)));
-        EG_CK(dmal(&dNeed, NB * 8)); EG_CK(dmal(&dWb, NB * 8)); EG_CK(dmal(&dWkey, NB * 8)); EG_CK(dmal(&dPend, NB)); EG_CK(dmal(&dWcnt, 8 * (u64)S));
+        EG_CK(dmalw(&dPool, (u64)S * poolAl * WA_SIZE * sizeof(m5::uint)));
+        EG_CK(dmalw(&dNeed, NB * 8)); EG_CK(dmalw(&dWb, NB * 8)); EG_CK(dmalw(&dWkey, NB * 8)); EG_CK(dmalw(&dPend, NB)); EG_CK(dmalw(&dWcnt, 8 * (u64)S));
     }
     // E12: the seed / windows kernels' counters, the warp lane's sort keys and order, the persistent kernels' grids
     unsigned long long* dCtr = nullptr; u64 *dKey = nullptr, *dKey2 = nullptr; uint32_t *dPerm = nullptr, *dPerm2 = nullptr;   // dKey / dPerm: k_cost's output, dKey2 / dPerm2: sorted
     uint8_t* dTmp = nullptr; size_t tmpBytes = 0;   // per slot: cub's temporary storage (scan, sort)
     int nSm = 0, bpsS = 0, bpsW = 0; size_t stack0 = 0; u64 stackRes = 0;
     if (NEW) {
-        EG_CK(dmal(&dCtr, 16 * (u64)S));
-        if (WARP || usePerm) { EG_CK(dmal(&dKey, NB * 8)); EG_CK(dmal(&dPerm, NB * 4)); EG_CK(dmal(&dKey2, NB * 8)); EG_CK(dmal(&dPerm2, NB * 4)); }
+        EG_CK(dmalw(&dCtr, 16 * (u64)S));
+        if (WARP || usePerm) { EG_CK(dmalw(&dKey, NB * 8)); EG_CK(dmalw(&dPerm, NB * 4)); EG_CK(dmalw(&dKey2, NB * 8)); EG_CK(dmalw(&dPerm2, NB * 4)); }
         {
             size_t b1 = 0, b2 = 0;
             EG_CK(cub::DeviceScan::ExclusiveSum((void*)nullptr, b1, (u64*)nullptr, (u64*)nullptr, (int)NBh));
             if (WARP || usePerm) EG_CK(cub::DeviceRadixSort::SortPairs((void*)nullptr, b2, (const u64*)nullptr, (u64*)nullptr, (const uint32_t*)nullptr, (uint32_t*)nullptr, (int)NBh, 0, 64));
             tmpBytes = (std::max(b1, b2) + 255) / 256 * 256;
-            EG_CK(dmal(&dTmp, tmpBytes * (u64)S));
+            EG_CK(dmalw(&dTmp, tmpBytes * (u64)S));
         }
         int dev = 0; cudaGetDevice(&dev); cudaDeviceGetAttribute(&nSm, cudaDevAttrMultiProcessorCount, dev);
         EG_CK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&bpsS, k_p1s<C>, 128, 0));
@@ -970,7 +1016,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
         thrust::exclusive_scan(TP, thrust::device_ptr<u64>(dNent), thrust::device_ptr<u64>(dNent + nb), thrust::device_ptr<u64>(dBase));
         u64 lastB, lastN; EG_CK(d2h(&lastB, dBase + nb - 1, 8)); EG_CK(d2h(&lastN, dNent + nb - 1, 8));
         u64 words = (lastB + lastN) / 32 + 2;
-        if (words > bitsCap) { dfree(dBits); bitsCap = words * 2; EG_CK(dmal(&dBits, bitsCap * 4)); }
+        if (words > bitsCap) { dfree(dBits); bitsCap = words * 2; EG_CK(dmalw(&dBits, bitsCap * 4)); }
         EG_CK(cudaMemset(dBits, 0, words * 4));
         k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256>>>(P, D, nb, dWork, dNent, dBase, dBits);
         if (!NEW) k_p3<C><<<G, T>>>(P, D, b0, nb, budget, dWork, dRbuf, dBase, dBits, dBst, dSt, dOut, dLen);
@@ -1043,7 +1089,7 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
             WCK(cudaMemcpyAsync(&lastB, sBase + nb - 1, 8, cudaMemcpyDeviceToHost, st)); WCK(cudaMemcpyAsync(&lastN, sNent + nb - 1, 8, cudaMemcpyDeviceToHost, st));
             WCK(cudaStreamSynchronize(st));
             const u64 words = (lastB + lastN) / 32 + 2;
-            if (words > sBitsCap[h]) { { std::lock_guard<std::mutex> lk(cbMu); retiredAll.push_back(sBits[h]); } sBitsCap[h] = words * 2;   /* the old set is freed after the kernels: no cudaFree (a device-wide sync) beside the lane copy thread */ WCK(dmal(&sBits[h], sBitsCap[h] * 4)); }
+            if (words > sBitsCap[h]) { { std::lock_guard<std::mutex> lk(cbMu); retiredAll.push_back(sBits[h]); } sBitsCap[h] = words * 2;   /* the old set is freed after the kernels: no cudaFree (a device-wide sync) beside the lane copy thread */ WCK(dmalw(&sBits[h], sBitsCap[h] * 4)); }
             uint32_t* sBt = sBits[h];
             WCK(cudaMemsetAsync(sBt, 0, words * 4, st));
             k_p2<C><<<(unsigned)((nb * 32 + 255) / 256), 256, 0, st>>>(P, D, nb, sW, sNent, sBase, sBt);
@@ -1139,11 +1185,11 @@ bool runLane(const Params& P, const GenomeView& D, const char* dSeq, const u64* 
     bool deferCopy = false;   // rt/maphold: the packed results go to the host on a thread, below
     {   // copy only the bytes of the results (the slots are 640-4096 bytes, results ~70)
         { std::string pe; if (!g_pend.join(pe)) { err = pe; return false; } }   // the earlier lane's copy (the D2H staging is shared)
-        u64* dPoff; EG_CK(dmal(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
+        u64* dPoff; EG_CK(dmalw(&dPoff, (n + 1) * 8)); EG_CK(cudaMemset(dPoff, 0, (n + 1) * 8));
         thrust::transform_inclusive_scan(TP, thrust::device_ptr<uint16_t>(dLen), thrust::device_ptr<uint16_t>(dLen + n), thrust::device_ptr<u64>(dPoff + 1),
                                          ToU64(), thrust::plus<u64>());
         u64 total; EG_CK(d2h(&total, dPoff + n, 8));
-        uint8_t* dPacked; EG_CK(dmal(&dPacked, total + 1));
+        uint8_t* dPacked; EG_CK(dmalw(&dPacked, total + 1));
         devNote();
         k_pack<<<(unsigned)((n + 255) / 256), 256>>>(dOut, C::NBLOB, dLen, dPoff, n, dPacked);
         EG_CK(cudaGetLastError());
@@ -1697,6 +1743,13 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         err = std::string(what) + " launch: " + cudaGetErrorString(le);
         return false;
     };
+    // rt/devoom: the launch and its check in one, the launch repeated when the driver is out of memory for it (launchw)
+    auto launchedRun = [&](const char* what, auto&& launch) -> bool {
+        const cudaError_t le = launchw(what, launch);
+        if (le == cudaSuccess) return true;
+        err = std::string(what) + " launch: " + cudaGetErrorString(le);
+        return false;
+    };
     if (in.e10.on && !e10) out.e10.log += "engine_gpu: E10 not used (no shared region or no host decode)\n";
     if (e10 && !RC) {
         const double ta = now();
@@ -1770,9 +1823,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             g_bud.at = "clip";
             if (dmal(&dP5, n * 2) || dmal(&dP3, n * 2) || dmal(&dInfo, n + 8)) return fail("out of device memory (CellRanger4 clip)");
             const unsigned g4 = (unsigned) ((n + 127) / 128);
-            if (nq == 30) k_cr4<30><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
-            else k_cr4<0><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
-            if (!launched("CellRanger4 clip kernel")) return fail(err);
+            if (!launchedRun("CellRanger4 clip kernel", [&] {
+                    if (nq == 30) k_cr4<30><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo);
+                    else k_cr4<0><<<g4, 128>>>(dSeq, dOff, n, c4, dP5, dP3, dInfo); })) return fail(err);
             if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()));
             const double tk4 = now() - t4;
             out.cr4info.resize(n);
@@ -1813,8 +1866,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         u64 *dCs, *dCl, *dOffC; char* dSeqC;
         g_bud.at = "clip";
         if (dmal(&dCs, n * 8) || dmal(&dCl, n * 8) || dmal(&dOffC, (n + 1) * 8)) return fail("out of device memory (clip)");
-        k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl);
-        if (!launched("clip kernel")) return fail(err);
+        if (!launchedRun("clip kernel", [&] { k_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dOff, n, c, dCs, dCl); })) return fail(err);
         if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()));   // E12: not the device (the index copy stream runs on)
         step("clip.kernel");
         if (e10) e10Entries(dCs, dCl);   // E10: the original reads and their clip
@@ -1828,8 +1880,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         u64 tot = 0;
         if (cudaMemcpy(&tot, dOffC + n, 8, cudaMemcpyDeviceToHost) != cudaSuccess) return fail("clip copy");
         if (dmal(&dSeqC, tot + 8)) return fail("out of device memory (clipped reads)");
-        k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC);
-        if (!launched("clip gather kernel")) return fail(err);
+        if (!launchedRun("clip gather kernel", [&] { k_gather_clip<<<(unsigned)((n + 255) / 256), 256>>>(dSeq, dCs, dOffC, n, dSeqC); })) return fail(err);
         if (cudaStreamSynchronize(0) != cudaSuccess) return fail(std::string("clip gather kernel: ") + cudaGetErrorString(cudaGetLastError()));   // E12: not the device
         step("clip.gather");
         hcs.resize(n); hoffC.resize(n + 1);
@@ -2158,6 +2209,11 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         const unsigned G = (unsigned) ((m + 255) / 256);
         double ta = now();
         auto lchk = [&](const char* what) -> bool { const cudaError_t e = cudaGetLastError(); if (e != cudaSuccess) { why = std::string(what) + " launch: " + cudaGetErrorString(e); return false; } return true; };
+        auto lrun = [&](const char* what, auto&& launch) -> bool {   // rt/devoom: the launch repeated when the driver is out of memory for it
+            const cudaError_t e = launchw(what, launch);
+            if (e != cudaSuccess) { why = std::string(what) + " launch: " + cudaGetErrorString(e); return false; }
+            return true;
+        };
         if (packUp) {   // rt/packup: the chunk's bases decoded into S.seq (same thread and stream as the kernels below); the 8 bytes after the last base are zeroed
             const u64 nb = in.off[r0 + m] - b0;
             if (nb) {
@@ -2183,16 +2239,15 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         }
         if (ccr4) {
             const unsigned g4 = (unsigned) ((m + 127) / 128);
-            if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo);
-            else k_cr4<0><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo);
-            if (!lchk("CellRanger4 clip kernel")) return;
+            if (!lrun("CellRanger4 clip kernel", [&] {
+                    if (c4.nq == 30) k_cr4<30><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo);
+                    else k_cr4<0><<<g4, 128>>>(S.seq, S.off, m, c4, S.p5, S.p3, cInfo); })) return;
             if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("CellRanger4 clip kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
             if (!d2h(out.cr4info.data() + r0, cInfo, m)) { why = "CellRanger4 clip: info copy"; return; }
         }
         if (in.clip.on) {
             ClipDev c{in.clip.n5, in.clip.after5, in.clip.n3, in.clip.after3, (uint32_t) in.clip.ad3.size(), in.clip.adMMp, cAd, S.p5, S.p3};
-            k_clip<<<G, 256>>>(S.seq, S.off, m, c, cCs, cCl);
-            if (!lchk("clip kernel")) return;
+            if (!lrun("clip kernel", [&] { k_clip<<<G, 256>>>(S.seq, S.off, m, c, cCs, cCl); })) return;
             if (cudaStreamSynchronize(0) != cudaSuccess) { why = std::string("clip kernel: ") + cudaGetErrorString(cudaGetLastError()); return; }
         }
         if (e10) {   // E10: the original reads and their clip; i0 = r0 keeps the hook's sample of the whole-sample run
