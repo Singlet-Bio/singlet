@@ -2,6 +2,25 @@
 
 All notable changes to the singlet project.
 
+## [Unreleased] — GPU node throughput and robustness
+
+**Speed.** The GPU pipeline is faster per node with byte-identical outputs: on a 300 M-pair 3' library, an H100 node goes from
+6.3 to 9.1 M read pairs/s (whole run). The work spans the mapping slot hold, pileup and all-site overlap, and the end-of-run
+stage graph.
+
+**Reliability.**
+- `singlet gpu-pool` admits samples against a node-wide host-memory budget estimated from each sample's read count, and limits
+  transparent huge pages under memory pressure. Mixed batches of deep and shallow samples no longer livelock a node.
+- The GPU hand-off pass, mapping lanes and Solo recover from device out-of-memory by smaller chunks and bounded waits instead of
+  failing the sample.
+- A 110-sample mix from 2 M to 1.3 G pairs completes 110/110 on one node.
+
+**HLA.**
+- Typing can be turned off per chemistry (`--hla-gpu-3p off`).
+- Candidate reads can be capped by even-stride sampling (`--hla-max-reads`).
+
+Every change has a switch that restores the earlier path. See `docs/gpu-engine/runtime/NODE-THROUGHPUT.md`.
+
 ## [1.3.9] — bacterial and fungal species keep their own ids in the non-host screen
 
 The bacterial and the fungal sketch index both number their species from 1, and the engine joined them without an offset.
