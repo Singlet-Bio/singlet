@@ -405,7 +405,7 @@ struct Output {
 };
 
 // true if a CUDA device of compute capability >= 8.0 is usable
-bool available(std::string* why = nullptr);
+bool available(std::string* why = nullptr, bool probeImage = false);   // probeImage creates a CUDA context: the gpu-probe child only
 int deviceCount();
 std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
 

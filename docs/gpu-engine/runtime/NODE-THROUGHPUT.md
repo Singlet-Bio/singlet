@@ -170,5 +170,10 @@ Each switch restores the earlier behaviour when set as shown. All are on by defa
   should route such samples to CPU lanes, or give them two slots (`SINGLET_ENGINE_GPU_ADMIT=1`, untested at node scale).
 - **Deep-sample host memory during mapping** (about 300 GB at 1.3 G reads) limits occupancy. The inventory is in
   results-2026-11-13.md.
-- **A100 and other GPU models.** The identity gate runs on RTX 8000 (Turing) and the timing on H100 NVL. Other models are
-  untested.
+- **GPU models.** The GPU engine now compiles for sm_70, 75, 80, 86, 89 and 90, plus sm_90 PTX for newer devices. It accepts
+  compute capability 7.0 and up (`SINGLET_ENGINE_GPU_MIN_CC`, default 70, was 80) with at least 30 GiB of device memory
+  (`SINGLET_ENGINE_GPU_MIN_MEM_GB`).
+  - The `singlet gpu-probe` child also checks that the build holds a kernel image for the device.
+  - A device that fails any check takes the CPU route, and the probe states the reason.
+  - The final build's identity gate ran on H100 NVL (Hopper), RTX 8000 (Turing) and V100S (Volta). Timing is H100 only.
+  - Ampere and Ada devices with 30 GiB or more (A100, A40, L40S) are compiled for but not gated.

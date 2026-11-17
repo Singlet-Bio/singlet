@@ -15,6 +15,10 @@ stage graph.
   failing the sample.
 - A 110-sample mix from 2 M to 1.3 G pairs completes 110/110 on one node.
 
+**Devices.** The GPU engine is built for Volta through Hopper (sm_70-90) and accepts compute capability 7.0 and up with at least
+30 GiB of device memory. Any other device takes the CPU route, with the reason given by `singlet gpu-probe`. The identity gate
+passes on V100S, RTX 8000 and H100.
+
 **HLA.**
 - Typing can be turned off per chemistry (`--hla-gpu-3p off`).
 - Candidate reads can be capped by even-stride sampling (`--hla-max-reads`).

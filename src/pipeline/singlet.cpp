@@ -3680,7 +3680,7 @@ static int singlet_main(int argc, char* argv[]) {
             }
             if (sub == "gpu-probe") {   // E19: "ok" (exit 0) when CUDA sees a usable device, else the reason (exit 1); the pipeline's probe
                 std::string w;
-                const bool ok = singlet_engine_gpu::available(&w);
+                const bool ok = singlet_engine_gpu::available(&w, true);
                 std::cout << (ok ? std::string("ok") : w) << std::endl;
                 return ok ? 0 : 1;
             }

@@ -1451,16 +1451,36 @@ void dumpOutput(const char* path, const Params& P, const GenomeView& H, const si
 
 namespace singlet_engine_gpu {
 
-bool available(std::string* why) {
+__global__ void k_image_probe() {}
+
+bool available(std::string* why, bool probeImage) {
     int n = 0;
     cudaError_t e = cudaGetDeviceCount(&n);
     if (e != cudaSuccess || n == 0) { if (why) *why = e != cudaSuccess ? cudaGetErrorString(e) : "no CUDA device"; return false; }
     cudaDeviceProp p; cudaGetDeviceProperties(&p, 0);
-    // SINGLET_ENGINE_GPU_MIN_CC (default 80): the lowest compute capability accepted, as major*10+minor. The engine's kernels compile for
-    // sm_70 and sm_75 too (CMAKE_CUDA_ARCHITECTURES="70;75;80;90"); 70 admits the V100S and RTX 8000 for identity checks
+    // SINGLET_ENGINE_GPU_MIN_CC (default 70): the lowest compute capability accepted, as major*10+minor. The identity gate passes on
+    // V100S (7.0), RTX 8000 (7.5) and H100 (9.0); a device this build has no kernel image for is refused below whatever the value.
     const char* mc = std::getenv("SINGLET_ENGINE_GPU_MIN_CC");
-    const int minCC = mc != nullptr && *mc ? std::atoi(mc) : 80;
+    const int minCC = mc != nullptr && *mc ? std::atoi(mc) : 70;
     if (p.major * 10 + p.minor < minCC) { if (why) *why = std::string("device ") + p.name + " below compute capability " + std::to_string(minCC / 10) + "." + std::to_string(minCC % 10); return false; }
+    // SINGLET_ENGINE_GPU_MIN_MEM_GB (default 30): the smallest device memory accepted. The genome index and one slot's lanes need about
+    // 30 GiB; the smallest device the identity gate ran on is the 32 GB V100S. A smaller card takes the CPU route instead of failing later.
+    const char* mm = std::getenv("SINGLET_ENGINE_GPU_MIN_MEM_GB");
+    const double minMem = mm != nullptr && *mm ? std::atof(mm) : 30.0;
+    if ((double) p.totalGlobalMem < minMem * (double) (1ull << 30)) {
+        if (why) { char b[200]; snprintf(b, sizeof b, "device %s has %.1f GiB, below SINGLET_ENGINE_GPU_MIN_MEM_GB %.1f", p.name, (double) p.totalGlobalMem / (double) (1ull << 30), minMem); *why = b; }
+        return false;
+    }
+    // probeImage (the `singlet gpu-probe` child only: it creates a context): a kernel image, or PTX it can JIT, for this device in this build
+    if (probeImage) {
+        cudaFuncAttributes fa;
+        e = cudaFuncGetAttributes(&fa, k_image_probe);
+        if (e != cudaSuccess) {
+            cudaGetLastError();
+            if (why) *why = std::string("no kernel image for ") + p.name + " (compute capability " + std::to_string(p.major) + "." + std::to_string(p.minor) + ") in this build: " + cudaGetErrorString(e);
+            return false;
+        }
+    }
     return true;
 }
 
