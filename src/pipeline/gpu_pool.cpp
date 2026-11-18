@@ -705,10 +705,29 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         // of mix3 816788 (peak of the per-item sum in memsamp.tsv against the reads in the .1fq header): peak = a + b x reads (M). Least squares gave
         // 48.2 + 0.2235 x (rmse 13.6 GB, worst under-prediction 30.3 GB: d500s_3p), the margin adds 30 GB, the genome comes off (-16.4): a = 61.8, b = 0.2235.
         // The reads are the u32 at byte 20 of the .1fq header ("1FQ\0" magic); without a header, the file size: 11.6 GB per GB + 43.6 (envelope of the 16 samples).
-        double reads = 0;
-        if (FILE* hf = fopen(it.fq.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) reads = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+        // A sample of several runs has one input per run: the queue line's first file, then every other run on the line (a positional .1fq / .1fg2, or the
+        // comma list of --1fq, as `singlet` itself reads them; relative paths are the sample process's, from its out dir's parent). All of them count:
+        // reading the first alone charged a 4-run 337 M-pair sample 85 GB, it peaked at 154 GB and the job's cgroup ended it (Clipper 818032).
+        std::vector<std::string> ins{it.fq};
+        for (size_t k = 0; k < it.extra.size(); ++k) {
+            const std::string& w = it.extra[k];
+            auto ends = [&w](const char* x) { const size_t n = std::strlen(x); return w.size() > n && w.compare(w.size() - n, n, x) == 0; };
+            if (w == "--1fq" && k + 1 < it.extra.size()) {
+                std::istringstream iss(it.extra[++k]);
+                for (std::string f; std::getline(iss, f, ',');) if (!f.empty()) ins.push_back(f);
+            } else if (!w.empty() && w[0] != '-' && (ends(".1fq") || ends(".1fg2"))) ins.push_back(w);
+        }
+        double reads = 0, unheadedGb = 0;
+        for (std::string p : ins) {
+            if (!p.empty() && p[0] != '/') p = parent_dir(it.out) + "/" + p;
+            double r = 0;
+            if (FILE* hf = fopen(p.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) r = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+            if (r > 0) reads += r;
+            else unheadedGb += stat(p.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0;
+        }
         const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
-        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 : (stat(it.fq.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0) * 11.6 + 43.6;
+        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 + unheadedGb * 11.6 : unheadedGb * 11.6 + 43.6;
+        if (ins.size() > 1) plog("item %d: %zu inputs, %.1f M pairs in their headers, estimate %.0f GB", it.idx, ins.size(), reads / 1e6, itemEst[it.idx]);
     }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
