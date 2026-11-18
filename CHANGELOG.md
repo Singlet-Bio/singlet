@@ -2,7 +2,7 @@
 
 All notable changes to the singlet project.
 
-## [Unreleased] — GPU node throughput and robustness
+## [1.4.0] — GPU node throughput and robustness
 
 **Speed.** The GPU pipeline is faster per node with byte-identical outputs: on a 300 M-pair 3' library, an H100 node goes from
 6.3 to 9.1 M read pairs/s (whole run). The work spans the mapping slot hold, pileup and all-site overlap, and the end-of-run
@@ -24,6 +24,15 @@ passes on V100S, RTX 8000 and H100.
 - Candidate reads can be capped by even-stride sampling (`--hla-max-reads`).
 
 Every change has a switch that restores the earlier path. See `docs/gpu-engine/runtime/NODE-THROUGHPUT.md`.
+
+**Fixes.**
+- Donor demultiplexing no longer splits one subject into several donors. When the auto-K search finds several donors it searches
+  again without the SNPs in the extended MHC (GRCh38 chr6:28.5-33.5 Mb) and reports one donor if nothing is left. The final fit and
+  every output use all SNPs. Donor labels are stored metadata: no count table or cell call changes.
+- Counting-parity sweep scripts and a diagnostic for the remaining counting gaps.
+- Calls (D-163): the shallow cells that stay out of the ambient cluster fits are now those below 30% of the median depth (was 10%),
+  and `doublet/score_v2` takes the Scrublet score (MIT port, credited in NOTICE) as an eighth input. The ambient and doublet
+  files change; no count output does.
 
 ## [1.3.9] — bacterial and fungal species keep their own ids in the non-host screen
 
