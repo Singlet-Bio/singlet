@@ -2,6 +2,17 @@
 
 All notable changes to the singlet project.
 
+## [1.4.1] — gpu-pool memory admission
+
+**Fixes.**
+- `singlet gpu-pool` reads the host-memory limit of a Slurm job from every ancestor of its cgroup instead of the leaf alone. Under
+  Slurm the limit sits on the job's cgroup while the process runs in a child with no limit of its own, so the pool saw the whole
+  node and could admit more deep samples than the job's memory held. The smallest headroom among the ancestors now wins (cgroup v2
+  and v1).
+- The memory estimate of a sample made of several runs counts the reads of every run, not only the first.
+
+Admission only: no counting, alignment, output or format change; outputs are byte-identical to 1.4.0.
+
 ## [1.4.0] — GPU node throughput and robustness
 
 **Speed.** The GPU pipeline is faster per node with byte-identical outputs: on a 300 M-pair 3' library, an H100 node goes from

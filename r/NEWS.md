@@ -1,5 +1,9 @@
 # singlet (R) — NEWS
 
+## singlet 1.4.1
+
+Version aligned with the Python package for the gpu-pool memory admission fix.
+
 ## singlet 1.4.0
 
 Version aligned with the Python package for the GPU node throughput and robustness release.
