@@ -81,15 +81,40 @@ double avail_gb() {
         if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v;
     }
     if (mfree >= 0) a = (mfree + 0.5 * std::max(0.0, cached - shm)) / 1048576.0;
+    // The job's limit sits on an ancestor of this process's cgroup: Slurm puts it on job_<id> and the process lives in
+    // .../job_<id>/step_<n>/user/task_<k>, whose own memory.max is "max".  Every ancestor from the leaf up is read and the
+    // smallest headroom wins (adaptive-scheduler live pilot 2026-11-18: reading only the leaf saw 510 GB on a 365 GB h100x1 job,
+    // admitted three deep samples at once, and the cgroup OOM ended one of them).  Headroom is limit - usage + half of the
+    // cgroup's file cache (less shmem), the same rule as the node figure.  cgroup v2 (the "0::" line) and v1 (the memory controller).
     std::ifstream cl("/proc/self/cgroup");
-    std::string line;
-    if (std::getline(cl, line)) {
-        const size_t c = line.rfind(':');
-        const std::string base = "/sys/fs/cgroup" + (c == std::string::npos ? std::string() : line.substr(c + 1));
-        std::ifstream mx(base + "/memory.max"), cu(base + "/memory.current");
+    std::string line, path, root, maxF, curF;
+    while (std::getline(cl, line)) {
+        if (line.rfind("0::", 0) == 0 && path.empty()) { path = line.substr(3); root = "/sys/fs/cgroup"; maxF = "memory.max"; curF = "memory.current"; }
+        const size_t c1 = line.find(':'), c2 = c1 == std::string::npos ? c1 : line.find(':', c1 + 1);
+        if (c2 != std::string::npos) {
+            const std::string ctl = "," + line.substr(c1 + 1, c2 - c1 - 1) + ",";
+            if (ctl.find(",memory,") != std::string::npos) { path = line.substr(c2 + 1); root = "/sys/fs/cgroup/memory"; maxF = "memory.limit_in_bytes"; curF = "memory.usage_in_bytes"; break; }
+        }
+    }
+    for (std::string p = path; !root.empty();) {
+        const std::string base = root + (p == "/" ? std::string() : p);
+        std::ifstream mx(base + "/" + maxF), cu(base + "/" + curF), stf(base + "/memory.stat");
         std::string m;
         double cur = 0;
-        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) a = std::min(a, (std::atof(m.c_str()) - cur) / 1073741824.0);
+        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) {
+            const double lim = std::atof(m.c_str());
+            if (lim < 1e18) {                      // v1 writes a huge number for "no limit"
+                double file = 0, shmem = 0, sv = 0;
+                std::string sk;
+                while (stf >> sk >> sv) {
+                    if (sk == "file" || sk == "total_cache") file = sv; else if (sk == "shmem" || sk == "total_shmem") shmem = sv;
+                }
+                a = std::min(a, (lim - cur + 0.5 * std::max(0.0, file - shmem)) / 1073741824.0);
+            }
+        }
+        if (p.empty() || p == "/") break;
+        const size_t s = p.rfind('/');
+        p = s == 0 || s == std::string::npos ? std::string("/") : p.substr(0, s);
     }
     return a;
 }
