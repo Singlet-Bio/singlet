@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(singlet VERSION 1.3.9 LANGUAGES CXX C)
+project(singlet VERSION 1.4.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -132,11 +132,19 @@ if(SINGLET_BUILD_PIPELINE)
         set_source_files_properties(src/engine_gpu/solo_gpu.cu PROPERTIES COMPILE_OPTIONS "--extended-lambda;-Xcompiler=-fopenmp")
         set_target_properties(singlet_engine_gpu PROPERTIES
             CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
+        # every generation the engine is gated on or expected to meet: Volta (V100), Turing (T4, RTX 8000), Ampere (A100; A10/A40),
+        # Ada (L4, L40S) and Hopper (H100); the sm_90 PTX also lets newer devices JIT. singlet_engine_gpu::available() refuses a
+        # device this build has no image for (CPU route instead).
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "52")
-            set_target_properties(singlet_engine_gpu PROPERTIES CUDA_ARCHITECTURES "80;90")
+            set_target_properties(singlet_engine_gpu PROPERTIES CUDA_ARCHITECTURES "70;75;80;86;89;90")
         endif()
         # no fused multiply-add: the port's double arithmetic must round as STAR's does on the host
         target_compile_options(singlet_engine_gpu PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3 -fmad=false>)
+        # stitch.cuh clock64() phase counters (Work::clk, statistics only; nothing reads them): compiled out unless SINGLET_ENGINE_GPU_CLK=ON
+        option(SINGLET_ENGINE_GPU_CLK "Compile the stitch phase clock64() counters into the GPU engine" OFF)
+        if(NOT SINGLET_ENGINE_GPU_CLK)
+            target_compile_definitions(singlet_engine_gpu PRIVATE M5_NOCLK)
+        endif()
         target_include_directories(singlet_engine_gpu PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src/engine_gpu)
         target_link_libraries(singlet_engine_gpu PUBLIC CUDA::cudart_static Threads::Threads ${CMAKE_DL_LIBS} PRIVATE OpenMP::OpenMP_CXX)

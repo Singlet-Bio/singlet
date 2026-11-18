@@ -40,8 +40,9 @@ struct DeviceReads {
     float msEval = 0, msScan = 0, msScatter = 0;
 };
 // the distinct CR keys (crKey) of the reads that have a record, sorted (thrust sort + unique on the device)
+// rt/devoom: *oom (optional) is set when the failure is the device running out of memory (the call can then be repeated on fewer reads)
 bool distinctBarcodes(const uint32_t* dReadRecord, const e6::ReadEntry* dE, uint64_t nReads, uint32_t cbL, std::vector<uint64_t>& keys,
-                      float& ms, std::string& err);
+                      float& ms, std::string& err, bool* oom = nullptr);
 // dKeys/dVals: the CR table (sorted keys; column >= 0, -1 not in the barcode set, -2 rejected); dQ: STAR's per-read low-quality masks
 // (16 bytes per read) or null
 bool expandReads(const uint32_t* dReadRecord, const e6::ReadEntry* dE, const uint64_t* dQ, uint64_t nReads, const DeviceRecords& R, uint32_t cbL,

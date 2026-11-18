@@ -152,6 +152,10 @@ bool decodeImpl(int threads, PackedReads& out, std::string& why, const Fused* fz
                 fail(std::string("block ") + std::to_string(b) + ": " + ex.what());
                 return;
             }
+            if (fz && pl.blockHook) {
+                try { pl.blockHook(b, blk); }
+                catch (const std::exception& ex) { fail(std::string("block ") + std::to_string(b) + " (the block hook): " + ex.what()); return; }
+            }
             const bool tmI = singlet::fq::RunSet::ingest_timing_on();
             const double cpy0 = tmI ? singlet::fq::RunSet::thread_cpu_now() : 0.0;
             if (fz) {   // publish this block's counts, advance the frontier, and wait until it passes this block

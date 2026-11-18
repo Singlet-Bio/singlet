@@ -122,6 +122,14 @@ if(TARGET singlet_engine_gpu)
     target_link_libraries(test_gpu_pileup_te PRIVATE singlet_engine_gpu)
     target_compile_definitions(test_gpu_pileup_te PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
+# The GPU pileup's streamed layout (SINGLET_PILEUP_STREAM) against SINGLET_PILEUP_STREAM=0 on a synthetic input, with a forced K and with a tiny
+# per-partition budget (many partitions). SKIP (77) without a GPU build or a CUDA device.
+if(TARGET singlet_engine_gpu)
+    add_pileup_test(test_gpu_pileup_stream)
+    set_tests_properties(test_gpu_pileup_stream PROPERTIES SKIP_RETURN_CODE 77)
+    target_link_libraries(test_gpu_pileup_stream PRIVATE singlet_engine_gpu)
+    target_compile_definitions(test_gpu_pileup_stream PRIVATE SINGLET_HAVE_ENGINE_GPU)
+endif()
 # Solo's two-pass counting (read chunks, key buckets; e9::soloRunTwoPass) against the one-shot device path on synthetic reads, field by field.
 # Built where the GPU engine library exists (a pipeline build with a CUDA compiler); prints SKIP and exits 77 without a usable CUDA device.
 if(TARGET singlet_engine_gpu)
@@ -293,6 +301,9 @@ add_pileup_test(test_encode_autodetect_whitelist)
 add_pileup_test(test_spot_source)    # fq/spot_source.h: FASTQ folders and files as SRA spots (singlet download --r1/--fastq-dir)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_demux_fixedpoint)   # exact fixed-point exit of the VB loop: bitwise equal to the full loop
+add_pileup_test(test_demux_autok_fast)   # fast auto-K path (progressive PCA, wider waves, pool) bitwise equal to the earlier path
+add_pileup_test(test_demux_mhc)   # the extended MHC is left out of the auto-K search
 add_pileup_test(test_donor_genotype_call)
 add_pileup_test(test_genotype_export)
 add_pileup_test(test_allsite)
@@ -306,6 +317,7 @@ if(TARGET singlet_engine_gpu)
     target_compile_definitions(test_allsite_gpu PRIVATE SINGLET_HAVE_ENGINE_GPU)
 endif()
 add_pileup_test(test_allsite_kernel)
+add_pileup_test(test_allsite_gather)   # the device route host gather: look-ahead prefetch walk against the plain walk (SINGLET_ALLSITE_GATHER_PF=0)
 add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
 add_pileup_test(test_prefix_probe)   # 5' constant-prefix probe on reads spread through the file (no false clip on sorted duplicates)
 add_pileup_test(test_polya_sites)    # poly(A) site detection/clustering, STAR CellReads.stats parsing, sj_features

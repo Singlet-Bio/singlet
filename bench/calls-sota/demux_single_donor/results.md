@@ -43,3 +43,18 @@ Osorio single lines (GSM3596320 and GSM3596321) and the GSE230239 single lines (
 
 ## Runtime
 The demultiplexer runs inside the engine export step. In this check it took 15 to 150 s per library on 8 threads (the 150 s case is 8,753 cells including matrix loading). It is therefore an engine cost, outside the post-freeze call budget of 2 core-minutes per ten thousand cells.
+
+## Update 2026-11-16: MHC guard in the auto-K search (D-163)
+
+Cause of the GSM5130155 split: 76 of the 98 well-covered SNPs where the three components disagree lie in the extended MHC (chr6:29-33 Mb); the three components differ at 3 to 5% of typed SNPs, against 20% or more between real donors of the Kang pool. Without the MHC SNPs the held-out likelihood gains 0.0004 nats per cell from a second donor (it gains 1.4 with them). The fix (`select_k_mhc_guarded`, donor_demux.h) repeats the K search without MHC SNPs when the first search finds several donors, and reports one donor when nothing outside the MHC supports a second. Gate files and bars are unchanged; the rerun uses the same stored allele counts and the standalone harness (`run_donorfix_eval.sbatch`).
+
+| | v1.4.0 (6c559c88) | with the guard |
+|---|---|---|
+| GSM5130155, K found | 3 (46.5% false) | 1 (0%) |
+| Other seven libraries | K = 1 | K = 1 |
+| Pooled false-split rate, 8 libraries | 1.27% | 0% |
+| Libraries with a split declared | 1 of 8 | 0 of 8 |
+| Kang b1 lane A, ARI on truth singlets (registered scorer) | 0.9928, K = 4 | 0.9928, K = 4 |
+| Multi-donor pilot pools (10-donor, hashed, two cell-line mixes): K and labels | | identical, ARI 1.0 between the two builds |
+
+Counts: the eight gate samples run on the CPU engine with the candidate and with the base build, compared by the harness field check: REFCMP PASS, 0 fields differ (`submit_count_parity_vs_base.sh`). A first comparison against the v1.3.9 references differs only by the all-site files, which those references hold because they ran with the GPU pileup.

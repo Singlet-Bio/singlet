@@ -20,7 +20,8 @@
 #include <unistd.h>
 #include "singlet/engine_gpu.h"
 
-namespace singlet::fq { class RunSet; }
+#include <functional>
+namespace singlet::fq { class RunSet; struct DecodedBlock; }
 
 namespace singlet_engine_gpu {
 namespace ingest {
@@ -97,6 +98,9 @@ struct Plan {
     uint32_t qualCodes = 1;                              // codes in use (1: no stored quality, every base 'F')
     const void* fallback = nullptr;                      // the read source the pipeline gave STAR (every read, a chunk source over the .1fq)
     int r11Fd = -1;                                      // the pipeline: its own descriptor of the E8 region (R11's histogram outlives the region's release)
+    // The pipeline's hook on the fused scan and decode: every decoded block, on the pass's threads, before it is packed (D-101: the
+    // HLA prefilter takes the blocks here instead of decoding the input again; hla_typing.h Presift). Null: none.
+    std::function<void(uint32_t block, const singlet::fq::DecodedBlock&)> blockHook;
     uint64_t reads() const { return first.empty() ? 0 : first.back(); }
     uint64_t bases() const { return baseAt.empty() ? 0 : baseAt.back(); }
 };
