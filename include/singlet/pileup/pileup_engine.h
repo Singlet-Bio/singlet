@@ -3263,7 +3263,7 @@ public:
         if (ok) in.release = nullptr;   // it captured this frame's locals; pileupRun is the only caller
         std::chrono::steady_clock::time_point tUnl = std::chrono::steady_clock::now(); double sReset = 0;
         struct RstJoin { std::thread t; ~RstJoin() { if (t.joinable()) t.join(); } } e20rst;   // joined before `in` goes, on every return
-        if (!e16rb) in.release();
+        if (!e16rb && in.release) in.release();   // cleared above when pileupRun ran (and released the device in) its own tail
         else if (e20ul) e20rst.t = std::thread([device, lock_fd, e24early = out.unlockedEarly, tRel, &tUnl, &sReset] {
             // E24 "lockpost": pileupRun unlocked the device itself before its host half (PileupOutput::unlockedEarly); this thread only resets
             // pileupRun freed its arena: what the reset still does is host work (the context's teardown, unpinning the input), so the
