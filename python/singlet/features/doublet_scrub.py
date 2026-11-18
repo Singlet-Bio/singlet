@@ -35,7 +35,9 @@ def _running_quantile(x: np.ndarray, y: np.ndarray, p: float, n_bins: int):
     return xo, yo
 
 
-def v_scores(E: sp.csr_matrix, n_bins: int = 50, fit_percentile: float = 0.1, error_wt: float = 1.0) -> np.ndarray:
+def v_scores(
+    E: sp.csr_matrix, n_bins: int = 50, fit_percentile: float = 0.1, error_wt: float = 1.0
+) -> np.ndarray:
     """Scrublet's ``get_vscores`` on a (cells x genes) normalised matrix; NaN for genes with zero mean."""
     from scipy.optimize import minimize
 
@@ -55,7 +57,9 @@ def v_scores(E: sp.csr_matrix, n_bins: int = 50, fit_percentile: float = 0.1, er
     b = b[:-1] + np.diff(b) / 2
     c = max(float(np.exp(b[np.argmax(h)])), 1.0)
     err = lambda b2: float(np.sum(np.abs(np.log(c * np.exp(-x) + b2[0]) - y) ** error_wt))  # noqa: E731
-    bb = float(minimize(err, [0.1], method="Nelder-Mead", options=dict(xatol=1e-4, fatol=1e-6)).x[0])
+    bb = float(
+        minimize(err, [0.1], method="Nelder-Mead", options=dict(xatol=1e-4, fatol=1e-6)).x[0]
+    )
     a = c / (1 + bb) - 1
     v = np.full(int(ok.sum()), np.nan)
     v[pos] = ff[pos] / ((1 + a) * (1 + bb) + bb * mu[ok][pos])
