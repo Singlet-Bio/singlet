@@ -73,6 +73,9 @@ struct Output {
     std::vector<ContigOut> contigs;   // parallel to Input::contigs
     uint64_t obs = 0, molecules = 0, ambiguous = 0, other = 0, ad_molecules = 0, hits = 0, entries = 0, groups = 0;
     double sec = 0, sec_gather = 0, sec_upload = 0, sec_disc = 0, sec_count = 0;
+    // the chunks are gathered on a thread beside the device's work (sec_gather: its seconds in Input::gather); sec_gather_wait: what the
+    // device waited for them; sec_lock_wait / sec_lock_held: the device lock; prefetched: the gathers started before the lock
+    double sec_gather_wait = 0, sec_lock_wait = 0, sec_lock_held = 0; int prefetched = 0;
     double sec_hits = 0, sec_sort = 0, sec_entries = 0, sec_r9 = 0, sec_out = 0;   // counting stages (SINGLET_ALLSITE_GPU_TIMING=1)
     uint64_t arena_bytes = 0, arena_peak = 0, chunks = 0, blocks = 0, spill_bytes = 0;   // arena_peak: its high-water mark
     uint64_t kept_dp = 0, kept_ad = 0, below_floor = 0;   // DP and AD molecules of the kept sites; counted sites the floor dropped

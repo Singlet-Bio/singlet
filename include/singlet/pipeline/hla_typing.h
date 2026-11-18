@@ -31,11 +31,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <future>
 #include <iostream>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <cerrno>
@@ -43,6 +46,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #include <thread>
 #include <unordered_map>
@@ -71,10 +75,11 @@ public:
             if (b < 0) { valid = 0; f = r = 0; continue; }
             f = ((f << 2) | uint64_t(b)) & mask;
             r = (r >> 2) | (uint64_t(3 - b) << (2 * (kK - 1)));
-            if (++valid >= kK) keys_.push_back(std::min(f, r));
+            if (++valid >= kK) add_key(std::min(f, r));
         }
     }
     void build() {
+        std::vector<uint64_t>().swap(seen_);
         std::sort(keys_.begin(), keys_.end());
         keys_.erase(std::unique(keys_.begin(), keys_.end()), keys_.end());
         size_t cap = 1; while (cap < keys_.size() * 2 + 16) cap <<= 1;
@@ -174,8 +179,24 @@ private:
         const uint64_t h = fib(k);
         return (uint64_t(1) << ((h >> (58 - kWordsLog2)) & 63)) | (uint64_t(1) << ((h >> (52 - kWordsLog2)) & 63));
     }
-    std::vector<uint64_t> keys_, table_, bits_;
-    size_t mask_ = 0, n_ = 0;
+    // The index's alleles repeat almost every k-mer (34 M k-mers, 0.23 M distinct): a key goes into keys_ the first time it is seen
+    // (seen_: an open-addressing set that doubles at half load), so build() sorts the distinct keys only. The same sorted keys as
+    // collecting every k-mer and removing the repeats, so the same table.
+    void add_key(uint64_t k) {
+        if (seen_.empty()) { seen_.assign(size_t(1) << 16, 0); seen_mask_ = seen_.size() - 1; }
+        size_t h = hash(k) & seen_mask_;
+        while (seen_[h] != 0) { if (seen_[h] == k + 1) return; h = (h + 1) & seen_mask_; }
+        seen_[h] = k + 1;
+        keys_.push_back(k);
+        if (keys_.size() * 2 > seen_.size()) {
+            std::vector<uint64_t> n(seen_.size() * 2, 0);
+            const size_t m = n.size() - 1;
+            for (uint64_t v : seen_) if (v != 0) { size_t g = hash(v - 1) & m; while (n[g] != 0) g = (g + 1) & m; n[g] = v; }
+            seen_.swap(n); seen_mask_ = m;
+        }
+    }
+    std::vector<uint64_t> keys_, table_, bits_, seen_;
+    size_t mask_ = 0, n_ = 0, seen_mask_ = 0;
 };
 
 inline bool load_fasta_kmers(const std::string& path, KmerSet& ks, size_t& n_seq) {
@@ -203,12 +224,20 @@ struct Config {
     std::string tmp_dir;
     int min_cells = 2;              // frequency prior: type against alleles recorded in >= this many cells of IPD-IMGT/HLA (0: all alleles)
     bool defer = false;             // prefilter only: leave private/hla/pending/ for run_pending (--hla-defer)
+    // At most about this many candidate reads go to T1K and into the stored candidate file (0: all; SINGLET_HLA_MAX_READS when 0 here):
+    // every c-th candidate read in input order, c = ceil(candidates / max_reads) (thin_candidates). Off by default: it changes the
+    // abundances T1K reports and can change calls. Measured (bench/gpu-runtime, jobs 813217 and 813235): on two 10x 5' libraries the
+    // 2-field calls at A, B, C, DQB1 and DRB1 are the same from every candidate read down to 1 in 64 and 1 in 256 of them, and
+    // T1K's cost falls in proportion; on 10x 3' libraries accuracy against truth falls with every halving (0.95 at 361 M pairs,
+    // 0.77 at 45 M), so the cap is for 5' libraries.
+    uint64_t max_reads = 0;
 };
 
 struct Result {
     bool ran = false;
     std::string why_not;
     uint64_t reads_scanned = 0, reads_kept = 0;
+    uint64_t reads_candidate = 0, kept_every = 1, max_reads = 0;   // Config::max_reads applied: the candidate reads before it, the stride and the cap (kept_every 1: not applied)
     size_t n_kmers = 0, n_alleles = 0, n_alleles_typed = 0;
     int n_donors_typed = 0, n_donors_failed = 0;   // failed: a donor with candidate reads whose T1K call failed
     double seconds_prefilter = 0, seconds_t1k = 0;
@@ -369,6 +398,7 @@ inline size_t filter_index_by_cells(const std::string& fa, const std::string& st
 //                 run's files are the same while it runs; empty: <out>/private/hla/.t1k as before);
 //   finish_stage: the donors' T1K and every output under private/hla/, as run() wrote them in one go.
 // run() = both, one after the other. The outputs do not depend on when the sample stage ran.
+class Presift;   // below: the prefilter made by another pass over the input's blocks
 struct Session {
     Config cfg;
     Result res;
@@ -389,6 +419,9 @@ struct Session {
     std::vector<uint64_t> donor_reads;
     std::vector<char> donor_ok;
     double donor_s = 0;        // wall seconds of the donor stage
+    // The prefilter already made by another pass over the input (Presift; its work directory is Config::tmp_dir): the sample stage
+    // takes its prefilter.fq and counts where it would have decoded and scanned the input itself.
+    std::shared_ptr<Presift> presift;
 };
 
 /// Move a file, across file systems too (Config::tmp_dir may be on another one than the run directory).
@@ -407,15 +440,11 @@ inline bool t1k_call(const Session& s, const std::string& in, const std::string&
     return run_sh(cmd.c_str()) == 0;
 }
 
-/// Prefilter of one .1fq into `out`: blocks decoded and scanned on `threads` threads (RunSet::decode is thread-safe), written in block
-/// order, reads named by their index in the whole input (`next_index` continues across the runs). Returns false (why) on an open error.
-inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cdna_is_r1, int threads, FILE* out, uint64_t& next_index,
-                            Result& res, std::string& why) {
-    singlet::fq::RunSet rs;
-    try { rs.open({input}); } catch (const std::exception& e) { why = std::string("cannot open input: ") + e.what(); return false; }
-    const uint16_t bc_len = rs.bc_length();
+/// The run's barcode dictionary as text (empty: none), for the candidate reads' names.
+inline std::vector<std::string> barcode_dict(const singlet::fq::RunSet& rs) {
     std::vector<std::string> dict;
     if (rs.has_bc_dict()) {
+        const uint16_t bc_len = rs.bc_length();
         const auto& flat = rs.bc_dict_flat();
         dict.resize(rs.bc_dict_size());
         for (size_t d = 0; d < dict.size(); ++d) {
@@ -423,6 +452,147 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
             for (uint16_t j = 0; j < bc_len; ++j) { const uint8_t b = flat[d * bc_len + j]; dict[d][j] = "ACGTN"[b < 5 ? b : 4]; }
         }
     }
+    return dict;
+}
+
+/// The prefilter of one decoded block: its reads that share a k-mer with the index, appended to `o` as FASTQ records named
+/// <base + index in the block>[.<copy>]_<raw cell barcode>. `base`: the block's first stored read in the whole input. The quality column
+/// may be packed (DecodedBlock::keep_packed_qual; 2 bits a base, BINNED4 and ILLUMINA4): the kept reads' Phred values are unpacked from
+/// it exactly as the decoder unpacks them. nscan / nkept: the block's reads and kept reads (with their copies).
+inline void scan_block(const KmerSet& ks, const singlet::fq::DecodedBlock& B, uint64_t base, const std::vector<std::string>& dict, uint16_t bc_len,
+                       bool cdna_is_r1, std::vector<uint8_t>& qbuf, std::string& o, uint64_t& nscan, uint64_t& nkept) {
+    o.clear(); nscan = nkept = 0;
+    const bool packed = !B.r2_qual_packed.empty() && B.r2_qual_packed_phred;
+    size_t qoff = 0;   // read i's packed quality starts here (reads in order, packed_bytes(len) each)
+    for (uint32_t i = 0; i < B.n_reads; ++i) {
+        const uint32_t dup = B.dup_counts.empty() ? 1u : std::max<uint32_t>(1u, B.dup_counts[i]);
+        nscan += dup;
+        const size_t qthis = qoff;
+        if (packed) qoff += singlet::fq::pack::packed_bytes(B.r2_len(i));
+        const uint8_t* s = cdna_is_r1 ? B.r1_seq(i) : B.r2_seq(i);
+        const int L = cdna_is_r1 ? B.r1_len(i) : B.r2_len(i);
+        if (!ks.hits(s, L)) continue;
+        std::string bc;
+        if (!dict.empty() && !B.bc_indices.empty() && B.bc_indices[i] < dict.size()) bc = dict[B.bc_indices[i]];
+        else {
+            const uint8_t* r = cdna_is_r1 ? B.r2_seq(i) : B.r1_seq(i);
+            const int rl = std::min<int>(bc_len ? bc_len : 16, cdna_is_r1 ? B.r2_len(i) : B.r1_len(i));
+            for (int j = 0; j < rl; ++j) bc += "ACGTN"[r[j] < 5 ? r[j] : 4];
+        }
+        const uint8_t* q = nullptr;
+        if (!cdna_is_r1 && packed) {
+            const int n = B.r2_len(i);
+            if (qthis + singlet::fq::pack::packed_bytes(n) <= B.r2_qual_packed.size()) {
+                qbuf.resize(n);
+                const uint8_t* src = B.r2_qual_packed.data() + qthis;
+                for (int j = 0; j < n; ++j) qbuf[j] = B.r2_qual_packed_phred[(src[j >> 2] >> (6 - 2 * (j & 3))) & 3];
+                q = qbuf.data();
+            }
+        } else if (!cdna_is_r1) q = B.r2_quality(i);
+        std::string seq(L, 'N'), qual(L, 'I');
+        for (int j = 0; j < L; ++j) { seq[j] = "ACGTN"[s[j] < 5 ? s[j] : 4]; if (q) qual[j] = static_cast<char>(33 + std::min<int>(q[j], 93)); }
+        for (uint32_t d = 0; d < dup; ++d) {
+            o += "@" + std::to_string(base + i) + (dup > 1 ? "." + std::to_string(d) : std::string()) + "_" + bc + "\n" + seq + "\n+\n" + qual + "\n";
+            ++nkept;
+        }
+    }
+}
+
+/// The prefilter as a by-product of another pass over the input's blocks. The GPU route's read ingest decodes every block of the .1fq
+/// before STAR starts (SeqCacheGpuIngest.cpp, the fused scan and decode); given each decoded block, block() scans it with scan_block
+/// and writes the records in block order, so the sample stage finds the prefilter.fq that prefilter_onefq would write without
+/// decoding the input a second time (on a 300 M-pair sample the second decode and its scan took about 46 s on every thread of the
+/// run). One .1fq only: prefilter_onefq names reads and takes the barcode dictionary per run. Only the process that opened it
+/// writes (STAR's child inherits the object and must not), and only until close().
+class Presift {
+public:
+    KmerSet ks;
+    size_t n_alleles = 0;
+    std::string t1k_dir, tmp, fq;                 // the T1K install, the sample stage's work directory, its prefilter.fq
+    uint64_t reads_scanned = 0, reads_kept = 0;
+    Presift() = default;
+    Presift(const Presift&) = delete;
+    Presift& operator=(const Presift&) = delete;
+    ~Presift() { discard(); }
+    bool open(const std::string& t1k, const std::string& tmp_dir, std::shared_ptr<const singlet::fq::RunSet> rs, bool cdna_is_r1) {
+        if (!rs || !load_fasta_kmers(t1k + "/hlaidx/hlaidx_rna_seq.fa", ks, n_alleles)) return false;
+        t1k_dir = t1k; tmp = tmp_dir; fq = tmp + "/prefilter.fq";
+        if (::mkdir(tmp.c_str(), 0700) != 0 && errno != EEXIST) return false;
+        made_dir_ = true; pid_ = getpid();
+        out_ = std::fopen(fq.c_str(), "wb");
+        if (!out_) { discard(); return false; }
+        rs_ = std::move(rs);
+        bc_len_ = rs_->bc_length(); dict_ = barcode_dict(*rs_); cdna_is_r1_ = cdna_is_r1;
+        nblk_ = rs_->block_count();
+        state_.assign(nblk_, 0); pend_.assign(nblk_, std::string());
+        open_ = true;
+        return true;
+    }
+    /// One decoded block (any thread, any order; a block given twice is scanned once).
+    void block(uint32_t b, const singlet::fq::DecodedBlock& B) {
+        if (!open_.load() || getpid() != pid_ || b >= nblk_) return;
+        { std::lock_guard<std::mutex> lk(mu_); if (state_[b] != 0) return; state_[b] = 1; }
+        const double c0 = thread_cpu();
+        std::string o; std::vector<uint8_t> qbuf; uint64_t ns = 0, nk = 0;
+        scan_block(ks, B, rs_->block_read_offset(b), dict_, bc_len_, cdna_is_r1_, qbuf, o, ns, nk);
+        const double c1 = thread_cpu();
+        std::lock_guard<std::mutex> lk(mu_);
+        pend_[b].swap(o); state_[b] = 2;
+        reads_scanned += ns; reads_kept += nk; cpu_s_ += c1 - c0;
+        while (front_ < nblk_ && state_[front_] == 2) {   // in block order, as prefilter_onefq writes
+            const std::string& w = pend_[front_];
+            if (!w.empty() && std::fwrite(w.data(), 1, w.size(), out_) != w.size()) bad_ = true;
+            std::string().swap(pend_[front_]);
+            state_[front_++] = 3;
+        }
+    }
+    /// The end of the pass: true when every block was scanned and written (the file is then complete); false: the file is removed.
+    bool close() {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (!open_.load()) return complete_;
+        open_ = false;
+        bool ok = !bad_ && front_ == nblk_;
+        if (out_) { if (std::fclose(out_) != 0) ok = false; out_ = nullptr; }
+        std::vector<std::string>().swap(pend_);
+        complete_ = ok;
+        if (!ok && getpid() == pid_) std::remove(fq.c_str());
+        return ok;
+    }
+    bool complete() const { return complete_; }
+    double cpu_seconds() const { return cpu_s_; }      // of the scans, summed over the pass's threads
+    void adopt() { adopted_ = true; }                  // the sample stage owns the work directory from here
+    /// Not used after all: the file and the directory go (only in the process that made them).
+    void discard() {
+        if (adopted_ || !made_dir_ || getpid() != pid_) return;
+        if (out_) { std::fclose(out_); out_ = nullptr; }
+        open_ = false; complete_ = false;
+        std::remove(fq.c_str());
+        ::rmdir(tmp.c_str());
+        made_dir_ = false;
+    }
+private:
+    static double thread_cpu() { timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); return static_cast<double>(ts.tv_sec) + 1e-9 * static_cast<double>(ts.tv_nsec); }
+    std::shared_ptr<const singlet::fq::RunSet> rs_;
+    std::vector<std::string> dict_, pend_;
+    std::vector<uint8_t> state_;          // per block: 0 not given, 1 being scanned, 2 scanned, 3 written
+    uint16_t bc_len_ = 0;
+    bool cdna_is_r1_ = false, bad_ = false, complete_ = false, adopted_ = false, made_dir_ = false;
+    uint32_t nblk_ = 0, front_ = 0;
+    FILE* out_ = nullptr;
+    pid_t pid_ = 0;
+    double cpu_s_ = 0;
+    std::atomic<bool> open_{false};
+    std::mutex mu_;
+};
+
+/// Prefilter of one .1fq into `out`: blocks decoded and scanned on `threads` threads (RunSet::decode is thread-safe), written in block
+/// order, reads named by their index in the whole input (`next_index` continues across the runs). Returns false (why) on an open error.
+inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cdna_is_r1, int threads, FILE* out, uint64_t& next_index,
+                            Result& res, std::string& why) {
+    singlet::fq::RunSet rs;
+    try { rs.open({input}); } catch (const std::exception& e) { why = std::string("cannot open input: ") + e.what(); return false; }
+    const uint16_t bc_len = rs.bc_length();
+    const std::vector<std::string> dict = barcode_dict(rs);
     const int T = std::max(1, threads);
     const uint32_t nblk = rs.block_count();
     const uint32_t W = static_cast<uint32_t>(T) * 4;   // blocks per window: decoded and scanned in parallel, then written in order
@@ -440,42 +610,7 @@ inline bool prefilter_onefq(const KmerSet& ks, const std::string& input, bool cd
             std::vector<uint8_t> qbuf;
             for (uint32_t b; (b = nx++) < nb;) {
                 B.clear(); rs.decode(w0 + b, B);   // a staged source does not clear the block itself
-                const uint64_t base = file_base + rs.block_read_offset(w0 + b);
-                std::string& o = buf[b]; o.clear(); nscan[b] = nkept[b] = 0;
-                const bool packed = !B.r2_qual_packed.empty() && B.r2_qual_packed_phred;
-                size_t qoff = 0;   // read i's packed quality starts here (reads in order, packed_bytes(len) each)
-                for (uint32_t i = 0; i < B.n_reads; ++i) {
-                    const uint32_t dup = B.dup_counts.empty() ? 1u : std::max<uint32_t>(1u, B.dup_counts[i]);
-                    nscan[b] += dup;
-                    const size_t qthis = qoff;
-                    if (packed) qoff += singlet::fq::pack::packed_bytes(B.r2_len(i));
-                    const uint8_t* s = cdna_is_r1 ? B.r1_seq(i) : B.r2_seq(i);
-                    const int L = cdna_is_r1 ? B.r1_len(i) : B.r2_len(i);
-                    if (!ks.hits(s, L)) continue;
-                    std::string bc;
-                    if (!dict.empty() && !B.bc_indices.empty() && B.bc_indices[i] < dict.size()) bc = dict[B.bc_indices[i]];
-                    else {
-                        const uint8_t* r = cdna_is_r1 ? B.r2_seq(i) : B.r1_seq(i);
-                        const int rl = std::min<int>(bc_len ? bc_len : 16, cdna_is_r1 ? B.r2_len(i) : B.r1_len(i));
-                        for (int j = 0; j < rl; ++j) bc += "ACGTN"[r[j] < 5 ? r[j] : 4];
-                    }
-                    const uint8_t* q = nullptr;
-                    if (!cdna_is_r1 && packed) {
-                        const int n = B.r2_len(i);
-                        if (qthis + singlet::fq::pack::packed_bytes(n) <= B.r2_qual_packed.size()) {
-                            qbuf.resize(n);
-                            const uint8_t* src = B.r2_qual_packed.data() + qthis;
-                            for (int j = 0; j < n; ++j) qbuf[j] = B.r2_qual_packed_phred[(src[j >> 2] >> (6 - 2 * (j & 3))) & 3];
-                            q = qbuf.data();
-                        }
-                    } else if (!cdna_is_r1) q = B.r2_quality(i);
-                    std::string seq(L, 'N'), qual(L, 'I');
-                    for (int j = 0; j < L; ++j) { seq[j] = "ACGTN"[s[j] < 5 ? s[j] : 4]; if (q) qual[j] = static_cast<char>(33 + std::min<int>(q[j], 93)); }
-                    for (uint32_t d = 0; d < dup; ++d) {
-                        o += "@" + std::to_string(base + i) + (dup > 1 ? "." + std::to_string(d) : std::string()) + "_" + bc + "\n" + seq + "\n+\n" + qual + "\n";
-                        ++nkept[b];
-                    }
-                }
+                scan_block(ks, B, file_base + rs.block_read_offset(w0 + b), dict, bc_len, cdna_is_r1, qbuf, buf[b], nscan[b], nkept[b]);
             }
         };
         std::vector<std::thread> th;
@@ -500,6 +635,42 @@ inline bool gzip_file(const std::string& from, const std::string& to, const char
     bool ok = true;
     while (ok && in) { in.read(b.data(), b.size()); const int n = static_cast<int>(in.gcount()); if (n > 0 && gzwrite(g, b.data(), static_cast<unsigned>(n)) != n) ok = false; }
     return gzclose(g) == Z_OK && ok && !in.bad();
+}
+
+/// At most about `max_reads` of the candidate reads: every c-th record of `fq` in input order (the first, the (c + 1)-th, ...),
+/// c = ceil(kept / max_reads). The kept reads are spread over the whole input whatever its order; the first max_reads are not (an
+/// input written in genome order holds one gene's reads first: the Oetjen libraries typed no locus from their first quarter).
+/// Rewrites the file; false when it cannot (the file is then as it was). n_out: the records kept.
+inline bool thin_candidates(const std::string& fq, uint64_t kept, uint64_t max_reads, uint64_t& n_out, uint64_t& stride) {
+    stride = max_reads > 0 ? (kept + max_reads - 1) / max_reads : 1;
+    n_out = kept;
+    if (stride <= 1) { stride = 1; return true; }
+    const std::string tmp = fq + ".thin";
+    FILE* in = std::fopen(fq.c_str(), "rb");
+    FILE* out = in ? std::fopen(tmp.c_str(), "wb") : nullptr;
+    if (!in || !out) { if (in) std::fclose(in); if (out) std::fclose(out); return false; }
+    std::vector<char> b(size_t(1) << 22);
+    std::string o;
+    uint64_t line = 0, n = 0;   // complete lines so far (4 per record); records kept
+    bool ok = true;
+    for (size_t got; ok && (got = std::fread(b.data(), 1, b.size(), in)) > 0;) {
+        o.clear();
+        for (size_t a = 0; a < got;) {
+            const char* nl = static_cast<const char*>(std::memchr(b.data() + a, '\n', got - a));
+            const size_t e = nl ? static_cast<size_t>(nl - b.data()) + 1 : got;
+            const bool keep = (line / 4) % stride == 0;
+            if (keep) o.append(b.data() + a, e - a);
+            if (nl) { if (keep && line % 4 == 3) ++n; ++line; }   // a line cut by the buffer's end counts once, at its newline
+            a = e;
+        }
+        if (!o.empty() && std::fwrite(o.data(), 1, o.size(), out) != o.size()) ok = false;
+    }
+    if (std::ferror(in)) ok = false;
+    std::fclose(in);
+    if (std::fclose(out) != 0) ok = false;
+    if (!ok || line != 4 * kept || std::rename(tmp.c_str(), fq.c_str()) != 0) { std::remove(tmp.c_str()); return false; }
+    n_out = n;
+    return true;
 }
 
 /// The sample's T1K on the prefiltered reads (Session::kept_fq), with the frequency prior.
@@ -549,22 +720,50 @@ inline void sample_stage(Session& s) {
 
     // 1. prefilter
     auto t0 = std::chrono::steady_clock::now();
-    KmerSet ks;
-    if (!load_fasta_kmers(ref, ks, res.n_alleles)) { res.why_not = "cannot read " + ref; return; }
-    res.n_kmers = ks.size();
     s.kept_fq = s.tmp + "/prefilter.fq";
-    FILE* out = std::fopen(s.kept_fq.c_str(), "wb");
-    if (!out) { res.why_not = "cannot write " + s.kept_fq; return; }
-    uint64_t next_index = 0;
-    for (const auto& input : cfg.onefq) {
-        std::string why;
-        if (!prefilter_onefq(ks, input, cfg.cdna_is_r1, cfg.threads, out, next_index, res, why)) { std::fclose(out); res.why_not = why; return; }
+    if (s.presift && s.presift->complete() && s.presift->fq == s.kept_fq && cfg.onefq.size() == 1 && file_exists(s.kept_fq)) {
+        // made inside the read ingest's pass over the same blocks: the same records in the same order
+        Presift& p = *s.presift;
+        p.adopt();
+        res.n_alleles = p.n_alleles; res.n_kmers = p.ks.size(); res.reads_scanned = p.reads_scanned; res.reads_kept = p.reads_kept;
+        s.stopped = false;
+        res.seconds_prefilter = p.cpu_seconds() / std::max(1, cfg.threads);
+        std::cerr << "[hla] prefilter: " << res.reads_kept << " of " << res.reads_scanned << " reads share a 19-mer with " << res.n_alleles
+                  << " HLA alleles (" << res.n_kmers << " k-mers), in the read ingest's pass (" << p.cpu_seconds() << " CPU-s on its threads)\n";
+    } else {
+        KmerSet ks;
+        if (!load_fasta_kmers(ref, ks, res.n_alleles)) { res.why_not = "cannot read " + ref; return; }
+        res.n_kmers = ks.size();
+        FILE* out = std::fopen(s.kept_fq.c_str(), "wb");
+        if (!out) { res.why_not = "cannot write " + s.kept_fq; return; }
+        uint64_t next_index = 0;
+        for (const auto& input : cfg.onefq) {
+            std::string why;
+            if (!prefilter_onefq(ks, input, cfg.cdna_is_r1, cfg.threads, out, next_index, res, why)) { std::fclose(out); res.why_not = why; return; }
+        }
+        std::fclose(out);
+        s.stopped = false;
+        res.seconds_prefilter = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::cerr << "[hla] prefilter: " << res.reads_kept << " of " << res.reads_scanned << " reads share a 19-mer with " << res.n_alleles
+                  << " HLA alleles (" << res.n_kmers << " k-mers), " << res.seconds_prefilter << " s\n";
     }
-    std::fclose(out);
-    s.stopped = false;
-    res.seconds_prefilter = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    std::cerr << "[hla] prefilter: " << res.reads_kept << " of " << res.reads_scanned << " reads share a 19-mer with " << res.n_alleles
-              << " HLA alleles (" << res.n_kmers << " k-mers), " << res.seconds_prefilter << " s\n";
+
+    // The cap on the candidate reads (Config::max_reads): from here on the thinned reads are the run's candidate reads (T1K, the stored
+    // file, the deferred route's pending reads, the donors)
+    res.reads_candidate = res.reads_kept;
+    {
+        uint64_t cap = cfg.max_reads;
+        if (cap == 0) if (const char* e = std::getenv("SINGLET_HLA_MAX_READS")) cap = std::strtoull(e, nullptr, 10);
+        if (cap > 0 && res.reads_kept > cap) {
+            uint64_t n = 0, c = 1;
+            if (thin_candidates(s.kept_fq, res.reads_kept, cap, n, c)) {
+                std::cerr << "[hla] candidate reads: 1 in " << c << " of " << res.reads_kept << " kept, in input order (at most " << cap << "): " << n << " reads\n";
+                res.reads_kept = n; res.kept_every = c; res.max_reads = cap;
+            } else {
+                std::cerr << "[hla] candidate reads not thinned (cannot rewrite " << s.kept_fq << "): all " << res.reads_kept << " are used\n";
+            }
+        }
+    }
 
     if (cfg.defer) {
         if (res.reads_kept > 0 && !gzip_file(s.kept_fq, s.tmp + "/" + kPendingReads, "wb1")) {
@@ -623,8 +822,10 @@ inline Result write_pending(Session& s) {
         std::ofstream j(pend + "/manifest.json.tmp");
         j << "{\n  \"format\": " << json_quote(kPendingFormat) << ",\n  \"t1k_dir\": " << json_quote(cfg.t1k_dir) << ",\n  \"cdna_is_r1\": " << (cfg.cdna_is_r1 ? "true" : "false")
           << ",\n  \"donor_assignments\": " << json_quote(donors) << ",\n  \"min_cells\": " << cfg.min_cells << ",\n  \"reads_scanned\": " << res.reads_scanned
-          << ",\n  \"reads_kept\": " << res.reads_kept << ",\n  \"n_kmers\": " << res.n_kmers << ",\n  \"n_alleles\": " << res.n_alleles
-          << ",\n  \"seconds_prefilter\": " << res.seconds_prefilter << ",\n  \"candidate_bytes\": " << bytes << "\n}\n";
+          << ",\n  \"reads_kept\": " << res.reads_kept << ",\n  \"n_kmers\": " << res.n_kmers << ",\n  \"n_alleles\": " << res.n_alleles;
+        if (res.kept_every > 1)   // Config::max_reads was applied
+            j << ",\n  \"reads_candidate\": " << res.reads_candidate << ",\n  \"kept_every\": " << res.kept_every << ",\n  \"max_reads\": " << res.max_reads;
+        j << ",\n  \"seconds_prefilter\": " << res.seconds_prefilter << ",\n  \"candidate_bytes\": " << bytes << "\n}\n";
         j.close();
         if (!j || std::rename((pend + "/manifest.json.tmp").c_str(), (pend + "/manifest.json").c_str()) != 0) return fail("cannot write the manifest in " + pend);
     }
@@ -753,6 +954,7 @@ inline Result finish_stage(Session& s) {
         j << "{\n  \"t1k\": " << manifest << ",\n  \"ran\": " << (res.ran ? "true" : "false") << ",\n  \"why_not\": \"" << res.why_not
           << "\",\n  \"prefilter\": {\"k\": " << kK << ", \"stride\": " << kStride << ", \"hla_alleles\": " << res.n_alleles << ", \"typed_alleles\": " << res.n_alleles_typed << ", \"min_cells\": " << cfg.min_cells << ", \"kmers\": " << res.n_kmers
           << ", \"reads_scanned\": " << res.reads_scanned << ", \"reads_kept\": " << res.reads_kept
+          << (res.kept_every > 1 ? ", \"reads_candidate\": " + std::to_string(res.reads_candidate) + ", \"kept_every\": " + std::to_string(res.kept_every) + ", \"max_reads\": " + std::to_string(res.max_reads) : std::string())
           << "},\n  \"run\": {\"prefilter_seconds\": " << res.seconds_prefilter << ", \"t1k_seconds\": " << res.seconds_t1k << "},\n  \"sample\": " << (res.ran ? genotype_json(dir + "/hla_genotype.tsv") : std::string("null"))
           << ",\n  \"donor_rule\": \"called cells (cell_status cell) of one donor with prob_max >= 0.9, matched by raw cell barcode\""
           << ",\n  \"donors\": " << donors_json << "\n}\n";
@@ -800,6 +1002,9 @@ inline Result run_pending(const std::string& pending_dir, const std::string& t1k
     if (!num("min_cells", mc) || !num("reads_scanned", scanned) || !num("reads_kept", kept) || !num("n_kmers", nk) || !num("n_alleles", na)) { bad.why_not = "incomplete manifest in " + pend; return bad; }
     cfg.min_cells = static_cast<int>(mc);
     res.reads_scanned = scanned; res.reads_kept = kept; res.n_kmers = nk; res.n_alleles = na;
+    res.reads_candidate = kept;
+    { unsigned long long rc = 0, ke = 0, mr = 0;   // the run applied Config::max_reads
+      if (num("reads_candidate", rc) && num("kept_every", ke) && ke > 1) { res.reads_candidate = rc; res.kept_every = ke; if (num("max_reads", mr)) res.max_reads = mr; } }
     if (manifest_field(man, "seconds_prefilter", v)) res.seconds_prefilter = std::atof(v.c_str());
 
     s.dir = cfg.out_prefix + "/private/hla";

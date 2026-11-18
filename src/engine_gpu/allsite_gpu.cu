@@ -17,11 +17,14 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -29,6 +32,7 @@
 
 #include "singlet/engine_gpu.h"
 #include "singlet/pileup/allsite_device.h"
+#include "singlet/thread_name.h"
 
 namespace singlet_engine_gpu {
 namespace {
@@ -393,9 +397,76 @@ struct PinnedCopy {
 
 inline unsigned gridFor(u64 n, unsigned b = 256) { return (unsigned) std::max<u64>(1, (n + b - 1) / b); }
 
+// ---------------------------------------------------------------------------------------------------------------- the chunks' gathers
+// The host gathers each chunk's reads into flat arrays (Input::gather: seconds of host work per chunk, none of it on the device). A thread
+// gathers the chunks in order into two staging sets, chunk k into set k & 1 as soon as chunk k - 2's upload has left it, so the device
+// works on chunk k while the host gathers chunk k + 1 (before: gather, upload and kernels of each chunk in turn, all under the device
+// lock). Started before the lock when the arena can be predicted, the first two chunks are gathered while the pass waits for the device.
+// The arrays hold what Input::gather wrote for the same chunks as before: placement in time only.
+struct Prefetch {
+    struct Set { std::unique_ptr<AD::Read[]> R; std::unique_ptr<u32[]> O; std::unique_ptr<u8[]> S; std::unique_ptr<uint64_t[]> Q; };
+    const AD::Input* in = nullptr;
+    std::vector<u32> cut;            // chunk k = entries [cut[k], cut[k + 1])
+    Set set[2];
+    std::mutex mu; std::condition_variable cv;
+    size_t done = 0, freed = 0;      // chunks gathered; chunks whose staging set is free again (their upload is complete)
+    bool stop = false; std::exception_ptr err;
+    double sec = 0;                  // seconds in Input::gather
+    std::thread th;
+    Prefetch() = default;
+    Prefetch(const Prefetch&) = delete;
+    Prefetch& operator=(const Prefetch&) = delete;
+    ~Prefetch() { halt(); }
+    bool running() const { return !cut.empty(); }
+    void start(const AD::Input& input, const std::vector<u32>& c) {
+        halt();
+        in = &input; cut = c; done = 0; freed = 0; stop = false; err = nullptr; sec = 0;
+        u64 mxR = 0, mxO = 0, mxS = 0, mxQ = 0;   // host staging for the largest chunk (pageable: page-locking GBs costs more than the copy saves)
+        for (size_t k = 0; k + 1 < cut.size(); ++k) {
+            u64 r = 0, o = 0, s = 0, q = 0;
+            for (u32 x = cut[k]; x < cut[k + 1]; ++x) { r += in->contigs[x].reads; o += in->contigs[x].ops; s += in->contigs[x].seqb; q += in->contigs[x].lqw; }
+            mxR = std::max(mxR, r); mxO = std::max(mxO, o); mxS = std::max(mxS, s); mxQ = std::max(mxQ, q);
+        }
+        for (int i = 0; i < (cut.size() > 2 ? 2 : 1); ++i) {
+            set[i].R.reset(new AD::Read[mxR + 1]); set[i].O.reset(new u32[mxO + 1]); set[i].S.reset(new u8[mxS + 1]); set[i].Q.reset(new uint64_t[mxQ + 1]);
+        }
+        th = std::thread([this]() {
+            singlet::ThreadNameScope tn("sg-allsite-g");
+            try {
+                for (size_t k = 0; k + 1 < cut.size(); ++k) {
+                    { std::unique_lock<std::mutex> lk(mu); cv.wait(lk, [&] { return stop || k < freed + 2; }); if (stop) return; }
+                    const auto t = std::chrono::steady_clock::now();
+                    Set& s = set[k & 1];
+                    in->gather(cut[k], cut[k + 1], s.R.get(), s.O.get(), s.S.get(), s.Q.get());
+                    { std::lock_guard<std::mutex> lk(mu); sec += secSince(t); done = k + 1; }
+                    cv.notify_all();
+                }
+            } catch (...) {
+                { std::lock_guard<std::mutex> lk(mu); err = std::current_exception(); }
+                cv.notify_all();
+            }
+        });
+    }
+    Set& wait(size_t k) {   // chunk k's arrays, once gathered
+        std::unique_lock<std::mutex> lk(mu);
+        cv.wait(lk, [&] { return done > k || err; });
+        if (done <= k) std::rethrow_exception(err);
+        return set[k & 1];
+    }
+    void release(size_t k) { { std::lock_guard<std::mutex> lk(mu); freed = k + 1; } cv.notify_all(); }
+    double seconds() { std::lock_guard<std::mutex> lk(mu); return sec; }
+    void halt() {   // ends the thread (after the gather it is in) and frees the sets
+        { std::lock_guard<std::mutex> lk(mu); stop = true; }
+        cv.notify_all();
+        if (th.joinable()) th.join();
+        set[0] = Set{}; set[1] = Set{}; cut.clear();
+    }
+};
+
 }  // namespace
 
 bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
+    SINGLET_NVTX("phase: allsite");
     const auto T0 = std::chrono::steady_clock::now();
     out = AD::Output{};
     out.contigs.resize(in.contigs.size());
@@ -408,11 +479,75 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
 
     // the engine's device lock (a short holder). With SINGLET_GPU_PILEUP_UNLOCK=late the GPU pileup still holds it here, so the pass
     // takes the device without it (SINGLET_ALLSITE_GPU_LOCK=0 does the same); the arena is sized from the memory free either way
+    double frac = 0.6, maxGB = 24.0;
+    if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_FRAC")) { const double v = atof(e); if (v > 0 && v <= 0.95) frac = v; }
+    if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_MAXGB")) { const double v = atof(e); if (v > 0) maxGB = v; }
+    u64 chunkReads = 0x7fffffffull, blockHits = 0;   // test knobs: smaller chunks and blocks than memory allows
+    if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_CHUNK_READS")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) chunkReads = v; }
+    if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_BLOCK_HITS")) blockHits = strtoull(e, nullptr, 10);
+    // The chunking as functions of the arena's size (the same rules whether they are applied to the predicted arena or to the real one).
+    auto dataBytes = [](const AD::Contig& c) { return AD::contig_bytes(c); };
+    auto hardFor = [&](size_t cap) {   // an entry above it (or past the 32-bit offsets) must be split into windows
+        u64 hard = (u64) (0.7 * (double) cap);
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) hard = std::min(hard, v); }   // test knob
+        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_FRAC")) {   // test knob: split the contigs above this share of the largest
+            const double f = atof(e); u64 big = 0; for (const AD::Contig& C : in.contigs) big = std::max<u64>(big, dataBytes(C));
+            if (f > 0 && f < 1) hard = std::min(hard, (u64) (f * (double) big));
+        }
+        return hard;
+    };
+    auto overFor = [&](size_t cap) {
+        const u64 hard = hardFor(cap), lim32 = 0x7fffffffull;
+        bool over = false;
+        for (const AD::Contig& C : in.contigs) over = over || dataBytes(C) > hard || C.reads >= lim32;
+        return over;
+    };
+    auto cutsFor = [&](size_t cap, std::vector<u32>& cut) {   // chunks of consecutive entries whose gathered reads take at most ~45% of the arena; false: an entry does not fit
+        const u64 lim = (u64) (0.45 * (double) cap), lim32 = 0x7fffffffull; u64 acc = 0, nr = 0;
+        const u32 nE = (u32) in.contigs.size();
+        cut.assign(1, 0);
+        for (u32 c = 0; c < nE; ++c) {
+            const AD::Contig& C = in.contigs[c];
+            const u64 b = dataBytes(C);
+            if (b > (u64) (0.7 * (double) cap) || C.reads >= lim32) return false;
+            if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + C.reads > chunkReads)) { cut.push_back(c); acc = 0; nr = 0; }
+            acc += b; nr += C.reads;
+        }
+        cut.push_back(nE);
+        return true;
+    };
+    // Before the lock: when the arena's size can be told ahead (the slot's share or the 24 GB cap decides it, not the memory free at the
+    // lock), the chunks are cut for it and their gathers start now, so the wait for the device is not idle and the lock is not held for
+    // them. The real arena decides after the lock: any other size, and the gathers start again for it (as if none had been made).
+    // SINGLET_ALLSITE_GPU_PREFETCH=0: no gather before the lock (the chunks are still gathered beside the device's work).
+    Prefetch pf;
+    size_t predCap = 0;
+    {
+        const char* pe = std::getenv("SINGLET_ALLSITE_GPU_PREFETCH");
+        const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE");
+        cudaDeviceProp prop;
+        if (!(pe && pe[0] == '0') && in.gather && cudaGetDeviceProperties(&prop, dv ? std::atoi(dv) : 0) == cudaSuccess) {
+            const double G = 1073741824.0, tot = (double) prop.totalGlobalMem;
+            const uint64_t bud = memBudget((uint64_t) prop.totalGlobalMem);
+            double want = maxGB * G;
+            if (bud) want = std::min(want, (double) bud - G);
+            // the memory free at the lock, at the least: the card less the shared index, the other slots' shares and 3 GB of contexts
+            const double freeMin = tot - (double) sharedIndexReserve() - (double) (gpuSlots() - 1) * (double) bud - 3.0 * G;
+            if (want >= (double) ((size_t) 1536 << 20) && frac * freeMin - 512.0 * 1048576.0 >= want) predCap = (size_t) want;
+        } else cudaGetLastError();
+        if (predCap && !overFor(predCap)) {
+            std::vector<u32> pc;
+            try { if (cutsFor(predCap, pc)) pf.start(in, pc); } catch (const std::exception&) { pf.halt(); }
+        }
+    }
+    const auto tLock0 = std::chrono::steady_clock::now();
     int lockFd = -1, device = 0;
     const char* ul = std::getenv("SINGLET_GPU_PILEUP_UNLOCK"); const char* lk = std::getenv("SINGLET_ALLSITE_GPU_LOCK");
     if ((ul && std::string(ul) == "late") || (lk && lk[0] == '0')) {
         if (const char* dv = std::getenv("SINGLET_ENGINE_GPU_DEVICE")) device = std::atoi(dv);
     } else device = lockDevice(&lockFd);
+    out.sec_lock_wait = secSince(tLock0);
+    const auto tLocked = std::chrono::steady_clock::now();
     struct Unlock { int fd; ~Unlock() { unlockDevice(fd); } } unlock{lockFd};
     DrvCtx ctx;
     if (!ctx.make(device, out.why)) return false;
@@ -427,9 +562,6 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         d2h.init(in.threads);
         size_t fr = 0, tot = 0;
         AS_CK(cudaMemGetInfo(&fr, &tot));
-        double frac = 0.6, maxGB = 24.0;
-        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_FRAC")) { const double v = atof(e); if (v > 0 && v <= 0.95) frac = v; }
-        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_MAXGB")) { const double v = atof(e); if (v > 0) maxGB = v; }
         size_t want = (size_t) std::min<double>(frac * (double) fr - 512.0 * 1048576.0, maxGB * 1073741824.0);
         // the slot's E17 share (memBudget: SINGLET_ENGINE_GPU_MEM_GB, else (device - 2 GB - shared index) / slots) less 1 GiB for the context:
         // the free memory also holds the other slots' unused shares, and an arena taken from them left their prefill no room (E17 stop)
@@ -445,47 +577,20 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_FAIL_BLOCK")) failBlock = strtoull(e, nullptr, 10);
 
         // chunks of consecutive contigs whose gathered reads take at most ~45% of the arena
-        auto dataBytes = [](const AD::Contig& c) { return AD::contig_bytes(c); };
-        {   // a contig too large for one chunk (or past the 32-bit offsets) is replaced by windows that fit, when the caller can split it
-            u64 hard = (u64) (0.7 * (double) A.cap); const u64 lim32 = 0x7fffffffull;
-            if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_BYTES")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) hard = std::min(hard, v); }   // test knob
-            if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_SPLIT_FRAC")) {   // test knob: split the contigs above this share of the largest
-                const double f = atof(e); u64 big = 0; for (const AD::Contig& C : in.contigs) big = std::max<u64>(big, dataBytes(C));
-                if (f > 0 && f < 1) hard = std::min(hard, (u64) (f * (double) big));
-            }
-            bool over = false;
-            for (const AD::Contig& C : in.contigs) over = over || dataBytes(C) > hard || C.reads >= lim32;
-            if (over && in.resplit) {
-                if (!in.resplit(hard, lim32)) { out.why = "a contig could not be split to fit the arena (" + std::to_string(A.cap >> 20) + " MiB)"; return false; }
+        std::vector<u32> cut;
+        if (pf.running() && A.cap == predCap) {   // the arena is the predicted one: the chunks cut for it before the lock, their gathers under way
+            cut = pf.cut; out.prefetched = 1;
+        } else {
+            pf.halt();   // another arena than predicted: its chunks are not these
+            // a contig too large for one chunk (or past the 32-bit offsets) is replaced by windows that fit, when the caller can split it
+            if (overFor(A.cap) && in.resplit) {
+                if (!in.resplit(hardFor(A.cap), 0x7fffffffull)) { out.why = "a contig could not be split to fit the arena (" + std::to_string(A.cap >> 20) + " MiB)"; return false; }
                 nCt = (u32) in.contigs.size(); out.contigs.assign(nCt, AD::ContigOut{});
             }
+            if (!cutsFor(A.cap, cut)) { out.why = "a contig's reads exceed the device budget (arena " + std::to_string(A.cap >> 20) + " MiB)"; return false; }
+            pf.start(in, cut);
         }
-        std::vector<u32> cut{0};
-        u64 chunkReads = 0x7fffffffull, blockHits = 0;   // test knobs: smaller chunks and blocks than memory allows
-        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_CHUNK_READS")) { const u64 v = strtoull(e, nullptr, 10); if (v > 0) chunkReads = v; }
-        if (const char* e = std::getenv("SINGLET_ALLSITE_GPU_BLOCK_HITS")) blockHits = strtoull(e, nullptr, 10);
-        { const u64 lim = (u64) (0.45 * (double) A.cap), lim32 = 0x7fffffffull; u64 acc = 0, nr = 0;
-          for (u32 c = 0; c < nCt; ++c) {
-              const AD::Contig& C = in.contigs[c];
-              const u64 b = dataBytes(C);
-              if (b > (u64) (0.7 * (double) A.cap) || C.reads >= lim32) {
-                  out.why = "a contig's reads exceed the device budget (arena " + std::to_string(A.cap >> 20) + " MiB)"; return false; }
-              if (c > cut.back() && (acc + b > lim || c - cut.back() >= 65535 || nr + C.reads > chunkReads)) {
-                  cut.push_back(c); acc = 0; nr = 0; }
-              acc += b; nr += C.reads;
-          }
-          cut.push_back(nCt); }
         out.chunks = cut.size() - 1;
-
-        // host staging for the largest chunk (pageable: page-locking GBs costs more than the copy saves)
-        u64 mxR = 0, mxO = 0, mxS = 0, mxQ = 0;
-        for (size_t k = 0; k + 1 < cut.size(); ++k) {
-            u64 r = 0, o = 0, s = 0, q = 0;
-            for (u32 c = cut[k]; c < cut[k + 1]; ++c) { r += in.contigs[c].reads; o += in.contigs[c].ops; s += in.contigs[c].seqb; q += in.contigs[c].lqw; }
-            mxR = std::max(mxR, r); mxO = std::max(mxO, o); mxS = std::max(mxS, s); mxQ = std::max(mxQ, q);
-        }
-        std::unique_ptr<AD::Read[]> hR(new AD::Read[mxR + 1]); std::unique_ptr<u32[]> hO(new u32[mxO + 1]);
-        std::unique_ptr<u8[]> hS(new u8[mxS + 1]); std::unique_ptr<uint64_t[]> hQ(new uint64_t[mxQ + 1]);
 
         u64 stat[4] = {0, 0, 0, 0};
         const bool TM = std::getenv("SINGLET_ALLSITE_GPU_TIMING") != nullptr;
@@ -504,17 +609,17 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             }
             const u32 n = (u32) nR;
             auto tg = std::chrono::steady_clock::now();
-            in.gather(c0, c1, hR.get(), hO.get(), hS.get(), hQ.get());
-            out.sec_gather += secSince(tg);
+            Prefetch::Set& hs = pf.wait(k);   // gathered beside the previous chunk's device work (or before the lock)
+            out.sec_gather_wait += secSince(tg);
             const size_t mark0 = A.top;
             auto tu = std::chrono::steady_clock::now();
             AD::Read* dR = A.get<AD::Read>(nR); u32* dO = A.get<u32>(nO + 1); u8* dS = A.get<u8>(nS + 1); u64* dQ = A.get<u64>(nQ + 1);
             u8* dRef = A.get<u8>(refOff[nC] + 1); u64* dRefOff = A.get<u64>(nC + 1); u64* dRefLen = A.get<u64>(nC + 1);
             int32_t* dWlo = A.get<int32_t>(nC + 1); int32_t* dWhi = A.get<int32_t>(nC + 1);
-            d2h.up(dR, hR.get(), nR * sizeof(AD::Read), st);
-            d2h.up(dO, hO.get(), (size_t) nO * 4, st);
-            d2h.up(dS, hS.get(), (size_t) nS, st);
-            d2h.up(dQ, hQ.get(), (size_t) nQ * 8, st);
+            d2h.up(dR, hs.R.get(), nR * sizeof(AD::Read), st);
+            d2h.up(dO, hs.O.get(), (size_t) nO * 4, st);
+            d2h.up(dS, hs.S.get(), (size_t) nS, st);
+            d2h.up(dQ, hs.Q.get(), (size_t) nQ * 8, st);
             for (u32 c = c0; c < c1; ++c) if (refLen[c - c0]) d2h.up(dRef + refOff[c - c0], in.contigs[c].ref, refLen[c - c0], st);
             AS_CK(cudaMemcpyAsync(dRefOff, refOff.data(), (nC + 1) * 8, cudaMemcpyHostToDevice, st));
             AS_CK(cudaMemcpyAsync(dRefLen, refLen.data(), nC * 8, cudaMemcpyHostToDevice, st));
@@ -522,6 +627,7 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
             AS_CK(cudaMemcpyAsync(dWhi, whi.data(), nC * 4, cudaMemcpyHostToDevice, st));
             AS_CK(cudaStreamSynchronize(st));
             out.sec_upload += secSince(tu);
+            pf.release(k);   // the set is free for chunk k + 2's gather
             ChunkV C{dR, dO, dS, dQ, dRef, dRefOff, dRefLen, dWlo, dWhi, in.skip_n, in.use_qual};
             u32* dCnt = A.get<u32>(nR + 1); u64* dOff = A.get<u64>(nR + 1); u32* dRf = A.get<u32>(nR + 1); u32* dRl = A.get<u32>(nR + 1);
             int* dNum = A.get<int>(4); u64* dStat = A.get<u64>(4);
@@ -745,7 +851,9 @@ bool allsiteDeviceRun(const AD::Input& in, AD::Output& out) {
         for (auto& c : out.contigs) c = AD::ContigOut{};   // the caller drops any spill units already put
         return false;
     }
+    out.sec_gather = pf.seconds();
     out.sec = secSince(T0);
+    out.sec_lock_held = secSince(tLocked);
     return true;
 }
 

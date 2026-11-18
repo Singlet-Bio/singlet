@@ -7,6 +7,7 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -191,6 +192,38 @@ inline bool noinitHugepage() {
     static const bool on = [] { const char* e = std::getenv("SINGLET_NOINIT_HUGEPAGE"); return !(e && e[0] == '0'); }();
     return on;
 }
+// rt/hostmem (SINGLET_THP_POLICY: auto (default), on, off): a huge-page request (MADV_HUGEPAGE) makes the faulting thread compact memory itself
+// when no 2 MB block is free (THP defrag = madvise). On a node whose memory is full of other tenants' file cache that was the livelock of
+// 815877, 816398, 816401, 816549 and of the first 18 minutes of mix 816547 (memory pressure 95 %, 25 cores in the kernel, MemFree 100 GB);
+// the same mix start with the request left out (816710): pressure 0 %, no compaction stall, a fifth of the system time. auto: an array of 64 MB
+// or more is allocated without the request when MemFree is under SINGLET_THP_MINFREE_GB (48), or (only when SINGLET_THP_MAXCACHE_GB is set above 0, off by default: it cost 12-15 % at K=3, 816991 vs 816992) the file cache (Cached - Shmem) is over
+// SINGLET_THP_MAXCACHE_GB, or the memory pressure "full" avg10 is over 1 %. Read once per large allocation (a few dozen per sample).
+inline bool thpFreeOk() {
+    static const int policy = [] { const char* e = std::getenv("SINGLET_THP_POLICY"); return (e && std::strcmp(e, "on") == 0) ? 1 : (e && std::strcmp(e, "off") == 0) ? 2 : 0; }();
+    static const double minFree = [] { const char* e = std::getenv("SINGLET_THP_MINFREE_GB"); return (e && e[0]) ? std::atof(e) : 48.0; }();
+    static const double maxCache = [] { const char* e = std::getenv("SINGLET_THP_MAXCACHE_GB"); return (e && e[0]) ? std::atof(e) : 0.0; }();
+    if (policy == 1) return true;
+    if (policy == 2) return false;
+    char l[160];
+    if (FILE* f = std::fopen("/proc/meminfo", "r")) {
+        double freeKb = -1, cachedKb = 0, shmKb = 0;
+        while (std::fgets(l, sizeof l, f)) {
+            if (std::strncmp(l, "MemFree:", 8) == 0) freeKb = std::atof(l + 8);
+            else if (std::strncmp(l, "Cached:", 7) == 0) cachedKb = std::atof(l + 7);
+            else if (std::strncmp(l, "Shmem:", 6) == 0) shmKb = std::atof(l + 6);
+        }
+        std::fclose(f);
+        if (freeKb >= 0 && freeKb / 1048576.0 < minFree) return false;
+        if (maxCache > 0 && (cachedKb - shmKb) / 1048576.0 > maxCache) return false;
+    }
+    if (FILE* f = std::fopen("/proc/pressure/memory", "r")) {
+        while (std::fgets(l, sizeof l, f)) {
+            if (std::strncmp(l, "full ", 5) == 0) { const char* a = std::strstr(l, "avg10="); if (a != nullptr && std::atof(a + 6) > 1.0) { std::fclose(f); return false; } }
+        }
+        std::fclose(f);
+    }
+    return true;
+}
 template <class T> struct NoInitAlloc : std::allocator<T> {
     template <class U> struct rebind { using other = NoInitAlloc<U>; };
     NoInitAlloc() = default;
@@ -200,7 +233,7 @@ template <class T> struct NoInitAlloc : std::allocator<T> {
 #if defined(__linux__)
         const std::size_t b = n * sizeof(T);
         constexpr std::uintptr_t H = std::uintptr_t(2) << 20;
-        if (b >= (std::size_t(64) << 20) && noinitHugepage()) {
+        if (b >= (std::size_t(64) << 20) && noinitHugepage() && thpFreeOk()) {
             const std::uintptr_t a = (reinterpret_cast<std::uintptr_t>(p) + H - 1) & ~(H - 1), e = (reinterpret_cast<std::uintptr_t>(p) + b) & ~(H - 1);
             if (e > a) madvise(reinterpret_cast<void*>(a), e - a, MADV_HUGEPAGE);
         }
@@ -372,7 +405,7 @@ struct Output {
 };
 
 // true if a CUDA device of compute capability >= 8.0 is usable
-bool available(std::string* why = nullptr);
+bool available(std::string* why = nullptr, bool probeImage = false);   // probeImage creates a CUDA context: the gpu-probe child only
 int deviceCount();
 std::string deviceId(int device);   // PCI bus id, e.g. 0000:4e:00.0
 
@@ -528,11 +561,8 @@ inline void unlockDevice(int lockFd) {
 }
 // a slot of one given device (E11: the sample's second, short use of the device that holds its kept Solo inputs, after STAR's loop): the first
 // free slot, or a wait for slot (pid mod slots). *lockFd is closed by unlockDevice.
-inline void lockDeviceSlot(int device, int* lockFd) {
-    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
-    const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
+inline void lockDeviceSlotImpl(int device, int* lockFd, int slots) {
     auto lockPath = [&](int k) { return "/tmp/singlet_engine_gpu_" + deviceId(device) + (k > 0 ? "." + std::to_string(k) : std::string()) + ".lock"; };
-    *lockFd = -1;
     if (!lockWaitFixed()) { int d = device; *lockFd = pollSlots({device}, slots, false, &d); return; }
     admitTurnstile(device);
     for (int k = 0; k < slots; k++) {
@@ -542,6 +572,16 @@ inline void lockDeviceSlot(int device, int* lockFd) {
     }
     *lockFd = open(lockPath((int) (getpid() % slots)).c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666);
     if (*lockFd >= 0) flock(*lockFd, LOCK_EX);
+}
+inline void lockDeviceSlot(int device, int* lockFd) {
+    const char* sl = std::getenv("SINGLET_ENGINE_GPU_SLOTS");
+    const int slots = sl != nullptr ? std::min(8, std::max(1, std::atoi(sl))) : 1;
+    *lockFd = -1;
+    { singlet::NvtxRange nvWait("device lock: wait (relock/Solo)"); lockDeviceSlotImpl(device, lockFd, slots); }
+    if (*lockFd >= 0) {   // NVTX: the hold of this slot, ended by unlockDevice
+        const unsigned long long id = singlet::nvtx_start("device lock: held (relock/Solo)");
+        if (id) { std::lock_guard<std::mutex> g(lockRangesMutex()); lockRanges()[*lockFd] = id; }
+    }
 }
 // SL step 2: `want` slots of `device` (see admitOn above): the first free slots, collected under the device's admission gate; after waitS
 // seconds with at least one slot it keeps what it has. Returns the number of slots held (*lockFd is the first; unlockDevice releases them all).
@@ -711,6 +751,10 @@ struct E2EPassIn {
     // E16: the region and the kept reads' arrays (reads, lowq) stay page-locked in a context that stays (no device reset) for pileupRun's
     // uploads, which then run at the pinned rate; pileupRun's own device reset ends both
     bool keepPinned = false;
+    // rt/holds (SINGLET_HANDOFF_PINCACHE, default on): preReg is e2ePreRegister's handle (the region page-locked before the device lock was taken, so
+    // the cudaHostRegister of the region is not under the slot); deferUnpin (with keepPinned) leaves the per-read ranges to e2eUnpinLater after the unlock
+    void* preReg = nullptr;
+    bool deferUnpin = false;
 };
 struct E2EPassOut {
     std::vector<uint8_t> reads;      // ReadRec per kept read, read order (= the pass's add_handoff_read order)
@@ -730,7 +774,15 @@ struct E2EPassOut {
     uint64_t nKeys = 0;
     double msKeys = 0, msTable = 0, msEval = 0, msScatter = 0, msUpload = 0, msDownload = 0, msTotal = 0;
     std::string log;
+    void* unpinLater = nullptr;      // rt/holds: the ranges e2ePass left page-locked for e2eUnpinLater (E2EPassIn::deferUnpin)
 };
+// rt/holds: page-locks the region's ranges (as e2ePass would, split as keepPinned + "trim") on `device` (its context created if need be) without the
+// device lock held; the handle goes in E2EPassIn::preReg. nullptr: not done (e2ePass then registers inside the hold, as before).
+void* e2ePreRegister(const E2ERegion& R, int device, bool split);
+// the handle's memory (unlocks the ranges e2ePass did not take over)
+void e2ePreRegisterRelease(void* h);
+// unlocks the ranges E2EPassOut::unpinLater holds (after the device unlock; the context of `device` is made current) and frees the handle
+void e2eUnpinLater(void* h, int device);
 bool e2ePass(const E2EPassIn& in, int device,
              const std::function<void(const std::vector<uint64_t>& keys, std::vector<E2ECrVal>& vals)>& crTable, E2EPassOut& out);
 

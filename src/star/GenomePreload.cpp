@@ -16,6 +16,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <fstream>
@@ -27,6 +28,7 @@
 #include <vector>
 
 GenomePreloadState* g_genomePreload = nullptr;
+static bool g_dropFileCache = false;   // set by star_genome_preload_resident (the pool's copy): the files' page cache is dropped after the read
 
 namespace {
 const uint64_t kPad = 200;   // STAR's L (Genome_genomeLoad.cpp)
@@ -138,6 +140,12 @@ bool star_genome_preload(const std::string& dir, int threads, std::string& log) 
     add(fd[0], 0, S->G1 + kPad, S->nGenome);
     add(fd[2], S->saiHdr, S->SAi, S->saiBytes);
     const bool ok = readPieces(pieces, std::max(1, threads));
+    // rt/hostmem (SINGLET_GENOME_DROPCACHE, default on, =0 off): the gpu-pool keeps this copy for its life and no process reads the files again, so
+    // their page cache (16.8 GB of the same bytes) is dropped; it would sit in the node's memory beside the copy
+    if (ok && g_dropFileCache) {
+        const char* dc = getenv("SINGLET_GENOME_DROPCACHE");
+        if (!(dc != nullptr && dc[0] == '0')) for (int i = 0; i < 3; ++i) posix_fadvise(fd[i], 0, 0, POSIX_FADV_DONTNEED);
+    }
     for (int i = 0; i < 3; ++i) { close(fd[i]); fd[i] = -1; }
     if (!ok) return fail("read error");
     memset(S->G1, kPadVal, kPad);
@@ -165,7 +173,9 @@ namespace { std::vector<GenomePreloadState*>* g_resident = nullptr; }
 bool star_genome_preload_resident(const std::string& dir, int threads, std::string& log) {
     GenomePreloadState* own = g_genomePreload;
     g_genomePreload = nullptr;
+    g_dropFileCache = true;
     const bool ok = star_genome_preload(dir, threads, log);
+    g_dropFileCache = false;
     if (ok) {
         if (g_resident == nullptr) g_resident = new std::vector<GenomePreloadState*>;
         g_genomePreload->resident = true;

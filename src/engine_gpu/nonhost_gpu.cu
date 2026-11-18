@@ -153,6 +153,35 @@ __global__ void k_probe(const uint64_t* flat, uint64_t Q, DevIndex v, DevIndex b
         probe(f, h, l, n); lo[2 * Q + q] = l; len[2 * Q + q] = n;
     }
 }
+// rt/xfer, zero-copy index: the probes in ascending hash order (the entries are read over the bus: sorted addresses stream at ~175-240 M lines/s,
+// random ones at 37 M/s). sq[t] is the probe's position in `flat`; the outputs are the same arrays k_probe writes.
+__global__ void k_probe_sorted(const uint64_t* sh, const uint32_t* sq, uint64_t Q, DevIndex v, DevIndex b, DevIndex f, uint32_t* lo, uint32_t* len) {
+    for (uint64_t t = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; t < Q; t += (uint64_t)gridDim.x * blockDim.x) {
+        const uint64_t h = sh[t];
+        const uint64_t q = sq[t];
+        uint32_t l, n;
+        probe(v, h, l, n); lo[q] = l; len[q] = n;
+        probe(b, h, l, n); lo[Q + q] = l; len[Q + q] = n;
+        probe(f, h, l, n); lo[2 * Q + q] = l; len[2 * Q + q] = n;
+    }
+}
+__global__ void k_iota32(uint32_t* a, uint64_t n) {
+    for (uint64_t i = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; i < n; i += (uint64_t)gridDim.x * blockDim.x) a[i] = (uint32_t)i;
+}
+// the probes' hit counts of one index in sorted order
+__global__ void k_gather_len(const uint32_t* sq, const uint32_t* len, uint64_t Q, uint64_t* out) {
+    for (uint64_t t = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; t < Q; t += (uint64_t)gridDim.x * blockDim.x) out[t] = len[sq[t]];
+}
+// the species ids of the hits of one index, copied from the mapped entries in sorted order into sid[coff[t] ..); lo then points into sid
+__global__ void k_cp_sid(const uint32_t* sq, const Entry* e, uint64_t Q, uint32_t* lo, const uint32_t* len, const uint64_t* coff, uint32_t* sid) {
+    for (uint64_t t = blockIdx.x * (uint64_t)blockDim.x + threadIdx.x; t < Q; t += (uint64_t)gridDim.x * blockDim.x) {
+        const uint64_t q = sq[t];
+        const uint32_t l = lo[q], n = len[q];
+        const uint64_t c = coff[t];
+        for (uint32_t u = 0; u < n; ++u) sid[c + u] = e[l + u].sid;
+        lo[q] = (uint32_t)c;
+    }
+}
 // per read: occurrences in the viral map and in the microbial map (bacterial + fungal)
 __global__ void k_sum(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* len, uint32_t n, uint64_t* tot64) {
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += gridDim.x * blockDim.x) {
@@ -170,17 +199,18 @@ constexpr uint32_t kFungalIdBit = 0x40000000u;
 // hit map is filled bacterial hits first. The two ids are different keys since v1.3.9, and a tie between a bacterium and a fungus is
 // resolved by the map's iteration order, so the insertion order must be the CPU's.
 __global__ void k_write(const uint32_t* np, const uint64_t* qoff, uint64_t Q, const uint32_t* lo, const uint32_t* len, DevIndex v, DevIndex b,
-                        DevIndex f, uint32_t n, const uint64_t* hoff, uint64_t* keys, uint32_t* vals) {
+                        DevIndex f, uint32_t n, const uint64_t* hoff, uint64_t* keys, uint32_t* vals,
+                        const uint32_t* sv, const uint32_t* sb, const uint32_t* sf) {   // sv/sb/sf: the hits' species ids gathered from the host-mapped index (zero-copy), else null
     for (uint32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += gridDim.x * blockDim.x) {
         if (!np[i] || hoff[i + 1] == hoff[i]) continue;
         uint64_t pos = hoff[i];
         const uint64_t q0 = qoff[i], q1 = q0 + np[i], rd = (uint64_t)i << 33;
         for (uint64_t q = q0; q < q1; ++q)
-            for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | v.e[lo[q] + t].sid; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[q]; ++t, ++pos) { keys[pos] = rd | (sv ? sv[lo[q] + t] : v.e[lo[q] + t].sid); vals[pos] = (uint32_t)pos; }
         for (uint64_t q = q0; q < q1; ++q)
-            for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | b.e[lo[Q + q] + t].sid; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | (sb ? sb[lo[Q + q] + t] : b.e[lo[Q + q] + t].sid); vals[pos] = (uint32_t)pos; }
         for (uint64_t q = q0; q < q1; ++q)
-            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | f.e[lo[2 * Q + q] + t].sid | kFungalIdBit; vals[pos] = (uint32_t)pos; }
+            for (uint32_t t = 0; t < len[2 * Q + q]; ++t, ++pos) { keys[pos] = rd | (1ULL << 32) | (sf ? sf[lo[2 * Q + q] + t] : f.e[lo[2 * Q + q] + t].sid) | kFungalIdBit; vals[pos] = (uint32_t)pos; }
     }
 }
 // after sort 1 (by key, stable) every (read, map, species) group is contiguous; first occurrence = min original position
@@ -307,7 +337,7 @@ uint64_t bloom_header(const std::string& path) {
 unsigned ceil_log2(uint64_t v) { unsigned b = 0; while ((1ull << b) < v) ++b; return b; }
 
 // what the classification reads on the device: the three indexes and the Bloom filter
-struct DevSet { Index vi, bi, fi; uint64_t* bloom = nullptr; uint64_t nbits = 0; };
+struct DevSet { Index vi, bi, fi; uint64_t* bloom = nullptr; uint64_t nbits = 0; bool zc = false; };   // zc: the entries are in host-mapped memory
 
 // Phases A-C for n reads whose bases are h_seq[h_off[i] .. h_off[i+1]) in page-locked host memory (n > 0)
 void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64_t bytes, const DevSet& X, Arena& A, NonhostResult& out) {
@@ -339,6 +369,35 @@ void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64
     NH_CK(cudaGetLastError());
     // ---- probe the three indexes
     uint32_t* d_lo = (uint32_t*)A.dev(Q * 12), *d_len = (uint32_t*)A.dev(Q * 12);
+    uint32_t *d_sv = nullptr, *d_sb = nullptr, *d_sf = nullptr;   // zero-copy: the hits' species ids, gathered in hash order
+    if (Q && X.zc && Q < (1ull << 31)) {
+        cub::DoubleBuffer<uint64_t> sk(d_flat, (uint64_t*)A.dev(Q * 8));
+        cub::DoubleBuffer<uint32_t> sv_((uint32_t*)A.dev(Q * 4), (uint32_t*)A.dev(Q * 4));
+        k_iota32<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 20), blk>>>(sv_.Current(), Q);
+        NH_CK(cudaGetLastError());
+        size_t tb = 0;
+        NH_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, sk, sv_, (int)Q, 0, 64));
+        NH_CK(cub::DeviceRadixSort::SortPairs(A.dev(tb), tb, sk, sv_, (int)Q, 0, 64));
+        const int pg = (int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22);
+        k_probe_sorted<<<pg, blk>>>(sk.Current(), sv_.Current(), Q, dv, db, df, d_lo, d_len);
+        NH_CK(cudaGetLastError());
+        uint64_t* d_ls = (uint64_t*)A.dev((Q + 1) * 8);
+        uint64_t* d_co = (uint64_t*)A.dev((Q + 1) * 8);
+        const Entry* ents[3] = {dv.e, db.e, df.e};
+        uint32_t** sids[3] = {&d_sv, &d_sb, &d_sf};
+        for (int x = 0; x < 3; ++x) {
+            k_gather_len<<<pg, blk>>>(sv_.Current(), d_len + (uint64_t)x * Q, Q, d_ls);
+            NH_CK(cudaGetLastError());
+            NH_CK(cudaMemset(d_ls + Q, 0, 8));
+            size_t tb2 = 0; NH_CK(cub::DeviceScan::ExclusiveSum(nullptr, tb2, d_ls, d_co, (int)Q + 1));
+            NH_CK(cub::DeviceScan::ExclusiveSum(A.dev(tb2), tb2, d_ls, d_co, (int)Q + 1));
+            uint64_t tot = 0; NH_CK(cudaMemcpy(&tot, d_co + Q, 8, cudaMemcpyDeviceToHost));
+            if (tot >= (1ull << 32)) throw std::string("more than 2^32 hits in one index");
+            *sids[x] = (uint32_t*)A.dev(tot * 4 + 16);
+            if (ents[x]) k_cp_sid<<<pg, blk>>>(sv_.Current(), ents[x], Q, d_lo + (uint64_t)x * Q, d_len + (uint64_t)x * Q, d_co, *sids[x]);
+            NH_CK(cudaGetLastError());
+        }
+    } else
     if (Q) k_probe<<<(int)std::min<uint64_t>((Q + blk - 1) / blk, 1u << 22), blk>>>(d_flat, Q, dv, db, df, d_lo, d_len);
     NH_CK(cudaGetLastError());
     uint64_t* d_tot = (uint64_t*)A.dev((n + 1) * 8ull);
@@ -355,7 +414,7 @@ void classify_reads(const char* h_seq, const uint64_t* h_off, uint32_t n, uint64
     if (H) {
         cub::DoubleBuffer<uint64_t> keys((uint64_t*)A.dev(H * 8), (uint64_t*)A.dev(H * 8));
         cub::DoubleBuffer<uint32_t> vals((uint32_t*)A.dev(H * 4), (uint32_t*)A.dev(H * 4));
-        k_write<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, dv, db, df, n, d_hoff, keys.Current(), vals.Current());
+        k_write<<<grd, blk>>>(d_np, d_qoff, Q, d_lo, d_len, dv, db, df, n, d_hoff, keys.Current(), vals.Current(), d_sv, d_sb, d_sf);
         NH_CK(cudaGetLastError());
         size_t tb = 0;
         NH_CK(cub::DeviceRadixSort::SortPairs(nullptr, tb, keys, vals, (int)H, 0, 64));
@@ -449,7 +508,16 @@ struct FileId {
     bool same(const FileId& o) const { return path == o.path && dev == o.dev && ino == o.ino && size == o.size && mtime == o.mtime; }
 };
 // one index in page-locked host memory
-struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; };
+// rt/xfer: SINGLET_NONHOST_ZEROCOPY (default off since node arms 815557/815748: classify 4x slower, no node gain; =1 on; off: the index is
+// copied to the device for every request, as before): the entries stay in
+// page-locked, device-mapped host memory and the kernels read the few they touch over the bus (the sample's 69 M probes touch a fraction of
+// the 25 GB); the radix directories (2.7 GB, built once at load) are copied to the device per request, with the Bloom filter. The kernels
+// and the answers are the same, only where `Entry*` points differs.
+bool zeroCopyOn() { const char* e = std::getenv("SINGLET_NONHOST_ZEROCOPY"); return e && e[0] == '1'; }
+// rt/xfer: SINGLET_NONHOST_OVERLAP (default on; =0 off): the device copy is made on a thread while the request's reads are received
+bool overlapOn() { const char* e = std::getenv("SINGLET_NONHOST_OVERLAP"); return !(e && e[0] == '0'); }
+struct HostIndex { FileId id; uint64_t n = 0; uint32_t B = 0; Entry* h = nullptr; Entry* hd = nullptr; uint32_t* dir = nullptr; uint64_t dirN = 0;
+                   uint64_t mapLen = 0; bool peer = false; };   // mapLen: h is a page-locked mapping of the node's shared copy (share_acquire), not a cudaHostAlloc
 void read_pinned(const std::string& path, off_t base, uint64_t total, char* dst, int threads) {
     int fd = open(path.c_str(), O_RDONLY);
     if (fd < 0) throw "cannot open " + path;
@@ -464,15 +532,119 @@ void read_pinned(const std::string& path, off_t base, uint64_t total, char* dst,
         }
     });
     for (auto& x : th) x.join();
+    // rt/hostmem (SINGLET_NONHOST_DROPCACHE, default on, =0 off): the server keeps this copy for its life; the file's page cache (up to 25 GB for the
+    // three indexes, once per file however many pools) is dropped
+    { const char* dc = std::getenv("SINGLET_NONHOST_DROPCACHE"); if (!bad && !(dc && dc[0] == '0')) posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); }
     close(fd);
     if (bad) throw "read failed: " + path;
+}
+// rt/hostmem: one host copy of an index for every server of the node (SINGLET_NONHOST_SHARE, default on, =0 off). Each pool forks its own server,
+// and each held the three indexes (25 GB) in page-locked memory: 50 GB for two pools. The first server to need a file reads it into a memfd
+// (anonymous shared memory), then listens on a Unix socket named by the file's identity; the others connect, receive the memfd with SCM_RIGHTS, map
+// it and page-lock their mapping (cudaHostRegister), so the node holds one copy. A flock on a lock file per file serialises "look for a listener,
+// else load and listen". Any failure on the way: the caller's own cudaHostAlloc copy, as before. The bytes, the device copies and the answers
+// are the same.
+bool shareOn() { const char* e = std::getenv("SINGLET_NONHOST_SHARE"); return !(e && e[0] == '0'); }
+int memfd_new(const char* name) {
+#ifndef __NR_memfd_create
+#if defined(__x86_64__)
+#define __NR_memfd_create 319
+#elif defined(__aarch64__)
+#define __NR_memfd_create 279
+#endif
+#endif
+#ifdef __NR_memfd_create
+    return (int)syscall(__NR_memfd_create, name, 1u /* MFD_CLOEXEC */);
+#else
+    (void)name; return -1;
+#endif
+}
+// a memfd holding `total` bytes of `file` from `base` (this process's own, or a peer's); -1 on any failure. The caller closes the descriptor.
+int share_acquire(const std::string& file, off_t base, uint64_t total, int threads, const FileId& id, bool& peer) {
+    peer = false;
+    uint64_t h = 1469598103934665603ull;
+    auto mix = [&](const void* p, size_t n) { for (size_t i = 0; i < n; ++i) { h ^= ((const unsigned char*)p)[i]; h *= 1099511628211ull; } };
+    mix(file.data(), file.size()); mix(&id.dev, sizeof id.dev); mix(&id.ino, sizeof id.ino); mix(&id.size, sizeof id.size); mix(&id.mtime, sizeof id.mtime);
+    mix(&base, sizeof base); mix(&total, sizeof total);
+    char hx[32]; snprintf(hx, sizeof hx, "%016llx", (unsigned long long)h);
+    const std::string stem = "/tmp/singlet-nhshare-" + std::to_string((unsigned)getuid()) + "-" + hx, sp = stem + ".sock", lp = stem + ".lock";
+    struct sockaddr_un a{};
+    a.sun_family = AF_UNIX;
+    if (sp.size() >= sizeof a.sun_path) return -1;
+    strcpy(a.sun_path, sp.c_str());
+    const int lk = open(lp.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (lk < 0) return -1;
+    struct Unlock { int fd; ~Unlock() { flock(fd, LOCK_UN); close(fd); } } unlock{lk};
+    if (flock(lk, LOCK_EX) != 0) return -1;
+    {   // a listener: a peer already holds the file
+        const int c = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        if (c >= 0) {
+            struct timeval tv{60, 0};
+            setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+            int got = -1;
+            if (connect(c, (struct sockaddr*)&a, sizeof a) == 0) {
+                uint64_t sz = 0;
+                struct iovec iov = {&sz, sizeof sz};
+                char cb[CMSG_SPACE(sizeof(int))];
+                memset(cb, 0, sizeof cb);
+                struct msghdr m{};
+                m.msg_iov = &iov; m.msg_iovlen = 1; m.msg_control = cb; m.msg_controllen = sizeof cb;
+                if (recvmsg(c, &m, MSG_CMSG_CLOEXEC) == (ssize_t)sizeof sz && sz == total) {
+                    struct cmsghdr* cm = CMSG_FIRSTHDR(&m);
+                    if (cm && cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_RIGHTS) memcpy(&got, CMSG_DATA(cm), sizeof(int));
+                }
+                struct stat st{};
+                if (got >= 0 && (fstat(got, &st) != 0 || (uint64_t)st.st_size != total)) { close(got); got = -1; }
+            }
+            close(c);
+            if (got >= 0) { peer = true; return got; }
+        }
+    }
+    const int fd = memfd_new("singlet-nhidx");
+    if (fd < 0 || ftruncate(fd, (off_t)total) != 0) { if (fd >= 0) close(fd); return -1; }
+    void* mp = mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mp == MAP_FAILED) { close(fd); return -1; }
+    try { read_pinned(file, base, total, (char*)mp, threads); } catch (...) { munmap(mp, total); close(fd); return -1; }
+    munmap(mp, total);
+    const int ls = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (ls >= 0) {
+        unlink(sp.c_str());
+        if (bind(ls, (struct sockaddr*)&a, sizeof a) == 0 && listen(ls, 16) == 0) {
+            chmod(sp.c_str(), 0600);
+            const int sfd = dup(fd);
+            if (sfd >= 0) std::thread([ls, sfd, total]() {   // serves the memfd for the life of the process
+                for (;;) {
+                    const int c = accept4(ls, nullptr, nullptr, SOCK_CLOEXEC);
+                    if (c < 0) { if (errno == EINTR) continue; break; }
+                    uint64_t sz = total;
+                    struct iovec iov = {&sz, sizeof sz};
+                    char cb[CMSG_SPACE(sizeof(int))];
+                    memset(cb, 0, sizeof cb);
+                    struct msghdr m{};
+                    m.msg_iov = &iov; m.msg_iovlen = 1; m.msg_control = cb; m.msg_controllen = sizeof cb;
+                    struct cmsghdr* cm = CMSG_FIRSTHDR(&m);
+                    cm->cmsg_level = SOL_SOCKET; cm->cmsg_type = SCM_RIGHTS; cm->cmsg_len = CMSG_LEN(sizeof(int));
+                    memcpy(CMSG_DATA(cm), &sfd, sizeof(int));
+                    sendmsg(c, &m, MSG_NOSIGNAL);
+                    close(c);
+                }
+            }).detach();
+            else close(ls);
+        } else close(ls);
+    }
+    return fd;
 }
 struct Resident {
     HostIndex v, b, f;
     FileId bloomId; uint64_t nbits = 0, nw = 0; uint64_t* bloom = nullptr;
     bool ok = false; double seconds = 0; uint64_t bytes = 0;
     void clear() {
-        for (HostIndex* x : {&v, &b, &f}) { if (x->h) cudaFreeHost(x->h); *x = HostIndex(); }
+        for (HostIndex* x : {&v, &b, &f}) {
+            if (x->h && x->mapLen) { cudaHostUnregister(x->h); munmap(x->h, x->mapLen); }
+            else if (x->h) cudaFreeHost(x->h);
+            if (x->dir) cudaFreeHost(x->dir);
+            *x = HostIndex();
+        }
         if (bloom) cudaFreeHost(bloom);
         bloom = nullptr; nbits = nw = 0; bloomId = FileId(); ok = false; bytes = 0;
     }
@@ -484,13 +656,31 @@ struct Resident {
     void load(const NonhostPaths& p, int threads) {
         clear();
         const double t0 = now();
+        const bool zc = zeroCopyOn();
         auto one = [&](const std::string& path, HostIndex& x) {
             if (!x.id.get(path)) throw "cannot stat " + path;
             if (path.empty()) return;
             x.n = index_header(path, x.B);
             if (x.n == 0) return;
-            NH_CK(cudaHostAlloc((void**)&x.h, x.n * sizeof(Entry), cudaHostAllocDefault));
-            read_pinned(path, 32, x.n * sizeof(Entry), (char*)x.h, threads);
+            bool shared = false;
+            if (!zc && shareOn()) {   // rt/hostmem: the node's one copy (a peer server's memfd, or this one's own, served to the peers)
+                const uint64_t tot = x.n * sizeof(Entry);
+                int sfd = share_acquire(path, 32, tot, threads, x.id, x.peer);
+                if (sfd >= 0) {
+                    void* m = mmap(nullptr, tot, PROT_READ | PROT_WRITE, MAP_SHARED, sfd, 0);
+                    close(sfd);
+                    if (m != MAP_FAILED) {
+                        if (cudaHostRegister(m, tot, cudaHostRegisterDefault) == cudaSuccess) { x.h = (Entry*)m; x.mapLen = tot; shared = true; }
+                        else { cudaGetLastError(); munmap(m, tot); }
+                    }
+                }
+                if (!shared) fprintf(stderr, "[nhsrv] shared copy of %s not used: this server holds its own\n", path.c_str());
+            }
+            if (!shared) {
+                NH_CK(cudaHostAlloc((void**)&x.h, x.n * sizeof(Entry), zc ? cudaHostAllocMapped : cudaHostAllocDefault));
+                if (zc) NH_CK(cudaHostGetDevicePointer((void**)&x.hd, (void*)x.h, 0));
+                read_pinned(path, 32, x.n * sizeof(Entry), (char*)x.h, threads);
+            }
             bytes += x.n * sizeof(Entry);
         };
         one(p.viral, v); one(p.bacterial, b); one(p.fungal, f);
@@ -500,6 +690,18 @@ struct Resident {
         NH_CK(cudaHostAlloc((void**)&bloom, nw * 8, cudaHostAllocDefault));
         read_pinned(p.bloom, 32, nw * 8, (char*)bloom, std::min(threads, 4));
         bytes += nw * 8;
+        if (zc) {   // the directories, once: built on the device from the mapped entries (which also checks the sort order), kept in page-locked host memory
+            for (HostIndex* x : {&v, &b, &f}) {
+                if (!x->n) continue;
+                Arena A;
+                Index ix; ix.n = x->n; ix.B = x->B; ix.e = x->hd;
+                build_dir(ix, A, x->id.path);
+                x->dirN = (1ull << x->B) + 1;
+                NH_CK(cudaHostAlloc((void**)&x->dir, x->dirN * 4, cudaHostAllocDefault));
+                NH_CK(cudaMemcpy(x->dir, ix.dir, x->dirN * 4, cudaMemcpyDeviceToHost));
+                bytes += x->dirN * 4;
+            }
+        }
         seconds = now() - t0;
         ok = true;
     }
@@ -514,12 +716,18 @@ struct OnDevice {
         auto one = [&](const HostIndex& h, Index& ix) {
             ix.n = h.n; ix.B = h.B;
             if (h.n == 0) return;
+            if (h.dir) {   // zero-copy: the entries where they are, the directory on the device
+                ix.e = h.hd;
+                ix.dir = (uint32_t*)A.dev(h.dirN * 4);
+                NH_CK(cudaMemcpy(ix.dir, h.dir, h.dirN * 4, cudaMemcpyHostToDevice));
+                return;
+            }
             ix.e = (Entry*)A.dev(h.n * sizeof(Entry));
             NH_CK(cudaMemcpy(ix.e, h.h, h.n * sizeof(Entry), cudaMemcpyHostToDevice));
             build_dir(ix, A, h.id.path);
         };
         one(R.v, X.vi); one(R.b, X.bi); one(R.f, X.fi);
-        X.nbits = R.nbits;
+        X.nbits = R.nbits; X.zc = R.v.dir || R.b.dir || R.f.dir;
         X.bloom = (uint64_t*)A.dev(R.nw * 8);
         NH_CK(cudaMemcpy(X.bloom, R.bloom, R.nw * 8, cudaMemcpyHostToDevice));
         NH_CK(cudaDeviceSynchronize());
@@ -733,9 +941,19 @@ int nonhostServe(const std::string& sock, int device, int loadThreads, const Non
                 }
             }
             if (err.empty()) {
-                char* h_seq = (char*)Wk.pinned(bytes);
-                uint64_t* h_off = (uint64_t*)Wk.pinned((n + 1) * 8ull);
-                if (!rd(c, h_off, (n + 1) * 8ull) || !rd(c, h_seq, bytes) || h_off[0] != 0 || h_off[n] != bytes) err = "reads not received";
+                std::thread upT; std::string upErr;
+                if (!D.on && overlapOn()) upT = std::thread([&]() {   // the index's device copy beside the reads' arrival
+                    try { NH_CK(cudaSetDevice(device)); up = D.upload(R); } catch (const std::string& e) { upErr = e; } catch (const std::exception& e) { upErr = std::string("host: ") + e.what(); }
+                });
+                char* h_seq = nullptr; uint64_t* h_off = nullptr; bool rdOk = false;
+                try {
+                    h_seq = (char*)Wk.pinned(bytes);
+                    h_off = (uint64_t*)Wk.pinned((n + 1) * 8ull);
+                    rdOk = rd(c, h_off, (n + 1) * 8ull) && rd(c, h_seq, bytes);
+                } catch (...) { if (upT.joinable()) upT.join(); throw; }
+                if (upT.joinable()) upT.join();
+                if (!upErr.empty()) throw upErr;
+                if (!rdOk || h_off[0] != 0 || h_off[n] != bytes) err = "reads not received";
                 else {
                     if (!D.on) up = D.upload(R);
                     const double t1 = now();

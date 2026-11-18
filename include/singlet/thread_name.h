@@ -65,6 +65,17 @@ inline bool export_timing_on() {
     static const bool on = [] { const char* v = std::getenv("SINGLET_EXPORT_TIMING"); return v && v[0] == '1'; }();
     return on;
 }
+// SINGLET_TAIL_TRACE=1: one stderr line per marked instant, with the wall clock (epoch seconds, ms), for the tail critical path.
+inline bool tail_trace_on() {
+    static const bool on = [] { const char* v = std::getenv("SINGLET_TAIL_TRACE"); return v && v[0] == '1'; }();
+    return on;
+}
+inline void tt(const char* what, const char* detail = "") {
+    if (!tail_trace_on()) return;
+    timespec ts{};
+    clock_gettime(CLOCK_REALTIME, &ts);
+    std::fprintf(stderr, "[tail-trace] %ld.%03ld %s %s\n", static_cast<long>(ts.tv_sec), static_cast<long>(ts.tv_nsec / 1000000), what, detail);
+}
 inline double thread_cpu_s() {
 #if defined(__linux__) || defined(__APPLE__)
     timespec ts{};
@@ -78,8 +89,10 @@ struct ExportTimer {
     const char* file; int line; bool on; std::chrono::steady_clock::time_point w0; double c0 = 0.0;
     ExportTimer(const char* f, int l) : file(f), line(l), on(export_timing_on()) {
         if (on) { w0 = std::chrono::steady_clock::now(); c0 = thread_cpu_s(); }
+        if (tail_trace_on()) { char b[96]; std::snprintf(b, sizeof b, "%s:%d", f, l); tt("job-begin", b); }
     }
     ~ExportTimer() {
+        if (tail_trace_on()) { char b[96]; std::snprintf(b, sizeof b, "%s:%d", file, line); tt("job-end", b); }
         if (!on) return;
         const double w = std::chrono::duration<double>(std::chrono::steady_clock::now() - w0).count();
         std::fprintf(stderr, "[export-timing] %s:%d wall %.2f s, thread cpu %.2f s\n", file, line, w, thread_cpu_s() - c0);
@@ -113,6 +126,7 @@ struct PhaseClock {
     void next(const char* name) {
         if (!export_timing_on()) return;
         flush();
+        tt("phase-begin", name);
         cur = name; w0 = std::chrono::steady_clock::now(); c0 = process_cpu_s();
     }
     ~PhaseClock() { flush(); }

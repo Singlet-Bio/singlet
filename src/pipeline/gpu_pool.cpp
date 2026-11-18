@@ -43,6 +43,7 @@
 #include <poll.h>
 #include <sstream>
 #include <string>
+#include <sys/file.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -63,6 +64,34 @@ double wall_now() {
     struct timespec ts{};
     clock_gettime(CLOCK_REALTIME, &ts);
     return (double) ts.tv_sec + (double) ts.tv_nsec * 1e-9;
+}
+
+double env_num(const char* name, double dflt) {
+    const char* e = std::getenv(name);
+    return (e != nullptr && e[0] != 0) ? std::atof(e) : dflt;
+}
+// GB the node (and this job's cgroup, when it has a limit) can still hand out without evicting anything but page cache
+double avail_gb() {
+    double a = 1e9;
+    std::ifstream mi("/proc/meminfo");
+    std::string k, u;
+    double v = 0;
+    double mfree = -1, cached = 0, shm = 0;   // MemFree plus half of the file cache: the cache of other tenants is reclaimed slowly under load (g051, 815877)
+    while (mi >> k >> v >> u) {
+        if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v;
+    }
+    if (mfree >= 0) a = (mfree + 0.5 * std::max(0.0, cached - shm)) / 1048576.0;
+    std::ifstream cl("/proc/self/cgroup");
+    std::string line;
+    if (std::getline(cl, line)) {
+        const size_t c = line.rfind(':');
+        const std::string base = "/sys/fs/cgroup" + (c == std::string::npos ? std::string() : line.substr(c + 1));
+        std::ifstream mx(base + "/memory.max"), cu(base + "/memory.current");
+        std::string m;
+        double cur = 0;
+        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) a = std::min(a, (std::atof(m.c_str()) - cur) / 1073741824.0);
+    }
+    return a;
 }
 
 FILE* g_plog = nullptr;
@@ -128,10 +157,21 @@ std::string absolute(const std::string& p) {   // a sample's process works in it
     return getcwd(cwd, sizeof cwd) ? std::string(cwd) + "/" + p : p;
 }
 
+// a small /proc file as a string; "" when the process is gone (an istreambuf_iterator over such a file throws std::ios_base::failure: the pool died of it, 816440)
+std::string slurp(const std::string& path) {
+    std::string s;
+    if (FILE* f = fopen(path.c_str(), "r")) {
+        char b[4096];
+        size_t n;
+        while ((n = fread(b, 1, sizeof b, f)) > 0) s.append(b, n);
+        fclose(f);
+    }
+    return s;
+}
+
 // /proc/<pid>/stat field 22 (start time in clock ticks since boot): with the pid, a process's identity for a sampler
 unsigned long long proc_starttime(pid_t pid) {
-    std::ifstream f("/proc/" + std::to_string(pid) + "/stat");
-    std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    std::string s = slurp("/proc/" + std::to_string(pid) + "/stat");
     const size_t r = s.rfind(')');
     if (r == std::string::npos) return 0;
     std::istringstream in(s.substr(r + 2));
@@ -139,6 +179,45 @@ unsigned long long proc_starttime(pid_t pid) {
     for (int i = 3; i <= 22 && (in >> tok); ++i)
         if (i == 22) return std::strtoull(tok.c_str(), nullptr, 10);
     return 0;
+}
+
+// rt/hostmem sampler (SINGLET_POOL_MEMSAMPLE=<period s>): every period one line per process of the pool, its server and each sample's process
+// group (the sample, its STAR child and probes): `unix-time item pid comm RssAnon RssFile RssShmem` (kB; item -1: the pool, -2: its server).
+// comm is the main thread's name, which the pipeline sets per phase. The counters are /proc/<pid>/status's (no page-table walk).
+void memsample_write(FILE* out, pid_t self, pid_t srv, const std::map<pid_t, int>& byPid) {
+    const long now = (long) time(nullptr);
+    if (DIR* d = opendir("/proc")) {
+        while (struct dirent* e = readdir(d)) {
+            if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+            const pid_t p = (pid_t) std::atoi(e->d_name);
+            int item = -9;
+            if (p == self) item = -1;
+            else if (p == srv) item = -2;
+            else {
+                std::string s = slurp("/proc/" + std::string(e->d_name) + "/stat");
+                const size_t r = s.rfind(')');
+                if (r == std::string::npos) continue;
+                std::istringstream in(s.substr(r + 2));
+                std::string st, ppid, pg;
+                in >> st >> ppid >> pg;
+                auto it = byPid.find((pid_t) std::atoi(pg.c_str()));
+                if (it != byPid.end()) item = it->second;
+            }
+            if (item == -9) continue;
+            std::ifstream f("/proc/" + std::string(e->d_name) + "/status");
+            std::string l, comm;
+            long an = 0, fi = 0, sh = 0;
+            while (std::getline(f, l)) {
+                if (l.rfind("Name:", 0) == 0) { comm = l.substr(5); comm.erase(0, comm.find_first_not_of(" \t")); }
+                else if (l.rfind("RssAnon:", 0) == 0) an = std::atol(l.c_str() + 8);
+                else if (l.rfind("RssFile:", 0) == 0) fi = std::atol(l.c_str() + 8);
+                else if (l.rfind("RssShmem:", 0) == 0) sh = std::atol(l.c_str() + 9);
+            }
+            if (an + fi + sh > 262144) fprintf(out, "%ld\t%d\t%d\t%s\t%ld\t%ld\t%ld\n", now, item, (int) p, comm.c_str(), an, fi, sh);
+        }
+        closedir(d);
+    }
+    fflush(out);
 }
 
 // "Number of input reads |	66601652" of STAR's Log.final.out in the sample's output directory (0 if absent)
@@ -173,6 +252,10 @@ struct Run {
     std::string partial;
     double t0 = 0, t1 = 0, killAt = 0;
     bool done = false, killed = false;
+    bool front = true;   // rt/hostmem: in the front half (from the start until the engine's "[engine_gpu] level" line: the packed planes and aux are freed by then)
+    bool plateau = false;   // rt/phaseadmit: the all-site pass has been joined ("[allsite] async: waited"): host memory is on its tail plateau and no longer grows with depth
+    mutable double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
+    bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
 };
 
 // the sample's log: each complete line with the unix time it arrived
@@ -190,6 +273,9 @@ void pump(Run& r, bool eof) {
         const long t = (long) time(nullptr);
         while ((e = r.partial.find('\n', s)) != std::string::npos) {
             if (r.log) fprintf(r.log, "%ld %.*s\n", t, (int) (e - s), r.partial.data() + s);
+            if (r.front && r.partial.compare(s, 19, "[engine_gpu] level ") == 0) r.front = false;
+            if (!r.plateau && r.partial.compare(s, 24, "[allsite] async: waited ") == 0) r.plateau = true;
+            if (!r.decoded) { const size_t dp = r.partial.find("decoded into the packed buffers", s); if (dp != std::string::npos && dp < e) r.decoded = true; }
             s = e + 1;
         }
         r.partial.erase(0, s);
@@ -556,6 +642,153 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
              sg ? fmt("killed by signal %d (%s)", sg, strsignal(sg)).c_str() : fmt("exit %d", ex).c_str(), r.t1 - r.t0, us + ss,
              ru.ru_maxrss / 1048576.0, pairs / 1e6, r.killed ? " (timed out)" : "");
     };
+    double lastStartAt = 0, lastSample = 0, lastStartEst = 0;   // lastStartEst: the estimate (GB) of the item started last: the stagger is for items of 50 GB and more
+    bool admitNoted = false;
+    const double sampPeriod = env_num("SINGLET_POOL_MEMSAMPLE", 0);
+    FILE* msf = sampPeriod > 0 ? fopen((report + "/memsamp.tsv").c_str(), "a") : nullptr;
+    const double stagger = env_num("SINGLET_POOL_STAGGER_S", 40), memFloor = env_num("SINGLET_POOL_MEM_FLOOR_GB", 0), frontMax = env_num("SINGLET_POOL_FRONT_MAX", 0);
+    // rt/hostmem SINGLET_POOL_MEMADMIT (default on, =0 off): node-wide admission by a per-item host-memory estimate. The pools of a node (one per GPU)
+    // publish, once a second, what their items in flight can still allocate (estimate minus what they hold) in /dev/shm/singlet-pool-mem-<job>-<uid>/<pid>;
+    // the decision and the registration of a start are made under a flock, so two pools cannot both take the last room. An item starts when
+    //   free now (MemFree + SINGLET_POOL_CACHE_SHARE (0.25) of the file cache, which other tenants' load makes slow to reclaim)
+    //   - what every pool's items can still allocate - the item's estimate - the estimate of a waiting item of another pool that waited longer
+    //   >= SINGLET_POOL_MEM_RESERVE_GB (40: MemFree min was 29 GB at pressure 0 % with THP auto, 816788).
+    // Estimate (SINGLET_POOL_ITEM_GB overrides): 11.5 GB per GB of .1fq + 8: d300_3p (6.0 GB file) peaks at 77 GB private (planes, aux, region, per-read
+    // tables), d1000_3p (24.9 GB) at 285 GB (rt-deep 815819). An item in its tail (after the engine's "[engine_gpu] level" line) is counted at
+    // 40 % of the estimate. An item with nothing else running on the node always starts, whatever its size (it runs alone). The wait is bounded
+    // (SINGLET_POOL_MEMADMIT_MAXWAIT_S, 1800): then it starts, with a log line. The page cache of an input is dropped when the item has decoded
+    // it (SINGLET_POOL_DROP_INPUT_CACHE, default on) and, for the clean pages, at pool start.
+    const bool memAdmit = env_num("SINGLET_POOL_MEMADMIT", 1) != 0;
+    const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0.25),
+                 memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 40), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
+    const bool dropInput = env_num("SINGLET_POOL_DROP_INPUT_CACHE", 1) != 0;
+    // rt/phaseadmit SINGLET_POOL_PHASE_ADMIT (default on, =0 restores the admission above exactly): an item whose all-site pass is joined (the "[allsite] async: waited" line;
+    // the STAR child has exited, the planes and the hand-off pass are long gone) sits on a tail plateau that does not grow with depth: its charge drops from 40 % of its
+    // estimate to min(that, SINGLET_POOL_TAIL_GB). Fitted on memsamp of mix4 817054 (anon+shmem of the item's process group, 10 s after the line): d2600 38, d1000 65,
+    // d1000s 61, d700s 49, d500s 38, d300 17 GB, so 80 = the largest plus a margin of 15. What the item holds is never charged less (the charge is on top of what MemFree already lost).
+    // The head item is re-tested at every loop turn (200 ms) while a slot is free, with the pool's own charges recomputed from /proc then, so a drop admits it at once.
+    const bool phaseAdmit = env_num("SINGLET_POOL_PHASE_ADMIT", 1) != 0;
+    const double tailGb = env_num("SINGLET_POOL_TAIL_GB", 80);
+    // SINGLET_POOL_SKIP_AHEAD (16, 0 = strict queue order): while the head of the queue waits for room, an item among the next 16 that fits starts instead,
+    // for at most SINGLET_POOL_SKIP_GRACE_S (900) of the head's wait; after that only the head is tried, and another pool's head that waited that long is served first
+    const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
+    std::vector<char> taken(items.size(), 0);
+    std::vector<double> itemEst(items.size(), 0);
+    for (const Item& it : items) {
+        struct stat st{};
+        // rt/hostmem2: the item's host peak (GB of its process group's RssAnon + RssShmem, minus the pool's genome that its STAR child maps), fitted on the 110 items
+        // of mix3 816788 (peak of the per-item sum in memsamp.tsv against the reads in the .1fq header): peak = a + b x reads (M). Least squares gave
+        // 48.2 + 0.2235 x (rmse 13.6 GB, worst under-prediction 30.3 GB: d500s_3p), the margin adds 30 GB, the genome comes off (-16.4): a = 61.8, b = 0.2235.
+        // The reads are the u32 at byte 20 of the .1fq header ("1FQ\0" magic); without a header, the file size: 11.6 GB per GB + 43.6 (envelope of the 16 samples).
+        double reads = 0;
+        if (FILE* hf = fopen(it.fq.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) reads = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+        const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
+        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 : (stat(it.fq.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0) * 11.6 + 43.6;
+    }
+    if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
+        std::vector<std::string> fqs;
+        for (const Item& it : items) if (std::find(fqs.begin(), fqs.end(), it.fq) == fqs.end()) fqs.push_back(it.fq);
+        std::thread([fqs]() { for (const std::string& p : fqs) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { fdatasync(fd); posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } } }).detach();
+    }
+    double sharedGb = 0;   // what a STAR child maps of the pool's resident genome: counted in its RSS, not in the item's own growth
+    { std::ifstream f("/proc/self/status"); std::string l; while (std::getline(f, l)) if (l.rfind("RssAnon:", 0) == 0) sharedGb = std::atof(l.c_str() + 8) / 1048576.0; }
+    const char* gjob = std::getenv("SLURM_JOB_ID");
+    const std::string gateDir = "/dev/shm/singlet-pool-mem-" + std::string(gjob ? gjob : "node") + "-" + std::to_string((unsigned) getuid());
+    if (memAdmit) mkdir(gateDir.c_str(), 0700);
+    const std::string gateMine = gateDir + "/" + std::to_string((int) self), gateLock = gateDir + "/lock";
+    double gateOwnRem = 0, gateLastScan = 0;
+    int gateOwnAct = 0;
+    // the pools' files: `t rem act waitEst waitSince`, written whole and renamed
+    auto gatePublish = [&](double waitEst, double waitSince) {
+        const std::string tmp = gateMine + ".tmp";
+        if (FILE* f = fopen(tmp.c_str(), "w")) {
+            fprintf(f, "%.3f %.3f %d %.3f %.3f\n", wall_now(), gateOwnRem, gateOwnAct, waitEst, waitSince);
+            fclose(f);
+            rename(tmp.c_str(), gateMine.c_str());
+        }
+    };
+    struct GateOthers { double rem = 0, waitEst = 0, waitSince = 0; int act = 0; };
+    auto gateReadOthers = [&]() {
+        GateOthers o;
+        if (DIR* d = opendir(gateDir.c_str())) {
+            while (struct dirent* e = readdir(d)) {
+                const int pid = std::atoi(e->d_name);
+                if (pid <= 0 || pid == (int) self || std::strchr(e->d_name, '.') != nullptr) continue;
+                double t = 0, rem = 0, we = 0, ws = 0;
+                int act = 0;
+                if (FILE* f = fopen((gateDir + "/" + e->d_name).c_str(), "r")) {
+                    const int n = fscanf(f, "%lf %lf %d %lf %lf", &t, &rem, &act, &we, &ws);
+                    fclose(f);
+                    if (n != 5 || wall_now() - t > 20 || kill(pid, 0) != 0) continue;
+                    o.rem += rem; o.act += act;
+                    if (we > 0 && (o.waitEst == 0 || ws < o.waitSince)) { o.waitEst = we; o.waitSince = ws; }
+                }
+            }
+            closedir(d);
+        }
+        return o;
+    };
+    auto gateOthersActive = [&]() { return gateReadOthers().act > 0; };
+    // once a second: own items' growth still to come, from /proc (RssAnon + RssShmem of each item's process group)
+    auto gateRefresh = [&](bool force) {
+        const double now = wall_now();
+        if (!force && now - gateLastScan < 1.0) return;
+        gateLastScan = now;
+        std::map<int, double> cur;
+        if (DIR* d = opendir("/proc")) {
+            while (struct dirent* e = readdir(d)) {
+                if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+                std::string s = slurp("/proc/" + std::string(e->d_name) + "/stat");
+                const size_t r = s.rfind(')');
+                if (r == std::string::npos) continue;
+                std::istringstream in(s.substr(r + 2));
+                std::string st, ppid, pg;
+                in >> st >> ppid >> pg;
+                auto it = byPid.find((pid_t) std::atoi(pg.c_str()));
+                if (it == byPid.end()) continue;
+                std::ifstream g("/proc/" + std::string(e->d_name) + "/status");
+                std::string l;
+                double an = 0, sh = 0;
+                while (std::getline(g, l)) { if (l.rfind("RssAnon:", 0) == 0) an = std::atof(l.c_str() + 8); else if (l.rfind("RssShmem:", 0) == 0) sh = std::atof(l.c_str() + 9); }
+                cur[it->second] += (an + sh) / 1048576.0;
+            }
+            closedir(d);
+        }
+        double rem = 0;
+        int act = 0;
+        for (const Run& r : runs) {
+            if (r.pid <= 0 || r.done) continue;
+            ++act;
+            const double held = std::max(0.0, cur[r.idx] - sharedGb);
+            double want = itemEst[r.idx] * (r.front ? 1.0 : 0.4);
+            if (phaseAdmit && r.plateau) want = std::min(want, tailGb);
+            if (phaseAdmit && r.charge > 0 && want < r.charge - 0.5) plog("phase drop: item %d charge %.0f -> %.0f GB (holds %.0f GB)", r.idx, r.charge, want, held);
+            if (phaseAdmit) r.charge = want;
+            rem += std::max(0.0, want - held);
+        }
+        gateOwnRem = rem; gateOwnAct = act;
+    };
+    auto gateRegister = [&](double est) { gateOwnRem += est; gateOwnAct += 1; gatePublish(0, 0); };
+    // under the flock: does an item of `est` fit? registers it when it does
+    auto gateTry = [&](double est, double mySince, double reserve, double& freeEff, double& othRem, double& othWait, double& proj) {
+        const int lk = open(gateLock.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        if (lk >= 0) flock(lk, LOCK_EX);
+        const GateOthers o = gateReadOthers();
+        double mfree = 0, cached = 0, shm = 0, v = 0;
+        { std::ifstream mi("/proc/meminfo"); std::string k, u; while (mi >> k >> v >> u) { if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v; } }
+        freeEff = (mfree + cacheShare * std::max(0.0, cached - shm)) / 1048576.0;
+        othRem = o.rem;
+        othWait = (o.waitEst > 0 && wall_now() - o.waitSince > prioAfter && o.waitSince <= mySince) ? o.waitEst : 0;   // a waiting item of another pool that waited longer goes first
+        proj = freeEff - gateOwnRem - o.rem - est - othWait;
+        const bool alone = gateOwnAct == 0 && o.act == 0;   // nothing else on the node: it runs alone, however large
+        const bool ok = alone || proj >= reserve;
+        if (ok) gateRegister(est);
+        if (lk >= 0) { flock(lk, LOCK_UN); close(lk); }
+        return ok;
+    };
+    double memWaitSince = 0, memWaitedTotal = 0;
+    bool memWaitNoted = false;
+    unsigned memWaits = 0;
     while (next < items.size() || active > 0) {
         if (g_stop) {
             plog("stopping: signal received; the samples in flight are killed");
@@ -563,7 +796,61 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             next = items.size();
             g_stop = 0;
         }
-        while (active < (size_t) workers && next < items.size()) start(items[next++]);
+        while (active < (size_t) workers && next < items.size()) {
+            // rt/hostmem admission: a start waits while another item of this pool started less than SINGLET_POOL_STAGGER_S ago (the items of a first
+            // wave would otherwise all reach their memory-heavy phases together) or while the node's available memory is under SINGLET_POOL_MEM_FLOOR_GB
+            // or while frontMax items of this pool are in their front half (SINGLET_POOL_FRONT_MAX): decoded reads, aux and the region, waiting for or
+            // holding a device slot; the items beyond it are in their tail (CPU work, a third of the host memory), where an extra sample earns its place
+            size_t front = 0;
+            if (frontMax > 0) for (const Run& r : runs) if (r.pid > 0 && !r.done && r.front) ++front;
+            if (active > 0 && ((stagger > 0 && lastStartEst >= 100 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor) || (frontMax > 0 && front >= (size_t) frontMax))) {
+                if (!admitNoted) { plog("admission: the next item waits (%zu in the front half of at most %.0f, stagger %.0f s, memory floor %.0f GB, available %.0f GB)", front, frontMax, stagger, memFloor, avail_gb()); admitNoted = true; }
+                break;
+            }
+            if (memAdmit) {
+                const double now = wall_now(), est = itemEst[items[next].idx];
+                if (memWaitSince == 0) memWaitSince = now;
+                gateRefresh(true);
+                double proj = 0, freeEff = 0, othRem = 0, othWait = 0;
+                bool ok = gateTry(est, memWaitSince, memReserve, freeEff, othRem, othWait, proj);
+                if (!ok && now - memWaitSince >= maxWait) {
+                    plog("memory admission: item %d starts after %.0f s (the wait is bounded; projected %.0f GB)", items[next].idx, now - memWaitSince, proj);
+                    gateRegister(est);
+                    ok = true;
+                }
+                if (!ok) {
+                    if (!memWaitNoted) {
+                        ++memWaits; memWaitNoted = true;
+                        plog("memory admission: item %d waits (estimate %.0f GB; free + cache share %.0f GB, own items still to allocate %.0f GB, other pools %.0f GB, reserve %.0f GB; projected %.0f GB)",
+                             items[next].idx, est, freeEff, gateOwnRem, othRem, memReserve, proj);
+                    }
+                    gatePublish(est, memWaitSince);
+                    if (skipAhead > 0 && now - memWaitSince < skipGrace) {   // the head waits: an item behind it that fits goes first
+                        size_t pick = items.size();
+                        for (size_t k = next + 1; k < items.size() && k <= next + (size_t) skipAhead; ++k) {
+                            if (taken[k]) continue;
+                            double p2 = 0, f2 = 0, r2 = 0, w2 = 0;
+                            if (gateTry(itemEst[items[k].idx], now, memReserve, f2, r2, w2, p2)) { pick = k; break; }
+                        }
+                        if (pick < items.size()) {
+                            plog("memory admission: item %d starts ahead of the waiting item %d (%.0f s)", items[pick].idx, items[next].idx, now - memWaitSince);
+                            taken[pick] = 1;
+                            lastStartAt = wall_now(); lastStartEst = itemEst[items[pick].idx];
+                            start(items[pick]);
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                if (memWaitNoted) { memWaitedTotal += now - memWaitSince; plog("memory admission: item %d admitted after %.0f s (projected %.0f GB)", items[next].idx, now - memWaitSince, proj); }
+                memWaitSince = 0; memWaitNoted = false;
+            }
+            admitNoted = false;
+            lastStartAt = wall_now(); lastStartEst = itemEst[items[next].idx];
+            taken[next] = 1;
+            start(items[next]);
+            while (next < items.size() && taken[next]) ++next;
+        }
         // logs, then the ends
         std::vector<struct pollfd> pf;
         std::vector<int> who;
@@ -586,6 +873,16 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             finish(p, st, ru);
         }
+        if (memAdmit && wall_now() - gateLastScan >= 1.0) {   // the pool's file for the others: what its items can still allocate, and its waiting item
+            gateRefresh(true);
+            gatePublish(memWaitSince > 0 && next < items.size() ? itemEst[items[next].idx] : 0, memWaitSince);
+        }
+        if (dropInput) for (Run& r : runs) if (r.decoded && !r.dropped) {   // the item read its input once: its page cache is of no use to it
+            r.dropped = true;
+            const int fd = open(items[r.idx].fq.c_str(), O_RDONLY);
+            if (fd >= 0) { posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); }
+        }
+        if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); }
         if (timeout > 0) {
             const double t = wall_now();
             for (auto& kv : byPid) {
@@ -611,6 +908,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double span = lastEnd > firstStart ? lastEnd - firstStart : 0;
     plog("queue drained: %zu samples, %zu failed; span %.1f s (first start to last end), %.2f M pairs, %.3f M pairs/s; start-up %.1f s",
          items.size(), failed, span, pairsAll / 1e6, span > 0 ? pairsAll / 1e6 / span : 0.0, tReady - tStart);
+    if (memAdmit) { plog("memory admission: %u waits, %.0f s waited in all (SINGLET_POOL_MEMADMIT)", memWaits, memWaitedTotal); unlink(gateMine.c_str()); }
+    if (msf != nullptr) fclose(msf);
     fclose(stsv);
     fclose(pids);
     fclose(g_plog);

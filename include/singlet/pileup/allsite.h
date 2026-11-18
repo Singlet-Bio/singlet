@@ -44,6 +44,7 @@
 #include "umi_dedup.h"
 #include "allsite_records.h"
 #include "allsite_device.h"
+#include "allsite_timing.h"
 
 namespace singlet { namespace allsite {
 
@@ -621,6 +622,13 @@ inline Result run_hashmap(const Rec& R, const Genome& G, uint32_t n_tid, uint32_
 }
 
 namespace detail {
+template <class F> inline void pfor_t(astm::Acc& cpu, unsigned nth, size_t n, F&& f) {   // pfor with the workers' thread CPU time summed into cpu (SINGLET_ALLSITE_TIMING)
+    std::atomic<size_t> next{0};
+    auto w = [&](unsigned id) { astm::Scope sc(&cpu); for (;;) { const size_t i = next.fetch_add(1); if (i >= n) return; f(i, id); } };
+    const unsigned k = static_cast<unsigned>(std::max<size_t>(1, std::min<size_t>(nth, n)));
+    std::vector<std::thread> th; for (unsigned i = 1; i < k; ++i) th.emplace_back(w, i);
+    w(0); for (auto& x : th) x.join();
+}
 template <class F> inline void pfor(unsigned nth, size_t n, F&& f) {   // f(item, worker) over [0, n), items taken in order
     std::atomic<size_t> next{0};
     auto w = [&](unsigned id) { for (;;) { const size_t i = next.fetch_add(1); if (i >= n) return; f(i, id); } };
@@ -660,7 +668,8 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
     // 1-2. as kernel 0: each signature's qualifying primary alignment; reads per contig ordered by read index
     std::vector<int32_t> sig_tid(nS, -1);
     std::vector<uint8_t> sig_p(nS, 0);
-    pfor(nth, (nS + (1u << 20) - 1) >> 20, [&](size_t c, unsigned) {
+    astm::Acc cpu_sig, cpu_bt; const double w_s0 = astm::wall();
+    pfor_t(cpu_sig, nth, (nS + (1u << 20) - 1) >> 20, [&](size_t c, unsigned) {
         const uint64_t e = std::min<uint64_t>(nS, (c + 1) << 20);
         for (uint64_t s = c << 20; s < e; ++s) {
             const auto& sg = R.sig(s);
@@ -672,6 +681,7 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
             }
         }
     });
+    astm::line("select 1: signature -> contig", astm::wall() - w_s0, cpu_sig.sec(), nth); const double w_b0 = astm::wall();
     auto use = [&](const auto& x) { return x.bc >= 0 && static_cast<uint32_t>(x.bc) < n_barcodes && sig_tid[x.sig] >= 0; };
     // reads per contig in read order, from equal slices of the reads: slice-local counts, then each slice scatters its reads from its own
     // offsets, which gives the serial order on any thread count
@@ -690,16 +700,17 @@ inline Result run_sorted(const Rec& R, const Genome& G, uint32_t n_tid, uint32_t
                 if (write) by_tid[w[t]++] = r; else w[t]++;
             }
         };
-        pfor(sth, sth, [&](size_t k, unsigned) { slice(static_cast<unsigned>(k), false); });
+        pfor_t(cpu_bt, sth, sth, [&](size_t k, unsigned) { slice(static_cast<unsigned>(k), false); });
         for (uint32_t t = 0; t < n_tid; ++t) { uint64_t sum = 0; for (unsigned k = 0; k < sth; ++k) sum += sc[k][t]; cnt[t + 1] = cnt[t] + sum; }
         for (uint32_t t = 0; t < n_tid; ++t) { uint64_t o = cnt[t]; for (unsigned k = 0; k < sth; ++k) { const uint64_t n = sc[k][t]; sc[k][t] = o; o += n; } }
         by_tid.resize(cnt[n_tid]);
-        pfor(sth, sth, [&](size_t k, unsigned) { slice(static_cast<unsigned>(k), true); });
+        pfor_t(cpu_bt, sth, sth, [&](size_t k, unsigned) { slice(static_cast<unsigned>(k), true); });
     }
     res.reads_used = by_tid.size();
     std::vector<uint32_t> order(n_tid); for (uint32_t t = 0; t < n_tid; ++t) order[t] = t;
     std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { const uint64_t na = cnt[a + 1] - cnt[a], nb = cnt[b + 1] - cnt[b]; return na != nb ? na > nb : a < b; });
     const uint64_t T_prep = now_ns();
+    astm::line("select 2: reads per contig (by_tid) + contig order", astm::wall() - w_b0, cpu_bt.sec(), nth);
 
     auto pass_q = [&](uint64_t r, uint32_t ri, uint8_t code) { return !(P.skip_n && code == 15) && !(P.use_qual && low_q(R, P.qwords, r, ri)); };
     // staged prefetch of the records of the reads ahead of position j (read, then signature, then alignment and sequence, then CIGAR):
