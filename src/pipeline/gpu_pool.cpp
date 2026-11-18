@@ -81,15 +81,40 @@ double avail_gb() {
         if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v;
     }
     if (mfree >= 0) a = (mfree + 0.5 * std::max(0.0, cached - shm)) / 1048576.0;
+    // The job's limit sits on an ancestor of this process's cgroup: Slurm puts it on job_<id> and the process lives in
+    // .../job_<id>/step_<n>/user/task_<k>, whose own memory.max is "max".  Every ancestor from the leaf up is read and the
+    // smallest headroom wins (adaptive-scheduler live pilot 2026-11-18: reading only the leaf saw 510 GB on a 365 GB h100x1 job,
+    // admitted three deep samples at once, and the cgroup OOM ended one of them).  Headroom is limit - usage + half of the
+    // cgroup's file cache (less shmem), the same rule as the node figure.  cgroup v2 (the "0::" line) and v1 (the memory controller).
     std::ifstream cl("/proc/self/cgroup");
-    std::string line;
-    if (std::getline(cl, line)) {
-        const size_t c = line.rfind(':');
-        const std::string base = "/sys/fs/cgroup" + (c == std::string::npos ? std::string() : line.substr(c + 1));
-        std::ifstream mx(base + "/memory.max"), cu(base + "/memory.current");
+    std::string line, path, root, maxF, curF;
+    while (std::getline(cl, line)) {
+        if (line.rfind("0::", 0) == 0 && path.empty()) { path = line.substr(3); root = "/sys/fs/cgroup"; maxF = "memory.max"; curF = "memory.current"; }
+        const size_t c1 = line.find(':'), c2 = c1 == std::string::npos ? c1 : line.find(':', c1 + 1);
+        if (c2 != std::string::npos) {
+            const std::string ctl = "," + line.substr(c1 + 1, c2 - c1 - 1) + ",";
+            if (ctl.find(",memory,") != std::string::npos) { path = line.substr(c2 + 1); root = "/sys/fs/cgroup/memory"; maxF = "memory.limit_in_bytes"; curF = "memory.usage_in_bytes"; break; }
+        }
+    }
+    for (std::string p = path; !root.empty();) {
+        const std::string base = root + (p == "/" ? std::string() : p);
+        std::ifstream mx(base + "/" + maxF), cu(base + "/" + curF), stf(base + "/memory.stat");
         std::string m;
         double cur = 0;
-        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) a = std::min(a, (std::atof(m.c_str()) - cur) / 1073741824.0);
+        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) {
+            const double lim = std::atof(m.c_str());
+            if (lim < 1e18) {                      // v1 writes a huge number for "no limit"
+                double file = 0, shmem = 0, sv = 0;
+                std::string sk;
+                while (stf >> sk >> sv) {
+                    if (sk == "file" || sk == "total_cache") file = sv; else if (sk == "shmem" || sk == "total_shmem") shmem = sv;
+                }
+                a = std::min(a, (lim - cur + 0.5 * std::max(0.0, file - shmem)) / 1073741824.0);
+            }
+        }
+        if (p.empty() || p == "/") break;
+        const size_t s = p.rfind('/');
+        p = s == 0 || s == std::string::npos ? std::string("/") : p.substr(0, s);
     }
     return a;
 }
@@ -680,10 +705,29 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         // of mix3 816788 (peak of the per-item sum in memsamp.tsv against the reads in the .1fq header): peak = a + b x reads (M). Least squares gave
         // 48.2 + 0.2235 x (rmse 13.6 GB, worst under-prediction 30.3 GB: d500s_3p), the margin adds 30 GB, the genome comes off (-16.4): a = 61.8, b = 0.2235.
         // The reads are the u32 at byte 20 of the .1fq header ("1FQ\0" magic); without a header, the file size: 11.6 GB per GB + 43.6 (envelope of the 16 samples).
-        double reads = 0;
-        if (FILE* hf = fopen(it.fq.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) reads = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+        // A sample of several runs has one input per run: the queue line's first file, then every other run on the line (a positional .1fq / .1fg2, or the
+        // comma list of --1fq, as `singlet` itself reads them; relative paths are the sample process's, from its out dir's parent). All of them count:
+        // reading the first alone charged a 4-run 337 M-pair sample 85 GB, it peaked at 154 GB and the job's cgroup ended it (Clipper 818032).
+        std::vector<std::string> ins{it.fq};
+        for (size_t k = 0; k < it.extra.size(); ++k) {
+            const std::string& w = it.extra[k];
+            auto ends = [&w](const char* x) { const size_t n = std::strlen(x); return w.size() > n && w.compare(w.size() - n, n, x) == 0; };
+            if (w == "--1fq" && k + 1 < it.extra.size()) {
+                std::istringstream iss(it.extra[++k]);
+                for (std::string f; std::getline(iss, f, ',');) if (!f.empty()) ins.push_back(f);
+            } else if (!w.empty() && w[0] != '-' && (ends(".1fq") || ends(".1fg2"))) ins.push_back(w);
+        }
+        double reads = 0, unheadedGb = 0;
+        for (std::string p : ins) {
+            if (!p.empty() && p[0] != '/') p = parent_dir(it.out) + "/" + p;
+            double r = 0;
+            if (FILE* hf = fopen(p.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) r = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+            if (r > 0) reads += r;
+            else unheadedGb += stat(p.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0;
+        }
         const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
-        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 : (stat(it.fq.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0) * 11.6 + 43.6;
+        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 + unheadedGb * 11.6 : unheadedGb * 11.6 + 43.6;
+        if (ins.size() > 1) plog("item %d: %zu inputs, %.1f M pairs in their headers, estimate %.0f GB", it.idx, ins.size(), reads / 1e6, itemEst[it.idx]);
     }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
