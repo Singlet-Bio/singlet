@@ -338,7 +338,6 @@ def test_package_reproduces_the_stored_inputs():
 def test_scrub_ranks_planted_doublets_and_is_deterministic():
     """The Scrublet port scores summed-profile cells above the singlets they came from (planted fixture) and repeats exactly."""
     import scipy.sparse as sps
-
     from singlet.features import doublet_scrub as DSC
 
     rng = np.random.default_rng(1)
