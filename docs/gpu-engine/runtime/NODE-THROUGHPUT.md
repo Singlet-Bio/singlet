@@ -175,5 +175,11 @@ Each switch restores the earlier behaviour when set as shown. All are on by defa
   (`SINGLET_ENGINE_GPU_MIN_MEM_GB`).
   - The `singlet gpu-probe` child also checks that the build holds a kernel image for the device.
   - A device that fails any check takes the CPU route, and the probe states the reason.
-  - The final build's identity gate ran on H100 NVL (Hopper), RTX 8000 (Turing) and V100S (Volta). Timing is H100 only.
+  - The final build's identity gate ran on H100 NVL (Hopper), RTX 8000 (Turing) and V100S (Volta), with fresh CPU references
+    (jobs 817285-817287). Timing is H100 only.
+    - All 8 samples have identical counts on all three devices.
+    - pbmc5p_v1 differs only in HLA routing, which predates this branch: the CPU engine types 5' HLA in the run, while the GPU
+      route defers it to `private/hla/pending/`.
+    - On the 32 GB V100S, the non-host classify and the records phase of the mouse sample fall back per phase, with identical
+      outputs.
   - Ampere and Ada devices with 30 GiB or more (A100, A40, L40S) are compiled for but not gated.
