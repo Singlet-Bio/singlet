@@ -37,6 +37,7 @@ public:
     static uint64 hashSeq(const char *seq, uint64 L); //seq: numeric bases 0..3
 
     //on a hit, copies the stored result into out and returns true
+    //N = code 4 only; any other code above 3 is not cached, as before.
     //A read with N bases (singlet T2 cpucache, SINGLET_STAR_SEQCACHE_NKEY=0 turns it off): seq holds code 4 for N, the 2-bit packed
     //bases have 0 there, and the positions of the N are part of the key: nmask (bit i of byte i/8 set when base i is N, (L+7)/8 bytes) is
     //stored after the packed bases and compared on lookup; the entry's length field carries a flag bit. A read without N has nmask==nullptr

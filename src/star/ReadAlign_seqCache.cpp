@@ -75,6 +75,7 @@ bool ReadAlign::seqCacheable() {
     //N bases are part of the key as a bit mask of their positions; the result of mapping depends on the numeric sequence only, N included
     for (uint64 i=0; i<Lread; i++) {
         if ((uint8) Read1[0][i] <= 3) continue;
+        if ((uint8) Read1[0][i] != 4) {seqCacheHasN = false; return false;} //N is code 4 only; any other code above 3 (e.g. the paired-end spacer) is not cached, as before
         if (!seqCacheHasN) {seqCacheHasN = true; memset(seqCacheNMask, 0, (Lread+7)/8);}
         seqCacheNMask[i>>3] |= (uint8) (1u << (i&7));
     };
