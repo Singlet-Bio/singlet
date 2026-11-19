@@ -23,10 +23,13 @@ Commands run through one shared bridge: `bash "<RC>" '<command>' [timeout_s]` wi
 RC=/c/Users/debruinz/AppData/Local/Temp/claude/b47c38086aba7e7c/f25663d1-6f16-4dcd-a7c4-2bb7c22e3f45/scratchpad/clipper/rc.sh
 - The bridge is ONE serial shell shared by all agents. Keep each command short (< 60 s) and wrap anything that could hang in
   `timeout 30`. Never run recursive grep/find/du over data trees (campaign/, jobs/gpu-campaign, inputs): `ls` named directories, read
-  named small files. If the bridge times out twice, stop and report; never try plain ssh.
+  named small files. Never put `sleep` or a wait loop inside a remote command.
+- Several agents share the shell, so a call can wait behind another agent's: give every call a timeout of at least 90 s. A call
+  that times out locally keeps running remotely and blocks the next one, so after a timeout wait 3 minutes before retrying; stop
+  and report after 5 timeouts in a row. Never try plain ssh. Keep at most one poller, polling no more often than every 180 s.
 - Send files as base64 (`base64 -w0 file`, then remote `printf %s '<b64>' | base64 -d > path`), at most 150 KB of base64 per command;
   append in chunks for larger files. Strip CRs first (`tr -d '\r'`), or sbatch rejects the script.
-- To wait for a job, poll `sacct -X -n -j <id> -o State` every 60-180 s from a Bash call with `run_in_background: true`; never faster.
+- To wait for a job, poll `sacct -X -n -j <id> -o State` every 180 s from a Bash call with `run_in_background: true`; never faster.
 - W=/mnt/projects/debruinz_project/debruinz/singlet. Our directory: `$W/jobs/gpu-runtime` (scripts, patches/, bin/, results/); name
   everything you create there `t2-<name>...`. Logs: `$W/logs/<jobname>-<job>.out`. Scripts there are copies of
   `bench/gpu-runtime/jobs/*` and `bench/gpu-runtime/*.{py,sh}` of the repo; put new scripts in the repo too.
