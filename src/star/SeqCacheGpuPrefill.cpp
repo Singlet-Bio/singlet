@@ -1241,9 +1241,11 @@ bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &wh
     const int T = (int) std::max<uint64>(1, std::min<uint64>((uint64) std::max(1, nThreads), n / 4096 + 1));
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
+        uint32 bcur = n * t / T < n * (t + 1) / T ? ing.block(reads[n * t / T]) : 0;   // hostcut: the reads ascend, so the block only moves on (one search per thread, not per read)
         for (uint64 k = n * t / T, e = n * (t + 1) / T; k < e; k++) {
             const uint64 r = reads[k], s0 = ingOff[r], L = ingOff[r + 1] - s0;
-            const uint32 b = ing.block(r);
+            while (r >= ing.first[bcur + 1]) bcur++;
+            const uint32 b = bcur;
             ingPs->get(s0, L, (char *) late.seq.data() + late.sOff[k]);
             late.name[k] = ing.name(b, r);
             uint8_t *q = late.qual.data() + late.qOff[k];
@@ -1494,6 +1496,7 @@ bool e11RnaAdjustCore(Parameters &P, std::string &why, int nThreads, uint64 N, c
     std::vector<std::thread> th;
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
         const char *m = e10f.m[0], *end = m + e10f.len[0];
+        uint32 bcur = ingOn && N * t / T < N * (t + 1) / T ? ing.block(N * t / T) : 0;   // hostcut: r ascends: the block only moves on
         for (uint64 r = N * t / T; r < N * (t + 1) / T; r++) {
             const bool rec = grr[r] != 0xFFFFFFFFu;
             uint64 c5 = 0, c3 = 0;
@@ -1505,7 +1508,8 @@ bool e11RnaAdjustCore(Parameters &P, std::string &why, int nThreads, uint64 N, c
             } else nNo[t]++;
             if (ingOn) {   // E13: the quality from the packed reads
                 const uint64 s0q = ingOff[r], L = ingOff[r + 1] - s0q;
-                const uint32 b = ing.block(r);
+                while (r >= ing.first[bcur + 1]) bcur++;
+                const uint32 b = bcur;
                 const uint64 s0 = rec ? std::min<uint64>(c5, L) : 0, s1 = rec ? (L >= c3 ? L - c3 : 0) : 0;
                 uint64 h = 0, hs = 0, ns = 0;
                 if (fast) {
