@@ -1191,6 +1191,19 @@ struct LateStore {
         singlet_engine_gpu::NoInitVector<uint64_t>().swap(r1);
     }
 } late;
+// hostcut round 2 (Step A): the sizes (GiB) of the big per-read arrays this process still holds, at the e16 marks (SINGLET_E16_TRACE=1 only)
+static void e16Sizes(const char *where, const singlet_engine_gpu::Input &in, const singlet_engine_gpu::Output &out) {
+    if (!singlet_tail::on()) return;
+    const double G = 1073741824.0;
+    double a, sh; singlet_tail::rss(a, sh);
+    const double pseq = (in.pseq ? in.pseq->w.size() : (ing.seq ? ing.seq->w.size() : 0)) / G;
+    singlet_tail::mark("sizes @%s: anon %.1f shmem %.1f | pseq %.1f qual %.1f r1 %.1f off %.1f+%.1f | aux in %.1f ing %.1f | clip5+3 %.1f cr4info %.1f+%.1f | readRecord %.1f "
+                       "| hostrecs seq %.1f blob %.1f offs %.1f hostDropped %d | e16bg.reads %.2f late %.2f | in.seq %.1f GiB",
+                       where, a, sh, pseq, ing.qual.size() / G, ing.r1.size() * 8 / G, in.off.size() * 8 / G, ing.off.size() * 8 / G, in.e10.aux.size() * 8 / G, ing.aux.size() * 8 / G,
+                       (out.clip5.size() + out.clip3.size()) * 2 / G, in.cr4info.size() / G, out.cr4info.size() / G, out.readRecord.size() * 4 / G,
+                       out.seq.size() / G, out.blob.size() / G, (out.seqOff.size() + out.blobOff.size()) * 8 / G, (int) out.hostDropped,
+                       e16bg.reads.size() * 4 / G, late.bytes() / G, in.seq.size() / G);
+}
 // copies the reads (ascending ids) the late readers need out of the planes
 bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
     if (!ingOn) { why = "no packed reads"; return false; }
@@ -1757,6 +1770,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     }
     in.release();
     singlet_tail::mark("prefill: mapDistinct returned (device held %.3f s)", heldS);
+    e16Sizes("returned", in, out);
     if (singlet_tail::on()) {   // what STAR's child holds after the engine (sizes only)
         double a, sh; singlet_tail::rss(a, sh);
         const double G = 1073741824.0;
@@ -1976,6 +1990,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         });
         for (auto &x : th) x.join();
         singlet_tail::mark("prefill: summary threads joined (%d threads, no summaries: %d)", nt, (int) e10NoSum);
+    e16Sizes("summary threads", in, out);
         tmark("hand-off records");
         if (g_handoffLeanAln.load() > 0)   // SINGLET_HANDOFF_LEAN=verify
             P.inOut->logMain << "ENGINE_GPU: lean alignment fields: " << g_handoffLeanAln.load() << " alignments, " << g_handoffLeanBad.load()
@@ -2088,6 +2103,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 __sync_synchronize();
                 memcpy(E2H.magic, "SGE2E001", 8);
                 singlet_tail::mark("prefill: region complete (magic written, %llu MB in use)", (unsigned long long) (E2H.used >> 20));
+    e16Sizes("region complete", in, out);
                 P.inOut->logMain << "ENGINE_GPU: E8: per-read hand-off entries" << (e2eQOn ? " and low-quality masks" : "") << " in the shared region ("
                                  << (E2H.used >> 20) << " MB in use)" << (e10ok ? ", built on the device (E10)" : "") << (e10chk.on ? "; STAR's are compared after mapping" : "")
                                  << "\n";
@@ -2176,6 +2192,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                                                             EXIT_CODE_INPUT_FILES, P);
                     adjDone = true;
                     singlet_tail::mark("prefill: RNA Q30 adjustment done (E22, before the background thread)");
+    e16Sizes("RNA Q30 done", in, out);
                     std::string wl;
                     const auto tb = std::chrono::steady_clock::now();
                     const double G = 1073741824.0;
@@ -2195,6 +2212,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                                          << " s); compact store " << late.bytes() / G << " GiB for " << late.n << " unmapped reads of " << g_handoffNReads << " (built " << sB
                                          << " s, planes freed in " << sR << " s)\n" << std::flush;
                         singlet_tail::mark("prefill: E22 early release: %s", late.check ? "check mode" : "planes freed");
+    e16Sizes("early release", in, out);
                     } else {
                         P.inOut->logMain << "ENGINE_GPU: E22 early release not used (" << wl << "): the planes stay until the background thread is done\n" << std::flush;
                     }
