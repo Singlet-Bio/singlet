@@ -1,0 +1,26 @@
+node=g051.clipper.gvsu.edu job=818968 tag=l5 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-hostcut5/singlet-gpu items='d100s_3p nuclei2k_v2' workers=1 T=8 slots=1 memgb=48 xenv='' mem=307200 2026-11-19T17:36:29-05:00
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          10         343           0         402         739
+node at start: MemFree: 343 GB; Cached: 398 GB; Shmem: 0 GB; ; squeue on node: 818968/t2-fz-item/debruinz/300G
+cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_818968 memory.max 322122547200
+input copy to node-local disk: 6 s
+pool wall 360 s
+item	slot	sample	out	start	end	wall_s	user_s	sys_s	core_s	maxrss_gb	exit	signal	pairs	pid
+0	0	/tmp/debruinz-fz-818968/data/d100s_3p.1fq	/tmp/debruinz-fz-818968/run/c0.0/out/	1795127803.904	1795127964.361	160.46	879.17	148.40	1027.57	77.93	0	0	100002652	457923
+1	0	/tmp/debruinz-fz-818968/data/nuclei2k_v2.1fq	/tmp/debruinz-fz-818968/run/c0.1/out/	1795127964.397	1795128153.005	188.61	438.35	129.44	567.79	76.41	0	0	118742315	504935
+ITEM 0 d100s_3p wall 160.46 s; device peak nvidia-smi 64.2 GiB (whole card, 1 s); host peak cgroup anon+shmem 102.9 GiB; files 71, core files 18, core set hash 2601bbe3170102c8c3b83764cce0b4e3, all-files list hash 0e92f36c07c579de3385b33b40690848
+ITEM 0 LINE: engine_gpu: E17 budget 48.0 GB (SINGLET_ENGINE_GPU_MEM_GB; device 93.1 GB, 18.0 GB in use at the start): mode normal; context 1.00 GB, index 0.00 GB, tables 0.04 GB, reads 14.64 GB, E10 aux 3.73 GB, entries+masks 4.47 GB, E11 keep 1.49 GB, clip 0.00 GB; estimates: normal 38.0 GB, lean 27.5 GB (the smallest lanes 0.54 GB, slack 1.0 GB)
+ITEM 0 LINE: engine_gpu: device memory (GB in use): start 1.1, index(shared) 18.0, reads+clip 34.1, dedup 28.5, index+distinct 28.5, before-laneA 28.5, before-laneA 28.7, before-laneA 28.7, before-laneA 28.7, released 19.6, relocked 19.6, peak (lanes, records) 64.248047
+ITEM 0 LINE: engine_gpu: 100002652 reads, 61828260 distinct (22500044 with N), mapped on the GPU 61694886, host lane 133374 (0.03 s), not mapped 0; upload 21.61 s, dedup 0.82 s, GPU mapping 56.17 s
+ITEM 0 LINE: ENGINE_GPU: E19: level 5 reached (requested 5)
+ITEM 1 nuclei2k_v2 wall 188.61 s; device peak nvidia-smi 64.1 GiB (whole card, 1 s); host peak cgroup anon+shmem 101.7 GiB; files 71, core files 18, core set hash 762a1a32a9e986aaf96bf20f58f0bf30, all-files list hash 618c18cd1511bc528f26aa300bba00e6
+ITEM 1 LINE: engine_gpu: E17 budget 48.0 GB (SINGLET_ENGINE_GPU_MEM_GB; device 93.1 GB, 18.0 GB in use at the start): mode normal; context 1.00 GB, index 0.00 GB, tables 0.04 GB, reads 11.67 GB, E10 aux 3.54 GB, entries+masks 4.42 GB, E11 keep 1.77 GB, clip 13.99 GB; estimates: normal 33.9 GB, lean 27.7 GB (the smallest lanes 0.54 GB, slack 1.0 GB)
+ITEM 1 LINE: engine_gpu: device memory (GB in use): start 18.0, index(shared) 18.0, reads+clip 30.7, dedup 27.2, index+distinct 27.2, before-laneA 27.2, before-laneA 27.3, before-laneA 27.3, before-laneA 27.3, before-laneA 27.3, released 19.9, relocked 19.9, peak (lanes, records) 64.115234
+ITEM 1 LINE: engine_gpu: 118742315 reads, 79810824 distinct (1641489 with N), mapped on the GPU 79676617, host lane 134206 (0.06 s), not mapped 0; upload 4.54 s, dedup 0.55 s, GPU mapping 94.16 s
+ITEM 1 LINE: ENGINE_GPU: E19: level 5 reached (requested 5)
+idle floor of the run (min cgroup anon+shmem): 0.1 GiB
+cgroup memory.events: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0
+cgroup memory.peak: 146876219392
+cgroup memory.max: 322122547200
+done 2026-11-19T17:44:09-05:00
