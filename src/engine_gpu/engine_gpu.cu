@@ -2611,6 +2611,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         std::mutex mu; std::condition_variable cv; u64 done = 0; std::thread th;   // done: the sequences copied so far (a prefix of rep)
         ~LeanFill() { if (th.joinable()) th.join(); }
     } leanFill;   // after leanSeq and leanOff: joined before they go
+    // hostcut 1 (SINGLET_ENGINE_GPU_LEAN_DROP, default on): leanSeq's bytes of a chunk, and leanOff's entries before it, are read by that chunk's upload
+    // only (gpuPart); once it has completed their whole pages go back to the system (dropPages), so the host holds the distinct sequences of the
+    // chunks still to come instead of every chunk's until the lanes end. =0: kept to the end, as before; =check: the released range is filled with
+    // 0xA5 (never a base code) instead, and every upload checks that its slice holds none, so a read of released bytes fails the mapping
+    const char* ldE = std::getenv("SINGLET_ENGINE_GPU_LEAN_DROP");
+    const int leanDrop = !ldE || !ldE[0] ? 1 : ldE[0] == '0' ? 0 : std::strcmp(ldE, "check") == 0 ? 2 : 1;
     auto leanWait = [&](u64 need) {   // until the first `need` sequences are in leanSeq
         const double tw = now();
         { std::unique_lock<std::mutex> lk(leanFill.mu); leanFill.cv.wait(lk, [&] { return leanFill.done >= need; }); }
@@ -2824,9 +2830,17 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             parallelFor(m + 1, hostThreads, [&](u64 lo, u64 hi) { for (u64 k = lo; k < hi; k++) ho[k] = leanOff[c0 + k] - o0; });
             g_bud.at = "chunk sequences";
             if (dmal(&dSc, nb) != cudaSuccess || dmal(&dOc, ho.size() * 8 + 8) != cudaSuccess) { err = "out of device memory (the chunk's sequences)"; return false; }
+            if (leanDrop == 2 && std::memchr(leanSeq.data() + o0, 0xA5, nb) != nullptr) { err = "LEAN_DROP check: the chunk's upload reads bytes already released"; return false; }
             if (staged ? !(SR.copy(dSc, leanSeq.data() + o0, nb) && SR.copy(dOc, ho.data(), ho.size() * 8) && SR.finish())
                        : (cudaMemcpy(dSc, leanSeq.data() + o0, nb, cudaMemcpyHostToDevice) != cudaSuccess || cudaMemcpy(dOc, ho.data(), ho.size() * 8, cudaMemcpyHostToDevice) != cudaSuccess)) {
                 err = "the chunk's sequences upload"; return false;
+            }
+            if (leanDrop) {   // the upload has completed, and the retries below (lane launches) work on the device's copy: this chunk's sequences are dead on the host
+                // [o0, leanOff[c0 + m]): the next chunk's first bytes start at its end (its page stays: dropPages releases whole pages inside the range only);
+                // leanOff's entries [0, c0 + m) (the next chunk starts at c0 + m); LeanFill has finished both ranges (leanWait above: done >= c0 + m)
+                const u64 e0 = leanOff[c0 + m];
+                if (leanDrop == 2) { std::memset(leanSeq.data() + o0, 0xA5, e0 - o0); std::memset((void*) leanOff.data(), 0xFF, (c0 + m) * sizeof(u64)); }
+                else { singlet_engine_gpu::dropPages(leanSeq.data() + o0, e0 - o0); singlet_engine_gpu::dropPages(leanOff.data(), (c0 + m) * sizeof(u64)); }
             }
             dS = dSc; dO = dOc;
             stepAdd("lanes.seq.h2d", now() - tu);
