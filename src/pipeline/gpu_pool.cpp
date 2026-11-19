@@ -25,6 +25,7 @@
 // --shared-index on (the default) exports SINGLET_GPU_SHARED_INDEX=1 to every sample unless the variable is already set: one holder per
 // device and genome keeps G, SA and SAi on the device and every slot maps them, so no sample uploads the index (outputs are the same).
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cerrno>
 #include <cmath>
@@ -54,6 +55,8 @@
 #include <vector>
 
 #include "star_api.h"
+#include "singlet/fq/read_source.h"   // cggate: RunSet, the first block of a .1fq for the peak model
+#include "singlet/gpu_pool_peak.h"
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
 #endif
@@ -265,6 +268,80 @@ std::string fmt(const char* f, ...) {
     return b;
 }
 
+// ---- cggate (SINGLET_POOL_PEAKADMIT=1, docs/gpu-engine/runtime/T2-cggate.md): helpers of the peak-model gate
+// The job-level cgroup as avail_gb() finds it: the ancestor with a finite memory.max and the smallest headroom (limit - usage + half of file - shmem). cgroup v2 only.
+struct JobCg { bool ok = false; std::string dir; double lim = 0; };
+JobCg find_job_cgroup() {
+    JobCg best;
+    double bestHead = 1e30;
+    std::ifstream cl("/proc/self/cgroup");
+    std::string line, path;
+    while (std::getline(cl, line)) if (line.rfind("0::", 0) == 0) { path = line.substr(3); break; }
+    if (path.empty()) return best;
+    for (std::string p = path;;) {
+        const std::string base = "/sys/fs/cgroup" + (p == "/" ? std::string() : p);
+        std::ifstream mx(base + "/memory.max"), cu(base + "/memory.current"), stf(base + "/memory.stat");
+        std::string m;
+        double cur = 0;
+        if (mx >> m && cu >> cur && !m.empty() && std::isdigit((unsigned char) m[0])) {
+            const double lim = std::atof(m.c_str());
+            if (lim < 1e18) {
+                double file = 0, shmem = 0, sv = 0;
+                std::string sk;
+                while (stf >> sk >> sv) { if (sk == "file") file = sv; else if (sk == "shmem") shmem = sv; }
+                const double head = lim - cur + 0.5 * std::max(0.0, file - shmem);
+                if (head < bestHead) { bestHead = head; best.ok = true; best.dir = base; best.lim = lim; }
+            }
+        }
+        if (p.empty() || p == "/") break;
+        const size_t s = p.rfind('/');
+        p = s == 0 || s == std::string::npos ? std::string("/") : p.substr(0, s);
+    }
+    return best;
+}
+// GiB of the job cgroup: memory.current, and from memory.stat anon, shmem, file
+struct CgNow { bool ok = false; double cur = 0, anon = 0, shmem = 0, file = 0, lim = 0; double as() const { return anon + shmem; } };
+CgNow read_job_cgroup(const JobCg& j) {
+    CgNow r;
+    if (!j.ok) return r;
+    std::ifstream cu(j.dir + "/memory.current"), stf(j.dir + "/memory.stat");
+    double cur = 0, sv = 0;
+    std::string sk;
+    bool gotAnon = false;
+    if (!(cu >> cur)) return r;
+    while (stf >> sk >> sv) {
+        if (sk == "anon") { r.anon = sv; gotAnon = true; } else if (sk == "shmem") r.shmem = sv; else if (sk == "file") r.file = sv;
+    }
+    if (!gotAnon) return r;
+    const double G = 1073741824.0;
+    r.cur = cur / G; r.anon /= G; r.shmem /= G; r.file /= G; r.lim = j.lim / G;
+    r.ok = true;
+    return r;
+}
+// the first block's cDNA bases per read of a .1fq (the pipeline's head scan on block 0); cached per path
+struct FqBpr { double bpr = -1; std::string why; };
+FqBpr fq_first_block_bpr(const std::string& path) {
+    static std::map<std::string, FqBpr> cache;
+    auto f = cache.find(path);
+    if (f != cache.end()) return f->second;
+    FqBpr r;
+    try {
+        singlet::fq::RunSet rs;
+        rs.open(std::vector<std::string>{path});
+        std::string w;
+        if (rs.block_count() == 0) r.why = "no blocks";
+        else if (!rs.head_scan_supported(&w)) r.why = "the head scan does not support this .1fq (" + w + ")";
+        else {
+            singlet::fq::RunSet::HeadScanOptions o;
+            singlet::fq::RunSet::BlockHead h;
+            rs.scan_head(0, o, h);
+            if (h.n_out > 0 && h.bases_out > 0) r.bpr = (double) h.bases_out / (double) h.n_out; else r.why = "the first block has no reads for the mapper";
+        }
+    } catch (const std::exception& e) { r.why = std::string("the first block could not be read: ") + e.what(); }
+    cache[path] = r;
+    return r;
+}
+
 volatile sig_atomic_t g_stop = 0;
 void on_stop(int) { g_stop = 1; }
 
@@ -281,7 +358,37 @@ struct Run {
     bool plateau = false;   // rt/phaseadmit: the all-site pass has been joined ("[allsite] async: waited"): host memory is on its tail plateau and no longer grows with depth
     mutable double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
     bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
+    // cggate (SINGLET_POOL_PEAKADMIT=1): the item's peak figure (GiB above the job's idle baseline) and what the engine printed
+    bool pk = false, pkZone = false;            // the figure comes from the peak model (else the old estimate), the item is in the zone of a possible fallback
+    double pkN = 0, pkBases = 0;                // M reads, G bases (from the .1fq headers and their first blocks)
+    double pkP = 0, pkFig = 0, pkFloor = 0;     // P now (no margin), the figure now (with margin), a raise of the figure that holds for pkFloorPhase
+    int pkFloorPhase = -1;
+    bool pm1 = false, pm2 = false, pm3 = false, pmFallback = false, pm1Done = false, pm3Done = false, pmFbDone = false;
+    double pmN = 0, pmD = 0, pmBases = 0, pmRc = 0, pmFb = 0, pmRegion = 0, pmUnmapped = 0, pmLate = 0, pmKeep = 0;
+    int pkPhase = 0;
 };
+
+// cggate: "[engine_gpu] peakmodel: key=value ..." lines of the engine (SINGLET_ENGINE_GPU_PEAKMODEL=1): the first (n nw D rc bases budget_gib need_est_gib fb), the second (records aln ops
+// seqbytes region_bytes hostrecs_bytes), the third (unmapped late_bytes solokeep_bytes), and a late "fallback=1 D=" when E8's records were not built
+bool g_peakParse = false;
+const char kPeakTag[] = "[engine_gpu] peakmodel: ";
+void peak_parse_line(Run& r, const std::string& body) {
+    std::map<std::string, double> kv;
+    std::istringstream in(body);
+    std::string tok;
+    while (in >> tok) {
+        const size_t q = tok.find('=');
+        if (q != std::string::npos) kv[tok.substr(0, q)] = std::atof(tok.c_str() + q + 1);
+    }
+    if (kv.count("fallback")) { r.pmFallback = true; if (kv.count("D")) r.pmD = kv["D"]; return; }
+    if (kv.count("rc") && kv.count("D") && kv.count("n")) {
+        r.pm1 = true; r.pmN = kv["n"]; r.pmD = kv["D"]; r.pmRc = kv["rc"]; r.pmBases = kv.count("bases") ? kv["bases"] : 0; r.pmFb = kv.count("fb") ? kv["fb"] : 0;
+    } else if (kv.count("region_bytes")) {
+        r.pm2 = true; r.pmRegion = kv["region_bytes"];
+    } else if (kv.count("late_bytes")) {
+        r.pm3 = true; r.pmUnmapped = kv.count("unmapped") ? kv["unmapped"] : 0; r.pmLate = kv["late_bytes"]; r.pmKeep = kv.count("solokeep_bytes") ? kv["solokeep_bytes"] : 0;
+    }
+}
 
 // the sample's log: each complete line with the unix time it arrived
 void pump(Run& r, bool eof) {
@@ -301,6 +408,7 @@ void pump(Run& r, bool eof) {
             if (r.front && r.partial.compare(s, 19, "[engine_gpu] level ") == 0) r.front = false;
             if (!r.plateau && r.partial.compare(s, 24, "[allsite] async: waited ") == 0) r.plateau = true;
             if (!r.decoded) { const size_t dp = r.partial.find("decoded into the packed buffers", s); if (dp != std::string::npos && dp < e) r.decoded = true; }
+            if (g_peakParse && r.partial.compare(s, sizeof kPeakTag - 1, kPeakTag) == 0) peak_parse_line(r, r.partial.substr(s + sizeof kPeakTag - 1, e - s - (sizeof kPeakTag - 1)));
             s = e + 1;
         }
         r.partial.erase(0, s);
@@ -447,6 +555,48 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     pid_line(self, "pool" + std::to_string(device));
     plog("pool pid %d on device %d: %zu samples, %d in flight, --threads %d, SINGLET_ENGINE_GPU_SLOTS=%d; report %s; args: %s", (int) self, device,
          items.size(), workers, threads, slots, report.c_str(), args.c_str());
+    // ---- cggate: SINGLET_POOL_PEAKADMIT=1 (default 0: nothing below runs, nothing is written, the gate is as before). The gate then accounts on the job's cgroup:
+    // see docs/gpu-engine/runtime/T2-cggate.md. Decided here, before the server and the genome load, because the pool announces itself to the other pools of the job at once.
+    const bool peakReq = env_num("SINGLET_POOL_PEAKADMIT", 0) != 0 && env_num("SINGLET_POOL_MEMADMIT", 1) != 0;
+    JobCg jobCg;
+    bool peakMode = false;
+    if (peakReq) {
+        jobCg = find_job_cgroup();
+        const CgNow c0 = read_job_cgroup(jobCg);
+        if (!jobCg.ok || !c0.ok) plog("peak admission (SINGLET_POOL_PEAKADMIT=1) is not available: this process has no cgroup v2 ancestor with a memory limit (or its memory.stat has no anon); the current gate is used");
+        else {
+            peakMode = true;
+            g_peakParse = true;
+            setenv("SINGLET_ENGINE_GPU_PEAKMODEL", "1", 1);   // the items print their peakmodel lines (only in this mode)
+            plog("peak admission on (SINGLET_POOL_PEAKADMIT=1): job cgroup %s, memory.max %.1f GiB, anon+shmem now %.1f GiB; the items print the engine's peakmodel lines (SINGLET_ENGINE_GPU_PEAKMODEL=1)",
+                 jobCg.dir.c_str(), c0.lim, c0.as());
+        }
+    }
+    const poolpeak::Consts pkK = poolpeak::fromEnv();
+    const double cgShare = env_num("SINGLET_POOL_CG_CACHE_SHARE", 0.5), pkSettle = env_num("SINGLET_POOL_PEAK_SETTLE_S", 30), pkStableS = env_num("SINGLET_POOL_PEAK_STABLE_S", 10),
+                 pkRangeGb = env_num("SINGLET_POOL_PEAK_B_RANGE_GB", 0.5), pkBWait = env_num("SINGLET_POOL_PEAK_B_WAIT_S", 120), pkNPools = env_num("SINGLET_POOL_PEAK_NPOOLS", 0);
+    const char* gjob = std::getenv("SLURM_JOB_ID");
+    const std::string gateDir = "/dev/shm/singlet-pool-mem-" + std::string(gjob ? gjob : "node") + "-" + std::to_string((unsigned) getuid());
+    const std::string gateMine = gateDir + "/" + std::to_string((int) self);
+    // the pools' files, mode 1: `t rem act waitEst waitSince figSum ready lastEvt` (the first five as before; rem = figSum), written whole and renamed
+    auto pkWriteFile = [&](double figSum, int act, double waitFig, double waitSince, int ready, double lastEvt) {
+        const std::string tmp = gateMine + ".tmp";
+        if (FILE* f = fopen(tmp.c_str(), "w")) {
+            fprintf(f, "%.3f %.3f %d %.3f %.3f %.3f %d %.3f\n", wall_now(), figSum, act, waitFig, waitSince, figSum, ready, lastEvt);
+            fclose(f);
+            rename(tmp.c_str(), gateMine.c_str());
+        }
+    };
+    // until the stream starts the pool's start-up (server, genome, references) blocks for a minute or more: a thread keeps the pool's file fresh, `ready` 0, so that a pool that
+    // measures the idle baseline sees this pool (its genome and server are not in the baseline yet) and does not take the baseline too low
+    std::atomic<bool> pkHbStop{false};
+    std::thread pkHb;
+    struct PkHbGuard { std::atomic<bool>& s; std::thread& t; ~PkHbGuard() { s = true; if (t.joinable()) t.join(); } } pkHbGuard{pkHbStop, pkHb};
+    if (peakMode) {
+        mkdir(gateDir.c_str(), 0700);
+        pkWriteFile(0, 0, 0, 0, 0, 0);
+        pkHb = std::thread([&]() { while (!pkHbStop.load()) { pkWriteFile(0, 0, 0, 0, 0, 0); for (int i = 0; i < 20 && !pkHbStop.load(); ++i) usleep(100000); } });
+    }
     setenv("SINGLET_ENGINE_GPU_SLOTS", std::to_string(slots).c_str(), 1);
     setenv("SINGLET_ENGINE_GPU_DEVICE", std::to_string(device).c_str(), 1);
     if (sharedIdx && std::getenv("SINGLET_GPU_SHARED_INDEX") == nullptr) setenv("SINGLET_GPU_SHARED_INDEX", "1", 1);
@@ -556,6 +706,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     std::map<pid_t, int> byPid;
     unsigned long long pairsAll = 0;
     double firstStart = 0, lastEnd = 0;
+    double pkLastEvt = 0;   // cggate: the last start or end of an item of this pool (the idle baseline is not measured just after one)
     auto start = [&](Item& it) {
         Run& r = runs[it.idx];
         r.idx = it.idx;
@@ -628,6 +779,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         r.logFd = lp[0];
         if (r.logFd >= 0) fcntl(r.logFd, F_SETFL, fcntl(r.logFd, F_GETFL) | O_NONBLOCK);
         byPid[pid] = it.idx;
+        if (peakMode) pkLastEvt = wall_now();
         ++active;
         if (firstStart == 0) firstStart = r.t0;
         pid_line(pid, "c" + std::to_string(it.idx));
@@ -642,6 +794,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         r.t1 = wall_now();
         r.done = true;
         --active;
+        if (peakMode) pkLastEvt = wall_now();
         freeSlots.push_back(r.slot);
         const double us = ru.ru_utime.tv_sec + ru.ru_utime.tv_usec * 1e-6, ss = ru.ru_stime.tv_sec + ru.ru_stime.tv_usec * 1e-6;
         const int ex = WIFEXITED(st) ? WEXITSTATUS(st) : -1, sg = WIFSIGNALED(st) ? WTERMSIG(st) : 0;
@@ -699,6 +852,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
     std::vector<char> taken(items.size(), 0);
     std::vector<double> itemEst(items.size(), 0);
+    std::vector<char> itemPk(items.size(), 0);   // cggate: the peak model applies to the item
+    std::vector<double> itemFig0(items.size(), 0), itemPkN(items.size(), 0), itemPkBases(items.size(), 0), itemPkP(items.size(), 0);
     for (const Item& it : items) {
         struct stat st{};
         // rt/hostmem2: the item's host peak (GB of its process group's RssAnon + RssShmem, minus the pool's genome that its STAR child maps), fitted on the 110 items
@@ -718,17 +873,54 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             } else if (!w.empty() && w[0] != '-' && (ends(".1fq") || ends(".1fg2"))) ins.push_back(w);
         }
         double reads = 0, unheadedGb = 0;
+        std::vector<std::pair<std::string, double>> inList;   // cggate: each input and its reads
         for (std::string p : ins) {
             if (!p.empty() && p[0] != '/') p = parent_dir(it.out) + "/" + p;
             double r = 0;
             if (FILE* hf = fopen(p.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) r = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
+            inList.emplace_back(p, r);
             if (r > 0) reads += r;
             else unheadedGb += stat(p.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0;
         }
         const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
         itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 + unheadedGb * 11.6 : unheadedGb * 11.6 + 43.6;
         if (ins.size() > 1) plog("item %d: %zu inputs, %.1f M pairs in their headers, estimate %.0f GB", it.idx, ins.size(), reads / 1e6, itemEst[it.idx]);
+        if (peakMode) {   // cggate: the item's figure from the peak model, or the old estimate with the reason
+            std::string why;
+            double bases = 0;
+            if (itemGbEnv > 0) why = "SINGLET_POOL_ITEM_GB is set";
+            else if (reads <= 0 || unheadedGb > 0) why = "an input has no readable .1fq header";
+            else
+                for (const auto& ir : inList) {
+                    const FqBpr b = fq_first_block_bpr(ir.first);
+                    if (b.bpr <= 0) { why = "the bases cannot be read: " + b.why; break; }
+                    bases += ir.second * b.bpr;
+                }
+            if (why.empty()) {
+                bool hcOff = false;
+                for (const char* sw : {"SINGLET_ENGINE_GPU_LEAN_DROP", "SINGLET_ENGINE_GPU_CLIP16", "SINGLET_ENGINE_GPU_READREP_FREE", "SINGLET_ENGINE_GPU_VERIFY_FREE", "SINGLET_ENGINE_GPU_AUX_COMPACT", "SINGLET_ENGINE_GPU_PRE_RELEASE"}) {
+                    const char* e = std::getenv(sw);
+                    if (e != nullptr && e[0] != 0 && !(e[0] == '1' && e[1] == 0)) hcOff = true;
+                }
+                const char* mg = std::getenv("SINGLET_ENGINE_GPU_MEM_GB");
+                std::string w2;
+                if (!poolpeak::fitValid(reads / 1e6, mg != nullptr && mg[0] != 0 ? std::atof(mg) : -1.0, env_num("SINGLET_ENGINE_GPU_SLOTS", -1), hcOff, pkK, w2)) why = w2;
+            }
+            if (why.empty()) {
+                const double nM = reads / 1e6, bG = bases / 1e9, P = poolpeak::peakP(nM, bG, pkK);
+                itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = P + pkK.margin;
+                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", P + pkK.margin, pkK.margin, itemEst[it.idx]);
+            } else {
+                itemFig0[it.idx] = itemEst[it.idx];
+                plog("item %d: peak model not used (%s): the old estimate, %.0f GB, is the figure", it.idx, why.c_str(), itemEst[it.idx]);
+            }
+        }
     }
+    if (peakMode)
+        for (size_t i = 0; i < items.size(); ++i) {
+            Run& r = runs[i];
+            r.pk = itemPk[i] != 0; r.pkN = itemPkN[i]; r.pkBases = itemPkBases[i]; r.pkP = itemPkP[i]; r.pkFig = itemFig0[i]; r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
+        }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
         for (const Item& it : items) if (std::find(fqs.begin(), fqs.end(), it.fq) == fqs.end()) fqs.push_back(it.fq);
@@ -736,10 +928,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     }
     double sharedGb = 0;   // what a STAR child maps of the pool's resident genome: counted in its RSS, not in the item's own growth
     { std::ifstream f("/proc/self/status"); std::string l; while (std::getline(f, l)) if (l.rfind("RssAnon:", 0) == 0) sharedGb = std::atof(l.c_str() + 8) / 1048576.0; }
-    const char* gjob = std::getenv("SLURM_JOB_ID");
-    const std::string gateDir = "/dev/shm/singlet-pool-mem-" + std::string(gjob ? gjob : "node") + "-" + std::to_string((unsigned) getuid());
-    if (memAdmit) mkdir(gateDir.c_str(), 0700);
-    const std::string gateMine = gateDir + "/" + std::to_string((int) self), gateLock = gateDir + "/lock";
+    if (memAdmit) mkdir(gateDir.c_str(), 0700);   // gateDir, gateMine: defined with the peak-admission decision above
+    const std::string gateLock = gateDir + "/lock";
     double gateOwnRem = 0, gateLastScan = 0;
     int gateOwnAct = 0;
     // the pools' files: `t rem act waitEst waitSince`, written whole and renamed
@@ -830,6 +1020,219 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         if (lk >= 0) { flock(lk, LOCK_UN); close(lk); }
         return ok;
     };
+    // ======== cggate (SINGLET_POOL_PEAKADMIT=1): the gate on the job's cgroup. Everything below is unused when peakMode is false.
+    // Per item a figure (GiB above the job's idle baseline B that it can still reach: T2-peakmodel.md section 2, include/singlet/gpu_pool_peak.h); B = anon + shmem of the job cgroup
+    // with no item in flight, measured only when it cannot be too low (see pkMeasure). What the items in flight of the whole job can still allocate =
+    // max(0, sum of their figures - (anon + shmem now - B)); with B unknown nothing counts as held (the sum of the figures: too high is safe, too low is not).
+    struct PkOthers { double figSum = 0, waitFig = 0, waitSince = 0, lastEvt = 0; int act = 0, pools = 0, ready = 0; };
+    auto pkReadOthers = [&]() {
+        PkOthers o;
+        if (DIR* d = opendir(gateDir.c_str())) {
+            while (struct dirent* e = readdir(d)) {
+                const int pid = std::atoi(e->d_name);
+                if (pid <= 0 || pid == (int) self || std::strchr(e->d_name, '.') != nullptr) continue;
+                double t = 0, rem = 0, we = 0, ws = 0, fs = 0, le = 0;
+                int act = 0, rdy = 0;
+                if (FILE* f = fopen((gateDir + "/" + e->d_name).c_str(), "r")) {
+                    const int n = fscanf(f, "%lf %lf %d %lf %lf %lf %d %lf", &t, &rem, &act, &we, &ws, &fs, &rdy, &le);
+                    fclose(f);
+                    if (n < 5 || wall_now() - t > 20 || kill(pid, 0) != 0) continue;
+                    if (n < 8) { fs = rem; rdy = 1; le = 0; }   // a pool of the old gate in the same job: its figure is its own estimate sum
+                    o.figSum += fs; o.act += act; o.pools += 1; o.ready += rdy; o.lastEvt = std::max(o.lastEvt, le);
+                    if (we > 0 && (o.waitFig == 0 || ws < o.waitSince)) { o.waitFig = we; o.waitSince = ws; }
+                }
+            }
+            closedir(d);
+        }
+        return o;
+    };
+    // the idle baseline, shared by the pools of the job through the gate directory: `B nPools t`. Valid while the pools now alive (this one included) are no more than at its measurement:
+    // a pool that appeared later brought its genome and server, so B would be too low
+    auto pkBaseline = [&](int poolsNow, double& B) -> bool {
+        FILE* f = fopen((gateDir + "/baseline").c_str(), "r");
+        if (!f) return false;
+        double b = 0, t = 0;
+        int n = 0;
+        const int k = fscanf(f, "%lf %d %lf", &b, &n, &t);
+        fclose(f);
+        if (k != 3 || b <= 0 || n < poolsNow) return false;
+        B = b;
+        return true;
+    };
+    // the non-host server is loaded (its page-locked index is 24.7 GiB of the baseline) when its log says "[nhsrv] resident"; no server (or one that ended): nothing to wait for
+    bool pkSrvUp = false;
+    auto pkServerUp = [&]() -> bool {
+        if (pkSrvUp) return true;
+        if (srvPid <= 0) { pkSrvUp = true; return true; }
+        if (slurp(report + "/nhsrv.log").find("[nhsrv] resident") != std::string::npos) pkSrvUp = true;
+        return pkSrvUp;
+    };
+    bool pkReady = false;
+    double pkOwnFigSum = 0, pkLastScan = 0, pkExcLast = 0, pkExcMax = 0, pkExcSecs = 0, pkBLogged = 0;
+    int pkOwnAct = 0, pkLastRefused = 0;
+    bool pkJobHoldNoted = false, pkBwaitNoted = false;
+    std::vector<std::pair<double, double>> pkRing;   // (time, anon + shmem of the job cgroup, GiB) about once a second
+    auto pkPublish = [&](double waitFig, double waitSince) { pkWriteFile(pkOwnFigSum, pkOwnAct, waitFig, waitSince, pkReady ? 1 : 0, pkLastEvt); };
+    auto pkRegister = [&](double fig) { pkOwnFigSum += fig; pkOwnAct += 1; pkLastEvt = wall_now(); pkPublish(0, 0); };
+    // the node term exactly as the old gate, the job term from the job cgroup (GiB)
+    auto pkTerms = [&](const CgNow& cg, double& freeNode, double& freeJob) {
+        double mfree = 0, cached = 0, shm = 0, v = 0;
+        { std::ifstream mi("/proc/meminfo"); std::string k, u; while (mi >> k >> v >> u) { if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v; } }
+        freeNode = (mfree + cacheShare * std::max(0.0, cached - shm)) / 1048576.0;
+        freeJob = cg.ok ? cg.lim - cg.cur + cgShare * std::max(0.0, cg.file - cg.shmem) : freeNode;
+    };
+    // an item's figure now: the phase (before the "level" line, after it, after the "waited" line), then what the engine printed. Logs each change.
+    auto pkFigure = [&](Run& r) -> double {
+        if (!r.pk) {   // the old estimate, phases as the old gate
+            double want = itemEst[r.idx] * (r.front ? 1.0 : 0.4);
+            if (phaseAdmit && r.plateau) want = std::min(want, tailGb);
+            r.pkFig = want;
+            return want;
+        }
+        const int phase = r.plateau ? 2 : (r.front ? 0 : 1);
+        std::string why;
+        double P = r.pkP;
+        const double nE = r.pmN > 0 ? r.pmN / 1e6 : r.pkN, bE = r.pmBases > 0 ? r.pmBases / 1e9 : r.pkBases, dE = r.pmD / 1e6;
+        if (r.pm1 && !r.pm1Done) {   // first line: the zone's fallback is decided now
+            r.pm1Done = true;
+            if (r.pkZone) {
+                if (r.pmFb > 0) { P = poolpeak::fallbackP(nE, bE, dE, pkK); why += fmt(", line 1: fallback expected, D %.1f M", dE); }
+                else { P = poolpeak::pLinear(nE, bE, pkK); why += ", line 1: no fallback"; }
+            } else if (r.pmFb > 0) {
+                const double Pf = poolpeak::fallbackP(nE, bE, dE, pkK);
+                if (Pf > P) { P = Pf; why += fmt(", line 1: fallback expected outside the zone, D %.1f M", dE); }
+            }
+        }
+        if (r.pmFallback && !r.pmFbDone) {   // E8's records were not built: STAR's loop does the work
+            r.pmFbDone = true;
+            const double Pf = poolpeak::fallbackP(nE, bE, r.pmD / 1e6, pkK);
+            if (Pf > P) { P = Pf; why += fmt(", fallback taken, D %.1f M", r.pmD / 1e6); }
+        }
+        r.pkP = P;
+        if (phase != r.pkPhase) { why += phase == 2 ? ", after the waited line" : phase == 1 ? ", after the level line" : ""; r.pkPhase = phase; }
+        double f = poolpeak::phaseFigure(P, phase, pkK);
+        if (r.pm3 && r.pm1 && r.pm2 && !r.pm3Done) {   // third line: the ledger; raise only
+            r.pm3Done = true;
+            const double L = poolpeak::ledgerL(nE, bE, r.pmRegion, r.pmKeep, r.pmLate, pkK);
+            if (L + pkK.margin > f) { r.pkFloor = L + pkK.margin; r.pkFloorPhase = phase; r.pkP = P = std::max(P, L); why += fmt(", ledger %.1f GiB raises the figure", L); }
+            else why += fmt(", ledger %.1f GiB (not above)", L);
+            f = poolpeak::phaseFigure(P, phase, pkK);
+        }
+        if (r.pkFloorPhase == phase) f = std::max(f, r.pkFloor);
+        if (std::fabs(f - r.pkFig) > 0.05 || !why.empty()) plog("peak figure: item %d %.1f -> %.1f GiB (P %.1f%s)", r.idx, r.pkFig, f, r.pkP, why.c_str());
+        r.pkFig = f;
+        return f;
+    };
+    // the idle baseline: measured only when it cannot be too low. All of: this pool's genome is resident and its non-host server has loaded its index (pkReady) and so have the other
+    // pools' (their `ready`); no item of any pool is in flight and none started or ended in the last SETTLE s (an ended item's memory is still being returned); the job's anon + shmem has been
+    // flat (range <= B_RANGE_GB) over the last STABLE s of 1 Hz samples. B = the largest sample of that window; once stored it is only ever raised (by a later idle moment: the gpu-holder
+    // the first item starts is in it), never lowered; it is invalidated when a pool appears that was not there at the measurement.
+    auto pkMeasure = [&](double now) {
+        if (!pkReady || pkOwnAct != 0 || (pkLastEvt > 0 && now - pkLastEvt < pkSettle)) return;
+        double lo = 1e30, hi = 0;
+        int cnt = 0;
+        double oldest = now;
+        for (const auto& s : pkRing) if (now - s.first <= pkStableS) { lo = std::min(lo, s.second); hi = std::max(hi, s.second); ++cnt; oldest = std::min(oldest, s.first); }
+        if (cnt < 6 || now - oldest < pkStableS - 1.5 || hi - lo > pkRangeGb) return;
+        const int lk = open(gateLock.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        if (lk >= 0) flock(lk, LOCK_EX);
+        const PkOthers o = pkReadOthers();
+        if (o.act == 0 && o.ready == o.pools && (o.lastEvt <= 0 || now - o.lastEvt >= pkSettle) && (pkNPools <= 0 || o.pools + 1 >= pkNPools)) {
+            double B = 0;
+            const bool had = pkBaseline(o.pools + 1, B);
+            if (!had || hi > B + 0.05) {
+                double old = 0, t = 0;
+                int n = 0;
+                if (FILE* f = fopen((gateDir + "/baseline").c_str(), "r")) { if (fscanf(f, "%lf %d %lf", &old, &n, &t) != 3) old = 0; fclose(f); }
+                const double nb = std::max(old, hi);
+                const std::string tmp = gateDir + "/baseline.tmp";
+                if (FILE* f = fopen(tmp.c_str(), "w")) { fprintf(f, "%.3f %d %.3f\n", nb, o.pools + 1, now); fclose(f); rename(tmp.c_str(), (gateDir + "/baseline").c_str()); }
+                if (std::fabs(nb - pkBLogged) > 0.2) { pkBLogged = nb; plog("peak admission: idle baseline B %.2f GiB (job anon+shmem %.2f to %.2f over %.0f s, %d pool(s), servers resident, no item for %.0f s)", nb, lo, hi, pkStableS, o.pools + 1, pkLastEvt > 0 ? now - pkLastEvt : -1.0); }
+            }
+        }
+        if (lk >= 0) { flock(lk, LOCK_UN); close(lk); }
+    };
+    // once a second (or forced): the job cgroup into the ring, the figures of the pool's items, the baseline, the model-exceeded check
+    auto pkRefresh = [&](bool force) {
+        const double now = wall_now();
+        if (!force && now - pkLastScan < 1.0) return;
+        const double dt = pkLastScan > 0 ? std::min(2.0, now - pkLastScan) : 0;
+        pkLastScan = now;
+        const CgNow cg = read_job_cgroup(jobCg);
+        if (cg.ok && (pkRing.empty() || now - pkRing.back().first >= 0.8)) {
+            pkRing.emplace_back(now, cg.as());
+            while (!pkRing.empty() && now - pkRing.front().first > 120) pkRing.erase(pkRing.begin());
+        }
+        double fs = 0;
+        int act = 0;
+        for (Run& r : runs) { if (r.pid <= 0 || r.done) continue; ++act; fs += pkFigure(r); }
+        pkOwnFigSum = fs; pkOwnAct = act;
+        if (!pkReady && pkServerUp()) pkReady = true;
+        if (!cg.ok) return;
+        pkMeasure(now);
+        const PkOthers o = pkReadOthers();
+        double B = 0;
+        if (pkBaseline(o.pools + 1, B) && act + o.act > 0) {   // the model exceeded: the items hold more than the sum of what the model lets them reach
+            const double held = cg.as() - B, figs = fs + o.figSum;
+            if (held > figs + 0.05) {
+                pkExcSecs += dt; pkExcMax = std::max(pkExcMax, held - figs);
+                if (now - pkExcLast >= 30) { pkExcLast = now; plog("model exceeded: job anon+shmem %.1f - baseline %.1f = %.1f GiB held by the items, above the sum of their figures %.1f by %.1f GiB (%d items in flight in the job; largest excess so far %.1f GiB)", cg.as(), B, held, figs, held - figs, act + o.act, pkExcMax); }
+            }
+        }
+    };
+    struct PkRes { double freeNode = 0, freeJob = 0, rem = 0, figs = 0, as = 0, B = 0, othWait = 0, projNode = 0, projJob = 0; int refused = 0; bool bOk = false; };
+    // under the flock: does an item of figure `fig` fit? registers it when it does. free = min(node term, job term); admit when nothing else is in flight in the job or when
+    // free - what the items in flight can still allocate - fig - the older waiting item of another pool >= reserve
+    auto pkTry = [&](double fig, double mySince, double reserve, PkRes& x) {
+        const int lk = open(gateLock.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        if (lk >= 0) flock(lk, LOCK_EX);
+        const PkOthers o = pkReadOthers();
+        const CgNow cg = read_job_cgroup(jobCg);
+        pkTerms(cg, x.freeNode, x.freeJob);
+        double B = 0;
+        x.bOk = cg.ok && pkBaseline(o.pools + 1, B);
+        x.B = B; x.as = cg.as();
+        x.figs = pkOwnFigSum + o.figSum;
+        x.rem = std::max(0.0, x.figs - (x.bOk ? std::max(0.0, x.as - B) : 0.0));
+        x.othWait = (o.waitFig > 0 && wall_now() - o.waitSince > prioAfter && o.waitSince <= mySince) ? o.waitFig : 0;
+        x.projNode = x.freeNode - x.rem - fig - x.othWait;
+        x.projJob = x.freeJob - x.rem - fig - x.othWait;
+        x.refused = (x.projNode < reserve ? 1 : 0) | (x.projJob < reserve ? 2 : 0);
+        const bool alone = pkOwnAct == 0 && o.act == 0;   // nothing else in the job: it runs alone, however large
+        const bool ok = alone || x.refused == 0;
+        if (ok) pkRegister(fig);
+        if (lk >= 0) { flock(lk, LOCK_UN); close(lk); }
+        return ok;
+    };
+    // the very first start of a job waits (bounded) until the idle baseline is known: it can only be measured while nothing runs
+    auto pkBaselineWait = [&]() -> bool {
+        if (wall_now() - tReady >= pkBWait || pkOwnAct > 0) return false;
+        const PkOthers o = pkReadOthers();
+        double B = 0;
+        return o.act == 0 && !pkBaseline(o.pools + 1, B);
+    };
+    FILE* msf2 = nullptr;
+    auto pkSampleWrite = [&]() {   // memsamp's neighbour: t AS B sum-of-figures node-term job-term items-in-flight baseline-valid
+        if (!msf2) {
+            msf2 = fopen((report + "/memsamp-cg.tsv").c_str(), "a");
+            if (!msf2) return;
+            fprintf(msf2, "t\tAS_GiB\tB_GiB\tfigures_GiB\tcan_still_allocate_GiB\tnode_free_GiB\tjob_free_GiB\titems_job\tB_valid\n");
+        }
+        const CgNow cg = read_job_cgroup(jobCg);
+        const PkOthers o = pkReadOthers();
+        double fn = 0, fj = 0, B = 0;
+        pkTerms(cg, fn, fj);
+        const bool bOk = cg.ok && pkBaseline(o.pools + 1, B);
+        const double figs = pkOwnFigSum + o.figSum;
+        fprintf(msf2, "%.0f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%d\t%d\n", wall_now(), cg.as(), B, figs, std::max(0.0, figs - (bOk ? std::max(0.0, cg.as() - B) : 0.0)), fn, fj, pkOwnAct + o.act, bOk ? 1 : 0);
+        fflush(msf2);
+    };
+    if (peakMode) {   // the stream starts: this pool is no longer in its start-up; its own refresh keeps the file fresh from here
+        pkHbStop = true;
+        if (pkHb.joinable()) pkHb.join();
+        if (pkReadOthers().pools == 0) unlink((gateDir + "/baseline").c_str());   // no other pool: a baseline left by an earlier run in this job is not trusted
+        pkPublish(0, 0);
+    }
     double memWaitSince = 0, memWaitedTotal = 0;
     bool memWaitNoted = false;
     unsigned memWaits = 0;
@@ -851,7 +1254,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 if (!admitNoted) { plog("admission: the next item waits (%zu in the front half of at most %.0f, stagger %.0f s, memory floor %.0f GB, available %.0f GB)", front, frontMax, stagger, memFloor, avail_gb()); admitNoted = true; }
                 break;
             }
-            if (memAdmit) {
+            if (memAdmit && !peakMode) {
                 const double now = wall_now(), est = itemEst[items[next].idx];
                 if (memWaitSince == 0) memWaitSince = now;
                 gateRefresh(true);
@@ -889,6 +1292,53 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 if (memWaitNoted) { memWaitedTotal += now - memWaitSince; plog("memory admission: item %d admitted after %.0f s (projected %.0f GB)", items[next].idx, now - memWaitSince, proj); }
                 memWaitSince = 0; memWaitNoted = false;
             }
+            else if (memAdmit && peakMode) {   // cggate: SINGLET_POOL_PEAKADMIT=1
+                const double now = wall_now();
+                const double fig = itemFig0[items[next].idx];
+                if (memWaitSince == 0) memWaitSince = now;
+                pkRefresh(true);
+                if (pkBaselineWait()) {   // nothing runs and the idle baseline is not known yet: it can only be measured now
+                    if (!pkBwaitNoted) { pkBwaitNoted = true; plog("peak admission: the first start waits for the idle baseline (at most %.0f s after the pool is ready): this pool's server index and the other pools' must be resident, then %.0f s of flat memory", pkBWait, pkStableS); }
+                    pkPublish(0, 0);
+                    break;
+                }
+                PkRes x;
+                bool ok = pkTry(fig, memWaitSince, memReserve, x);
+                if (!ok && x.refused == 1 && now - memWaitSince >= maxWait) {   // the bounded wait stays for the node term; when the job term refuses, the pool keeps waiting
+                    plog("memory admission: item %d starts after %.0f s (the wait is bounded; only the node term refused; projected node %.0f GiB, job %.0f GiB)", items[next].idx, now - memWaitSince, x.projNode, x.projJob);
+                    pkRegister(fig);
+                    ok = true;
+                }
+                if (!ok) {
+                    if (x.refused != pkLastRefused || !memWaitNoted) {
+                        if (!memWaitNoted) { ++memWaits; memWaitNoted = true; }
+                        pkLastRefused = x.refused;
+                        const char* term = x.refused == 3 ? "node and job" : x.refused == 2 ? "job" : "node";
+                        plog("memory admission: item %d waits (figure %.0f GiB; free: node term %.0f, job term %.0f GiB; the items in flight can still allocate %.0f GiB (figures %.0f, job anon+shmem %.0f, baseline %s%.1f), waiting item of another pool %.0f, reserve %.0f; projected node %.0f, job %.0f; refused by the %s term)",
+                             items[next].idx, fig, x.freeNode, x.freeJob, x.rem, x.figs, x.as, x.bOk ? "" : "unknown, ", x.B, x.othWait, memReserve, x.projNode, x.projJob, term);
+                    }
+                    if ((x.refused & 2) != 0 && now - memWaitSince >= maxWait && !pkJobHoldNoted) { pkJobHoldNoted = true; plog("memory admission: item %d has waited %.0f s and the job term still refuses it: no forced start; it starts when the items in flight have ended at the latest", items[next].idx, now - memWaitSince); }
+                    pkPublish(fig, memWaitSince);
+                    if (skipAhead > 0 && now - memWaitSince < skipGrace) {   // the head waits: an item behind it that fits goes first
+                        size_t pick = items.size();
+                        for (size_t k = next + 1; k < items.size() && k <= next + (size_t) skipAhead; ++k) {
+                            if (taken[k]) continue;
+                            PkRes x2;
+                            if (pkTry(itemFig0[items[k].idx], now, memReserve, x2)) { pick = k; break; }
+                        }
+                        if (pick < items.size()) {
+                            plog("memory admission: item %d starts ahead of the waiting item %d (%.0f s)", items[pick].idx, items[next].idx, now - memWaitSince);
+                            taken[pick] = 1;
+                            lastStartAt = wall_now(); lastStartEst = itemEst[items[pick].idx];
+                            start(items[pick]);
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                if (memWaitNoted) { memWaitedTotal += now - memWaitSince; plog("memory admission: item %d admitted after %.0f s (projected node %.0f GiB, job %.0f GiB)", items[next].idx, now - memWaitSince, x.projNode, x.projJob); }
+                memWaitSince = 0; memWaitNoted = false; pkLastRefused = 0; pkJobHoldNoted = false;
+            }
             admitNoted = false;
             lastStartAt = wall_now(); lastStartEst = itemEst[items[next].idx];
             taken[next] = 1;
@@ -917,6 +1367,9 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             finish(p, st, ru);
         }
+        if (memAdmit && peakMode) {   // cggate
+            if (wall_now() - pkLastScan >= 1.0) { pkRefresh(true); pkPublish(memWaitSince > 0 && next < items.size() ? itemFig0[items[next].idx] : 0, memWaitSince); }
+        } else
         if (memAdmit && wall_now() - gateLastScan >= 1.0) {   // the pool's file for the others: what its items can still allocate, and its waiting item
             gateRefresh(true);
             gatePublish(memWaitSince > 0 && next < items.size() ? itemEst[items[next].idx] : 0, memWaitSince);
@@ -926,7 +1379,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             const int fd = open(items[r.idx].fq.c_str(), O_RDONLY);
             if (fd >= 0) { posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); }
         }
-        if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); }
+        if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); if (peakMode) pkSampleWrite(); }
         if (timeout > 0) {
             const double t = wall_now();
             for (auto& kv : byPid) {
@@ -952,8 +1405,10 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double span = lastEnd > firstStart ? lastEnd - firstStart : 0;
     plog("queue drained: %zu samples, %zu failed; span %.1f s (first start to last end), %.2f M pairs, %.3f M pairs/s; start-up %.1f s",
          items.size(), failed, span, pairsAll / 1e6, span > 0 ? pairsAll / 1e6 / span : 0.0, tReady - tStart);
+    if (peakMode) plog("peak admission: model exceeded in %.0f s of the refreshes (largest excess %.1f GiB)", pkExcSecs, pkExcMax);
     if (memAdmit) { plog("memory admission: %u waits, %.0f s waited in all (SINGLET_POOL_MEMADMIT)", memWaits, memWaitedTotal); unlink(gateMine.c_str()); }
     if (msf != nullptr) fclose(msf);
+    if (msf2 != nullptr) fclose(msf2);
     fclose(stsv);
     fclose(pids);
     fclose(g_plog);

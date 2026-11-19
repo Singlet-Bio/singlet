@@ -44,6 +44,7 @@ endmacro()
 
 # Core codec tests
 add_pileup_test(test_pz_reader)
+add_pileup_test(test_gpu_pool_peak)   # cggate: the gpu-pool peak-model figures (include/singlet/gpu_pool_peak.h) against the 18-class table
 add_pileup_test(test_pz_hardening)
 add_pileup_test(test_pz_metadata_bound)   # names block over the old 256 MiB reader cap (editing tables of 13 M sites)
 set_tests_properties(test_pz_metadata_bound PROPERTIES TIMEOUT 600)
