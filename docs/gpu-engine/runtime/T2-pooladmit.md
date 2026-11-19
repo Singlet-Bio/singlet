@@ -1,5 +1,7 @@
 # T2 pool admission: where the gate loses memory (pooladmit)
 
+> **Correction (2026-11-19, from T2-peakmodel.md section 0):** the idle baseline used in section 2 (22.03 GiB) was read while the non-host server's page-locked index was still loading. With nothing running the cgroup holds 42.5 GiB (pool 17.65 + server 24.7), so every "TRUE" figure of section 2, the fit of the true peak, the "true" variants of the replay in section 3 and the statement that the RSS sum equals the true peak between 100 M and 1,000 M reads are 20.4 GiB too high or follow from that offset. Corrected peaks, the predictor and the corrected replay are in T2-peakmodel.md. Section 1 (the gate against the job's limit) is not affected.
+
 Task `pooladmit` of throughput track 2 (branch `t2/pooladmit`, measurement and analysis only: no file under `src/` or `include/` changed, `gpu_pool.cpp` not edited).
 Build `bin/t2-hostcut5` (v1.4.0 + the hostcut cuts, all switches at their defaults) in every run. Units: the pool prints GiB with the label "GB" (`RssAnon` kB / 1048576); this
 document says GiB for figures from the cgroup and from the scripts, and keeps "GB" inside quoted pool lines. Scripts (all in `bench/gpu-runtime/`): `t2-cgsamp.sh` (1 Hz cgroup and node sampler), `jobs/t2-pooladmit-cg.sbatch`
