@@ -2667,7 +2667,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     if (bgOn) {   // the check of every group member against its head, beside what follows (joined before the records)
         bgv.I.swap(Ip); bgv.pBeg = pBeg; bgv.on = true; bgv.t0 = now();
         const int nv = (int) nT;
-        bgv.th = std::thread([&bgv, &rseq, &rlen, nv]() {
+        const char* vfrE = std::getenv("SINGLET_ENGINE_GPU_VERIFY_FREE");
+        const bool verifyFree = !(vfrE && vfrE[0] == '0');
+        bgv.th = std::thread([&bgv, &rseq, &rlen, nv, verifyFree]() {
             singlet::ThreadNameScope tnV("gpu-verify");
             const u64 nAll = bgv.I.size();
             std::vector<std::thread> tv;
@@ -2688,6 +2690,9 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             });
             for (auto& x : tv) x.join();
             bgv.t1 = now();
+            // hostcut 3b (SINGLET_ENGINE_GPU_VERIFY_FREE, default on): nothing reads I and gh after the check, which ends beside the lanes (88 s of the 355 s hold
+            // of d2600_3p, 817170: waited 0.00 s for it): released here, not after the lanes; the main thread only swaps them after join()
+            if (verifyFree) { decltype(bgv.I)().swap(bgv.I); decltype(bgv.gh)().swap(bgv.gh); }
         });
     }
     decltype(Ip)().swap(Ip);
@@ -3256,6 +3261,10 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     const char* raE = std::getenv("SINGLET_ENGINE_GPU_RECASYNC");
     const bool recAsync = !(raE && raE[0] == '0');
     u64 recNext = 0, recS = 0, recB = 0, recR = 0; bool recInit = false, recOk = true;
+    // hostcut 3a (SINGLET_ENGINE_GPU_READREP_FREE, default on): readRep (a u32 per read) is read by the first record chunk's rrPos build and, when no record chunk
+    // ever ran (no distinct sequence to map), by fillReadRecord; it is released where rrPos is built. =0: kept to the return, as before
+    const char* rfE = std::getenv("SINGLET_ENGINE_GPU_READREP_FREE");
+    const bool rrFree = !(rfE && rfE[0] == '0');
     std::vector<uint32_t> rrPos;   // per read: its representative's position in rep, or NONE (readRecord = recOfPos of it, once the records exist)
     auto recOne = [&](u64 c) -> bool {
         ChunkRes& cr = chunks[c];
@@ -3279,6 +3288,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                 parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { for (u64 i = lo; i < hi; i++) { const uint32_t r = readRep[i]; rrPos[i] = r != NONE ? posOf[r] : NONE; } });
             }
             stepAdd("readRecord.pre", now() - tP0);
+            if (rrFree) decltype(readRep)().swap(readRep);   // hostcut 3a: rrPos holds every read's position now; fillReadRecord uses readRep only when rrPos was never built
         }
         const u64 s0 = recS, b0 = recB, r0 = recR;
         recS += cr.sOff[nK]; recB += cr.bOff[nK]; recR += cr.rank[nK];
