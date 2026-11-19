@@ -133,8 +133,8 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         chimRecord = false;
         peOv.yes = false;
     } else if (cacheable) {
-        seqHash = SeqCache::hashSeq(Read1[0], Lread);
-        if (g_seqCache->lookup(seqHash, Read1[0], Lread, seqCacheBlob))
+        seqHash = !seqCacheHasN ? SeqCache::hashSeq(Read1[0], Lread) : SeqCache::hashRead(Read1[0], Lread);
+        if (g_seqCache->lookup(seqHash, Read1[0], Lread, seqCacheBlob, seqCacheHasN ? seqCacheNMask : nullptr))
             fromCache = !g_seqCache->verify;
     } else if (g_seqCache != nullptr) {
         g_seqCache->nUncacheable++;
@@ -169,6 +169,8 @@ int ReadAlign::oneRead() {//process one read: load, map, write
             chimericDetection();
         };
 
+        if (g_seqCache != nullptr && g_seqCache->splitOn)//singlet T2 cpucache: counting only
+            seqCacheSplitNote(cacheable, -1);
         if (cacheable) {
             bool hit = !seqCacheBlob.empty(); //lookup() filled the blob: verify mode
             if (seqCacheEncode(seqCacheEncoded)) {
@@ -185,10 +187,12 @@ int ReadAlign::oneRead() {//process one read: load, map, write
                         };
                     };
                 } else {
-                    g_seqCache->insert(seqHash, Read1[0], Lread, seqCacheEncoded.data(), seqCacheEncoded.size());
+                    g_seqCache->insert(seqHash, Read1[0], Lread, seqCacheEncoded.data(), seqCacheEncoded.size(), seqCacheHasN ? seqCacheNMask : nullptr);
                 };
             } else {
                 g_seqCache->nUncacheable++;
+                if (g_seqCache->splitOn)
+                    seqCacheSplitNote(true, seqCacheWhy);
             };
         };
         if (g_starNDumpOn) {//singlet align-w2: the reads with N (the GPU's NREADS=check comparison)

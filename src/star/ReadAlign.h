@@ -32,6 +32,11 @@ class ReadAlign {
         //sequence cache (SeqCache.h): encode/restore the mapping result of a read
         std::vector<uint8> seqCacheBlob, seqCacheEncoded;
         bool seqCacheable();
+        uint8 seqCacheNMask[DEF_readSeqLengthMax/8+1]; //bit i set: base i of Read1[0] is N; valid when seqCacheHasN (set by seqCacheable())
+        bool seqCacheHasN = false;
+        int seqCacheWhy = 0; //why seqCacheEncode refused the last read (SeqCache.h reasons 4-10; counting only)
+        int seqCacheUncReason(); //0-2: why seqCacheable() is false, -1 if it is true; counting only
+        void seqCacheSplitNote(bool cacheable, int reasonEncode); //SINGLET_STAR_SEQCACHE_SPLIT counters
         bool seqCacheEncode(std::vector<uint8> &blob);
         void seqCacheRestore(const std::vector<uint8> &blob);
         void seqCacheRestore(const uint8 *blob);
