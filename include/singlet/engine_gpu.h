@@ -368,6 +368,7 @@ struct Output {
     std::vector<uint32_t> readRecord;   // per input read: index of its record above, or 0xFFFFFFFF (sequence with N, or not mapped)
     uint64_t nReads = 0, nDistinct = 0, nWithN = 0, nHostLane = 0, nFailed = 0;
     double secUpload = 0, secDedup = 0, secMapGpu = 0, secHostLane = 0;
+    bool auxDropped = false;            // hostcut AUX_COMPACT: Input::e10.aux's pages were released as the reads phase uploaded them; a retry needs aux rebuilt from the planes
     bool hostDropped = false;           // E16 handover: seq and blob keep their sizes, but their pages were released (zeros); offsets intact
     bool handoverRetry = false;         // E16 handover: the call failed because a fallback would read the released records; run it again without
     bool e2eOk = false;                 // E8: the records are in Input::e2e (arrays and nRec..nSeq; readRecord and magic are the caller's)

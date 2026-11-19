@@ -111,6 +111,10 @@ E10Files e10f;
 // E13 (SINGLET_ENGINE_GPU_INGEST=1, singlet/engine_gpu_ingest.h): the reads decoded from the .1fq into packed arrays instead of the FASTQ files
 // above; their host planes (cDNA quality, barcode read) stay here until the prefill returns, the sequences are in Input (ingSeq, ingOff)
 singlet_engine_gpu::ingest::PackedReads ing;
+// hostcut round 2 (AUX_COMPACT): the barcode configuration phase B ran with, to build aux again from the planes when mapDistinct released its pages
+// (Output::auxDropped) and the attempt failed
+singlet_engine_gpu::ingest::BarcodeConfig g_bcCfg;
+bool g_bcCfgOn = false;
 bool ingOn = false;
 const singlet_engine_gpu::PackedSeq *ingPs = nullptr;   // the sequences (2 bits per base, exact N), owned by Input::pseq from ingestReads on
 const uint64_t *ingOff = nullptr;
@@ -937,6 +941,7 @@ void ingPrepare(Parameters &P, IngPrep &W) {
     c.e11 = true; c.q30 = (unsigned) P.readQualityScoreBase + 30;
     if (so.cbWLyes && !so.cbWL.empty()) { c.wl = (const uint64_t *) so.cbWL.data(); c.nWL = so.cbWL.size(); }
     if (!ig::barcodes(c, ing, W.bcWhy)) { W.why = W.bcWhy; ing.release(); return; }
+    g_bcCfg = c; g_bcCfgOn = true;
     W.secB = std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
     singlet_engine_gpu::Clip clip;
     std::string cw;
@@ -1203,6 +1208,18 @@ static void e16Sizes(const char *where, const singlet_engine_gpu::Input &in, con
                        (out.clip5.size() + out.clip3.size()) * 2 / G, in.cr4info.size() / G, out.cr4info.size() / G, out.readRecord.size() * 4 / G,
                        out.seq.size() / G, out.blob.size() / G, (out.seqOff.size() + out.blobOff.size()) * 8 / G, (int) out.hostDropped,
                        e16bg.reads.size() * 4 / G, late.bytes() / G, in.seq.size() / G);
+}
+// hostcut round 2 (AUX_COMPACT): in.e10.aux again, from the planes, with phase B's configuration (the planes it reads are alive until the engine's output
+// has been used; barcodes() reads the offsets from the planes' object, which hands them to the Input after the decode)
+static bool regenAux(singlet_engine_gpu::Input &in, std::string &why) {
+    if (!g_bcCfgOn || !ingOn) { why = "no barcode configuration or no planes"; return false; }
+    ing.off.swap(in.off);
+    const bool ok = singlet_engine_gpu::ingest::barcodes(g_bcCfg, ing, why);
+    ing.off.swap(in.off);
+    if (!ok || ing.nw == 0 || ing.nw != in.e10.nw) { if (ok) why = "the quality words per read changed"; return false; }
+    in.e10.aux.swap(ing.aux);
+    singlet_engine_gpu::NoInitVector<uint64_t>().swap(ing.aux);
+    return true;
 }
 // copies the reads (ascending ids) the late readers need out of the planes
 bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
@@ -1743,6 +1760,15 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     // The waits (15, 30, 45 s) cover another slot's device hold (about 34 s per pbmc1k_v3 run).
     in.oomFatal = oomTries > 1;
     bool ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
+    // hostcut round 2: the engine released aux's pages as the reads phase uploaded them; before another call it is built again from the planes
+    auto auxFix = [&]() -> bool {
+        if (!out.auxDropped) return true;
+        std::string wa;
+        const double ta = singlet_tail::now();
+        const bool okA = regenAux(in, wa);
+        P.inOut->logMain << "ENGINE_GPU: AUX_COMPACT: aux rebuilt from the planes for the retry: " << (okA ? "done in " + std::to_string(singlet_tail::now() - ta) + " s" : "FAILED (" + wa + ")") << "\n" << std::flush;
+        return okA;
+    };
     auto handoverAgain = [&]() {   // E16 handover: a fallback needs the records it released; the same call without it (not an attempt)
         in.e2eHandover = false;
         P.inOut->logMain << "ENGINE_GPU: E16 handover: the run would fall back and read the released host records; the engine runs again without "
@@ -1750,6 +1776,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         singlet_tail::mark("prefill: E16 handover: the engine again without it (a fallback reads the host records)");
         in.release(); in.reacquire(1);
         if (e2hSaved) *e2r.hdr() = e2h0;
+        if (!auxFix()) { ok = false; return; }
         out = singlet_engine_gpu::Output{};
         out.log = "engine_gpu: E16 handover off: the engine again for a fallback that reads the host records\n";
         ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
@@ -1763,6 +1790,7 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
         std::this_thread::sleep_for(std::chrono::seconds(waitS));
         in.reacquire(1);
         if (e2hSaved) *e2r.hdr() = e2h0;
+        if (!auxFix()) break;
         out = singlet_engine_gpu::Output{};
         out.log = "engine_gpu: retry: attempt " + std::to_string(a) + " of " + std::to_string(oomTries) + "\n";
         ok = singlet_engine_gpu::mapDistinct(Q, H, G.SA.lengthByte, G.SAi.lengthByte, in, device, hostThreads, out);
