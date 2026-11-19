@@ -57,6 +57,7 @@
 #include "star_api.h"
 #include "singlet/fq/read_source.h"   // cggate: RunSet, the first block of a .1fq for the peak model
 #include "singlet/gpu_pool_peak.h"
+namespace poolpeak = singlet::poolpeak;
 #ifdef SINGLET_HAVE_ENGINE_GPU
 #include "singlet/engine_gpu.h"
 #endif
