@@ -44,10 +44,12 @@ inline uint64 mix64(uint64 x) {//splitmix64 finalizer
 }
 const uint64 entHeader = 20; //uint32 entLen, uint32 L, uint64 hash, uint32 blobLen
 inline uint64 packedBytes(uint64 L) {return (L+3)/4;}
+const uint32 NFLAG = 0x80000000u; //in an entry's L field: the entry's key has an N mask after the packed bases ((L+7)/8 bytes)
+inline uint64 maskBytes(uint64 L, const uint8 *nmask) {return nmask ? (L+7)/8 : 0;}
 inline void packSeq(const char *seq, uint64 L, uint8 *out) {
     memset(out, 0, packedBytes(L));
     for (uint64 i=0; i<L; i++)
-        out[i>>2] |= (uint8) (seq[i] << ((i&3)*2));
+        out[i>>2] |= (uint8) ((seq[i] & 3) << ((i&3)*2)); //N (code 4) packs as 0; its position is in the key's N mask
 }
 }
 
@@ -93,11 +95,23 @@ SeqCache *SeqCache::create(Parameters &P, uint64 nGenome) {
     SeqCache *c = new SeqCache(mb << 20, (eg != nullptr && eg[0] == '1') ? 8 : 2);
     const char *v = getenv("SINGLET_STAR_SEQCACHE_VERIFY");
     c->verify = v && v[0] == '1';
+    const char *sp = getenv("SINGLET_STAR_SEQCACHE_SPLIT");
+    if (sp && sp[0] == '1') {
+        c->splitOn = true;
+        c->shadowMask = (1ULL << 27) - 1;
+        c->shadowA = (std::atomic<uint64>*) calloc(c->shadowMask + 1, 8);
+        c->shadowB = (std::atomic<uint64>*) calloc(c->shadowMask + 1, 8);
+        if (c->shadowA == nullptr || c->shadowB == nullptr) c->splitOn = false;
+    }
     P.inOut->logMain << "SEQCACHE: on, " << mb << " MB in " << c->nShards << " shards" << (c->verify ? ", verify" : "") << "\n";
     return c;
 }
 
 SeqCache::SeqCache(uint64 totalBytes, uint64 waysIn) : verify(false), ways(waysIn) {
+    for (int a=0; a<UNC_N; a++) {
+        uncRepA[a] = 0; uncRepB[a] = 0;
+        for (int b=0; b<4; b++) for (int c=0; c<5; c++) uncCnt[a][b][c] = 0;
+    }
     nShards = 64;
     uint64 perShard = totalBytes / nShards;
     //index: one 16-byte slot per ~112 bytes of ring (entries are ~100-150 bytes)
@@ -122,18 +136,31 @@ SeqCache::~SeqCache() {
     delete[] shards;
 }
 
-bool SeqCache::entryMatches(Shard &s, uint64 pos, uint64 h, const char *seq, uint64 L, uint64 &blobOff, uint64 &blobLen, uint64 &entLen) {
+bool SeqCache::nKeyOn() {
+    static const bool on = [] {
+        const char *a = getenv("SINGLET_STAR_SEQCACHE_NKEY"), *b = getenv("SINGLET_STAR_SEQCACHE_CLIPKEY");
+        return !((a != nullptr && a[0] == '0') || (b != nullptr && b[0] == '0'));
+    }();
+    return on;
+}
+
+bool SeqCache::entryMatches(Shard &s, uint64 pos, uint64 h, const char *seq, uint64 L, uint64 &blobOff, uint64 &blobLen, uint64 &entLen,
+                            const uint8 *nmask) {
     if (pos == 0) return false;
     uint64 p = pos - 1;
     if (p + ringBytes < s.head) return false; //overwritten
     const char *ent = s.ring + p % ringBytes;
     uint32 eLen, eL, bLen; uint64 eh;
     memcpy(&eLen, ent, 4); memcpy(&eL, ent+4, 4); memcpy(&eh, ent+8, 8); memcpy(&bLen, ent+16, 4);
-    if (eh != h || eL != L) return false;
+    if (eh != h || eL != (nmask ? (uint32) L | NFLAG : (uint32) L)) return false;
     uint8 packed[DEF_readSeqLengthMax/4+1];
     packSeq(seq, L, packed);
     if (memcmp(packed, ent+entHeader, packedBytes(L)) != 0) return false;
     blobOff = entHeader + packedBytes(L);
+    if (nmask) {
+        if (memcmp(ent + blobOff, nmask, maskBytes(L, nmask)) != 0) return false;
+        blobOff += maskBytes(L, nmask);
+    }
     blobLen = bLen;
     entLen = eLen;
     return true;
@@ -151,7 +178,7 @@ uint64 SeqCache::append(Shard &s, const char *ent, uint64 entLen) {
     return p;
 }
 
-bool SeqCache::lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &out) {
+bool SeqCache::lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &out, const uint8 *nmask) {
     nLookup++;
     Shard &s = shards[(h >> 40) % nShards];
     uint64 b = h & indexMask & ~(ways-1);
@@ -159,7 +186,7 @@ bool SeqCache::lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &o
     for (uint64 j=0; j<ways; j++) {
         Slot &sl = s.index[b+j];
         uint64 blobOff, blobLen, entLen;
-        if (sl.hash != h || !entryMatches(s, sl.pos, h, seq, L, blobOff, blobLen, entLen))
+        if (sl.hash != h || !entryMatches(s, sl.pos, h, seq, L, blobOff, blobLen, entLen, nmask))
             continue;
         const char *ent = s.ring + (sl.pos-1) % ringBytes;
         out.assign((const uint8*) ent + blobOff, (const uint8*) ent + blobOff + blobLen);
@@ -174,15 +201,17 @@ bool SeqCache::lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &o
     return false;
 }
 
-void SeqCache::insert(uint64 h, const char *seq, uint64 L, const uint8 *blob, uint64 blobLen) {
-    uint64 entLen = ((entHeader + packedBytes(L) + blobLen + 7) / 8) * 8;
+void SeqCache::insert(uint64 h, const char *seq, uint64 L, const uint8 *blob, uint64 blobLen, const uint8 *nmask) {
+    uint64 entLen = ((entHeader + packedBytes(L) + maskBytes(L, nmask) + blobLen + 7) / 8) * 8;
     if (entLen > ringBytes / 64)
         return;
     std::vector<char> ent(entLen, 0);
-    uint32 eLen = (uint32) entLen, eL = (uint32) L, bLen = (uint32) blobLen;
+    uint32 eLen = (uint32) entLen, eL = nmask ? (uint32) L | NFLAG : (uint32) L, bLen = (uint32) blobLen;
     memcpy(ent.data(), &eLen, 4); memcpy(ent.data()+4, &eL, 4); memcpy(ent.data()+8, &h, 8); memcpy(ent.data()+16, &bLen, 4);
     packSeq(seq, L, (uint8*) ent.data()+entHeader);
-    memcpy(ent.data() + entHeader + packedBytes(L), blob, blobLen);
+    if (nmask)
+        memcpy(ent.data() + entHeader + packedBytes(L), nmask, maskBytes(L, nmask));
+    memcpy(ent.data() + entHeader + packedBytes(L) + maskBytes(L, nmask), blob, blobLen);
 
     Shard &s = shards[(h >> 40) % nShards];
     uint64 b = h & indexMask & ~(ways-1);
@@ -205,6 +234,35 @@ void SeqCache::insert(uint64 h, const char *seq, uint64 L, const uint8 *blob, ui
     nInsert++;
 }
 
+uint64 SeqCache::hashRead(const char *seq, uint64 L) {
+    uint64 h = mix64(L + 0x51ed270b0e0f3a97ULL);
+    for (uint64 i=0; i<L; i++)
+        h = mix64(h ^ ((uint64) (uint8) seq[i] + (i << 8)));
+    return h;
+}
+
+static bool shadowSeen(std::atomic<uint64> *t, uint64 mask, uint64 h) {//true if h was in the set; inserts it otherwise
+    if (h == 0) h = 1;
+    uint64 i = h & mask;
+    for (;;) {
+        uint64 cur = t[i].load(std::memory_order_relaxed);
+        if (cur == h) return true;
+        if (cur == 0) {
+            uint64 exp = 0;
+            if (t[i].compare_exchange_strong(exp, h)) return false;
+            if (exp == h) return true;
+        }
+        i = (i + 1) & mask;
+    }
+}
+
+void SeqCache::uncNote(int reason, int clipCls, int unmapType, uint64 hA, uint64 hB) {
+    uncCnt[reason][clipCls][unmapType]++;
+    if (reason == 3) return; //a read that is looked up: counted, not a repeat candidate
+    if (shadowSeen(shadowA, shadowMask, hA)) uncRepA[reason]++;
+    if (shadowSeen(shadowB, shadowMask, hB)) uncRepB[reason]++;
+}
+
 std::string SeqCache::stats() const {
     std::ostringstream o;
     uint64 l = nLookup, hit = nHit;
@@ -212,5 +270,19 @@ std::string SeqCache::stats() const {
       << " inserts=" << nInsert << " refreshes=" << nRefresh << " uncacheable=" << nUncacheable;
     if (verify)
         o << " verified=" << nVerified << " verify_mismatches=" << nVerifyFail;
+    if (splitOn) {//second line: reason R, clip class C (0 none, 1 5', 2 3', 3 both), unmapType U (-1 mapped .. 3 too many loci): count
+        o << "\nSEQCACHE-SPLIT: counts";
+        for (int a=0; a<UNC_N; a++) {
+            uint64 tot = 0;
+            for (int b=0; b<4; b++) for (int c=0; c<5; c++) {
+                uint64 n = uncCnt[a][b][c];
+                if (n > 0) {o << " R" << a << ":C" << b << ":U" << (c-1) << "=" << n; tot += n;}
+            }
+            o << " R" << a << "total=" << tot;
+        }
+        o << "\nSEQCACHE-SPLIT: repeats";
+        for (int a=0; a<UNC_N; a++)
+            o << " R" << a << ":repA=" << uncRepA[a] << ":repB=" << uncRepB[a];
+    }
     return o.str();
 }

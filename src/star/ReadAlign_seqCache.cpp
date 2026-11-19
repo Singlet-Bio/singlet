@@ -63,25 +63,71 @@ struct Get {
 }
 
 bool ReadAlign::seqCacheable() {
+    seqCacheHasN = false;
     if (Lread == 0 || Lread > DEF_readSeqLengthMax)
         return false;
-    for (uint64 i=0; i<Lread; i++)
-        if ((uint8) Read1[0][i] > 3) //N: the key is 2-bit packed
-            return false;
+    if (!SeqCache::nKeyOn()) {
+        for (uint64 i=0; i<Lread; i++)
+            if ((uint8) Read1[0][i] > 3) //N: the key is 2-bit packed
+                return false;
+        return true;
+    };
+    //N bases are part of the key as a bit mask of their positions; the result of mapping depends on the numeric sequence only, N included
+    for (uint64 i=0; i<Lread; i++) {
+        if ((uint8) Read1[0][i] <= 3) continue;
+        if (!seqCacheHasN) {seqCacheHasN = true; memset(seqCacheNMask, 0, (Lread+7)/8);}
+        seqCacheNMask[i>>3] |= (uint8) (1u << (i&7));
+    };
     return true;
+}
+
+int ReadAlign::seqCacheUncReason() {
+    if (Lread == 0) return 0;
+    if (Lread > DEF_readSeqLengthMax) return 1;
+    for (uint64 i=0; i<Lread; i++)
+        if ((uint8) Read1[0][i] > 3) return 2;
+    return -1;
+}
+
+//SINGLET_STAR_SEQCACHE_SPLIT=1: counting only. reasonEncode < 0: the read was not refused by seqCacheEncode (called for a read that was
+//not cacheable, or for one that was looked up, to count non-ACGT bases that lie only inside the clipped regions)
+void ReadAlign::seqCacheSplitNote(bool cacheable, int reasonEncode) {
+    int reason = reasonEncode;
+    if (reason < 0) {
+        reason = cacheable ? -1 : seqCacheUncReason();
+        if (reason < 0) {//cacheable: is there a non-ACGT base in a clipped region of the original read?
+            const uint c5 = clipMates[0][0].clippedN, c3 = clipMates[0][1].clippedN, L0 = readLengthOriginal[0];
+            bool nClip = false;
+            auto bad = [&](uint64 a, uint64 b) {
+                for (uint64 i=a; i<b && i<L0; i++) {
+                    char x = Read0[0][i];
+                    if (x != 'A' && x != 'C' && x != 'G' && x != 'T' && x != 'a' && x != 'c' && x != 'g' && x != 't') return true;
+                }
+                return false;
+            };
+            if (c5 > 0 || c3 > 0) nClip = bad(0, c5) || bad(L0 > c3 ? L0 - c3 : 0, L0);
+            if (!nClip) return;
+            reason = 3;
+        }
+    }
+    const int cls = (clipMates[0][0].clippedN > 0 ? 1 : 0) + (clipMates[0][1].clippedN > 0 ? 2 : 0);
+    const uint64 hA = SeqCache::hashRead(Read1[0], Lread);
+    const uint64 hB = hA ^ ((uint64) clipMates[0][0].clippedN << 40) ^ ((uint64) clipMates[0][1].clippedN << 20) ^ (uint64) readLengthOriginal[0] ^ 0x9e3779b97f4a7c15ULL;
+    g_seqCache->uncNote(reason, cls, unmapType + 1, hA, hB * 0xff51afd7ed558ccdULL);
 }
 
 bool ReadAlign::seqCacheEncode(std::vector<uint8> &b) {
     b.clear();
-    if (chimRecord || peOv.yes || nTr > 255)
-        return false;
+    if (chimRecord) {seqCacheWhy = 4; return false;}
+    if (peOv.yes) {seqCacheWhy = 5; return false;}
+    if (nTr > 255) {seqCacheWhy = 6; return false;}
     int64 iBest = -1;
     if (nW == 0) {
-        if (trBest != trInit) return false;
+        if (trBest != trInit) {seqCacheWhy = 7; return false;}
     } else {
         for (uint64 i=0; i<nTr; i++)
             if (trMult[i] == trBest) {iBest = (int64) i; break;}
-        if (iBest < 0) return false;
+        if (iBest < 0) {seqCacheWhy = 8; return false;}
     };
     putV(b, (int64) nW);
     putV(b, (int64) nTr);
@@ -91,9 +137,9 @@ bool ReadAlign::seqCacheEncode(std::vector<uint8> &b) {
     Put put{b};
     for (uint64 i=0; i<nTr; i++) {
         Transcript &t = *trMult[i];
+        if (t.nExons > MAX_N_EXONS) {seqCacheWhy = 10; return false;}
         if (!t.cigar.empty() || !t.varInd.empty() || !t.varGenCoord.empty() || !t.varReadCoord.empty()
-            || !t.varAllele.empty() || !t.alignGenes.empty() || t.nExons > MAX_N_EXONS)
-            return false;
+            || !t.varAllele.empty() || !t.alignGenes.empty()) {seqCacheWhy = 9; return false;}
         putV(b, (int64) t.nExons);
         forEachScalar(t, put);
         for (uint64 iex=0; iex<t.nExons; iex++)
