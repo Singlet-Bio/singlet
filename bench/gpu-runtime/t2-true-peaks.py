@@ -45,21 +45,23 @@ for i in sorted(items):
     sel = (t >= s0) & (t <= e0 + 1)
     L = anonshm[sel] - base
     at = lambda x: float(np.interp(x, t, anonshm)) - base
-    pre = float(np.interp(s0 - 1, t, anonshm)) - base
     true = float(L.max())
     pk_t = float(t[sel][np.argmax(L)] - s0)
+    tt = t[sel]
     lv = at(m_['level']) if 'level' in m_ else None
+    grow_l = float(L[tt >= m_['level']].max() - lv) if lv is not None else None
+    grow_w = float(L[tt >= m_['waited']].max() - at(m_['waited'])) if 'waited' in m_ else None
     wt = at(m_['waited']) if 'waited' in m_ else None
     ex = at(e0)
     r = dict(item=i, sample=items[i], reads=meta[i]['pairs'], exit=meta[i]['exit'], est=61.8 + 0.2235 * meta[i]['pairs'], rss=rss.get(i, float('nan')), true=true, peak_at=pk_t,
-             lvl_t=(m_['level'] - s0) if 'level' in m_ else None, lvl=lv, wt_t=(m_['waited'] - s0) if 'waited' in m_ else None, waited=wt, end_t=e0 - s0, exitlvl=ex, pre=pre, wall=meta[i]['wall'])
+             lvl_t=(m_['level'] - s0) if 'level' in m_ else None, lvl=lv, wt_t=(m_['waited'] - s0) if 'waited' in m_ else None, waited=wt, end_t=e0 - s0, exitlvl=ex, grow_after_level=grow_l, grow_after_waited=grow_w, wall=meta[i]['wall'])
     out.append(r)
     prof[items[i]] = dict(peak=true, t=[float(x) for x in (t[sel] - s0)], L=[float(x) for x in L], level=r['lvl_t'], waited=r['wt_t'], end=r['end_t'])
 f = lambda x, fmt='%.1f': '-' if x is None else fmt % x
-print('%-3s %-15s %9s %6s %7s %7s %6s %7s | %-18s %-18s %-14s | %5s %6s' % ('it', 'sample', 'reads(M)', 'est', 'RSSsum', 'TRUE', 'ratio', 'peak@s', 'level (t s, GiB)', 'waited (t s, GiB)', 'exit (t s,GiB)', 'pre', 'wall'))
+print('%-3s %-15s %9s %6s %7s %7s %6s %7s | %-18s %-18s %-14s | %6s %6s' % ('it', 'sample', 'reads(M)', 'est', 'RSSsum', 'TRUE', 'ratio', 'peak@s', 'level (t s, GiB)', 'waited (t s, GiB)', 'exit (t s,GiB)', 'g.lvl', 'g.wait'))
 for r in out:
-    print('%-3d %-15s %9.1f %6.1f %7.1f %7.1f %6.2f %7.0f | %-18s %-18s %-14s | %5.1f %6.0f%s' % (r['item'], r['sample'], r['reads'], r['est'], r['rss'], r['true'], r['rss'] / r['true'], r['peak_at'],
-          '%s, %s' % (f(r['lvl_t'], '%.0f'), f(r['lvl'])), '%s, %s' % (f(r['wt_t'], '%.0f'), f(r['waited'])), '%.0f, %.1f' % (r['end_t'], r['exitlvl']), r['pre'], r['wall'], '' if r['exit'] == '0' else '  EXIT ' + r['exit']))
+    print('%-3d %-15s %9.1f %6.1f %7.1f %7.1f %6.2f %7.0f | %-18s %-18s %-14s | %6s %6s%s' % (r['item'], r['sample'], r['reads'], r['est'], r['rss'], r['true'], r['rss'] / r['true'], r['peak_at'],
+          '%s, %s' % (f(r['lvl_t'], '%.0f'), f(r['lvl'])), '%s, %s' % (f(r['wt_t'], '%.0f'), f(r['waited'])), '%.0f, %.1f' % (r['end_t'], r['exitlvl']), f(r['grow_after_level'], '%.0f'), f(r['grow_after_waited'], '%.0f'), '' if r['exit'] == '0' else '  EXIT ' + r['exit']))
 ok = [r for r in out if r['exit'] == '0']
 def fit(key, label):
     xs = np.array([r['reads'] for r in ok]); ys = np.array([r[key] for r in ok])
@@ -72,7 +74,6 @@ fit('true', 'TRUE'); fit('rss', 'RSS-sum')
 over = [(r['sample'], r['true'] - r['est']) for r in ok]
 print('true peak minus the pool estimate (61.8 + 0.2235 x): ' + ', '.join('%s %+.0f' % o for o in over))
 print('max over items of true / estimate: %.2f (%s)' % max((r['true'] / r['est'], r['sample']) for r in ok))
-print('max over items of (true - level-line level) i.e. growth after the level line, GiB: ' + ', '.join('%s %.0f' % (r['sample'], r['true'] - r['lvl']) for r in ok if r['lvl'] is not None))
 if len(sys.argv) > 2: json.dump(prof, open(sys.argv[2], 'w'))
 if len(sys.argv) > 3:
     with open(sys.argv[3], 'w') as fo:

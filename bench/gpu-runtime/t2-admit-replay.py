@@ -243,6 +243,13 @@ print('  node start: ' + ' '.join(rd('node_start.txt')[0].split()[3:]) )
 def tot_(k): return sum((r[k] if r[k] is not None else 0) for r in rows)
 print('TOTAL actual wait %.0f s; replayed baseline %.0f s; cache1 %.0f s (saves %.0f vs replayed baseline)' % (tot_('actual'), tot_('base'), tot_('cache1'), tot_('base') - tot_('cache1')))
 if TRUE: print('       true %.0f s (saves %.0f); both %.0f s (saves %.0f)' % (tot_('true'), tot_('base') - tot_('true'), tot_('both'), tot_('base') - tot_('both')))
+ks_ = ['base', 'cache1'] + (['true', 'both'] if TRUE else [])
+for k in ks_:
+    v = [r[k] for r in rows if r[k] is not None]
+    print('  variant %-6s: waits shorter than 10 s: %d of %d; shorter than half the replayed baseline: %d; wait seconds %.0f' % (k, sum(1 for x in v if x < 10), len(v), sum(1 for r in rows if r[k] is not None and r['base'] is not None and r[k] < 0.5 * r['base']), sum(v)))
+print('  logged lines only (no time evolution): projected + 0.75 x (Cached - Shmem) >= reserve in %d of %d lines (cache share 1.0 at the first moment)' % (sum(1 for r in rows if r['proj_cache1_first'] >= r['reserve']), len(rows)))
+agree = [abs(r['base'] - r['actual']) <= 15 for r in rows if r['base'] is not None]
+print('  replayed baseline agrees with the real wait within 15 s in %d of %d waits (the rest differ by the model error of the 10 s MemFree / the second-by-second state)' % (sum(agree), len(agree)))
 if a.csv:
     with open(a.csv, 'w') as f:
         ks = list(rows[0].keys())
