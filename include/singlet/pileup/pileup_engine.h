@@ -3002,6 +3002,7 @@ public:
         if (o.unpinLater) { singlet_engine_gpu::e2eUnpinLater(o.unpinLater, device); o.unpinLater = nullptr; }
         singlet_engine_gpu::e2ePreRegisterRelease(preReg);
         singlet_tail::mark("parent: hand-off pass: e2ePass returned (%s)", o.log.c_str());
+        singlet_tail::mark("parent: sizes after e2ePass: reads %.1f clip %.1f lowq %.1f GiB (E2EPassOut)", o.reads.size() / 1073741824.0, o.clip.size() * 4 / 1073741824.0, o.lowq.size() / 1073741824.0);
         if (!ok) { std::cerr << "[gpu_pileup] hand-off pass on the device failed: " << o.log << "\n"; return false; }
         if (deferRrna) { nRrnaOut = 0; sROut = -1; return true; }
         const auto tR = std::chrono::steady_clock::now();

@@ -2059,6 +2059,16 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         void join() { if (th.joinable()) th.join(); }
         ~BgVerify() { join(); }
     } bgv;
+    // hostcut round 2, cut 2 (SINGLET_ENGINE_GPU_AUX_COMPACT, default on): of the 4 words per read of aux (CR, UR, 2 quality words) only CR and UR are read after
+    // the reads phase (E11's keep, uploaded again at the records), so each chunk's CR / UR go to a compact array (16 B per read) as soon as the chunk's upload has
+    // completed, and the chunk's aux pages are released: 16 B per read less on the host from the end of the reads phase to the return (the caller frees aux then
+    // anyway). The caller (Output::auxDropped) rebuilds aux from the packed planes when a failed attempt is retried. =0: aux kept whole, as before; =check: nothing
+    // released, and the compact array is compared with aux word by word before the keep upload (a difference fails the mapping)
+    const char* acE = std::getenv("SINGLET_ENGINE_GPU_AUX_COMPACT");
+    const int auxCompact = (acE && acE[0] == '0') || !(RC && e10 && keepLate && in.e10.soloModel != nullptr && in.e10.soloParams != nullptr) ? 0 : (acE && std::strcmp(acE, "check") == 0 ? 2 : 1);
+    double tAuxC = 0;
+    singlet_engine_gpu::NoInitVector<uint64_t> cru;   // per read CR, UR
+    if (auxCompact) cru.resize(2 * n);
     if (!RC) {
     // ---- dedup
     nvch.next("mapDistinct: dedup");
@@ -2456,6 +2466,15 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                   && (!cpre || (cp(S.p5, in.pre5.data() + r0, m * 2) && cp(S.p3, in.pre3.data() + r0, m * 2)));
         if (staged) up = up && SR.finish();
         tUp += now() - ta;
+        if (up && auxCompact && upAux) {   // hostcut 2: beside the previous chunk's kernels (this thread waits for them below)
+            const double tz = now();
+            uint64_t* cr = cru.data(); const uint64_t* ax = in.e10.aux.data();
+            parallelFor(m, hostThreads, [&](u64 lo, u64 hi) {
+                for (u64 k = r0 + lo; k < r0 + hi; k++) { cr[2 * k] = ax[k * strideAux]; cr[2 * k + 1] = ax[k * strideAux + 1]; }
+            });
+            if (auxCompact == 1) { singlet_engine_gpu::dropPages(ax + r0 * strideAux, m * strideAux * 8); out.auxDropped = true; }
+            tAuxC += now() - tz;
+        }
         { const int f = rcFinish(); if (f == 2) return fail(e10OomWhy()); if (f == 1) return fail(rcWhy); }   // the previous chunk (its input set is free again)
         if (!up) return fail("reads upload (read chunk at " + std::to_string(r0) + ")");
         if (rpipe) rcTh = std::thread([&, r0, Sp = &S]() { cudaSetDevice(device); singlet::ThreadNameScope tnR("gpu-rchunk"); rcProcess(r0, *Sp, rcWhy, rcOom); });
@@ -3615,17 +3634,25 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         // E11: the reads' CR/UR from their aux, by read chunks
         bool keep = e10 && in.e10.soloModel != nullptr && in.e10.soloParams != nullptr;
         if (keep) {
-            const u64 st = 2 + (u64) in.e10.nw, m0 = std::max<u64>(1, std::min<u64>(n, RCN ? RCN : n));
+            const u64 st = auxCompact ? 2 : 2 + (u64) in.e10.nw, m0 = std::max<u64>(1, std::min<u64>(n, RCN ? RCN : n));
+            const uint64_t* const keepSrc = auxCompact ? cru.data() : in.e10.aux.data();
+            if (auxCompact == 2) {   // check: the compact CR / UR against aux, every read
+                const u64 sA = 2 + (u64) in.e10.nw; std::atomic<u64> bad{0};
+                parallelFor(n, hostThreads, [&](u64 lo, u64 hi) { u64 c = 0; for (u64 k = lo; k < hi; k++) c += cru[2 * k] != in.e10.aux[k * sA] || cru[2 * k + 1] != in.e10.aux[k * sA + 1]; bad += c; });
+                if (bad) { why = "AUX_COMPACT check: the compact CR / UR differ from aux in " + std::to_string(bad.load()) + " reads"; return false; }
+                out.log += "engine_gpu: AUX_COMPACT check: the compact CR / UR of " + std::to_string(n) + " reads equal aux's\n";
+            }
             DB dA; std::string ws;
             if (!dalc(dA, m0 * st * 8)) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (device memory)\n"; }
             for (u64 i0 = 0; keep && i0 < n; i0 += m0) {
                 const u64 m = std::min(m0, n - i0);
-                if (!SU.copy(dA.p, in.e10.aux.data() + i0 * st, m * st * 8) || !SU.finish()) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (aux upload)\n"; }
+                if (!SU.copy(dA.p, keepSrc + i0 * st, m * st * 8) || !SU.finish()) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (aux upload)\n"; }
                 else if (!e9::soloKeepReadsPart((const uint64_t*) dA.p, st, i0, m, n, ws)) { keep = false; out.e10.log += "engine_gpu: E11: the reads' CR/UR not kept (" + ws + ")\n"; }
             }
             if (keep) { keepTally = budRound(std::max<u64>(1, n) * 8) * 2; g_bud.used += keepTally; g_bud.note(); }
             stepAdd("e2e.keep", now() - t0r);
         }
+        if (auxCompact) { decltype(cru)().swap(cru); stepAdd("aux.compact", tAuxC); }
         hostMark("records phase (RC)", nRec);
         // readRecord on the device (products' and E11's read -> record map); per chunk its local copy
         DB dRRg, dRRl;
