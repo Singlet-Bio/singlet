@@ -1222,7 +1222,7 @@ static bool regenAux(singlet_engine_gpu::Input &in, std::string &why) {
     return true;
 }
 // copies the reads (ascending ids) the late readers need out of the planes
-bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &why) {
+bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &why, bool setOn = true) {
     if (!ingOn) { why = "no packed reads"; return false; }
     if (!std::is_sorted(reads.begin(), reads.end())) { why = "the unmapped reads are not in read order"; return false; }
     const uint64 n = reads.size();
@@ -1256,9 +1256,19 @@ bool lateBuild(const std::vector<uint32_t> &reads, int nThreads, std::string &wh
         }
     });
     for (auto &x : th) x.join();
-    late.on = true; late.built = true;
+    late.on = setOn; late.built = true;
     return true;
 }
+struct AdjRes { uint64 dq = 0, dn = 0, nNo = 0, nCl = 0; double s = 0; };   // what the adjustment takes off e11's counts
+// hostcut round 2, cut 1 (SINGLET_ENGINE_GPU_PRE_RELEASE, default on): the RNA Q30 adjustment and the compact store of the unmapped reads read only what the
+// engine's output holds (the reads' records, the clip amounts, the unmapped reads) and the planes, so they run on a thread from the return of mapDistinct,
+// beside the hand-off install and the read source (which took 17 s and 4 s, then the adjustment 24 s and the store 11 s after them one by one), and the planes
+// are freed where E22 frees them, as soon as the read source is built and the thread has finished. The results are applied (and the store switched on) at
+// E22's own site, under its own conditions; when it does not take them the store is freed and E22's path runs as before.
+struct PreAdj {
+    std::thread th; bool started = false, adjOk = false, lateOk = false; AdjRes R; double sB = 0, sA = 0; std::string why;
+    ~PreAdj() { if (th.joinable()) th.detach(); }
+} preAdj;
 // the same record text as ingRecord, from the compact store
 inline bool lateRecord(uint64 r, E10Rec &x) {
     const size_t k = (size_t) (std::lower_bound(late.ids.begin(), late.ids.end(), (uint32_t) r) - late.ids.begin());
@@ -1458,9 +1468,9 @@ bool e10BuildSource(Parameters &P, const uint32 *readRecord, uint64 nReads, std:
 // E11: Gene/Summary.csv's "Q30 Bases in RNA read" is STAR's qualHist (ReadAlign_oneRead.cpp:34-38): per read the cDNA quality characters in
 // [clip5, L - clip3). The decode counted whole reads; here a read with a record keeps only that span (its clip: the GPU's, which readLoad
 // would have taken) and a read without one keeps nothing (STAR's loop counts it, with its own clip)
-bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
+// grr / gc5 / gc3: per read its record (0xFFFFFFFF: none) and the GPU's clip amounts (gc5 null: no clip arrays); the globals' values for the call after the install
+bool e11RnaAdjustCore(Parameters &P, std::string &why, int nThreads, uint64 N, const uint32 *grr, const uint16 *gc5, const uint16 *gc3, AdjRes &R) {
     const auto t0 = std::chrono::steady_clock::now();
-    const uint64 N = g_handoffNReads;
     const int T = std::max(1, nThreads > 0 ? nThreads : (int) P.runThreadN);
     const unsigned q30 = e11.qBase + 30;
     if (ingOn ? ing.n != N : (e10f.m[0] == nullptr || e10f.at[0].size() != N)) { why = "the cDNA file is not mapped"; return false; }
@@ -1485,11 +1495,11 @@ bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
     for (int t = 0; t < T; t++) th.emplace_back([&, t]() {
         const char *m = e10f.m[0], *end = m + e10f.len[0];
         for (uint64 r = N * t / T; r < N * (t + 1) / T; r++) {
-            const bool rec = g_handoffReadRecord[r] != 0xFFFFFFFFu;
+            const bool rec = grr[r] != 0xFFFFFFFFu;
             uint64 c5 = 0, c3 = 0;
             if (rec) {
-                if (g_handoffClip5 == nullptr) continue;
-                c5 = g_handoffClip5[r]; c3 = g_handoffClip3[r];
+                if (gc5 == nullptr) continue;
+                c5 = gc5[r]; c3 = gc3[r];
                 if (c5 + c3 == 0) continue;
                 nCl[t]++;
             } else nNo[t]++;
@@ -1535,8 +1545,15 @@ bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
     for (auto &x : th) x.join();
     for (int t = 0; t < T; t++) if (bad[t] == 2) { why = "E22: the RNA Q30 byte-table count differs from the base loop"; return false; }
     for (int t = 0; t < T; t++) if (bad[t]) { why = "a cDNA quality line could not be read back"; return false; }
-    for (int t = 0; t < T; t++) { e11.q30Rna -= dq[t]; e11.nRna -= dn[t]; e11.nNoRec += nNo[t]; e11.nClipped += nCl[t]; }
-    e11.sAdj = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    for (int t = 0; t < T; t++) { R.dq += dq[t]; R.dn += dn[t]; R.nNo += nNo[t]; R.nCl += nCl[t]; }
+    R.s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return true;
+}
+void e11ApplyAdj(const AdjRes &R) { e11.q30Rna -= R.dq; e11.nRna -= R.dn; e11.nNoRec += R.nNo; e11.nClipped += R.nCl; e11.sAdj = R.s; }
+bool e11RnaAdjust(Parameters &P, std::string &why, int nThreads = 0) {
+    AdjRes R;
+    if (!e11RnaAdjustCore(P, why, nThreads, g_handoffNReads, g_handoffReadRecord, g_handoffClip5, g_handoffClip3, R)) return false;
+    e11ApplyAdj(R);
     return true;
 }
 #endif
@@ -1872,6 +1889,31 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
     if (e11.ready) {
         const char *kd = getenv("SINGLET_E15_KEEP_ON_DEVICE");
         if (!(kd != nullptr && kd[0] == '1')) e9::soloKeepToHost(device);
+    }
+    {   // hostcut round 2, cut 1: the thread (conditions of E22's site below; the planes are only read)
+        const char *prE = getenv("SINGLET_ENGINE_GPU_PRE_RELEASE");
+        const char *gpE = getenv("SINGLET_GPU_PILEUP");
+        const bool softclipR = P.singletSoftclipMin > 0 && P.inOut->outSoftclipStream[0].is_open();
+        if (!(prE != nullptr && prE[0] == '0') && ok && e10ok && e11.ready && e10Level >= 5 && ingOn && earlyMode() != 0 && !softclipR && gpE != nullptr && strcmp(gpE, "on") == 0
+            && P.outReadsUnmapped == "Fastx" && singlet_tail::cut("bg") && out.readRecord.size() == ing.n && out.readRecord.size() > 0) {
+            preAdj.started = true;
+            const int nT = std::max(1, (int) P.runThreadN);
+            preAdj.th = std::thread([&P, nT, N = (uint64) out.readRecord.size(), rr = out.readRecord.data(), c5 = out.clip5.empty() ? (const uint16 *) nullptr : out.clip5.data(),
+                                     c3 = out.clip3.empty() ? (const uint16 *) nullptr : out.clip3.data(), ids = out.e10.unmappedReads]() {
+                singlet::ThreadNameScope tnPre("star-preadj");
+                const auto t0 = std::chrono::steady_clock::now();
+                preAdj.adjOk = e11RnaAdjustCore(P, preAdj.why, nT, N, rr, c5, c3, preAdj.R);
+                preAdj.sA = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                if (preAdj.adjOk) {
+                    const auto tb = std::chrono::steady_clock::now();
+                    std::string wl;
+                    preAdj.lateOk = lateBuild(ids, nT, wl, false);
+                    preAdj.sB = std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
+                    if (!preAdj.lateOk) preAdj.why = wl;
+                }
+                singlet_tail::mark("prefill (pre): RNA Q30 adjustment %.3f s, compact store %.3f s (%d, %d)", preAdj.sA, preAdj.sB, (int) preAdj.adjOk, (int) preAdj.lateOk);
+            });
+        }
     }
     if (const char *rp = getenv("SINGLET_ENGINE_GPU_E10_R11"); rp != nullptr && !out.e10.r11.empty()) {   // the histogram in r11_hist.cpp's format
         FILE *f = fopen(rp, "wb");
@@ -2216,7 +2258,12 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 if (earlyMode() != 0 && ingOn && !softclipRoute) {
                     const auto te = std::chrono::steady_clock::now();
                     std::string w5;
-                    if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
+                    bool pre = false;   // hostcut: the thread's adjustment and store, when both were made for these reads
+                    if (preAdj.th.joinable()) preAdj.th.join();
+                    if (preAdj.started && preAdj.adjOk && preAdj.lateOk && late.n == e16bg.reads.size() && late.ids == e16bg.reads) pre = true;
+                    else if (preAdj.started) { late.freeData(); late.built = false; P.inOut->logMain << "ENGINE_GPU: PRE_RELEASE: the thread's results not used (" << preAdj.why << "); the adjustment and the store run here\n"; }
+                    if (pre) e11ApplyAdj(preAdj.R);
+                    else if (!e11RnaAdjust(P, w5)) exitWithError("EXITING because of FATAL ERROR (singlet --engine gpu, E11): " + w5 + "\n", std::cerr, P.inOut->logMain,
                                                             EXIT_CODE_INPUT_FILES, P);
                     adjDone = true;
                     singlet_tail::mark("prefill: RNA Q30 adjustment done (E22, before the background thread)");
@@ -2224,8 +2271,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                     std::string wl;
                     const auto tb = std::chrono::steady_clock::now();
                     const double G = 1073741824.0;
-                    if (lateBuild(e16bg.reads, (int) P.runThreadN, wl)) {
-                        const double sB = std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
+                    if (pre ? (late.on = true, true) : lateBuild(e16bg.reads, (int) P.runThreadN, wl)) {
+                        const double sB = pre ? preAdj.sB : std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
                         late.check = earlyMode() == 2;
                         const double gSeq = (in.pseq ? in.pseq->w.size() : 0) / G, gOff = in.off.size() * 8 / G, gQual = ing.qual.size() / G, gR1 = ing.r1.size() * 8 / G;
                         const long uc = in.pseq.use_count();
@@ -2287,6 +2334,8 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
             gpuFallback(P, "ENGINE_GPU: E10 level 3 not used (" + w + "); STAR's loop does the per-read work");
         }
     }
+    if (preAdj.th.joinable()) preAdj.th.join();   // hostcut: the thread was not used by E22's site (a path that does not take it): its store is freed
+    if (preAdj.started && !late.on) { late.freeData(); late.built = false; }
     // E19 (E11 §5.4, the level-4 fallback hole): without summaries for the reads with a record, any level below 4 would replay empty summaries for
     // them (STAR's loop would treat them as unmapped, and Solo, Log.final.out and the BAM stream would miss them): stop with an error instead
     if (e10NoSumMade && g_e10Level < 4)
