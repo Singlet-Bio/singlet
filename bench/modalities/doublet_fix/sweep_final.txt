@@ -1,3 +1,0 @@
-final
-final_bayes clf=0
-final_exon_only nomap=1

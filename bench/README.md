@@ -202,3 +202,13 @@ Features seeded: `io/pz_loader`, `preprocess/lognorm`, `preprocess/hvg`,
    the bench row shows a real number (not TBD).
 
 No feature is on the Pareto frontier without a populated bench row.
+
+---
+
+## Removed experiment folders
+
+The experiment and study folders that nothing in the build, the tests or the pipelines uses were removed from `main` before the
+Beta launch (GPU engine development, compression ablations, SOTA comparisons, validation harnesses). They stay available in the
+tag `archive/2026-11-20/pre-consolidation-main`. Kept: the benchmark drivers listed above, `bench/public`, `bench/count_parity`,
+`bench/star_accel`, `bench/gpu-runtime`, the files of `bench/compression` that rebuild the s1 vocabulary packs, and the two gate
+helper scripts under `bench/fable`.
