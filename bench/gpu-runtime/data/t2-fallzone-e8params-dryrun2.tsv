@@ -1,0 +1,100 @@
+key	device	pairs_M	assay	engine_protocol	chimeric_flag	hla_args	outSAMtype	soloType	soloCBlen	soloUMIlen	soloStrand	soloBarcodeMate	soloFeatures	quantMode	soloCBposition	soloUMIposition	chimSegmentMin	outFilterType	waspOutputMode	outSJtype	nFiles	level	not_used
+ERS22719189	h100	372.0	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5534780	rtx8000	132.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8263021	rtx8000	277.4	10x_3p_v2	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5682562	v100s	68.9	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+GSM6647596	rtx8000	72.6	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM8514579	rtx8000	24.2	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5733767	h100	459.5	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM1241178	rtx8000	2.8	10x_3p_v3	microwell-seq	no	yes	BAM SortedByCoordinate	CB_samTagOut	18	6											3	0	E8 does not run
+SRS26805128	rtx8000	50.0	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM4658517	rtx8000	77.9	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	0	
+GSM5724573	rtx8000	295.4	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM6025613	rtx8000	92.8	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	0	
+GSM6250953	h100	121.4	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+GSM7069989	rtx8000	335.5	10x_3p_v2	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8354322	h100	393.8	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8254522	rtx8000	7.3	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5341102	rtx8000	128.4	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7655088	h100	515.6	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7295086	h100	357.7	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM4827166	h100	355.7	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+SRS4937041	rtx8000	259.1	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM5467117	rtx8000	118.6	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8980321	rtx8000	311.3	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM9134876	h100	614.2	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7634817	rtx8000	109.1	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM5419022	rtx8000	23.1	10x_3p_v3	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+SRS16338556	rtx8000	48.9	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM5361253	v100s	15.3	seqwell	dropseq	no	yes	BAM SortedByCoordinate	CB_samTagOut	12	8											3	0	E8 does not run
+GSM8704007	rtx8000	47.8	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7658834	h100	130.6	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+GSM8163696	h100	783.4	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5238900	rtx8000	311.1	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8810635	rtx8000	318.3	10x_3p_v4	10xv4	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	3	
+GSM7900398	h100	513.3	10x_3p_v2	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+SRS24359065	rtx8000	254.5	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+SRS24158252	h100	856.2	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5014159	rtx8000	55.7	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7208745	rtx8000	303.6	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8194406	h100	585.2	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM9237524	h100	641.3	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM9178821	rtx8000	241.7	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8436872	rtx8000	243.7	10x_3p_v2	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM6856692	rtx8000	278.3	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+ERS5428492	rtx8000	269.7	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM3972019	rtx8000	82.1	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+ERS10898570	rtx8000	341.8	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8615473	h100	582.2	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7889706	rtx8000	340.5	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM4451262	rtx8000	341.1	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7157281	rtx8000	100.5	10x_3p_v3	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	0	
+GSM8430302	rtx8000	256.5	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM8738923	rtx8000	287.4	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM6504592	h100	516.1	10x_5p	10xv2-5p	yes	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM8680646	rtx8000	38.8	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM4954811	h100	720.4	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM6025579	rtx8000	51.7	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5231122	v100s	16.3	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+GSM4497128	rtx8000	60.5	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7305278	rtx8000	87.4	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7990806	rtx8000	299.9	10x_3p_v4	10x-arc-gex	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM4761524	rtx8000	14.5	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM6939137	h100	437.3	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM6481641	rtx8000	336.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5268288	rtx8000	94.8	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM8300979	h100	399.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM5140613	h100	591.7	10x_3p_v3	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7818514	h100	384.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7444994	rtx8000	115.8	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8033685	h100	759.5	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8610950	rtx8000	52.7	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+SRS8707771	rtx8000	324.4	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8410330	rtx8000	45.4	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8173895	rtx8000	113.9	10x_3p_v4	10x-arc-gex	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	0	
+GSM9141159	h100	435.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM9309309	rtx8000	301.2	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7518387	h100	385.9	10x_3p_v3	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM7662904	v100s	9.3	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+GSM7232636	h100	255.2	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+GSM4257567	h100	452.5	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM8825758	rtx8000	343.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+SRS7232046	h100	355.3	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM6285456	rtx8000	344.3	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+SRS9457654	h100	569.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8608204	rtx8000	6.8	10x_3p_v2	10xv2-5p	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM8647188	h100	358.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM4771283	rtx8000	110.9	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+SRS17329417	h100	853.3	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7966243	rtx8000	334.5	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM6047838	rtx8000	239.6	10x_3p_v4	10x-visium	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM7064231	h100	712.9	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8699165	rtx8000	280.4	10x_3p_v3	10x-visium	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM8313333	rtx8000	106.7	10x_3p_v3	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM3891635	rtx8000	115.3	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM9038586	rtx8000	109.1	10x_3p_v2	10xv2	no	yes	BAM Unsorted	CB_UMI_Simple	16	10											3	5	
+GSM6123263	rtx8000	74.3	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM9405285	h100	572.4	10x_3p_v4	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	
+GSM9535813	h100	253.6	10x_5p	10xv2-5p	yes	yes	BAM SortedByCoordinate	CB_UMI_Simple	16	10											3	0	E8 does not run
+SRS3702682	rtx8000	4.4	10x_3p_v2	microwell-seq	no	yes	BAM SortedByCoordinate	CB_samTagOut	18	6											3	0	E8 does not run
+GSM8871313	rtx8000	107.1	10x_3p_v3	10xv3	no	yes	BAM Unsorted	CB_UMI_Simple	16	12											3	5	

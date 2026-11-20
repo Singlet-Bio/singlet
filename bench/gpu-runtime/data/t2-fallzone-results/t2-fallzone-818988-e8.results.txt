@@ -1,0 +1,32 @@
+node=g051.clipper.gvsu.edu job=818988 tag=e8 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-hostcut5/singlet-gpu sra=/mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR25434921/SRR25434921.sra arms='auto p3' extra='--chimeric' 2026-11-19T18:53:58-05:00
+encode auto rc=0 users bytes; [protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 2, polyA 10, polyT 85 of 5000 spots [protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A)) [protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 3, polyA 23, polyT 355 of 20000 spots 
+encode p3 rc=0 users bytes; [protocol_detect] 3'/5' check: R1 5'-TSO 0 / polyT 0; R2 3'-TSO 3, polyA 23, polyT 355 of 20000 spots [protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A)) [1fq-encode] Protocol: 10x-3p-v2 (confidence: 4) 
+pool wall 157 s
+item	sample	wall_s	pairs
+0	/tmp/debruinz-fze8-818988/data/auto.1fq	65.55	1989132
+1	/tmp/debruinz-fze8-818988/data/p3.1fq	80.75	1989132
+ITEM 0 arm=auto
+  STAR: engine_gpu: E17 budget 31.0 GB (SINGLET_ENGINE_GPU_MEM_GB; device 93.1 GB, 18.0 GB in use at the start): mode normal; context 1.00 GB, index 0.00 GB, tables 0.04 GB, reads 0.20 GB, E10 aux 0.06 GB, entries+masks 0.07 GB, E11 keep 0.03 GB, clip 0.23 GB; estimat
+  STAR: engine_gpu: 1989132 reads, 1138019 distinct (41440 with N), mapped on the GPU 1137614, host lane 404 (0.00 s), not mapped 0; upload 16.10 s, dedup 0.02 s, GPU mapping 0.85 s
+  STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+  STAR: outSAMtype                    BAM   Unsorted        ~RE-DEFINED
+  LOG: 1795132453 [singlet] 5' protocol detected → using reverse strand
+  LOG: 1795132454 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+  LOG: 1795132475 [singlet-pileup] Done: 1746166 reads, 1746166 mapped, 1126491 barcoded, 518791 secondary, 153572 SNP hits, 785819 exon hits, 122052 intron hits, 290700 SJ, 134605 chrM, 11212147 mt_bases, 7108 multigene, 57246 wrong_strand, 1541 vdj_hits, UMI 402178 unique / 505693 dup in 21s
+  LOG: 1795132483 [singlet] chimeric: 778185 reads into the second pass (761757 unmapped, 16428 mapped with >= 15 unaligned bases)
+  LOG: 1795132517 [singlet] chimeric: second pass 3e+01 s; 154392 junction lines, 1847 kept, 0 without barcode, 234 unmatched, 0 ambiguous, 122141 non-canonical, 1322 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 1782 rows in 642 cells, 0 flagged recurre
+ITEM 1 arm=p3
+  STAR: ENGINE_GPU: E10 (level 5) not used: E8 does not run
+  STAR: engine_gpu: E17 budget 31.0 GB (SINGLET_ENGINE_GPU_MEM_GB; device 93.1 GB, 18.0 GB in use at the start): mode normal; context 1.00 GB, index 0.00 GB, tables 0.04 GB, reads 0.20 GB, E10 aux 0.00 GB, entries+masks 0.00 GB, E11 keep 0.00 GB, clip 0.23 GB; estimat
+  STAR: engine_gpu: 1989132 reads, 1138103 distinct (41776 with N), mapped on the GPU 1137460, host lane 642 (0.00 s), not mapped 0; upload 0.33 s, dedup 0.01 s, GPU mapping 0.82 s
+  STAR: ENGINE_GPU: E19: level 0 reached (requested 5)
+  STAR: outSAMtype                    BAM   SortedByCoordinate        ~RE-DEFINED
+  LOG: 1795132520 [singlet] BAM: unsorted STAR stream into the pileup (no sort; --sorted-bam for the sorted path)
+  LOG: 1795132528 [singlet-pileup] Done: 1701807 reads, 1701807 mapped, 1098193 barcoded, 505829 secondary, 144864 SNP hits, 101378 exon hits, 85867 intron hits, 285488 SJ, 131633 chrM, 10964498 mt_bases, 759 multigene, 707961 wrong_strand, 1484 vdj_hits, UMI 98301 unique / 88944 dup in 5.1s
+  LOG: 1795132528 [singlet] STREAM STRAND: 92% of 687804 strand-informative nuclear reads are antisense to the protocol orientation (at the end of the pass); restarting on the sorted path (--sorted-bam)
+  LOG: 1795132553 [singlet-pileup] Strand probe: 87% of 17234 informative reads antisense (nuclear chromosomes) -> reverse-strand counting
+  LOG: 1795132557 [singlet-pileup] Done: 1701807 reads, 1701807 mapped, 1098193 barcoded, 505829 secondary, 144864 SNP hits, 768282 exon hits, 119021 intron hits, 285488 SJ, 131633 chrM, 10964498 mt_bases, 6884 multigene, 55579 wrong_strand, 1488 vdj_hits, UMI 397879 unique / 489424 dup in 3.9s
+  LOG: 1795132557 [singlet] Protocol relabeled by strand: id 2 -> 5 (cDNA read counted antisense, 5')
+  LOG: 1795132566 [singlet] chimeric: 821490 reads into the second pass (793154 unmapped, 28336 mapped with >= 15 unaligned bases)
+  LOG: 1795132598 [singlet] chimeric: second pass 3e+01 s; 266654 junction lines, 3473 kept, 0 without barcode, 553 unmatched, 7 ambiguous, 217465 non-canonical, 2211 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 3397 rows in 1021 cells, 0 flagged recurr
+done 2026-11-19T18:56:45-05:00
