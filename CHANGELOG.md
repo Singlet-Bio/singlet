@@ -2,6 +2,18 @@
 
 All notable changes to the singlet project.
 
+## [1.4.2] — host memory and chimeric throughput
+
+**Speed and memory.** Each change has a switch that restores the old behavior (`=0`).
+- Lower host memory per deep item on the GPU path: lean slices dropped per chunk, 16-bit clip amounts, early frees, compacted
+  auxiliary arrays, early release. A 1,000 M-read item peaks at 214 GiB instead of 271.
+- The records phase is built in record chunks when it exceeds the GPU budget, instead of falling back to the CPU.
+- The CPU engine's sequence cache also covers reads that contain N.
+- `--chimeric`: each distinct read is mapped once, the pair loop is pruned exactly, and the pass reuses the pool's resident genome.
+- An optional peak-model memory admission gate for the GPU pool (`SINGLET_POOL_PEAKADMIT=1`, off by default).
+
+Outputs are byte-identical to 1.4.1 on the identity gate.
+
 ## [1.4.1] — gpu-pool memory admission
 
 **Fixes.**

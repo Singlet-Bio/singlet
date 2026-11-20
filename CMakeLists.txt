@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(singlet VERSION 1.4.1 LANGUAGES CXX C)
+project(singlet VERSION 1.4.2 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
