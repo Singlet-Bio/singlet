@@ -10626,8 +10626,10 @@ static int singlet_main(int argc, char* argv[]) {
                         chim_sc = softclip ? dres.n_second : 0;
                         char pct[32];
                         std::snprintf(pct, sizeof pct, "%.1f", dres.n_reads ? 100.0 * static_cast<double>(dres.n_distinct) / static_cast<double>(dres.n_reads) : 0.0);
+                        char tsec[32];
+                        std::snprintf(tsec, sizeof tsec, "%.1f", chim_sw.elapsed_s());   // fixed digits: the stream precision is 1 in this program
                         std::cerr << "[singlet] chimeric: dedup: " << dres.n_reads << " reads, " << dres.n_distinct << " distinct sequences (" << pct << " %), "
-                                  << chim_sw.elapsed_s() << " s\n";
+                                  << tsec << " s\n";
                         std::cerr << "[singlet] chimeric: dedup memory: parent VmRSS " << rss0 / 1024 << " MiB before, " << dres.rss_peak_kb / 1024
                                   << " MiB at the peak of stage A, " << singlet::chimeric::dedup_detail::rss_kb() / 1024 << " MiB during the pass\n";
                     } else {
