@@ -865,6 +865,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
     std::vector<char> taken(items.size(), 0);
     std::vector<double> itemEst(items.size(), 0);
+    auto chimMode = [](const Run& r) { return !r.pkChim ? poolpeak::Chim::None : r.pkChimShared ? poolpeak::Chim::Shared : poolpeak::Chim::Private; };
     std::vector<char> itemChimShared(items.size(), 0);   // T2 chimshare: the pool established that this --chimeric item's pass takes the pool's resident genome
     std::vector<char> itemPk(items.size(), 0), itemPkChim(items.size(), 0);   // cggate: the peak model applies to the item
     std::vector<double> itemFig0(items.size(), 0), itemPkN(items.size(), 0), itemPkBases(items.size(), 0), itemPkP(items.size(), 0);
@@ -1187,7 +1188,6 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         if (lk >= 0) { flock(lk, LOCK_UN); close(lk); }
     };
     // once a second (or forced): the job cgroup into the ring, the figures of the pool's items, the baseline, the model-exceeded check
-    auto chimMode = [](const Run& r) { return !r.pkChim ? poolpeak::Chim::None : r.pkChimShared ? poolpeak::Chim::Shared : poolpeak::Chim::Private; };
     auto pkRefresh = [&](bool force) {
         const double now = wall_now();
         if (!force && now - pkLastScan < 1.0) return;
