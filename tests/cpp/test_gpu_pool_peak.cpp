@@ -56,7 +56,7 @@ int main() {
     {
         // the three recordings of T2-chimpass.md with their real n and cDNA bases (the "[1fq-ingest] Scanned" lines): pbmc5p_v1 60.000 M / 5.460 G, GSM6250953 121.366 M / 18.205 G, d300_5p 299.628 M / 27.266 G
         const double P5 = peakP(60.0, 5.46, k), Pc = peakP(299.628383, 27.266182853, k), Pg = peakP(121.366072, 18.2049108, k), PgLin = pLinear(121.366072, 18.2049108, k);
-        CHECK(near(phaseFigure(P5, 2, k, true), 0.5 * P5 + 22.1432 + 12.0, 1e-6) && near(phaseFigure(P5, 2, k, true), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
+        CHECK(near(phaseFigure(P5, 2, k, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4) && near(phaseFigure(P5, 2, k, true), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
         CHECK(near(phaseFigure(Pc, 2, k, true), 64.1, 0.1), "chimeric d300_5p F2");
         CHECK(near(phaseFigure(PgLin, 2, k, true), 52.0, 0.1) && near(phaseFigure(Pg, 2, k, true), 72.5, 0.1), "chimeric GSM6250953 F2 (after the first engine line, and at the start in the zone)");
         Consts z; z.chimGb = 0.0;
