@@ -18,7 +18,9 @@ pytest.importorskip("anndata")
 pytest.importorskip("pandas")
 
 ROOT = Path(__file__).resolve().parents[2]
-_spec = importlib.util.spec_from_file_location("bench_loaders", ROOT / "bench" / "pipeline" / "analysis" / "loaders.py")
+_spec = importlib.util.spec_from_file_location(
+    "bench_loaders", ROOT / "bench" / "pipeline" / "analysis" / "loaders.py"
+)
 LD = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(LD)
 
@@ -55,7 +57,9 @@ def _run(tmp: Path, usa: bool) -> Path:
         _write(d, "spliced_counts", S, gene_feats)
         _write(d, "unspliced_counts", U, gene_feats)
     else:
-        _write(d, "intron_counts", U, intron_feats)  # pre-1.3.5: intron_counts is the unspliced layer
+        _write(
+            d, "intron_counts", U, intron_feats
+        )  # pre-1.3.5: intron_counts is the unspliced layer
     return d
 
 
