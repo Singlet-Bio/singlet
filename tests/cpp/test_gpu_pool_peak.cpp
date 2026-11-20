@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "singlet/gpu_pool_peak.h"
 
@@ -50,17 +51,43 @@ int main() {
         CHECK(phaseFigure(r.P, 1, k) <= phaseFigure(r.P, 0, k) + 1e-12 && phaseFigure(r.P, 2, k) <= phaseFigure(r.P, 1, k) + 1e-12, (nm + ": figures never grow with the phase").c_str());
         CHECK(inZone(r.n, k) == (r.n >= 70.0 && r.n < 160.0), (nm + ": zone").c_str());
     }
+    const Chim PR = Chim::Private, SH = Chim::Shared;   // the allowance: private index (chimGb 19.5), or the pool's resident genome (chimSharedGb)
     // --chimeric (T2-chimpass.md): every phase figure is at least 0.5 P + 2.6432 + 19.5 + 12; never lower than without it; chimGb 0 gives the floor 0.5 P + 2.6 + margin = F2
     for (const Row& r : kRows)
-        for (int ph = 0; ph < 3; ++ph) CHECK(phaseFigure(r.P, ph, k, true) >= phaseFigure(r.P, ph, k) - 1e-12 && phaseFigure(r.P, ph, k, true) >= 0.5 * r.P + 22.1432 + 12.0 - 1e-6, (std::string(r.s) + ": chimeric figure is a floor").c_str());
+        for (int ph = 0; ph < 3; ++ph) CHECK(phaseFigure(r.P, ph, k, PR) >= phaseFigure(r.P, ph, k) - 1e-12 && phaseFigure(r.P, ph, k, PR) >= 0.5 * r.P + 22.1432 + 12.0 - 1e-6, (std::string(r.s) + ": chimeric figure is a floor").c_str());
     {
         // the three recordings of T2-chimpass.md with their real n and cDNA bases (the "[1fq-ingest] Scanned" lines): pbmc5p_v1 60.000 M / 5.460 G, GSM6250953 121.366 M / 18.205 G, d300_5p 299.628 M / 27.266 G
         const double P5 = peakP(60.0, 5.46, k), Pc = peakP(299.628383, 27.266182853, k), Pg = peakP(121.366072, 18.2049108, k), PgLin = pLinear(121.366072, 18.2049108, k);
-        CHECK(near(phaseFigure(P5, 2, k, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4) && near(phaseFigure(P5, 2, k, true), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
-        CHECK(near(phaseFigure(Pc, 2, k, true), 64.1, 0.1), "chimeric d300_5p F2");
-        CHECK(near(phaseFigure(PgLin, 2, k, true), 52.0, 0.1) && near(phaseFigure(Pg, 2, k, true), 72.5, 0.1), "chimeric GSM6250953 F2 (after the first engine line, and at the start in the zone)");
-        Consts z; z.chimGb = 0.0;
-        CHECK(near(phaseFigure(P5, 2, z, true), phaseFigure(P5, 2, z), 1e-9), "chimGb 0: the floor equals F2");
+        CHECK(near(phaseFigure(P5, 2, k, PR), 0.5 * P5 + 22.1432 + 12.0, 1e-4) && near(phaseFigure(P5, 2, k, PR), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
+        CHECK(near(phaseFigure(Pc, 2, k, PR), 64.1, 0.1), "chimeric d300_5p F2");
+        CHECK(near(phaseFigure(PgLin, 2, k, PR), 52.0, 0.1) && near(phaseFigure(Pg, 2, k, PR), 72.5, 0.1), "chimeric GSM6250953 F2 (after the first engine line, and at the start in the zone)");
+        // T2 chimshare: the floor adds chimSharedGb when sharing is in effect (the default), chimGb when SINGLET_CHIM_SHARE_GENOME=0
+        Consts sh; sh.chimSharedGb = 30.0;
+        CHECK(near(phaseFigure(P5, 2, sh, SH), 0.5 * P5 + 2.6432 + 30.0 + 12.0, 1e-4), "chimeric shared: floor uses chimSharedGb");
+        CHECK(near(phaseFigure(P5, 2, sh, PR), 0.5 * P5 + 22.1432 + 12.0, 1e-4), "chimeric private: floor uses chimGb even when chimSharedGb is set");
+        for (const Row& r : kRows) CHECK(phaseFigure(r.P, 2, k, SH) >= 0.5 * r.P + 2.6432 + 4.0 + 12.0 - 1e-6 && phaseFigure(r.P, 2, k, SH) >= phaseFigure(r.P, 2, k) - 1e-12, (std::string(r.s) + ": shared chimeric floor (chimSharedGb 4.0)").c_str());
+        CHECK(phaseFigure(P5, 2, k, Chim::None) == phaseFigure(P5, 2, k), "no --chimeric: no floor");
+        CHECK(phaseFigure(P5, 2, k, SH) < phaseFigure(P5, 2, k, PR) + 1e-12, "the shared floor is not above the private one");
+        CHECK(phaseFigure(Pc, 2, k, SH) >= 0.5 * Pc + 2.6432 + 4.0 + 12.0 - 1e-6, "shared floor on d300_5p");
+        Consts z; z.chimGb = 0.0; z.chimSharedGb = 0.0;
+        CHECK(near(phaseFigure(P5, 2, z, PR), phaseFigure(P5, 2, z), 1e-9), "chimGb 0: the floor equals F2");
+    }
+    // T2 chimshare: heldGib (what an item holds: the group's RssAnon+RssShmem minus the pool's genome once per mapping process)
+    {
+        auto pr = [](double anon, double shmem) { ProcRss p; p.anon = anon; p.anonShmem = anon + shmem; return p; };
+        const double G = 17.0;
+        const std::vector<ProcRss> parentChild = {pr(24.0, 0.1), pr(27.0, 0.2), pr(2.0, 0.0)};   // sample process, STAR child, a small helper
+        int m = 0;
+        CHECK(near(heldGib(parentChild, G, false, &m), 24.1 + 27.2 + 2.0 - G, 1e-9) && m == 1, "heldGib flag off: the old formula, genome once");
+        CHECK(near(heldGib(parentChild, G, true, &m), 24.1 + 27.2 + 2.0 - 2 * G, 1e-9) && m == 2, "heldGib flag on, parent and child above 0.9 G: twice, the small third process does not count");
+        const std::vector<ProcRss> onlyParent = {pr(24.0, 0.1), pr(2.0, 0.0)};
+        CHECK(near(heldGib(onlyParent, G, true, &m), 24.1 + 2.0 - G, 1e-9) && m == 1, "heldGib flag on, only the parent maps it: once");
+        const std::vector<ProcRss> noneBig = {pr(3.0, 0.0), pr(1.0, 0.0)};
+        CHECK(near(heldGib(noneBig, G, true, &m), 0.0, 1e-12) && m == 1, "heldGib flag on, no process above the threshold: m = 1, clamped at 0");
+        CHECK(heldGib(std::vector<ProcRss>(), G, false) == 0.0, "heldGib of an empty group is 0");
+        CHECK(near(heldGib(parentChild, 60.0, true, &m), 0.0, 1e-12), "heldGib clamps at 0");
+        const std::vector<ProcRss> edge = {pr(0.9 * G, 0.0), pr(0.9 * G - 0.01, 0.0)};
+        CHECK(near(heldGib(edge, G, true, &m), 0.9 * G + 0.9 * G - 0.01 - G, 1e-9) && m == 1, "heldGib: the threshold is RssAnon >= 0.9 G (inclusive)");
     }
     // zone: the four classes the doc over-predicts (fallback possible) are above the linear predictor
     CHECK(peakP(75.2, 6.8, k) > pLinear(75.2, 6.8, k) + 20.0, "zone raises hgmm1k_v2");

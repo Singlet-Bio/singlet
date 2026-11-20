@@ -4838,6 +4838,10 @@ static int singlet_main(int argc, char* argv[]) {
         void join() { if (t.joinable()) t.join(); }
         ~GenomePreloadJob() { join(); }
     } genome_preload;
+    // T2 chimshare (docs/gpu-engine/runtime/T2-chimshare.md): in a gpu-pool item that will run the chimeric pass, the pool's resident genome (shared
+    // copy-on-write with the pool, so it costs no memory here) is kept past the first STAR fork and handed to the pass's STAR child (the pass then
+    // takes it instead of reading 17.6 GB again). SINGLET_CHIM_SHARE_GENOME=0: released at the first fork as before.
+    bool chim_share_held = false;
     const char* gpl_env = std::getenv("SINGLET_GENOME_PRELOAD");
     const bool genome_preload_on = !(gpl_env && gpl_env[0] == '0');
     if (genome_load == "NoSharedMemory" && !genome_dir.empty() && genome_preload_on && !sra_mode) {
@@ -8079,7 +8083,13 @@ static int singlet_main(int argc, char* argv[]) {
             std::cerr << "[singlet] CR4 probe: early runs complete; waited " << ew.elapsed_s() << " s for them at the STAR fork\n";
         }
         star_pid = fork();
-        if (star_pid != 0) star_genome_preload_release();   // E14: the parent's references; the STAR child keeps the pages
+        if (star_pid != 0) {   // E14: the parent's references; the STAR child keeps the pages
+            const char* cse = std::getenv("SINGLET_CHIM_SHARE_GENOME");
+            if (chimeric && !(cse && cse[0] == '0') && star_genome_preload_is_resident()) {   // T2 chimshare: released at the pass's fork
+                chim_share_held = true;
+                if (star_pid > 0) std::cerr << "[singlet] chimeric: genome kept for the pass (SINGLET_CHIM_SHARE_GENOME)\n";   // the pool follows this line (it counts the mapping twice until the pass's fork)
+            } else star_genome_preload_release();
+        }
 #ifdef SINGLET_HAVE_ENGINE_GPU
         if (star_pid != 0) singlet_engine_gpu::ingest::releaseParent();   // E13: likewise the packed reads
 #endif
@@ -10679,7 +10689,9 @@ static int singlet_main(int argc, char* argv[]) {
                 pv.push_back(const_cast<char*>("STAR"));
                 for (auto& s : pa) pv.push_back(const_cast<char*>(s.c_str()));
                 pv.push_back(nullptr);
+                if (chim_share_held) std::cerr << "[singlet] chimeric: genome shared with the pool (SINGLET_CHIM_SHARE_GENOME)\n";
                 pid_t pp = fork();
+                if (pp != 0 && chim_share_held) { star_genome_preload_release(); chim_share_held = false; }   // the parent's references; the pass keeps the pages
                 if (pp == 0) {
                     int dn = open("/dev/null", O_WRONLY);
                     if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
@@ -10689,7 +10701,13 @@ static int singlet_main(int argc, char* argv[]) {
                     _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
                 }
                 int ws = 0;
-                return pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                const bool pass_ok = pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+                {   // the pass's own STAR log (Log.out, removed below): did it take the genome from the preload, and how long did its genome load take
+                    std::ifstream lf(prefix + "Log.out");
+                    for (std::string l; std::getline(lf, l);)
+                        if (l.rfind("Genome preload:", 0) == 0 || l.rfind("Genome load seconds:", 0) == 0) std::cerr << "[singlet] chimeric: pass STAR log: " << l << "\n";
+                }
+                return pass_ok;
             };
             std::error_code ec;
             auto clean_solo = [&]() {
@@ -10763,6 +10781,7 @@ static int singlet_main(int argc, char* argv[]) {
         std::error_code ec2;
         std::filesystem::remove(out_prefix + "/star_args.txt", ec2);
     }
+    if (chim_share_held) { star_genome_preload_release(); chim_share_held = false; std::cerr << "[singlet] chimeric: genome released (pass not run)\n"; }   // T2 chimshare: the pass was not forked (skipped or not run)
 
     // ── T4: CITE-seq ADT/HTO processing ──────────────────────────────────────
     // After GEX export, do a second pass through the .1fq to match ADT tags.

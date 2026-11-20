@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 namespace singlet { namespace poolpeak {
 
@@ -31,6 +32,9 @@ struct Consts {
     // --chimeric: after the engine the item forks a CPU STAR that loads the genome index privately (+16.6..17.1 GiB at 8 threads, 18.0 at 16, 19.3 at 27: T2-chimpass.md); every phase figure is
     // raised to wtU P + wtV + chimGb + margin (= 0.50 P + 22.1 + margin). Basis: three samples, one thread count each for two of them.
     double chimGb = 19.5;
+    // T2 chimshare: an item whose pass takes the pool's resident genome adds chimSharedGb instead of chimGb (SINGLET_POOL_PEAK_CHIM_SHARED_GB). The pool decides per item (Chim::Shared only when
+    // it can establish that the item shares; every other case, and whenever it cannot tell, is Chim::Private). Measured (T2-chimshare.md): largest rise of the job cgroup anon+shmem during the pass over three samples at 8 threads and GSM6250953 at 16 and 27 threads = 3.61 GiB, rounded up to 4.0.
+    double chimSharedGb = 4.0;
     // the fitted range and regime
     double nMaxM = 1400.0;                           // above: not fitted
     double fitMemGb = 31.0, fitMemTolGb = 1.0;       // SINGLET_ENGINE_GPU_MEM_GB the fit was made at, and how far from it the pool still trusts the figures
@@ -55,8 +59,10 @@ inline double peakP(double nM, double basesG, const Consts& k) {
     return p;
 }
 // the figure (GiB above the baseline) an item at phase 0 (before the level line), 1 (after it), 2 (after the waited line) can still reach
-inline double phaseFigure(double P, int phase, const Consts& k, bool chimeric = false) {
-    const double chim = chimeric ? k.wtU * P + k.wtV + k.chimGb + k.margin : 0.0;   // the second pass' floor, every phase
+// the item's --chimeric allowance: none, the pass loads the index privately (chimGb), or the pass takes the pool's resident genome (chimSharedGb)
+enum class Chim { None, Private, Shared };
+inline double phaseFigure(double P, int phase, const Consts& k, Chim chimeric = Chim::None) {
+    const double chim = chimeric == Chim::None ? 0.0 : k.wtU * P + k.wtV + (chimeric == Chim::Shared ? k.chimSharedGb : k.chimGb) + k.margin;   // the second pass' floor, every phase
     const double f0 = std::max(P + k.margin, chim);
     const double f1 = std::max(std::min(P + k.margin, k.lvlU * P + k.lvlV + k.margin), chim);
     const double f2 = std::max(std::min(std::min(P + k.margin, k.lvlU * P + k.lvlV + k.margin), k.wtU * P + k.wtV + k.margin), chim);
@@ -81,6 +87,20 @@ inline bool fitValid(double nM, double memGb, double slots, bool hostcutOff, con
     return true;
 }
 
+// T2 chimshare: what an item holds (GiB) from the RssAnon + RssShmem and the RssAnon (GiB) of each process of its group. Every process that maps the pool's resident genome counts it in its RSS, and the
+// genome is not the item's own growth: sharedGb comes off once per mapping process. With keptGenome off (the item's parent released the preload at the STAR fork, or the item is not
+// --chimeric) only one process maps it: sum - sharedGb, as before. With it on (the parent keeps the preload from the first STAR fork until the pass's fork) the parent and the STAR child
+// both map it: m = the number of processes whose RssAnon is at least 0.9 sharedGb, at least 1. Never below 0.
+struct ProcRss { double anonShmem = 0, anon = 0; };   // GiB: (RssAnon + RssShmem) as the pool computed it before, and RssAnon alone
+inline double heldGib(const std::vector<ProcRss>& procs, double sharedGb, bool keptGenome, int* nMap = nullptr) {
+    double sum = 0;
+    int m = 0;
+    for (const ProcRss& p : procs) { sum += p.anonShmem; if (p.anon >= 0.9 * sharedGb) ++m; }
+    if (!keptGenome || m < 1) m = 1;
+    if (nMap != nullptr) *nMap = m;
+    return std::max(0.0, sum - sharedGb * m);
+}
+
 inline double envd(const char* n, double d) { const char* e = std::getenv(n); return e && e[0] ? std::atof(e) : d; }
 // the constants with their environment overrides: SINGLET_POOL_PEAK_<NAME>, margin SINGLET_POOL_PEAK_MARGIN_GB
 inline Consts fromEnv() {
@@ -93,6 +113,7 @@ inline Consts fromEnv() {
     k.wtU = envd("SINGLET_POOL_PEAK_WAITED_U", k.wtU); k.wtV = envd("SINGLET_POOL_PEAK_WAITED_V", k.wtV);
     k.ledA = envd("SINGLET_POOL_PEAK_LEDGER_A", k.ledA); k.ledB = envd("SINGLET_POOL_PEAK_LEDGER_B", k.ledB); k.ledKeep = envd("SINGLET_POOL_PEAK_LEDGER_KEEP", k.ledKeep);
     k.nMaxM = envd("SINGLET_POOL_PEAK_NMAX_M", k.nMaxM); k.chimGb = envd("SINGLET_POOL_PEAK_CHIM_GB", k.chimGb);
+    k.chimSharedGb = envd("SINGLET_POOL_PEAK_CHIM_SHARED_GB", k.chimSharedGb);
     k.fitMemGb = envd("SINGLET_POOL_PEAK_FIT_MEM_GB", k.fitMemGb); k.fitMemTolGb = envd("SINGLET_POOL_PEAK_FIT_MEM_TOL_GB", k.fitMemTolGb);
     k.fitSlots = envd("SINGLET_POOL_PEAK_FIT_SLOTS", k.fitSlots); k.fitSlotsTol = envd("SINGLET_POOL_PEAK_FIT_SLOTS_TOL", k.fitSlotsTol);
     return k;
