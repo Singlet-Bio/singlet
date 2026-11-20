@@ -1,5 +1,9 @@
 # singlet (R) — NEWS
 
+## singlet 1.4.2
+
+Version aligned with the Python package for the host-memory and chimeric-throughput release.
+
 ## singlet 1.4.1
 
 Version aligned with the Python package for the gpu-pool memory admission fix.
