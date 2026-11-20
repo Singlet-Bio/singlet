@@ -1,0 +1,61 @@
+== T8: watch rows 831, first 1795136801.0
+  event logout: +0.0 s
+  event junction: +9.4 s
+  event finalout: +839.9 s
+  event childgone: +841.0 s
+  child pid 2087128, threads (max) 8, STAR child CPU (user+sys, last sample) 6479.8 s, samples 806 over 839 s; VmHWM max 24.0 GiB, VmRSS max 24.0 GiB
+  CPU cores in use per ~30 s window (offset s: cores): 0:5.9, 31:8.0, 63:8.0, 94:8.0, 125:8.0, 156:8.0, 188:8.0, 219:8.0, 250:8.0, 282:8.0, 313:8.0, 344:8.0, 375:8.0, 406:8.0, 438:8.0, 469:8.0, 500:8.0, 532:8.0, 563:8.0, 594:8.0, 625:8.0, 657:8.0, 688:8.0, 719:8.0, 750:8.0, 782:8.0, 813:1.6
+  cgroup anon+shmem at the first sample 53.9 GiB; peak over the watch 70.5 GiB (increase 16.6); page cache (file) max 71.7 GiB
+  cgroup CPU over the watch: 6583.8 s
+  junction file: first seen +815 s, 2.34 GB at the end of the watch
+  STAR Log.out stage lines:
+    Nov 19 20:06:40 ... Finished reading, sorting and deduplicating CB whitelist sequences.
+    SEQCACHE: off (chimeric detection)
+    Nov 19 20:20:17 ..... finished mapping
+    Nov 19 20:20:17 ..... started Solo counting
+    Nov 19 20:20:17 ... Starting Solo post-map for Gene
+    Nov 19 20:20:17 ... Finished allocating arrays for Solo 0.00259266 GiB
+    Nov 19 20:20:39 ... Finished reading reads from Solo files nCB=43970, nReadPerCBmax=1943, yesWLmatch=0
+    Nov 19 20:20:39 ... Finished collapsing UMIs
+    Nov 19 20:20:39 ... Solo: writing raw matrix
+    Nov 19 20:20:39 ... Solo: cell filtering
+    Nov 19 20:20:40 ..... finished Solo counting
+    ALL DONE!
+  Log.final.out:
+                                     Started job on |	Nov 19 20:06:40
+                                 Started mapping on |	Nov 19 20:06:50
+                                        Finished on |	Nov 19 20:20:40
+           Mapping speed, Million of reads per hour |	220.20
+                              Number of input reads |	50768292
+                          Average input read length |	149
+                       Uniquely mapped reads number |	14922322
+                            Uniquely mapped reads % |	29.39%
+                              Average mapped length |	130.65
+                           Number of splices: Total |	16862065
+                Number of splices: Annotated (sjdb) |	2325384
+                           Number of splices: GT/AG |	10241361
+                           Number of splices: GC/AG |	297087
+                           Number of splices: AT/AC |	3922
+                   Number of splices: Non-canonical |	6319695
+                          Mismatch rate per base, % |	1.68%
+                             Deletion rate per base |	0.00%
+                            Deletion average length |	1.23
+                            Insertion rate per base |	0.00%
+                           Insertion average length |	1.21
+            Number of reads mapped to multiple loci |	151292
+                 % of reads mapped to multiple loci |	0.30%
+            Number of reads mapped to too many loci |	31549
+                 % of reads mapped to too many loci |	0.06%
+      Number of reads unmapped: too many mismatches |	0
+           % of reads unmapped: too many mismatches |	0.00%
+                Number of reads unmapped: too short |	34560654
+                     % of reads unmapped: too short |	68.08%
+                    Number of reads unmapped: other |	1102475
+                         % of reads unmapped: other |	2.17%
+                           Number of chimeric reads |	11359390
+                                % of chimeric reads |	22.37%
+  Log.progress.out (last 4 lines):
+    Nov 19 20:17:53    208.6    38413466      149    13.0%    149.3     2.5%     0.3%     0.1%     0.0%    84.0%     2.7%
+    Nov 19 20:18:53    211.6    42495990      149    15.7%    143.4     2.3%     0.3%     0.1%     0.0%    81.3%     2.6%
+    Nov 19 20:19:53    222.3    48355557      149    25.9%    132.6     1.8%     0.3%     0.1%     0.0%    71.5%     2.3%
+    ALL DONE!

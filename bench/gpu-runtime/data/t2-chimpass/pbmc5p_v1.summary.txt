@@ -1,0 +1,21 @@
+== pbmc5p_v1: watch rows 125, first 1795139044.2
+  event logout: +0.0 s
+  event junction: +9.4 s
+  event finalout: +123.1 s
+  event childgone: +124.2 s
+  child pid 2288236, threads (max) 8, STAR child CPU (user+sys, last sample) 856.6 s, samples 118 over 122 s; VmHWM max 24.4 GiB, VmRSS max 24.4 GiB
+  CPU cores in use per ~30 s window (offset s: cores): 0:5.8, 32:8.0, 63:8.0, 94:6.1
+  cgroup anon+shmem at the first sample 51.6 GiB; peak over the watch 68.3 GiB (increase 16.7); page cache (file) max 60.1 GiB
+  cgroup CPU over the watch: 872.8 s
+  junction file: first seen +110 s, 0.51 GB at the end of the watch
+  STAR Log.out stage lines:
+    Nov 19 20:44:03 ... Finished reading, sorting and deduplicating CB whitelist sequences.
+ Started job on |	Nov 19 20:44:03
+ Started mapping on |	Nov 19 20:44:13
+ Finished on |	Nov 19 20:46:07
+ Number of input reads |	4944371
+ Average input read length |	90
+ Number of reads unmapped: too short |	4415239
+ % of reads unmapped: too short |	89.30%
+ Number of chimeric reads |	913687
+ % of chimeric reads |	18.48%
