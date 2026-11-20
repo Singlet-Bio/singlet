@@ -1,0 +1,20 @@
+node=g002.clipper.gvsu.edu job=819037 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimdedup/singlet-gpu item=pbmc5p_v1 arms='on:SINGLET_CHIM_DEDUP=1 off:SINGLET_CHIM_DEDUP=0' T=16 2026-11-19T21:46:27-05:00
+RUN pbmc5p_v1_cpu_on env 'SINGLET_CHIM_DEDUP=1' start 2026-11-19T21:46:28-05:00
+RUN pbmc5p_v1_cpu_on wall 380 s
+RUN pbmc5p_v1_cpu_on LOG: 1795143105 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.2 s
+RUN pbmc5p_v1_cpu_on LOG: 1795143105 [singlet] chimeric: dedup memory: parent VmRSS 9243 MiB before, 9559 MiB at the peak of stage A, 9266 MiB during the pass
+RUN pbmc5p_v1_cpu_on LOG: 1795143105 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_cpu_on LOG: 1795143165 [singlet] chimeric: second pass 6e+01 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_cpu_on LOG: 1795143166 [singlet] Total: 4e+02s
+RUN pbmc5p_v1_cpu_on table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_cpu_on time: 	Elapsed (wall clock) time (h:mm:ss or m:ss): 6:20.06
+RUN pbmc5p_v1_cpu_on time: 	Maximum resident set size (kbytes): 40339992
+RUN pbmc5p_v1_cpu_off env 'SINGLET_CHIM_DEDUP=0' start 2026-11-19T21:52:48-05:00
+RUN pbmc5p_v1_cpu_off wall 400 s
+RUN pbmc5p_v1_cpu_off LOG: 1795143489 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_cpu_off LOG: 1795143566 [singlet] chimeric: second pass 8e+01 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_cpu_off LOG: 1795143566 [singlet] Total: 4e+02s
+RUN pbmc5p_v1_cpu_off table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_cpu_off time: 	Elapsed (wall clock) time (h:mm:ss or m:ss): 6:40.59
+RUN pbmc5p_v1_cpu_off time: 	Maximum resident set size (kbytes): 40904452
+done 2026-11-19T21:59:28-05:00
