@@ -402,7 +402,8 @@ int star_main_impl(int argInN, char *argIn[])
     // solo counts
     Solo soloMain(RAchunk, P, *RAchunk[0]->chunkTr);
     E16_MARK("STAR: Solo constructed");
-    if (!g_e11SoloDone) //singlet E11 (SINGLET_ENGINE_GPU_E2E=5): counted on the device
+    //singlet --chimeric second pass (SINGLET_CHIM_SKIP_SOLO=1, set for the child only): its Solo output is deleted unread, so the post-mapping count is skipped
+    if (!g_e11SoloDone && getenv("SINGLET_CHIM_PASS_NOSOLO") == nullptr) //singlet E11 (SINGLET_ENGINE_GPU_E2E=5): counted on the device
     soloMain.processAndOutput();
 
     if (P.quant.geCount.yes)

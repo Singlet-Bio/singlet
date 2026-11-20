@@ -65,6 +65,7 @@
 #include "singlet/pileup/pileup_engine.h"
 #include "singlet/pileup/export.h"
 #include "singlet/pileup/chimeric_table.h"
+#include "singlet/pileup/chimeric_dedup.h"
 #include "singlet/pipeline/hla_typing.h"   // D-101: HLA typing with T1K from the input reads
 #include "singlet/pileup/species_detect.h"
 #include "singlet/pileup/nonhost/min_sketch.h"
@@ -10576,51 +10577,125 @@ static int singlet_main(int argc, char* argv[]) {
             std::cerr << "[singlet] chimeric: skipped (needs a FASTQ barcode run with unmapped reads written)\n";
         } else {
             StopWatch chim_sw;
+            const std::string prefix = out_prefix + "/chim_";
+            const std::string dd1 = out_prefix + "/chim_dedup.mate1", dd2 = out_prefix + "/chim_dedup.mate2";
+            const char* keep_env = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");
             uint64_t chim_in = 0;   // reads going into the second pass (FASTQ records of the cDNA mate)
             uint64_t chim_sc = 0;   // of which mapped reads routed by their unaligned part (Softclip.out)
-            { std::ifstream uf(unm1); std::string l; while (std::getline(uf, l)) ++chim_in; chim_in /= 4; }
-            if (softclip) { std::ifstream uf(sc1); std::string l; while (std::getline(uf, l)) ++chim_sc; chim_sc /= 4; }
+            // Stage A (SINGLET_CHIM_DEDUP, default on): map each distinct cDNA sequence once; the member table gives every read its CB and UMI
+            singlet::chimeric::DedupResult dres;
+            bool dedup_on = false;
+            {
+                const char* de = std::getenv("SINGLET_CHIM_DEDUP");
+                std::string why;
+                auto arg1 = [&](const char* name) -> const std::string* {
+                    for (size_t k = 0; k + 1 < base_args.size(); ++k) if (base_args[k] == name) return &base_args[k + 1];
+                    return nullptr;
+                };
+                auto uarg = [&](const char* name, uint32_t dflt) -> uint32_t {
+                    const std::string* v = arg1(name);
+                    return v ? static_cast<uint32_t>(std::strtoul(v->c_str(), nullptr, 10)) : dflt;
+                };
+                auto not_default = [&](const char* name, const char* dflt) { const std::string* v = arg1(name); return v && *v != dflt; };
+                if (de && std::string(de) == "0") {
+                    why = "off";
+                } else if (keep_env && *keep_env == '1') {
+                    std::cerr << "[singlet] chimeric: dedup off (SINGLET_KEEP_CHIMERIC_JUNCTION=1 keeps the raw junction file as the pass writes it)\n";
+                    why = "off";
+                } else if (arg1("--soloType") == nullptr || *arg1("--soloType") != "CB_UMI_Simple") {
+                    why = "--soloType is not CB_UMI_Simple";
+                } else if (not_default("--soloBarcodeMate", "0") || not_default("--soloCBtype", "Sequence") || arg1("--soloCBposition") || arg1("--soloUMIposition")) {
+                    why = "the barcode is not a plain CB and UMI of a separate barcode read";
+                } else if (not_default("--outSAMreadID", "Standard") || arg1("--outSAMattrRGline") || not_default("--twopassMode", "None") ||
+                           not_default("--outFilterType", "Normal")) {
+                    why = "a STAR option under which a read's junction line depends on other reads or on its name";
+                }
+                if (why.empty()) {
+                    singlet::chimeric::DedupParams dp;
+                    dp.cb_start = uarg("--soloCBstart", 1); dp.cb_len = uarg("--soloCBlen", 16);
+                    dp.umi_start = uarg("--soloUMIstart", 17); dp.umi_len = uarg("--soloUMIlen", 10);
+                    const uint32_t bl = uarg("--soloBarcodeReadLength", 1);
+                    dp.barcode_len = bl == 1 ? dp.cb_len + dp.umi_len : bl;   // ParametersSolo.cpp: 1 means cbL + umiL, 0 means any length
+                    std::vector<std::pair<std::string, std::string>> din = {{unm1, unm2}};
+                    if (softclip) din.emplace_back(sc1, sc2);
+                    const uint64_t rss0 = singlet::chimeric::dedup_detail::rss_kb();
+                    dres = singlet::chimeric::build_dedup(din, dd1, dd2, dp);
+                    if (dres.ok) {
+                        dedup_on = true;
+                        chim_in = dres.n_first;
+                        chim_sc = softclip ? dres.n_second : 0;
+                        char pct[32];
+                        std::snprintf(pct, sizeof pct, "%.1f", dres.n_reads ? 100.0 * static_cast<double>(dres.n_distinct) / static_cast<double>(dres.n_reads) : 0.0);
+                        std::cerr << "[singlet] chimeric: dedup: " << dres.n_reads << " reads, " << dres.n_distinct << " distinct sequences (" << pct << " %), "
+                                  << chim_sw.elapsed_s() << " s\n";
+                        std::cerr << "[singlet] chimeric: dedup memory: parent VmRSS " << rss0 / 1024 << " MiB before, " << dres.rss_peak_kb / 1024
+                                  << " MiB at the peak of stage A, " << singlet::chimeric::dedup_detail::rss_kb() / 1024 << " MiB during the pass\n";
+                    } else {
+                        why = dres.reason;
+                        std::error_code dec;
+                        std::filesystem::remove(dd1, dec); std::filesystem::remove(dd2, dec);
+                    }
+                }
+                if (!dedup_on && !why.empty() && why != "off")
+                    std::cerr << "[singlet] chimeric: dedup refused (" << why << "); running the pass on all reads\n";
+            }
+            if (!dedup_on) {
+                { std::ifstream uf(unm1); std::string l; while (std::getline(uf, l)) ++chim_in; chim_in /= 4; }
+                if (softclip) { std::ifstream uf(sc1); std::string l; while (std::getline(uf, l)) ++chim_sc; chim_sc /= 4; }
+            }
             std::cerr << "[singlet] chimeric: " << chim_in + chim_sc << " reads into the second pass (" << chim_in << " unmapped, " << chim_sc
                       << " mapped with >= " << (getenv("SINGLET_CHIM_SOFTCLIP_MIN") ? getenv("SINGLET_CHIM_SOFTCLIP_MIN") : "0") << " unaligned bases)\n";
-            static const std::set<std::string> drop = {
-                "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
-                "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
-                "--readFilesIn", "--readFilesCommand", "--readFilesType", "--soloFeatures", "--soloOutFileNames", "--soloMultiMappers"};
-            std::vector<std::string> pa;
-            bool skipping = false;
-            for (const auto& s : base_args) {
-                if (s.rfind("--", 0) == 0) skipping = drop.count(s) > 0;
-                if (!skipping) pa.push_back(s);
-            }
-            const std::string prefix = out_prefix + "/chim_";
-            for (const char* s : {"--readFilesIn"}) pa.push_back(s);
-            pa.push_back(softclip ? unm1 + "," + sc1 : unm1); pa.push_back(softclip ? unm2 + "," + sc2 : unm2);
-            for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
-            pa.push_back(prefix);
-            // Arriba's published chimeric settings (Uhrig et al. 2021): short segments (10 bases), unaligned tails up to 30 points and
-            // read gaps up to 3 bases, which droplet reads of 90 bases need (B6: the 15-base settings lost RUNX1-RUNX1T1 reads)
-            for (const char* s : {"--chimSegmentMin", "10", "--chimJunctionOverhangMin", "10", "--chimScoreMin", "1", "--chimScoreDropMax", "30",
-                                  "--chimScoreJunctionNonGTAG", "0", "--chimScoreSeparation", "1", "--alignSJstitchMismatchNmax", "5", "-1", "5", "5",
-                                  "--chimSegmentReadGapMax", "3", "--chimMultimapNmax", "50", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1"})
-                pa.push_back(s);
-            std::vector<char*> pv;
-            pv.push_back(const_cast<char*>("STAR"));
-            for (auto& s : pa) pv.push_back(const_cast<char*>(s.c_str()));
-            pv.push_back(nullptr);
-            pid_t pp = fork();
-            if (pp == 0) {
-                int dn = open("/dev/null", O_WRONLY);
-                if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
-                unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF"); unsetenv("SINGLET_GPU_PILEUP");   // the second pass is a CPU STAR run
-                unsetenv("SINGLET_CHIM_SOFTCLIP_MIN");   // that writes no Softclip.out of its own
-                _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
-            }
-            int ws = 0;
-            const bool ran = pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+            // the pass: STAR on the representatives (dedup) or on every read; true when it exited with 0
+            auto run_pass = [&](bool dedup) -> bool {
+                static const std::set<std::string> drop = {
+                    "--outSAMtype", "--outStd", "--outBAMcompression", "--limitBAMsortRAM", "--outBAMsortingBinsN", "--outBAMsortingThreadN",
+                    "--outFileNamePrefix", "--outTmpDir", "--outReadsUnmapped", "--outSAMattributes", "--outSAMunmapped", "--readMapNumber",
+                    "--readFilesIn", "--readFilesCommand", "--readFilesType", "--soloFeatures", "--soloOutFileNames", "--soloMultiMappers"};
+                std::vector<std::string> pa;
+                bool skipping = false;
+                for (const auto& s : base_args) {
+                    if (s.rfind("--", 0) == 0) skipping = drop.count(s) > 0;
+                    if (!skipping) pa.push_back(s);
+                }
+                for (const char* s : {"--readFilesIn"}) pa.push_back(s);
+                if (dedup) { pa.push_back(dd1); pa.push_back(dd2); }
+                else { pa.push_back(softclip ? unm1 + "," + sc1 : unm1); pa.push_back(softclip ? unm2 + "," + sc2 : unm2); }
+                for (const char* s : {"--soloFeatures", "Gene", "--outSAMtype", "None", "--outFileNamePrefix"}) pa.push_back(s);
+                pa.push_back(prefix);
+                // Arriba's published chimeric settings (Uhrig et al. 2021): short segments (10 bases), unaligned tails up to 30 points and
+                // read gaps up to 3 bases, which droplet reads of 90 bases need (B6: the 15-base settings lost RUNX1-RUNX1T1 reads)
+                for (const char* s : {"--chimSegmentMin", "10", "--chimJunctionOverhangMin", "10", "--chimScoreMin", "1", "--chimScoreDropMax", "30",
+                                      "--chimScoreJunctionNonGTAG", "0", "--chimScoreSeparation", "1", "--alignSJstitchMismatchNmax", "5", "-1", "5", "5",
+                                      "--chimSegmentReadGapMax", "3", "--chimMultimapNmax", "50", "--chimOutType", "Junctions", "--chimOutJunctionFormat", "1"})
+                    pa.push_back(s);
+                if (const char* te = std::getenv("SINGLET_CHIM_THREADS"); te && std::atoi(te) > 0) {   // the pass's own thread count (default: the item's)
+                    bool set = false;
+                    for (size_t k = 0; k + 1 < pa.size(); ++k) if (pa[k] == "--runThreadN") { pa[k + 1] = std::to_string(std::atoi(te)); set = true; }
+                    if (!set) { pa.push_back("--runThreadN"); pa.push_back(std::to_string(std::atoi(te))); }
+                }
+                std::vector<char*> pv;
+                pv.push_back(const_cast<char*>("STAR"));
+                for (auto& s : pa) pv.push_back(const_cast<char*>(s.c_str()));
+                pv.push_back(nullptr);
+                pid_t pp = fork();
+                if (pp == 0) {
+                    int dn = open("/dev/null", O_WRONLY);
+                    if (dn >= 0) { dup2(dn, STDOUT_FILENO); close(dn); }
+                    unsetenv("SINGLET_ENGINE_GPU"); unsetenv("SINGLET_ENGINE_GPU_HANDOFF"); unsetenv("SINGLET_GPU_PILEUP");   // the second pass is a CPU STAR run
+                    unsetenv("SINGLET_CHIM_SOFTCLIP_MIN");   // that writes no Softclip.out of its own
+                    if (const char* sk = std::getenv("SINGLET_CHIM_SKIP_SOLO"); sk && *sk == '1') setenv("SINGLET_CHIM_PASS_NOSOLO", "1", 1);   // STAR.cpp: no Solo post-map
+                    _exit(star_main_impl(static_cast<int>(pv.size()) - 1, pv.data()));
+                }
+                int ws = 0;
+                return pp > 0 && waitpid(pp, &ws, 0) >= 0 && WIFEXITED(ws) && WEXITSTATUS(ws) == 0;
+            };
             std::error_code ec;
-            std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
-            std::filesystem::remove(sc1, ec); std::filesystem::remove(sc2, ec);
-            std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
+            auto clean_solo = [&]() {
+                std::filesystem::remove_all(out_prefix + "/chim_Solo.out", ec);
+                std::filesystem::remove_all(out_prefix + "/chim_STARgenome", ec);
+            };
+            bool ran = run_pass(dedup_on);
+            clean_solo();
             if (!ran) {
                 std::cerr << "[singlet] chimeric: the second STAR pass failed\n";
             } else {
@@ -10645,7 +10720,25 @@ static int singlet_main(int argc, char* argv[]) {
                     cc.blacklist_path = pick(chimeric_blacklist_path, "blacklist_hg38_GRCh38_v2.5.1.tsv.gz");
                     cc.recurrent_path = pick(chimeric_recurrent_path, "chimeric_recurrent_GRCh38.tsv");
                 }
-                const auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+                if (dedup_on) {
+                    cc.members = &dres.table;
+                    const char* dmp = std::getenv("SINGLET_CHIM_DEDUP_DUMP");
+                    if (dmp && *dmp == '1') cc.expanded_dump_path = prefix + "Expanded.junction";
+                }
+                auto cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+                if (dedup_on && !cs.dedup_refusal.empty()) {   // the self-check failed: today's path on every read (the four input files are still there)
+                    std::cerr << "[singlet] chimeric: dedup refused (" << cs.dedup_refusal << "); running the pass on all reads\n";
+                    if (!cc.expanded_dump_path.empty()) std::filesystem::remove(cc.expanded_dump_path, ec);
+                    dedup_on = false;
+                    cc.members = nullptr;
+                    cc.expanded_dump_path.clear();
+                    dres = singlet::chimeric::DedupResult();
+                    ran = run_pass(false);
+                    clean_solo();
+                    if (ran) cs = singlet::chimeric::write_table(engine_ptr->barcodes(), cc);
+                    else std::cerr << "[singlet] chimeric: the second STAR pass failed\n";
+                }
+                if (ran)
                 std::cerr << "[singlet] chimeric: second pass " << chim_sw.elapsed_s() << " s; " << cs.lines << " junction lines, " << cs.kept_lines << " kept, "
                           << cs.no_barcode << " without barcode, " << cs.unmatched << " unmatched, " << cs.ambiguous << " ambiguous, "
                           << cs.noncanonical << " non-canonical, " << cs.reoriented << " turned to transcript orientation (library "
@@ -10654,8 +10747,11 @@ static int singlet_main(int argc, char* argv[]) {
                           << " rows in " << cs.cells << " cells, " << cs.recurrent_rows << " flagged recurrent, " << cs.annotated << " in the catalogue"
                           << (cs.ok ? "" : " (WRITE FAILED)") << "\n";
             }
+            dres = singlet::chimeric::DedupResult();   // frees the member table
+            std::filesystem::remove(sc1, ec); std::filesystem::remove(sc2, ec);
+            std::filesystem::remove(dd1, ec); std::filesystem::remove(dd2, ec);
             // the second pass's own files: logs carry timings and paths (they differ between runs), the junction file is the table's input
-            const char* keep = std::getenv("SINGLET_KEEP_CHIMERIC_JUNCTION");
+            const char* keep = keep_env;
             for (const char* f : {"Log.out", "Log.final.out", "Log.progress.out", "Log.std.out", "SJ.out.tab", "Chimeric.out.junction"}) {
                 if (keep && *keep == '1' && std::string(f) == "Chimeric.out.junction") continue;
                 std::filesystem::remove(prefix + f, ec);
