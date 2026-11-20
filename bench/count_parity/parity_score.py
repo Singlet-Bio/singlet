@@ -49,6 +49,11 @@ def collapse_by_gene(d, stem):
     return L.Mat(bcs, uniq, X)
 
 
+def unspliced_stem(d):
+    """USA-labelled unspliced layer (1.3.5 and later) when present, else the legacy intron_counts used as unspliced."""
+    return "unspliced_counts" if os.path.exists(os.path.join(d, "unspliced_counts.mtx.gz")) else "intron_counts"
+
+
 def align(m, bcs):
     idx = {b: i for i, b in enumerate(m.barcodes)}
     rows = np.array([idx.get(b, -1) for b in bcs])
@@ -170,7 +175,7 @@ def main():
         res["n_pure_human"], res["n_pure_mouse"] = int(ph.sum()), int(pm.sum())
         layers = [("barnyard.X", lambda: L.load_singlet(a.singlet), lambda: L.load_starsolo(a.starsolo, "GeneFull")),
                   ("barnyard.exon", lambda: collapse_by_gene(a.singlet, "exon_counts"), lambda: L.load_starsolo(a.starsolo, "Gene")),
-                  ("barnyard.intron", lambda: collapse_by_gene(a.singlet, "intron_counts"), lambda: L.load_starsolo_velocyto(a.starsolo, "unspliced"))]
+                  ("barnyard.intron", lambda: collapse_by_gene(a.singlet, unspliced_stem(a.singlet)), lambda: L.load_starsolo_velocyto(a.starsolo, "unspliced"))]
         chrom = L.gene_chrom(a.gtf)
         res["excess"] = {}
         for name, ls, lo in layers:
