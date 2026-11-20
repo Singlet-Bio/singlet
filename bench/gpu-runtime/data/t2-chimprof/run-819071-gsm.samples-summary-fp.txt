@@ -1,0 +1,165 @@
+# t2-chimprof stack samples of /tmp/debruinz-chimprof-run-819071/gsm/samp-fp/p: 489242 samples of 8 threads at 100 Hz (wall clock): 4892.4 thread-seconds
+samples whose first backtrace frame equals the interrupted pc: 100.0 %; leaf unresolved (no symbol): 2.4 %
+per thread samples: 60965 61282 60945 61255 61271 61101 60978 61445
+
+## groups (innermost frame that belongs to a group; percent of all samples; seconds = samples / Hz summed over threads)
+chimeric: pair loop (chimericDetectionMult, segments, score)                                 180529   36.90 %     1805.3 thread-s
+stitching (stitchWindowAligns, stitchAlignToTranscript, extendAlign, scoring)                138284   28.26 %     1382.8 thread-s
+seed search (maxMappableLength2strands, suffix array)                                        105965   21.66 %     1059.7 thread-s
+seed storage / windows (createExtendWindowsWithAlign, assignAlignToWindow, stitchPieces)      45255    9.25 %      452.6 thread-s
+input parsing (readLoad, chunk read, clip, chunk sort)                                         8599    1.76 %       86.0 thread-s
+Solo / barcode (getCBandUMI, Solo records)                                                     3424    0.70 %       34.2 thread-s
+chimeric: stitching (chimericStitching)                                                        3192    0.65 %       31.9 thread-s
+per-read driver (oneRead self, qualHist)                                                       1080    0.22 %       10.8 thread-s
+chimeric: junction output (chimericJunctionOutput, formatting)                                 1037    0.21 %       10.4 thread-s
+multimapper selection (multMapSelect, mappedFilter)                                             928    0.19 %        9.3 thread-s
+output (outputAlignments, SAM/unmapped/SJ output)                                               578    0.12 %        5.8 thread-s
+other (main binary, no group)                                                                   306    0.06 %        3.1 thread-s
+chimeric: ChimericAlign other (check, construct, generateCigar)                                  34    0.01 %        0.3 thread-s
+chimeric: ReadAlign::chimericDetection (entry)                                                   26    0.01 %        0.3 thread-s
+other (libc/other library)                                                                        5    0.00 %        0.1 thread-s
+
+## self time, top 25 (innermost frame)
+ 17.24 %  ChimericSegment::ChimericSegment
+ 15.97 %  compareSeqToGenome
+  9.73 %  chimericAlignScore
+  8.35 %  ChimericDetection::chimericDetectionMult
+  7.20 %  stitchWindowAligns
+  7.09 %  stitchAlignToTranscript
+  6.93 %  ReadAlign::stitchPieces
+  6.36 %  extendAlign
+  2.75 %  ReadAlign::maxMappableLength2strands
+  1.94 %  Transcript::operator=
+  1.61 %  maxMappableLength
+  1.55 %  ChimericSegment::segmentCheck
+  1.31 %  sjAlignSplit
+  1.05 %  ReadAlign::assignAlignToWindow
+  0.96 %  [libc.so.6 unresolved] <- stitchWindowAligns
+  0.88 %  std::vector<int, std::allocator >::operator=(std::vector<int, std::allocator > const&)
+  0.83 %  localSearch
+  0.81 %  ReadAlign::createExtendWindowsWithAlign
+  0.76 %  binarySearch2
+  0.71 %  ReadAlign::storeAligns
+  0.60 %  ChimericAlign::chimericStitching
+  0.48 %  [libm.so.6 unresolved] <- stitchWindowAligns
+  0.48 %  blocksOverlap
+  0.45 %  findMultRange
+  0.38 %  [libc.so.6 unresolved] <- ReadAlign::stitchPieces
+
+## inclusive time, top 25 (function anywhere in the stack)
+ 99.07 %  [libc.so.6 unresolved]
+ 99.06 %  ReadAlignChunk::processChunks
+ 98.91 %  ReadAlignChunk::mapChunk
+ 98.58 %  ReadAlign::oneRead
+ 86.55 %  ThreadControl::threadRAprocessChunks
+ 58.72 %  ReadAlign::mapOneRead
+ 37.84 %  ReadAlign::chimericDetection
+ 36.71 %  ReadAlign::stitchPieces
+ 24.31 %  stitchWindowAligns
+ 21.47 %  ReadAlign::maxMappableLength2strands
+ 17.78 %  maxMappableLength
+ 17.66 %  ChimericDetection::chimericDetectionMult
+ 17.24 %  ChimericSegment::ChimericSegment
+ 15.97 %  compareSeqToGenome
+ 12.36 %  mapThreadsSpawn
+ 12.35 %  star_main_impl
+ 12.35 %  singlet_main
+ 12.34 %  __libc_start_main@GLIBC_2.2.5
+ 12.34 %  _start
+  9.73 %  chimericAlignScore
+  7.85 %  stitchAlignToTranscript
+  6.36 %  extendAlign
+  2.38 %  Transcript::operator=
+  2.17 %  findMultRange
+  1.55 %  ChimericSegment::segmentCheck
+
+## innermost functions inside each group (top 6)
+chimeric: pair loop (chimericDetectionMult, segments, score) (36.90 %)
+     17.24 % of all  ChimericSegment::ChimericSegment
+      9.73 % of all  chimericAlignScore
+      8.35 % of all  ChimericDetection::chimericDetectionMult
+      1.55 % of all  ChimericSegment::segmentCheck
+      0.02 % of all  [libc.so.6 unresolved]
+      0.00 % of all  free@@GLIBC_2.2.5
+stitching (stitchWindowAligns, stitchAlignToTranscript, extendAlign, scoring) (28.26 %)
+      7.20 % of all  stitchWindowAligns
+      7.09 % of all  stitchAlignToTranscript
+      6.36 % of all  extendAlign
+      1.94 % of all  Transcript::operator=
+      1.31 % of all  sjAlignSplit
+      0.99 % of all  [libc.so.6 unresolved]
+seed search (maxMappableLength2strands, suffix array) (21.66 %)
+     15.97 % of all  compareSeqToGenome
+      2.75 % of all  ReadAlign::maxMappableLength2strands
+      1.61 % of all  maxMappableLength
+      0.71 % of all  ReadAlign::storeAligns
+      0.45 % of all  findMultRange
+      0.14 % of all  ReadAlign::mapOneRead
+seed storage / windows (createExtendWindowsWithAlign, assignAlignToWindow, stitchPieces) (9.25 %)
+      6.93 % of all  ReadAlign::stitchPieces
+      1.05 % of all  ReadAlign::assignAlignToWindow
+      0.81 % of all  ReadAlign::createExtendWindowsWithAlign
+      0.38 % of all  [libc.so.6 unresolved]
+      0.08 % of all  std::vector<int, std::allocator >::operator=(std::vector<int, std::allocator > const&)
+      0.00 % of all  [singlet-gpu unresolved]
+input parsing (readLoad, chunk read, clip, chunk sort) (1.76 %)
+      0.83 % of all  localSearch
+      0.32 % of all  [libc.so.6 unresolved]
+      0.14 % of all  ReadAlignChunk::mapChunk
+      0.08 % of all  complementSeqNumbers
+      0.05 % of all  readLoad
+      0.04 % of all  ReadAlignChunk::processChunks
+Solo / barcode (getCBandUMI, Solo records) (0.70 %)
+      0.24 % of all  ParametersSolo::hashLookupCB
+      0.06 % of all  SoloReadBarcode::addStats
+      0.05 % of all  [libc.so.6 unresolved]
+      0.05 % of all  SoloReadBarcode::getCBandUMI
+      0.03 % of all  malloc@@GLIBC_2.2.5
+      0.02 % of all  SoloReadBarcode::matchCBtoWL
+chimeric: stitching (chimericStitching) (0.65 %)
+      0.60 % of all  ChimericAlign::chimericStitching
+      0.02 % of all  [libc.so.6 unresolved]
+      0.02 % of all  malloc@@GLIBC_2.2.5
+      0.00 % of all  std::basic_filebuf<char, std::char_traits >::xsputn(char const*, long)
+      0.00 % of all  std::basic_ostream<char, std::char_traits >::sentry::sentry(std::basic_ostream<char, std::char_traits >&)
+      0.00 % of all  std::codecvt::do_always_noconv() const
+per-read driver (oneRead self, qualHist) (0.22 %)
+      0.19 % of all  ReadAlign::oneRead
+      0.01 % of all  std::__cxx11::basic_string<char, std::char_traits, std::allocator >::operator=(std::__cxx11::basic_string<char
+      0.01 % of all  [singlet-gpu unresolved]
+      0.00 % of all  ReadAlign::resetN
+      0.00 % of all  ReadAlign::waspMap
+      0.00 % of all  void std::_Rb_tree<unsigned int, unsigned int, std::_Identity, std::less, std::allocator >::_M_assign_unique
+chimeric: junction output (chimericJunctionOutput, formatting) (0.21 %)
+      0.03 % of all  std::basic_ostream<char, std::char_traits >& std::__ostream_insert<char, std::char_traits >(std::basic_ostream
+      0.02 % of all  writev@@GLIBC_2.2.5
+      0.02 % of all  std::basic_filebuf<char, std::char_traits >::xsputn(char const*, long)
+      0.02 % of all  std::basic_streambuf<char, std::char_traits >::xsputn(char const*, long)
+      0.02 % of all  int std::__int_to_char
+      0.02 % of all  std::ostreambuf_iterator<char, std::char_traits > std::num_put<char, std::ostreambuf_iterator<char, std::char_
+multimapper selection (multMapSelect, mappedFilter) (0.19 %)
+      0.19 % of all  ReadAlign::multMapSelect
+      0.00 % of all  ReadAlign::mappedFilter
+output (outputAlignments, SAM/unmapped/SJ output) (0.12 %)
+      0.03 % of all  Transcriptome::classifyAlign
+      0.03 % of all  ReadAlign::outputAlignments
+      0.01 % of all  [libc.so.6 unresolved]
+      0.01 % of all  void std::_Rb_tree<unsigned int, unsigned int, std::_Identity, std::less, std::allocator >::_M_assign_unique
+      0.01 % of all  alignToTranscript
+      0.00 % of all  read@@GLIBC_2.2.5
+other (main binary, no group) (0.06 %)
+      0.05 % of all  writev@@GLIBC_2.2.5
+      0.00 % of all  std::__cxx11::basic_stringbuf<char, std::char_traits, std::allocator >::overflow(int)
+      0.00 % of all  std::ostreambuf_iterator<char, std::char_traits > std::num_put<char, std::ostreambuf_iterator<char, std::char_
+      0.00 % of all  std::__cxx11::basic_stringbuf<char, std::char_traits, std::allocator >::_M_pbump(char*, char*, long)
+      0.00 % of all  std::basic_streambuf<char, std::char_traits >::xsputn(char const*, long)
+      0.00 % of all  malloc@@GLIBC_2.2.5
+chimeric: ChimericAlign other (check, construct, generateCigar) (0.01 %)
+      0.01 % of all  ChimericAlign::ChimericAlign
+      0.00 % of all  ChimericAlign::chimericCheck
+chimeric: ReadAlign::chimericDetection (entry) (0.01 %)
+      0.01 % of all  ReadAlign::chimericDetection
+other (libc/other library) (0.00 %)
+      0.00 % of all  [libc.so.6 unresolved]
+      0.00 % of all  [singlet-gpu unresolved]
+      0.00 % of all  [libstdc++.so.6.0.36 unresolved]

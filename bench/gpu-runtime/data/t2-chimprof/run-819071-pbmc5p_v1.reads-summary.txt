@@ -1,0 +1,264 @@
+# t2-chimprof per-read analysis of /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/prof/p
+records 4535057 (meta says 4535057); threads 8; mapping wall 97.9 s; TSC 2.095 GHz; process utime 759.3 s stime 10.8 s
+sum of per-read oneRead cycles: 754.7 CPU-s (166.4 us per read); mapping wall x threads = 782.9
+
+## 1. where the cycles of oneRead go (all reads)
+cLoad             10.6 CPU-s   1.40 %      2.33 us/read
+cSeed            157.5 CPU-s  20.86 %     34.72 us/read
+cWinCreate        13.8 CPU-s   1.83 %      3.04 us/read
+cWinFlank          3.3 CPU-s   0.44 %      0.74 us/read
+cWinAssign        90.3 CPU-s  11.96 %     19.90 us/read
+cStitch          216.3 CPU-s  28.66 %     47.69 us/read
+cMult              2.2 CPU-s   0.30 %      0.49 us/read
+cBar               4.9 CPU-s   0.64 %      1.07 us/read
+cChim            249.4 CPU-s  33.04 %     54.99 us/read
+cOut               3.0 CPU-s   0.39 %      0.66 us/read
+other              3.5 CPU-s   0.47 %   (oneRead total minus the phases above: hand-off, qualHist, mappedFilter, transformGenome, loop overhead)
+inside cChim: stitching 13.4 CPU-s (5.4 % of cChim), junction output 6.9 CPU-s (2.7 %), rest (pair loop, segment checks, allocation) 229.1 CPU-s
+
+## 2. cost distribution (oneRead cycles per read)
+costliest   0.1 % of reads (4535 reads): 4.11 % of the CPU; their mean 6836 us, smallest of them 3539 us
+costliest   1.0 % of reads (45351 reads): 12.24 % of the CPU; their mean 2036 us, smallest of them 930 us
+costliest  10.0 % of reads (453506 reads): 36.78 % of the CPU; their mean 612 us, smallest of them 308 us
+costliest  50.0 % of reads (2267528 reads): 79.96 % of the CPU; their mean 266 us, smallest of them 111 us
+per-read us: p10 44.2 median 110.9 p90 308.1 p99 930.3 p99.9 3537.8 max 282091.4; mean 166.4
+
+### all reads (4535057 reads, 100.00 % of the CPU)
+  Lread     mean     90.16  median      91  p90      91  max       91
+  nP        mean     14.99  median      14  p90      21  max       33
+  nA        mean   3331.42  median     524  p90   10372  max    52758
+  nWinMade  mean     34.38  median      27  p90      68  max      244
+  nW        mean     33.97  median      27  p90      68  max      244
+  nTr       mean      2.43  median       1  p90       5  max      311
+  maxScore/Lread: mean 0.363; maxScore == 0: 2.3 %
+  nTr>1 (multimapping): 49.9 %   nTr==0: 2.3 %   nTr>outFilterMultimapNmax(10): 1.8 %
+  flag chim_called                                           100.00 %
+  flag chim_trigger                                           98.85 %
+  flag chim_pairloop                                          96.51 %
+  flag chim_record                                            17.64 %
+  flag limit seedMultimapNmax (a seed dropped)                64.50 %
+  flag limit seedPerWindowNmax                                 3.83 %
+  flag limit alignWindowsPerReadNmax                           0.00 %
+  flag limit alignTranscriptsPerReadNmax                       0.00 %
+  flag limit alignTranscriptsPerWindowNmax                     0.18 %
+  flag seed above winAnchorMultimapNmax (not an anchor)       59.21 %
+  flag limit seedPerReadNmax                                   0.00 %
+  flag marker too many anchors per window                      0.00 %
+  flag chimN > chimMultimapNmax                                0.16 %
+  chimVisited  sum  10070406605  mean   2220.57  max  10032960
+  chimScored   sum   9674646171  mean   2133.30  max  10032960
+  chimCand     sum      7220866  mean      1.59  max      5800
+  chimCheckOk  sum      7217243  mean      1.59  max      5800
+  chimStitched sum      7217243  mean      1.59  max      5800
+  chimSurvive  sum      5355061  mean      1.18  max      3032
+  chimLines    sum      2832142  mean      0.62  max        50
+  share of the group CPU: cLoad        1.40 %
+  share of the group CPU: cSeed       20.86 %
+  share of the group CPU: cWinCreate   1.83 %
+  share of the group CPU: cWinFlank    0.44 %
+  share of the group CPU: cWinAssign  11.96 %
+  share of the group CPU: cStitch     28.66 %
+  share of the group CPU: cMult        0.30 %
+  share of the group CPU: cBar         0.64 %
+  share of the group CPU: cChim       33.04 %
+  share of the group CPU: cOut         0.39 %
+### costliest 10 % (453506 reads, 36.78 % of the CPU)
+  Lread     mean     90.18  median      91  p90      91  max       91
+  nP        mean     19.26  median      20  p90      24  max       33
+  nA        mean   9547.10  median    8770  p90   17466  max    49536
+  nWinMade  mean     65.31  median      63  p90     106  max      244
+  nW        mean     65.30  median      63  p90     106  max      244
+  nTr       mean      4.22  median       2  p90       8  max      311
+  maxScore/Lread: mean 0.349; maxScore == 0: 0.0 %
+  nTr>1 (multimapping): 61.2 %   nTr==0: 0.0 %   nTr>outFilterMultimapNmax(10): 6.6 %
+  flag chim_called                                           100.00 %
+  flag chim_trigger                                           97.58 %
+  flag chim_pairloop                                          97.57 %
+  flag chim_record                                            19.19 %
+  flag limit seedMultimapNmax (a seed dropped)                70.65 %
+  flag limit seedPerWindowNmax                                 7.13 %
+  flag limit alignWindowsPerReadNmax                           0.00 %
+  flag limit alignTranscriptsPerReadNmax                       0.00 %
+  flag limit alignTranscriptsPerWindowNmax                     1.79 %
+  flag seed above winAnchorMultimapNmax (not an anchor)       97.71 %
+  flag limit seedPerReadNmax                                   0.00 %
+  flag marker too many anchors per window                      0.00 %
+  flag chimN > chimMultimapNmax                                1.30 %
+  chimVisited  sum   6064578011  mean  13372.65  max  10032960
+  chimScored   sum   5780327243  mean  12745.87  max  10032960
+  chimCand     sum      3135054  mean      6.91  max      5800
+  chimCheckOk  sum      3134510  mean      6.91  max      5800
+  chimStitched sum      3134510  mean      6.91  max      5800
+  chimSurvive  sum      2118267  mean      4.67  max      3032
+  chimLines    sum       661692  mean      1.46  max        50
+  share of the group CPU: cLoad        0.41 %
+  share of the group CPU: cSeed        6.55 %
+  share of the group CPU: cWinCreate   0.81 %
+  share of the group CPU: cWinFlank    0.23 %
+  share of the group CPU: cWinAssign  10.00 %
+  share of the group CPU: cStitch     32.83 %
+  share of the group CPU: cMult        0.19 %
+  share of the group CPU: cBar         0.22 %
+  share of the group CPU: cChim       48.49 %
+  share of the group CPU: cOut         0.14 %
+### costliest 1 % (45351 reads, 12.24 % of the CPU)
+  Lread     mean     90.07  median      91  p90      91  max       91
+  nP        mean     18.06  median      19  p90      24  max       32
+  nA        mean  11555.34  median   11238  p90   19697  max    48651
+  nWinMade  mean     66.31  median      65  p90     115  max      244
+  nW        mean     66.30  median      65  p90     115  max      244
+  nTr       mean     10.64  median       3  p90      35  max      311
+  maxScore/Lread: mean 0.443; maxScore == 0: 0.0 %
+  nTr>1 (multimapping): 69.4 %   nTr==0: 0.0 %   nTr>outFilterMultimapNmax(10): 24.8 %
+  flag chim_called                                           100.00 %
+  flag chim_trigger                                           85.18 %
+  flag chim_pairloop                                          85.17 %
+  flag chim_record                                            17.16 %
+  flag limit seedMultimapNmax (a seed dropped)                62.88 %
+  flag limit seedPerWindowNmax                                24.39 %
+  flag limit alignWindowsPerReadNmax                           0.00 %
+  flag limit alignTranscriptsPerReadNmax                       0.00 %
+  flag limit alignTranscriptsPerWindowNmax                    16.01 %
+  flag seed above winAnchorMultimapNmax (not an anchor)       99.66 %
+  flag limit seedPerReadNmax                                   0.00 %
+  flag marker too many anchors per window                      0.00 %
+  flag chimN > chimMultimapNmax                                5.33 %
+  chimVisited  sum   2727979783  mean  60152.58  max  10032960
+  chimScored   sum   2676890650  mean  59026.06  max  10032960
+  chimCand     sum      1319012  mean     29.08  max      5800
+  chimCheckOk  sum      1318954  mean     29.08  max      5800
+  chimStitched sum      1318954  mean     29.08  max      5800
+  chimSurvive  sum       827010  mean     18.24  max      3032
+  chimLines    sum        63076  mean      1.39  max        50
+  share of the group CPU: cLoad        0.12 %
+  share of the group CPU: cSeed        1.74 %
+  share of the group CPU: cWinCreate   0.24 %
+  share of the group CPU: cWinFlank    0.07 %
+  share of the group CPU: cWinAssign   3.99 %
+  share of the group CPU: cStitch     32.96 %
+  share of the group CPU: cMult        0.09 %
+  share of the group CPU: cBar         0.08 %
+  share of the group CPU: cChim       60.61 %
+  share of the group CPU: cOut         0.05 %
+### costliest 0.1 % (4535 reads, 4.11 % of the CPU)
+  Lread     mean     90.11  median      91  p90      91  max       91
+  nP        mean     17.54  median      19  p90      23  max       29
+  nA        mean  11785.56  median   12230  p90   20042  max    44693
+  nWinMade  mean     68.26  median      68  p90     118  max      233
+  nW        mean     68.25  median      68  p90     118  max      232
+  nTr       mean     19.30  median       3  p90      59  max      311
+  maxScore/Lread: mean 0.466; maxScore == 0: 0.0 %
+  nTr>1 (multimapping): 72.7 %   nTr==0: 0.0 %   nTr>outFilterMultimapNmax(10): 33.0 %
+  flag chim_called                                           100.00 %
+  flag chim_trigger                                           95.88 %
+  flag chim_pairloop                                          95.88 %
+  flag chim_record                                            15.19 %
+  flag limit seedMultimapNmax (a seed dropped)                54.49 %
+  flag limit seedPerWindowNmax                                42.73 %
+  flag limit alignWindowsPerReadNmax                           0.00 %
+  flag limit alignTranscriptsPerReadNmax                       0.00 %
+  flag limit alignTranscriptsPerWindowNmax                    29.57 %
+  flag seed above winAnchorMultimapNmax (not an anchor)       99.89 %
+  flag limit seedPerReadNmax                                   0.00 %
+  flag marker too many anchors per window                      0.00 %
+  flag chimN > chimMultimapNmax                               21.50 %
+  chimVisited  sum   1166458145  mean 257212.38  max  10032960
+  chimScored   sum   1160431016  mean 255883.36  max  10032960
+  chimCand     sum       691428  mean    152.46  max      5800
+  chimCheckOk  sum       691412  mean    152.46  max      5800
+  chimStitched sum       691412  mean    152.46  max      5800
+  chimSurvive  sum       431069  mean     95.05  max      3032
+  chimLines    sum         6461  mean      1.42  max        50
+  share of the group CPU: cLoad        0.03 %
+  share of the group CPU: cSeed        0.49 %
+  share of the group CPU: cWinCreate   0.07 %
+  share of the group CPU: cWinFlank    0.02 %
+  share of the group CPU: cWinAssign   1.44 %
+  share of the group CPU: cStitch     21.63 %
+  share of the group CPU: cMult        0.05 %
+  share of the group CPU: cBar         0.03 %
+  share of the group CPU: cChim       76.20 %
+  share of the group CPU: cOut         0.02 %
+
+## 3. chimeric detection (counters of every read; trigger = trBest->maxScore <= Lread - chimNonchimScoreDropMin(20), see T2-chimprof.md)
+reads mapped by the pass 4535057
+reads that entered chimericDetection() past its early returns: 4535057 (100.00 %)
+reads passing the trigger (chimericDetectionMult called): 4483075 (98.85 %)
+reads that reached the pair loop (some segment passed segmentCheck): 4376608 (96.51 %)
+reads with at least one junction line: 799963 (17.64 %); lines 2832142
+total chimVisited  10070406605
+total chimScored   9674646171
+total chimCand     7220866
+total chimCheckOk  7217243
+total chimStitched 7217243
+total chimSurvive  5355061
+chimericDetection() time: 249.4 CPU-s = 33.04 % of oneRead; reads with no junction line: 191.8 CPU-s = 76.91 % of it
+  reads passing the trigger without a line: 191.8 CPU-s (76.91 % of chim time); reads not passing the trigger: 0.0 CPU-s (0.00 %)
+  reads in the pair loop without a line: 191.8 CPU-s (76.90 %)
+  barcode parse (getCBandUMI, once per read before chimericDetection): 4.9 CPU-s = 0.64 % of oneRead
+  chim time by pair-loop size (chimScored per read): 
+    chimScored 0-0: 159400 reads, chim 0.0 CPU-s (0.01 % of chim), stitching 0.0 CPU-s
+    chimScored 1-1: 10123 reads, chim 0.1 CPU-s (0.02 % of chim), stitching 0.0 CPU-s
+    chimScored 2-10: 27052 reads, chim 0.2 CPU-s (0.07 % of chim), stitching 0.1 CPU-s
+    chimScored 11-100: 526664 reads, chim 2.8 CPU-s (1.12 % of chim), stitching 0.8 CPU-s
+    chimScored 101-1000: 2086159 reads, chim 32.8 CPU-s (13.15 % of chim), stitching 3.9 CPU-s
+    chimScored 1001-inf: 1725659 reads, chim 213.6 CPU-s (85.63 % of chim), stitching 8.7 CPU-s
+
+## 4. outcome classes (all reads): mean us per read and share of the CPU
+  nW == 0 (no window with an alignment)       106545 reads (  2.3 %)      60.2 us/read    0.85 % of CPU
+  nW == 1                                       5945 reads (  0.1 %)      61.6 us/read    0.05 % of CPU
+  nW 2-5                                       51314 reads (  1.1 %)      74.8 us/read    0.51 % of CPU
+  nW 6-20                                    1424768 reads ( 31.4 %)      82.2 us/read   15.51 % of CPU
+  nW > 20                                    2946485 reads ( 65.0 %)     212.8 us/read   83.08 % of CPU
+  by read length (Lread after clip):
+    Lread 0-89:   1494209 reads    170.3 us/read  33.71 % of CPU
+    Lread 90-99:   3040848 reads    164.5 us/read  66.29 % of CPU
+  by nP (stored seeds):
+    nP 0-0:       173 reads      7.6 us/read   0.00 % of CPU
+    nP 1-2:       152 reads     23.5 us/read   0.00 % of CPU
+    nP 3-5:      7477 reads     44.6 us/read   0.04 % of CPU
+    nP 6-10:    636093 reads     76.3 us/read   6.43 % of CPU
+    nP 11-20:   3347307 reads    155.6 us/read  69.02 % of CPU
+    nP 21-inf:    543855 reads    340.2 us/read  24.51 % of CPU
+
+## 5. read classes (T2-chimpass 3.3 definitions, on the unclipped sequence of the pass input)
+sequences found for 243392 of 243392 selected reads
+### random sample (baseline) (200000 reads classified)
+  polyA           0.29 % of the reads; mean    293.9 us/read;   0.50 % of the group CPU
+  polyT           0.01 % of the reads; mean    175.3 us/read;   0.01 % of the group CPU
+  polyG           0.74 % of the reads; mean     71.1 us/read;   0.32 % of the group CPU
+  polyC           0.01 % of the reads; mean     69.2 us/read;   0.01 % of the group CPU
+  tandem2-6       0.59 % of the reads; mean    674.6 us/read;   2.38 % of the group CPU
+  entropy<1.5    29.47 % of the reads; mean    191.9 us/read;  33.88 % of the group CPU
+  entropy<1.0     6.02 % of the reads; mean    236.5 us/read;   8.53 % of the group CPU
+  hasN            0.34 % of the reads; mean    254.1 us/read;   0.52 % of the group CPU
+  TSO5rc          0.96 % of the reads; mean    114.1 us/read;   0.65 % of the group CPU
+  TSO5fwd         0.35 % of the reads; mean    112.4 us/read;   0.23 % of the group CPU
+  TSO3core       36.37 % of the reads; mean     86.4 us/read;  18.82 % of the group CPU
+  any low-complexity (mono, tandem, entropy<1.5)   29.48 % of the reads; mean    191.9 us/read;  33.88 % of the group CPU
+### costliest 1 % (45351 reads classified)
+  polyA           2.87 % of the reads; mean   1342.5 us/read;   1.89 % of the group CPU
+  polyT           0.02 % of the reads; mean   1194.1 us/read;   0.01 % of the group CPU
+  polyG           0.82 % of the reads; mean   4376.9 us/read;   1.76 % of the group CPU
+  polyC           0.01 % of the reads; mean   1745.7 us/read;   0.01 % of the group CPU
+  tandem2-6      13.71 % of the reads; mean   2188.8 us/read;  14.74 % of the group CPU
+  entropy<1.5    54.93 % of the reads; mean   2213.5 us/read;  59.71 % of the group CPU
+  entropy<1.0    23.78 % of the reads; mean   2200.0 us/read;  25.69 % of the group CPU
+  hasN            1.13 % of the reads; mean   2154.4 us/read;   1.20 % of the group CPU
+  TSO5rc          0.11 % of the reads; mean   1682.5 us/read;   0.09 % of the group CPU
+  TSO5fwd         0.01 % of the reads; mean   1262.9 us/read;   0.00 % of the group CPU
+  TSO3core        1.69 % of the reads; mean   1369.2 us/read;   1.14 % of the group CPU
+  any low-complexity (mono, tandem, entropy<1.5)   54.94 % of the reads; mean   2213.4 us/read;  59.72 % of the group CPU
+### costliest 0.1 % (4535 reads classified)
+  polyA           0.02 % of the reads; mean   6226.8 us/read;   0.02 % of the group CPU
+  polyT           0.00 % of the reads; mean      0.0 us/read;   0.00 % of the group CPU
+  polyG           2.25 % of the reads; mean  11450.6 us/read;   3.77 % of the group CPU
+  polyC           0.00 % of the reads; mean      0.0 us/read;   0.00 % of the group CPU
+  tandem2-6      20.13 % of the reads; mean   5646.3 us/read;  16.63 % of the group CPU
+  entropy<1.5    65.05 % of the reads; mean   7257.5 us/read;  69.06 % of the group CPU
+  entropy<1.0    31.31 % of the reads; mean   6525.0 us/read;  29.89 % of the group CPU
+  hasN            0.77 % of the reads; mean  11882.9 us/read;   1.34 % of the group CPU
+  TSO5rc          0.07 % of the reads; mean   4843.1 us/read;   0.05 % of the group CPU
+  TSO5fwd         0.00 % of the reads; mean      0.0 us/read;   0.00 % of the group CPU
+  TSO3core        0.31 % of the reads; mean   5608.2 us/read;   0.25 % of the group CPU
+  any low-complexity (mono, tandem, entropy<1.5)   65.05 % of the reads; mean   7257.5 us/read;  69.06 % of the group CPU
