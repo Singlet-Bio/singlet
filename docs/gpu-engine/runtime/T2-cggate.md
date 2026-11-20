@@ -157,3 +157,53 @@ Three d500s_3p solo peaks plus the baseline are 3 x 126.3 + 42.5 = 421 GiB, over
 against the 505-510 the doc says today's gate needs to admit all three; skipped as the brief says. (The mode-1 run itself, 20 min earlier on the same node, started from MemFree 342 / Cached 399.) No kill in mode 0 was therefore observed and none is claimed.
 
 Gate of the build with the chimeric term (`t2-cggate-4`, job 819029: `ctest exit 0`, 188 of 188), switches default, RTX 8000: job 819033, 8 lines `VERDICT <sample> cpu:gpu IDENTICAL (except E11's run-dependent files ...)`, no fallback line.
+
+## 6. The mix on an exclusive 2-H100 node (test 6)
+
+Same job script, mix string and settings as the baseline arm of 818763 / 818882 (`t2-rt_mix.sbatch`; `K=3 T=8 slots=2 memgb=31 NUMA=1 PROD=1 PARGS=--no-hla`, `XENV='SINGLET_TAIL_THREADS=16 SINGLET_INGEST_THREADS=16 SINGLET_POOL_MEMSAMPLE=2'`, `--mem=700G`, 54 cores, node g052,
+`REFMIX` = `mixident.tsv` of 818882). **Those two ran `bin/t2-hostcut5`, not my binary**, so mode 0 was also run with `bin/t2-cggate-2` (mode 1 is the same binary with `SINGLET_POOL_PEAKADMIT=1` added to XENV). Both ran on `t2-cggate-2`, which predates the chimeric term (no `--chimeric` in the mix).
+A first mode-1 run (818984, `LIM` left at the harness default 6000 s) was cut by the harness at 6000 s (`status=TIMEOUT`, 99 of 104 items ok, the others killed by the stop) and is not used; its pool lines: baseline B 60.65 GiB, no job-term-only waits. Both runs below use `LIM=12000`.
+
+| | mode 1: 819015 (`cggate-peak2`) | mode 0, same binary: 819016 (`cggate-base2`) |
+|---|---|---|
+| RUN line | `RUN cggate-peak2 K=3 T=8 items=126 ok=126 wall=8461s pairs=28493.3M rate_overall=3.368 Mpairs/s item_wall_mean=239s core_s_per_Mpair=7.08 max_item_rss=248GB status=ok` | `RUN cggate-base2 K=3 T=8 items=126 ok=126 wall=8832s pairs=28493.3M rate_overall=3.226 Mpairs/s item_wall_mean=231s core_s_per_Mpair=7.05 max_item_rss=248GB status=ok` |
+| NODE steady-state rate | 3.442 Mpairs/s | 3.314 Mpairs/s |
+| pool walls (first start to last end) | 8134.5 s (pool 0), 8461.0 s (pool 1) | 8829.5 s, 8706.2 s |
+| items ok / failed | 126 / 0 (pools: 0 failed) | 126 / 0 |
+| waits, seconds waited | pool 0: 10 waits, 7053 s; pool 1: 9 waits, 7678 s | pool 0: 10 waits, 7847 s; pool 1: 13 waits, 7770 s |
+| term that refused | the node term at the end of every wait (each wait alternated "node" and "node and job" while the items in flight were large; the job term alone never; none forced) | n/a (one term) |
+| MemFree min / memory pressure (full avg10 max) | 34.3 GB / 2 % | 46.2 GB / 10 % |
+| host peak anon+shmem / memory.current | 410 GB / 582 GB | 381 GB / 431 GB |
+| memory.events / memory.peak | `low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0` / 586.6 GiB | the same events / 432.0 GiB |
+| model exceeded | no `model exceeded` line; end lines `model exceeded in 0 s of the refreshes (largest excess 0.0 GiB)` in both pools; largest AS - B - sum of figures in memsamp-cg.tsv: -51.0 (pool 0) and -29.9 GiB (pool 1) | n/a |
+| per-sample IDENT vs `mixident.tsv` of 818882 | `IDENT vs REFMIX: all samples identical` (18 samples) | `all samples identical` |
+| node at start | MemFree 601 GB, Cached 134 GB | MemFree 456 GB, Cached 278 GB |
+| baseline B | 60.65 GiB at +24 s (anon+shmem 60.52-60.65 over 10 s, 2 pools, both servers resident) | n/a |
+
+Facts on the comparison: mode 1 is 3.8 % shorter in pool wall (8461 against 8832 s) and 3.9 % higher in steady rate; one run is about 4 % noise and the two runs started from different node states (MemFree 601 / 456 GB at start): **no gain is claimed** (A/B/B/A was not run).
+The wait seconds are close (14,731 s in mode 1 against 15,617 in mode 0), the baseline arms of 818763 / 818882 (hostcut5) waited 20,569 and 19,193 s. memory.peak includes the page cache (586.6 against 432.0 GiB); the cgroup's anon+shmem peak is 410 against 381 GB. 2 "soloRun failed: CUDA out of memory (device free ...)" lines
+are in the mode-1 run's results.txt and the same kind of line in the first (cut) run: device-memory recoveries of the E11 solo step (the items ended ok; not host memory).
+The idle baseline of the two-pool job is 60.65 GiB (T2-peakmodel.md used 60.0, 60.4 the minimum of `mon.tsv`): 0.65 above the 60.0 of the doc, in the safe direction. In the single-pool jobs it is 42.43 (T2-peakmodel.md 42.5 median, 42.4-43.3 range).
+`cachetest` (cache share 1.0, mode 0) was not repeated.
+
+## 7. What failed, what was skipped, what is open
+
+- Build `t2-cggate` (818972) failed to compile (namespace); `t2-cggate-3` (819024) failed ctest on one tolerance of the new test; `-4` is the final binary (ctest exit 0, 188 of 188, gate 819033). The limit jobs, the 365 job and the mixes ran on `-2`; the chimeric term (section F) is the only difference of `-3` / `-4`
+  (and a test tolerance): none of those items had `--chimeric`.
+- Mode 0 on the 365 GiB triple: skipped, the node's free memory was 441-442 GiB (probe 818983), under the 505-510 the doc needs.
+- The first mix run of mode 1 (818984) was cut by the harness' default limit (6000 s) and is not used; a pending duplicate (818985) was cancelled by me (my own job) before it started.
+- `t2-admit-replay2.py` could not be re-run (its derived inputs are not available), see section 2.
+- Not done: the replay of the baseline rule on recordings (they contain no idle window: the items ran back to back from +7 s), so B is shown only in the live jobs; no run with `--chimeric`; no A/B/B/A.
+- Known limits of the rule: the engine's `fb` expectation is a two-point fit and errs high at a budget above 31 GiB (nuclei2k_v2 on RTX 8000); the margin and the phase rules are those of T2-peakmodel.md (18 classes, one build); a pool that has not created its gate file when a sibling measures the baseline is the residual risk of B (set `SINGLET_POOL_PEAK_NPOOLS`
+  to close it); the first start of a job waits up to 120 s for B.
+
+## 8. Jobs
+
+| id | what | note |
+|---|---|---|
+| 818972 / 818973 / 819024 / 819029 | builds `t2-cggate` (failed) / `-2` / `-3` (ctest 1 failed) / `-4` | patches `patches/t2-cggate{,-2,-3,-4}.diff` |
+| 818978 / 818980 / 819033 | identity gates RTX 8000 (default; PEAKMODEL=1; default on -4) | 8/8 IDENTICAL each |
+| 818979 / 818981 | limit jobs 200G / 150G, mode 1 | section 4 |
+| 818982 / 818983 | 365G triple d500s_3p x 3, mode 1 / probe | section 5 |
+| 818984 (cut), 819015, 819016 | mixes: mode 1 (LIM 6000, not used), mode 1, mode 0 (same binary) | section 6 |
+Results on Clipper: `$W/jobs/gpu-runtime/results/t2-cggate-818979-peak200`, `-818981-peak150`, `-818982-peak365-d500s3`, `rt-node-819015-cggate-peak2`, `rt-node-819016-cggate-base2`, `rt-node-818984-cggate-peak`. Scripts (repo `bench/gpu-runtime/` and Clipper `$W/jobs/gpu-runtime/`): `t2-cggate-cg.sbatch`, `t2-cggate-probe.sbatch`, `t2-cggate-waits.py`.
