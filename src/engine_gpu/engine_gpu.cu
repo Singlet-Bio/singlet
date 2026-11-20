@@ -3701,7 +3701,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         u64 nAln = 0, nOps = 0, nSeqT = 0, nNoExon = 0, nBadBest = 0, nMapped = 0;
         // rec2 = 0 (default): the counts were made on the host while the records were assembled (hcnt), no device pass; 1: the device's pass as
         // before; 2 (check): the device's pass, every value compared with the host's (per chunk, recounted here, and in total)
-        const bool devPass1 = rec2 != 0;
+        const bool devPass1 = !hostCnt || rec2 != 0;   // recchunk: without read chunks (hostCnt off) the host did not count the records: the device's pass
         if (devPass1) for (u64 c = 0, q0 = 0; q0 < nRec; q0 += RRN, c++) {
             const u64 m = std::min(RRN, nRec - q0);
             if (!upChunk(q0, m)) { why = "records upload"; return false; }
@@ -3737,12 +3737,12 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             nAln += R6.nAln; nOps += R6.nOps; nSeqT += R6.nSeq; nNoExon += R6.nNoExon; nBadBest += R6.nBadBest; nMapped += R6.nMapped;
             tBuild += now() - ta;
         }
-        if (rec2 == 2 && (nAln != hcnt.a || nOps != hcnt.o || nSeqT != hcnt.s || nNoExon != hcnt.noExon || nBadBest != hcnt.badBest || nMapped != hcnt.mapped || hcnt.mateGap != 0))
+        if (hostCnt && rec2 == 2 && (nAln != hcnt.a || nOps != hcnt.o || nSeqT != hcnt.s || nNoExon != hcnt.noExon || nBadBest != hcnt.badBest || nMapped != hcnt.mapped || hcnt.mateGap != 0))
             return fail("REC2PASS=check: device totals (alns " + std::to_string(nAln) + ", ops " + std::to_string(nOps) + ", seq " + std::to_string(nSeqT) + ", noExon "
                         + std::to_string(nNoExon) + ", badBest " + std::to_string(nBadBest) + ", mapped " + std::to_string(nMapped) + ") differ from the host's assembly counts ("
                         + std::to_string(hcnt.a.load()) + ", " + std::to_string(hcnt.o.load()) + ", " + std::to_string(hcnt.s.load()) + ", " + std::to_string(hcnt.noExon.load()) + ", "
                         + std::to_string(hcnt.badBest.load()) + ", " + std::to_string(hcnt.mapped.load()) + ", mateGap " + std::to_string(hcnt.mateGap.load()) + ")");
-        if (rec2 != 1) {   // the host's counts are the ones used (in check they are equal to the device's)
+        if (hostCnt) {   // the host's counts are the ones used (in check they are equal to the device's)
             if (hcnt.mateGap) { why = std::to_string(hcnt.mateGap.load()) + " records with a mate gap (paired-end; alignBAM's path)"; return false; }
             nAln = hcnt.a; nOps = hcnt.o; nSeqT = hcnt.s; nNoExon = hcnt.noExon; nBadBest = hcnt.badBest; nMapped = hcnt.mapped;
         }
@@ -3881,7 +3881,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
         } else if (in.e10.soloModel != nullptr) { e9::soloKeepRelease(); out.e10.soloKept = false; if (e10) out.e10.log += "engine_gpu: E11: Solo inputs not kept\n"; }
         char l[640];
         char upMsg[96];
-        if (rec2 == 0) snprintf(upMsg, sizeof upMsg, "one pass; counts on the host %.2f s", (double) hcnt.ns.load() * 1e-9);
+        if (hostCnt && rec2 == 0) snprintf(upMsg, sizeof upMsg, "one pass; counts on the host %.2f s", (double) hcnt.ns.load() * 1e-9);
         else snprintf(upMsg, sizeof upMsg, rec2 == 2 ? "two passes; checked against the host counts, %.2f s" : "two passes", (double) hcnt.ns.load() * 1e-9);
         snprintf(l, sizeof l, "engine_gpu: E8 records on the device in %llu record chunks of %llu (P3-MEM-03): %llu records, %llu alignments, %llu ops, %llu seq bytes "
                  "(%llu mapped, no exon %llu, trBest=trInit %llu); upload %.0f ms (%s), buildRecords %.0f ms, copy to the region %.0f ms, products and keep %.0f ms\n",
@@ -3954,7 +3954,25 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     }
     if (e2e) {
         std::string e2eWhy;
-        if (!(RC ? e2eBuildRC(e2eWhy) : e2eBuild(e2eWhy))) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
+        // recchunk (SINGLET_ENGINE_GPU_REC_CHUNK, default on; =0: as before): without read chunks, a records' phase that does not fit the budget is built by
+        // e2eBuildRC (record chunks within the room) instead of being refused. Only where its inputs are the ones the lean path has: the host-assembled
+        // records (not gathered from the device), E10's entries and masks already in the region (entHost) with readRecord filled, E11's keep made at the
+        // records (keepLate) or none; anything else keeps e2eBuild's refusal. The counts come from the device's pass (no read chunks, no host counts)
+        bool recChunks = RC;
+        if (!RC && cap && !gatherDev) {
+            const char* rcc = std::getenv("SINGLET_ENGINE_GPU_REC_CHUNK");
+            if (!(rcc && rcc[0] == '0') && out.seqOff.size() > 1 && recNeed() > capRec && e10 && entHost && out.readRecord.size() == n
+                && (keepLate || in.e10.soloModel == nullptr)) {
+                recChunks = true;
+                char rl[300];
+                snprintf(rl, sizeof rl, "engine_gpu: E17 records by record chunks (SINGLET_ENGINE_GPU_REC_CHUNK): the records' phase needs about %.2f GB, more than the budget of %.2f GB",
+                         b2gb(recNeed()), b2gb(capRec));
+                out.log += std::string(rl) + "\n";
+                fprintf(stderr, "[engine_gpu] %s\n", rl + 12);
+                for (auto& cr : chunks) { std::vector<uint8_t>().swap(cr.hBlob); std::vector<u64>().swap(cr.hOff); }   // the host lane's results: e2eBuild frees them the same way
+            }
+        }
+        if (!(recChunks ? e2eBuildRC(e2eWhy) : e2eBuild(e2eWhy))) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
         step("e2e.build");
         { const bool ok10 = out.e10.ok; e10 = false; e10Off(""); out.e10.ok = ok10; }   // frees the device entries
         for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
