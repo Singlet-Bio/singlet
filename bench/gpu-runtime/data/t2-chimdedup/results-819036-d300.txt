@@ -1,0 +1,79 @@
+node=g051.clipper.gvsu.edu job=819036 tag=d300 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimdedup/singlet-gpu sras='' items='d300_5p' arms='on:SINGLET_CHIM_DEDUP=1 off:SINGLET_CHIM_DEDUP=0' T=8 extra='--chimeric' 2026-11-19T23:07:29-05:00
+binary sha256 c7dde135e8cad2d8 commit b21de2cfb748f257385f4d4973e88f5639acc054
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          11         326           0         418         738
+nproc 27 CLK_TCK 100 cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_819036 memory.max 322122547200 cpu.max max 100000
+node at start: MemFree: 326 GB; Cached: 414 GB; Shmem: 0 GB; ; squeue on node: 819036/t2-chimdedup/debruinz/300G
+input copy to node-local disk: 5 s
+RUN d300_5p_on env 'SINGLET_CHIM_DEDUP=1' threads 8 start 2026-11-19T23:07:38-05:00 node memory: MemFree: 320 GB; Cached: 421 GB; Shmem: 0 GB; 
+RUN d300_5p_on pool wall 619 s
+RUN d300_5p_on samples: item	wall_s	pairs
+RUN d300_5p_on samples: 0	608.88	299628383
+RUN d300_5p_on STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN d300_5p_on STAR: runThreadN                    8     ~RE-DEFINED
+RUN d300_5p_on STAR: runThreadN                        8
+RUN d300_5p_on STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN d300_5p_on STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN d300_5p_on STAR: engine_gpu: 299628383 reads, 69946895 distinct (182171 with N), mapped on the GPU 69858733, host lane 88161 (0.02 s), not mapped 0; upload 4.13 s, dedup 2.78 s, GPU mapping 35.31 s
+RUN d300_5p_on STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN d300_5p_on STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=17699
+RUN d300_5p_on LOG: 1795147835 [singlet] chimeric: dedup: 22372925 reads, 19286025 distinct sequences (86.2 %), 14.5 s
+RUN d300_5p_on LOG: 1795147835 [singlet] chimeric: dedup memory: parent VmRSS 12096 MiB before, 13202 MiB at the peak of stage A, 12586 MiB during the pass
+RUN d300_5p_on LOG: 1795147835 [singlet] chimeric: 22372925 reads into the second pass (21477879 unmapped, 895046 mapped with >= 15 unaligned bases)
+RUN d300_5p_on LOG: 1795148268 [singlet] chimeric: second pass 4e+02 s; 16886797 junction lines, 145563 kept, 0 without barcode, 60831 unmatched, 1369 ambiguous, 12840905 non-canonical, 131869 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 102846 rows in 12775 cells, 0 flagged recurrent, 0 in the catalogue
+RUN d300_5p_on LOG: 1795148269 [singlet] Total: 6e+02s
+RUN d300_5p_on table md5 (decompressed) 1763c9dca0013d9bb3e68d7bfc419efe rows 102847
+RUN d300_5p_on table md5 (decompressed, sorted lines) 0b0e43a48860fd745bc8d4bc2fddca9b
+RUN d300_5p_off env 'SINGLET_CHIM_DEDUP=0' threads 8 start 2026-11-19T23:18:01-05:00 node memory: MemFree: 325 GB; Cached: 416 GB; Shmem: 0 GB; 
+RUN d300_5p_off pool wall 721 s
+RUN d300_5p_off samples: item	wall_s	pairs
+RUN d300_5p_off samples: 0	709.75	299628383
+RUN d300_5p_off STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN d300_5p_off STAR: runThreadN                    8     ~RE-DEFINED
+RUN d300_5p_off STAR: runThreadN                        8
+RUN d300_5p_off STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN d300_5p_off STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN d300_5p_off STAR: engine_gpu: 299628383 reads, 69946895 distinct (182171 with N), mapped on the GPU 69858733, host lane 88161 (0.02 s), not mapped 0; upload 3.90 s, dedup 2.78 s, GPU mapping 35.26 s
+RUN d300_5p_off STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN d300_5p_off STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=17699
+RUN d300_5p_off LOG: 1795148433 [singlet] chimeric: 22372925 reads into the second pass (21477879 unmapped, 895046 mapped with >= 15 unaligned bases)
+RUN d300_5p_off LOG: 1795148993 [singlet] chimeric: second pass 6e+02 s; 16886797 junction lines, 145563 kept, 0 without barcode, 60831 unmatched, 1369 ambiguous, 12840905 non-canonical, 131869 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 102846 rows in 12775 cells, 0 flagged recurrent, 0 in the catalogue
+RUN d300_5p_off LOG: 1795148994 [singlet] Total: 7e+02s
+RUN d300_5p_off table md5 (decompressed) 1763c9dca0013d9bb3e68d7bfc419efe rows 102847
+RUN d300_5p_off table md5 (decompressed, sorted lines) 0b0e43a48860fd745bc8d4bc2fddca9b
+done 2026-11-19T23:30:06-05:00
+===SUMMARY
+== d300_5p_on
+   item_wall_s: 608.88
+   pairs: 299628383
+   dedup: reads 22372925 distinct 19286025 (86.2 %) stageA_s 14.5
+   parent_mem: parent VmRSS 12096 MiB before, 13202 MiB at the peak of stage A, 12586 MiB during the pass
+   t_in: 1795147835
+   reads_in: 22372925
+   t_out: 1795148268
+   counters: lines 16886797 kept 145563 nobc 0 unmatched 60831 ambiguous 1369 noncanon 12840905 turned 131869
+   table_md5: 1763c9dca0013d9bb3e68d7bfc419efe
+   table_lines: 102847
+   pass_wall_s: 433
+   cg_anon_shmem_first_GiB: 59.1
+   cg_anon_shmem_pass_start_GiB: 60.7
+   cg_anon_shmem_peak_GiB: 77.3
+   child_cpu_s: 3174.7
+   child_vmhwm_GiB: 29.1
+   cg_anon_shmem_stageA_peak_GiB: 60.2
+== d300_5p_off
+   item_wall_s: 709.75
+   pairs: 299628383
+   t_in: 1795148433
+   reads_in: 22372925
+   t_out: 1795148993
+   counters: lines 16886797 kept 145563 nobc 0 unmatched 60831 ambiguous 1369 noncanon 12840905 turned 131869
+   table_md5: 1763c9dca0013d9bb3e68d7bfc419efe
+   table_lines: 102847
+   pass_wall_s: 560
+   cg_anon_shmem_first_GiB: 58.5
+   cg_anon_shmem_pass_start_GiB: 58.5
+   cg_anon_shmem_peak_GiB: 75.7
+   child_cpu_s: 4096.0
+   child_vmhwm_GiB: 27.7

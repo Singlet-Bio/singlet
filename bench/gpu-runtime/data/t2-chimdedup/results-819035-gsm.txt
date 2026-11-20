@@ -1,0 +1,162 @@
+node=g051.clipper.gvsu.edu job=819035 tag=gsm bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimdedup/singlet-gpu sras='/mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR19716870/SRR19716870.sra /mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR19716869/SRR19716869.sra' items='' arms='rawoff:SINGLET_CHIM_DEDUP=0,SINGLET_KEEP_CHIMERIC_JUNCTION=1 on:SINGLET_CHIM_DEDUP=1 rawon:SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_DEDUP_DUMP=1 on16:SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_THREADS=16' T=8 extra='--chimeric' 2026-11-19T22:09:29-05:00
+binary sha256 c7dde135e8cad2d8 commit b21de2cfb748f257385f4d4973e88f5639acc054
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          11         326           0         418         739
+nproc 27 CLK_TCK 100 cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_819035 memory.max 322122547200 cpu.max max 100000
+node at start: MemFree: 326 GB; Cached: 415 GB; Shmem: 0 GB; ; squeue on node: 819035/t2-chimdedup/debruinz/300G
+encode of 2 runs without --protocol: 90 s
+encode r0: rc=0
+encode r1: rc=0
+RUN gsm_rawoff env 'SINGLET_CHIM_DEDUP=0,SINGLET_KEEP_CHIMERIC_JUNCTION=1' threads 8 start 2026-11-19T22:11:03-05:00 node memory: MemFree: 323 GB; Cached: 418 GB; Shmem: 0 GB; 
+RUN gsm_rawoff pool wall 1045 s
+RUN gsm_rawoff samples: item	wall_s	pairs
+RUN gsm_rawoff samples: 0	1035.39	121366072
+RUN gsm_rawoff STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_rawoff STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_rawoff STAR: runThreadN                        8
+RUN gsm_rawoff STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_rawoff STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_rawoff STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.14 s, dedup 1.38 s, GPU mapping 60.77 s
+RUN gsm_rawoff STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_rawoff STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_rawoff LOG: 1795144435 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_rawoff LOG: 1795145300 [singlet] chimeric: second pass 9e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_rawoff LOG: 1795145301 [singlet] Total: 1e+03s
+RUN gsm_rawoff table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_rawoff table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN gsm_rawoff leftover: chim_Chimeric.out.junction
+RUN gsm_rawoff RAWNORM raw 5202513e0679f97a1e700c494b3bfca2 17188238
+RUN gsm_on env 'SINGLET_CHIM_DEDUP=1' threads 8 start 2026-11-19T22:29:53-05:00 node memory: MemFree: 320 GB; Cached: 419 GB; Shmem: 0 GB; 
+RUN gsm_on pool wall 805 s
+RUN gsm_on samples: item	wall_s	pairs
+RUN gsm_on samples: 0	794.40	121366072
+RUN gsm_on STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_on STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_on STAR: runThreadN                        8
+RUN gsm_on STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_on STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_on STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.16 s, dedup 1.39 s, GPU mapping 60.73 s
+RUN gsm_on STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_on STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_on LOG: 1795145594 [singlet] chimeric: dedup: 50768292 reads, 17636124 distinct sequences (34.7 %), 39.0 s
+RUN gsm_on LOG: 1795145594 [singlet] chimeric: dedup memory: parent VmRSS 7836 MiB before, 9737 MiB at the peak of stage A, 8696 MiB during the pass
+RUN gsm_on LOG: 1795145594 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_on LOG: 1795146188 [singlet] chimeric: second pass 6e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_on LOG: 1795146191 [singlet] Total: 8e+02s
+RUN gsm_on table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_on table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN gsm_rawon env 'SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_DEDUP_DUMP=1' threads 8 start 2026-11-19T22:43:24-05:00 node memory: MemFree: 321 GB; Cached: 420 GB; Shmem: 0 GB; 
+RUN gsm_rawon pool wall 805 s
+RUN gsm_rawon samples: item	wall_s	pairs
+RUN gsm_rawon samples: 0	795.00	121366072
+RUN gsm_rawon STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_rawon STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_rawon STAR: runThreadN                        8
+RUN gsm_rawon STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_rawon STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_rawon STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.02 s), not mapped 0; upload 2.16 s, dedup 1.35 s, GPU mapping 60.63 s
+RUN gsm_rawon STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_rawon STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_rawon LOG: 1795146391 [singlet] chimeric: dedup: 50768292 reads, 17636124 distinct sequences (34.7 %), 39.1 s
+RUN gsm_rawon LOG: 1795146391 [singlet] chimeric: dedup memory: parent VmRSS 7836 MiB before, 10010 MiB at the peak of stage A, 8985 MiB during the pass
+RUN gsm_rawon LOG: 1795146391 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_rawon LOG: 1795147000 [singlet] chimeric: second pass 6e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_rawon LOG: 1795147002 [singlet] Total: 8e+02s
+RUN gsm_rawon table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_rawon table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN gsm_rawon leftover: chim_Expanded.junction
+RUN gsm_rawon RAWNORM dump 5202513e0679f97a1e700c494b3bfca2 17188238
+RAWPROOF gsm raw-line md5 5202513e0679f97a1e700c494b3bfca2 lines 17188238; dump md5 5202513e0679f97a1e700c494b3bfca2 lines 17188238; IDENTICAL
+RUN gsm_on16 env 'SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_THREADS=16' threads 8 start 2026-11-19T22:58:17-05:00 node memory: MemFree: 320 GB; Cached: 420 GB; Shmem: 0 GB; 
+RUN gsm_on16 pool wall 519 s
+RUN gsm_on16 samples: item	wall_s	pairs
+RUN gsm_on16 samples: 0	508.43	121366072
+RUN gsm_on16 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_on16 STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_on16 STAR: runThreadN                        8
+RUN gsm_on16 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_on16 STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_on16 STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.09 s, dedup 1.39 s, GPU mapping 60.76 s
+RUN gsm_on16 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_on16 STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_on16 LOG: 1795147284 [singlet] chimeric: dedup: 50768292 reads, 17636124 distinct sequences (34.7 %), 39.0 s
+RUN gsm_on16 LOG: 1795147284 [singlet] chimeric: dedup memory: parent VmRSS 7396 MiB before, 9505 MiB at the peak of stage A, 8411 MiB during the pass
+RUN gsm_on16 LOG: 1795147284 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_on16 LOG: 1795147606 [singlet] chimeric: second pass 4e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_on16 LOG: 1795147608 [singlet] Total: 5e+02s
+RUN gsm_on16 table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_on16 table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+done 2026-11-19T23:07:02-05:00
+===SUMMARY
+== gsm_rawoff
+   item_wall_s: 1035.39
+   pairs: 121366072
+   t_in: 1795144435
+   reads_in: 50768292
+   t_out: 1795145300
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   raw: RAWNORM raw 5202513e0679f97a1e700c494b3bfca2 17188238
+   pass_wall_s: 865
+   cg_anon_shmem_first_GiB: 53.0
+   cg_anon_shmem_pass_start_GiB: 53.0
+   cg_anon_shmem_peak_GiB: 70.5
+   child_cpu_s: 6473.0
+   child_vmhwm_GiB: 24.1
+== gsm_on
+   item_wall_s: 794.40
+   pairs: 121366072
+   dedup: reads 50768292 distinct 17636124 (34.7 %) stageA_s 39.0
+   parent_mem: parent VmRSS 7836 MiB before, 9737 MiB at the peak of stage A, 8696 MiB during the pass
+   t_in: 1795145594
+   reads_in: 50768292
+   t_out: 1795146188
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   pass_wall_s: 594
+   cg_anon_shmem_first_GiB: 52.9
+   cg_anon_shmem_pass_start_GiB: 54.4
+   cg_anon_shmem_peak_GiB: 71.6
+   child_cpu_s: 4481.4
+   child_vmhwm_GiB: 25.1
+   cg_anon_shmem_stageA_peak_GiB: 55.0
+== gsm_rawon
+   item_wall_s: 795.00
+   pairs: 121366072
+   dedup: reads 50768292 distinct 17636124 (34.7 %) stageA_s 39.1
+   parent_mem: parent VmRSS 7836 MiB before, 10010 MiB at the peak of stage A, 8985 MiB during the pass
+   t_in: 1795146391
+   reads_in: 50768292
+   t_out: 1795147000
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   raw: RAWNORM dump 5202513e0679f97a1e700c494b3bfca2 17188238
+   pass_wall_s: 609
+   cg_anon_shmem_first_GiB: 53.3
+   cg_anon_shmem_pass_start_GiB: 55.6
+   cg_anon_shmem_peak_GiB: 71.9
+   child_cpu_s: 4512.5
+   child_vmhwm_GiB: 25.5
+   cg_anon_shmem_stageA_peak_GiB: 55.3
+== gsm_on16
+   item_wall_s: 508.43
+   pairs: 121366072
+   dedup: reads 50768292 distinct 17636124 (34.7 %) stageA_s 39.0
+   parent_mem: parent VmRSS 7396 MiB before, 9505 MiB at the peak of stage A, 8411 MiB during the pass
+   t_in: 1795147284
+   reads_in: 50768292
+   t_out: 1795147606
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   pass_wall_s: 322
+   cg_anon_shmem_first_GiB: 52.8
+   cg_anon_shmem_pass_start_GiB: 55.3
+   cg_anon_shmem_peak_GiB: 72.4
+   child_cpu_s: 4526.1
+   child_vmhwm_GiB: 25.2
+   cg_anon_shmem_stageA_peak_GiB: 54.8

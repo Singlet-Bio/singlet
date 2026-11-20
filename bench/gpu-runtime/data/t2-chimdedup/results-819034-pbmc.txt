@@ -1,0 +1,261 @@
+node=g051.clipper.gvsu.edu job=819034 tag=pbmc bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimdedup/singlet-gpu sras='' items='pbmc5p_v1' arms='rawoff:SINGLET_CHIM_DEDUP=0,SINGLET_KEEP_CHIMERIC_JUNCTION=1 on:SINGLET_CHIM_DEDUP=1 off:SINGLET_CHIM_DEDUP=0 rawon:SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_DEDUP_DUMP=1 on2:SINGLET_CHIM_DEDUP=1 off2:SINGLET_CHIM_DEDUP=0 skipsolo:SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_SKIP_SOLO=1' T=8 extra='--chimeric' 2026-11-19T21:46:07-05:00
+binary sha256 c7dde135e8cad2d8 commit b21de2cfb748f257385f4d4973e88f5639acc054
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          10         326           0         418         739
+nproc 27 CLK_TCK 100 cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_819034 memory.max 322122547200 cpu.max max 100000
+node at start: MemFree: 326 GB; Cached: 415 GB; Shmem: 0 GB; ; squeue on node: 819034/t2-chimdedup/debruinz/300G
+input copy to node-local disk: 1 s
+RUN pbmc5p_v1_rawoff env 'SINGLET_CHIM_DEDUP=0,SINGLET_KEEP_CHIMERIC_JUNCTION=1' threads 8 start 2026-11-19T21:46:11-05:00 node memory: MemFree: 325 GB; Cached: 416 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_rawoff pool wall 208 s
+RUN pbmc5p_v1_rawoff samples: item	wall_s	pairs
+RUN pbmc5p_v1_rawoff samples: 0	196.77	60000000
+RUN pbmc5p_v1_rawoff STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_rawoff STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_rawoff STAR: runThreadN                        8
+RUN pbmc5p_v1_rawoff STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_rawoff STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_rawoff STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.15 s), not mapped 0; upload 18.03 s, dedup 0.21 s, GPU mapping 7.74 s
+RUN pbmc5p_v1_rawoff STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_rawoff STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_rawoff LOG: 1795142841 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_rawoff LOG: 1795142971 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_rawoff LOG: 1795142972 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_rawoff table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_rawoff table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_rawoff leftover: chim_Chimeric.out.junction
+RUN pbmc5p_v1_rawoff RAWNORM raw d9e7359a0c10b09163e2622063149394 3926694
+RUN pbmc5p_v1_on env 'SINGLET_CHIM_DEDUP=1' threads 8 start 2026-11-19T21:50:00-05:00 node memory: MemFree: 324 GB; Cached: 416 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_on pool wall 177 s
+RUN pbmc5p_v1_on samples: item	wall_s	pairs
+RUN pbmc5p_v1_on samples: 0	166.53	60000000
+RUN pbmc5p_v1_on STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_on STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_on STAR: runThreadN                        8
+RUN pbmc5p_v1_on STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_on STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_on STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.14 s), not mapped 0; upload 2.70 s, dedup 0.21 s, GPU mapping 7.75 s
+RUN pbmc5p_v1_on STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_on STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_on LOG: 1795143057 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.2 s
+RUN pbmc5p_v1_on LOG: 1795143057 [singlet] chimeric: dedup memory: parent VmRSS 7827 MiB before, 7923 MiB at the peak of stage A, 7846 MiB during the pass
+RUN pbmc5p_v1_on LOG: 1795143057 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_on LOG: 1795143169 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_on LOG: 1795143170 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_on table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_on table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_off env 'SINGLET_CHIM_DEDUP=0' threads 8 start 2026-11-19T21:53:00-05:00 node memory: MemFree: 324 GB; Cached: 417 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_off pool wall 199 s
+RUN pbmc5p_v1_off samples: item	wall_s	pairs
+RUN pbmc5p_v1_off samples: 0	187.50	60000000
+RUN pbmc5p_v1_off STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_off STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_off STAR: runThreadN                        8
+RUN pbmc5p_v1_off STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_off STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_off STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.13 s), not mapped 0; upload 2.50 s, dedup 0.21 s, GPU mapping 7.77 s
+RUN pbmc5p_v1_off STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_off STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_off LOG: 1795143235 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_off LOG: 1795143371 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_off LOG: 1795143372 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_off table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_off table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_rawon env 'SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_DEDUP_DUMP=1' threads 8 start 2026-11-19T21:56:22-05:00 node memory: MemFree: 323 GB; Cached: 417 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_rawon pool wall 180 s
+RUN pbmc5p_v1_rawon samples: item	wall_s	pairs
+RUN pbmc5p_v1_rawon samples: 0	169.10	60000000
+RUN pbmc5p_v1_rawon STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_rawon STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_rawon STAR: runThreadN                        8
+RUN pbmc5p_v1_rawon STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_rawon STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_rawon STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.14 s), not mapped 0; upload 2.65 s, dedup 0.21 s, GPU mapping 7.72 s
+RUN pbmc5p_v1_rawon STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_rawon STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_rawon LOG: 1795143440 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.3 s
+RUN pbmc5p_v1_rawon LOG: 1795143440 [singlet] chimeric: dedup memory: parent VmRSS 7573 MiB before, 7661 MiB at the peak of stage A, 7583 MiB during the pass
+RUN pbmc5p_v1_rawon LOG: 1795143440 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_rawon LOG: 1795143554 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_rawon LOG: 1795143555 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_rawon table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_rawon table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_rawon leftover: chim_Expanded.junction
+RUN pbmc5p_v1_rawon RAWNORM dump d9e7359a0c10b09163e2622063149394 3926694
+RAWPROOF pbmc5p_v1 raw-line md5 d9e7359a0c10b09163e2622063149394 lines 3926694; dump md5 d9e7359a0c10b09163e2622063149394 lines 3926694; IDENTICAL
+RUN pbmc5p_v1_on2 env 'SINGLET_CHIM_DEDUP=1' threads 8 start 2026-11-19T21:59:43-05:00 node memory: MemFree: 322 GB; Cached: 418 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_on2 pool wall 178 s
+RUN pbmc5p_v1_on2 samples: item	wall_s	pairs
+RUN pbmc5p_v1_on2 samples: 0	167.09	60000000
+RUN pbmc5p_v1_on2 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_on2 STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_on2 STAR: runThreadN                        8
+RUN pbmc5p_v1_on2 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_on2 STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_on2 STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.14 s), not mapped 0; upload 2.70 s, dedup 0.21 s, GPU mapping 7.76 s
+RUN pbmc5p_v1_on2 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_on2 STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_on2 LOG: 1795143640 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.1 s
+RUN pbmc5p_v1_on2 LOG: 1795143640 [singlet] chimeric: dedup memory: parent VmRSS 7813 MiB before, 7943 MiB at the peak of stage A, 7834 MiB during the pass
+RUN pbmc5p_v1_on2 LOG: 1795143640 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_on2 LOG: 1795143754 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_on2 LOG: 1795143754 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_on2 table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_on2 table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_off2 env 'SINGLET_CHIM_DEDUP=0' threads 8 start 2026-11-19T22:02:45-05:00 node memory: MemFree: 321 GB; Cached: 419 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_off2 pool wall 198 s
+RUN pbmc5p_v1_off2 samples: item	wall_s	pairs
+RUN pbmc5p_v1_off2 samples: 0	187.16	60000000
+RUN pbmc5p_v1_off2 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_off2 STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_off2 STAR: runThreadN                        8
+RUN pbmc5p_v1_off2 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_off2 STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_off2 STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.14 s), not mapped 0; upload 2.44 s, dedup 0.21 s, GPU mapping 7.73 s
+RUN pbmc5p_v1_off2 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_off2 STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_off2 LOG: 1795143819 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_off2 LOG: 1795143956 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_off2 LOG: 1795143956 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_off2 table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_off2 table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_skipsolo env 'SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_SKIP_SOLO=1' threads 8 start 2026-11-19T22:06:06-05:00 node memory: MemFree: 320 GB; Cached: 420 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_skipsolo pool wall 176 s
+RUN pbmc5p_v1_skipsolo samples: item	wall_s	pairs
+RUN pbmc5p_v1_skipsolo samples: 0	164.72	60000000
+RUN pbmc5p_v1_skipsolo STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1_skipsolo STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1_skipsolo STAR: runThreadN                        8
+RUN pbmc5p_v1_skipsolo STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1_skipsolo STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN pbmc5p_v1_skipsolo STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.14 s), not mapped 0; upload 2.79 s, dedup 0.21 s, GPU mapping 7.69 s
+RUN pbmc5p_v1_skipsolo STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1_skipsolo STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=83
+RUN pbmc5p_v1_skipsolo LOG: 1795144023 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.0 s
+RUN pbmc5p_v1_skipsolo LOG: 1795144023 [singlet] chimeric: dedup memory: parent VmRSS 7807 MiB before, 7930 MiB at the peak of stage A, 7821 MiB during the pass
+RUN pbmc5p_v1_skipsolo LOG: 1795144023 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_skipsolo LOG: 1795144134 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_skipsolo LOG: 1795144135 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_skipsolo table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_skipsolo table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+done 2026-11-19T22:09:05-05:00
+===SUMMARY
+== pbmc5p_v1_rawoff
+   item_wall_s: 196.77
+   pairs: 60000000
+   t_in: 1795142841
+   reads_in: 4944371
+   t_out: 1795142971
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   raw: RAWNORM raw d9e7359a0c10b09163e2622063149394 3926694
+   pass_wall_s: 130
+   cg_anon_shmem_first_GiB: 50.9
+   cg_anon_shmem_pass_start_GiB: 50.9
+   cg_anon_shmem_peak_GiB: 68.4
+   child_cpu_s: 855.7
+   child_vmhwm_GiB: 24.6
+== pbmc5p_v1_on
+   item_wall_s: 166.53
+   pairs: 60000000
+   dedup: reads 4944371 distinct 4535057 (91.7 %) stageA_s 3.2
+   parent_mem: parent VmRSS 7827 MiB before, 7923 MiB at the peak of stage A, 7846 MiB during the pass
+   t_in: 1795143057
+   reads_in: 4944371
+   t_out: 1795143169
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 112
+   cg_anon_shmem_first_GiB: 50.7
+   cg_anon_shmem_pass_start_GiB: 52.3
+   cg_anon_shmem_peak_GiB: 68.2
+   child_cpu_s: 707.6
+   child_vmhwm_GiB: 24.4
+   cg_anon_shmem_stageA_peak_GiB: 50.8
+== pbmc5p_v1_off
+   item_wall_s: 187.50
+   pairs: 60000000
+   t_in: 1795143235
+   reads_in: 4944371
+   t_out: 1795143371
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 136
+   cg_anon_shmem_first_GiB: 51.2
+   cg_anon_shmem_pass_start_GiB: 51.2
+   cg_anon_shmem_peak_GiB: 68.1
+   child_cpu_s: 860.5
+   child_vmhwm_GiB: 24.2
+== pbmc5p_v1_rawon
+   item_wall_s: 169.10
+   pairs: 60000000
+   dedup: reads 4944371 distinct 4535057 (91.7 %) stageA_s 3.3
+   parent_mem: parent VmRSS 7573 MiB before, 7661 MiB at the peak of stage A, 7583 MiB during the pass
+   t_in: 1795143440
+   reads_in: 4944371
+   t_out: 1795143554
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   raw: RAWNORM dump d9e7359a0c10b09163e2622063149394 3926694
+   pass_wall_s: 114
+   cg_anon_shmem_first_GiB: 50.4
+   cg_anon_shmem_pass_start_GiB: 51.3
+   cg_anon_shmem_peak_GiB: 67.9
+   child_cpu_s: 706.1
+   child_vmhwm_GiB: 24.0
+   cg_anon_shmem_stageA_peak_GiB: 50.5
+== pbmc5p_v1_on2
+   item_wall_s: 167.09
+   pairs: 60000000
+   dedup: reads 4944371 distinct 4535057 (91.7 %) stageA_s 3.1
+   parent_mem: parent VmRSS 7813 MiB before, 7943 MiB at the peak of stage A, 7834 MiB during the pass
+   t_in: 1795143640
+   reads_in: 4944371
+   t_out: 1795143754
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 114
+   cg_anon_shmem_first_GiB: 50.7
+   cg_anon_shmem_pass_start_GiB: 51.2
+   cg_anon_shmem_peak_GiB: 68.2
+   child_cpu_s: 708.5
+   child_vmhwm_GiB: 24.4
+   cg_anon_shmem_stageA_peak_GiB: 50.7
+== pbmc5p_v1_off2
+   item_wall_s: 187.16
+   pairs: 60000000
+   t_in: 1795143819
+   reads_in: 4944371
+   t_out: 1795143956
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 137
+   cg_anon_shmem_first_GiB: 51.4
+   cg_anon_shmem_pass_start_GiB: 51.4
+   cg_anon_shmem_peak_GiB: 68.2
+   child_cpu_s: 860.5
+   child_vmhwm_GiB: 24.4
+== pbmc5p_v1_skipsolo
+   item_wall_s: 164.72
+   pairs: 60000000
+   dedup: reads 4944371 distinct 4535057 (91.7 %) stageA_s 3.0
+   parent_mem: parent VmRSS 7807 MiB before, 7930 MiB at the peak of stage A, 7821 MiB during the pass
+   t_in: 1795144023
+   reads_in: 4944371
+   t_out: 1795144134
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 111
+   cg_anon_shmem_first_GiB: 50.7
+   cg_anon_shmem_pass_start_GiB: 50.7
+   cg_anon_shmem_peak_GiB: 68.2
+   child_cpu_s: 707.1
+   child_vmhwm_GiB: 24.6
+   cg_anon_shmem_stageA_peak_GiB: 50.7
