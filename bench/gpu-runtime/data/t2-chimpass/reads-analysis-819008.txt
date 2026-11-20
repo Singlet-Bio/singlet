@@ -1,0 +1,247 @@
+INFO adapter_len 30 mmp 0.1 minseg 10 necessary_min_clipped_len 24 threads 24
+SOFTCLIP_reads 9636150
+JUNCTION_lines 17188238
+JUNCTION_lines_unmapped_or_other 5972859
+JUNCTION_lines_unmapped_or_other_best_score 5856059
+JUNCTION_lines_unmapped_or_other_best_canonical 3869687
+JUNCTION_lines_unmapped_or_other_best_noncanonical 1986372
+JUNCTION_lines_unmapped_or_other_with_maxposs_lt24 0
+JUNCTION_lines_softclip 11215379
+JUNCTION_lines_softclip_best_score 8530021
+JUNCTION_lines_softclip_best_canonical 766816
+JUNCTION_lines_softclip_best_noncanonical 7763205
+JUNCTION_lines_softclip_with_maxposs_lt24 0
+JUNCTION_min_maxposs_score 116
+JUNCTION_min_drop_maxposs_minus_nonchim 20
+JUNCTION_lines_by_clipped_len_lt12 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_12_19 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_20_23 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_24_29 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_30_39 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_40_49 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_50_59 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_60_69 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_70_79 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_80_89 all 0 best_canonical 0
+JUNCTION_lines_by_clipped_len_ge90 all 17188238 best_canonical 4636503
+JUNCTION_distinct_reads_any_line 11359390
+JUNCTION_distinct_reads_best_canonical 4621263
+JUNCTION_distinct_reads_any_line_softclip 5940358
+JUNCTION_distinct_reads_best_canonical_softclip 756806
+JUNCTION_reads_found_in_the_two_input_files 11359390
+CLASS source=unmapped set=all reads 41132142
+CLASS source=unmapped set=all sum_clipped_len 6156818654
+CLASS source=unmapped set=all clipped_by_adapter 9276088
+CLASS source=unmapped set=all clipped_len_0 23
+CLASS source=unmapped set=all clipped_len_lt_2x(minseg+2) 24
+CLASS source=unmapped set=all clipped_len_lt_2xminseg 24
+CLASS source=unmapped set=all mono_A_ge90pct 70296
+CLASS source=unmapped set=all mono_C_ge90pct 83
+CLASS source=unmapped set=all mono_G_ge90pct 546415
+CLASS source=unmapped set=all mono_T_ge90pct 193
+CLASS source=unmapped set=all tandem_period2_6_ge90pct_not_mono 27793
+CLASS source=unmapped set=all entropy_lt1.0_len_ge12 1005943
+CLASS source=unmapped set=all entropy_lt1.5_len_ge12 2164826
+CLASS source=unmapped set=all N_any 126535
+CLASS source=unmapped set=all N_ge10pct 4872
+CLASS source=unmapped set=all tso_5p_kit_TTTCTTATATGGG 46888
+CLASS source=unmapped set=all tso_5p_kit_revcomp 4163721
+CLASS source=unmapped set=all tso_3p_kit_core16 63926
+CLASS source=unmapped set=all tso_3p_kit_core16_revcomp 178
+CLASS source=unmapped set=all tso_any_motif 4270536
+CLASS source=unmapped set=all tso_ge2_hits 40735
+CLASS source=unmapped set=all bucket_lt12 23
+CLASS source=unmapped set=all bucket_12_19 1
+CLASS source=unmapped set=all bucket_20_23 0
+CLASS source=unmapped set=all bucket_24_29 0
+CLASS source=unmapped set=all bucket_30_39 0
+CLASS source=unmapped set=all bucket_40_49 0
+CLASS source=unmapped set=all bucket_50_59 0
+CLASS source=unmapped set=all bucket_60_69 0
+CLASS source=unmapped set=all bucket_70_79 0
+CLASS source=unmapped set=all bucket_80_89 0
+CLASS source=unmapped set=all bucket_ge90 41132118
+CLASS source=unmapped set=with_a_junction_line reads 5419032
+CLASS source=unmapped set=with_a_junction_line sum_clipped_len 812078382
+CLASS source=unmapped set=with_a_junction_line clipped_by_adapter 521135
+CLASS source=unmapped set=with_a_junction_line clipped_len_0 0
+CLASS source=unmapped set=with_a_junction_line clipped_len_lt_2x(minseg+2) 0
+CLASS source=unmapped set=with_a_junction_line clipped_len_lt_2xminseg 0
+CLASS source=unmapped set=with_a_junction_line mono_A_ge90pct 39462
+CLASS source=unmapped set=with_a_junction_line mono_C_ge90pct 0
+CLASS source=unmapped set=with_a_junction_line mono_G_ge90pct 399
+CLASS source=unmapped set=with_a_junction_line mono_T_ge90pct 113
+CLASS source=unmapped set=with_a_junction_line tandem_period2_6_ge90pct_not_mono 14234
+CLASS source=unmapped set=with_a_junction_line entropy_lt1.0_len_ge12 59518
+CLASS source=unmapped set=with_a_junction_line entropy_lt1.5_len_ge12 62284
+CLASS source=unmapped set=with_a_junction_line N_any 13799
+CLASS source=unmapped set=with_a_junction_line N_ge10pct 0
+CLASS source=unmapped set=with_a_junction_line tso_5p_kit_TTTCTTATATGGG 334
+CLASS source=unmapped set=with_a_junction_line tso_5p_kit_revcomp 17113
+CLASS source=unmapped set=with_a_junction_line tso_3p_kit_core16 219
+CLASS source=unmapped set=with_a_junction_line tso_3p_kit_core16_revcomp 0
+CLASS source=unmapped set=with_a_junction_line tso_any_motif 17666
+CLASS source=unmapped set=with_a_junction_line tso_ge2_hits 0
+CLASS source=unmapped set=with_a_junction_line bucket_lt12 0
+CLASS source=unmapped set=with_a_junction_line bucket_12_19 0
+CLASS source=unmapped set=with_a_junction_line bucket_20_23 0
+CLASS source=unmapped set=with_a_junction_line bucket_24_29 0
+CLASS source=unmapped set=with_a_junction_line bucket_30_39 0
+CLASS source=unmapped set=with_a_junction_line bucket_40_49 0
+CLASS source=unmapped set=with_a_junction_line bucket_50_59 0
+CLASS source=unmapped set=with_a_junction_line bucket_60_69 0
+CLASS source=unmapped set=with_a_junction_line bucket_70_79 0
+CLASS source=unmapped set=with_a_junction_line bucket_80_89 0
+CLASS source=unmapped set=with_a_junction_line bucket_ge90 5419032
+CLASS source=unmapped set=with_a_best_canonical_line reads 3864457
+CLASS source=unmapped set=with_a_best_canonical_line sum_clipped_len 579598438
+CLASS source=unmapped set=with_a_best_canonical_line clipped_by_adapter 56639
+CLASS source=unmapped set=with_a_best_canonical_line clipped_len_0 0
+CLASS source=unmapped set=with_a_best_canonical_line clipped_len_lt_2x(minseg+2) 0
+CLASS source=unmapped set=with_a_best_canonical_line clipped_len_lt_2xminseg 0
+CLASS source=unmapped set=with_a_best_canonical_line mono_A_ge90pct 56
+CLASS source=unmapped set=with_a_best_canonical_line mono_C_ge90pct 0
+CLASS source=unmapped set=with_a_best_canonical_line mono_G_ge90pct 9
+CLASS source=unmapped set=with_a_best_canonical_line mono_T_ge90pct 0
+CLASS source=unmapped set=with_a_best_canonical_line tandem_period2_6_ge90pct_not_mono 31
+CLASS source=unmapped set=with_a_best_canonical_line entropy_lt1.0_len_ge12 114
+CLASS source=unmapped set=with_a_best_canonical_line entropy_lt1.5_len_ge12 156
+CLASS source=unmapped set=with_a_best_canonical_line N_any 9777
+CLASS source=unmapped set=with_a_best_canonical_line N_ge10pct 0
+CLASS source=unmapped set=with_a_best_canonical_line tso_5p_kit_TTTCTTATATGGG 12
+CLASS source=unmapped set=with_a_best_canonical_line tso_5p_kit_revcomp 11239
+CLASS source=unmapped set=with_a_best_canonical_line tso_3p_kit_core16 1
+CLASS source=unmapped set=with_a_best_canonical_line tso_3p_kit_core16_revcomp 0
+CLASS source=unmapped set=with_a_best_canonical_line tso_any_motif 11252
+CLASS source=unmapped set=with_a_best_canonical_line tso_ge2_hits 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_lt12 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_12_19 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_20_23 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_24_29 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_30_39 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_40_49 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_50_59 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_60_69 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_70_79 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_80_89 0
+CLASS source=unmapped set=with_a_best_canonical_line bucket_ge90 3864457
+CLASS source=softclip set=all reads 9636150
+CLASS source=softclip set=all sum_clipped_len 1441104321
+CLASS source=softclip set=all clipped_by_adapter 3032331
+CLASS source=softclip set=all clipped_len_0 0
+CLASS source=softclip set=all clipped_len_lt_2x(minseg+2) 0
+CLASS source=softclip set=all clipped_len_lt_2xminseg 0
+CLASS source=softclip set=all mono_A_ge90pct 1334
+CLASS source=softclip set=all mono_C_ge90pct 5
+CLASS source=softclip set=all mono_G_ge90pct 1031
+CLASS source=softclip set=all mono_T_ge90pct 85
+CLASS source=softclip set=all tandem_period2_6_ge90pct_not_mono 503
+CLASS source=softclip set=all entropy_lt1.0_len_ge12 3964
+CLASS source=softclip set=all entropy_lt1.5_len_ge12 4810
+CLASS source=softclip set=all N_any 25432
+CLASS source=softclip set=all N_ge10pct 498
+CLASS source=softclip set=all tso_5p_kit_TTTCTTATATGGG 37872
+CLASS source=softclip set=all tso_5p_kit_revcomp 4107303
+CLASS source=softclip set=all tso_3p_kit_core16 154
+CLASS source=softclip set=all tso_3p_kit_core16_revcomp 82
+CLASS source=softclip set=all tso_any_motif 4145365
+CLASS source=softclip set=all tso_ge2_hits 9393
+CLASS source=softclip set=all bucket_lt12 0
+CLASS source=softclip set=all bucket_12_19 0
+CLASS source=softclip set=all bucket_20_23 0
+CLASS source=softclip set=all bucket_24_29 0
+CLASS source=softclip set=all bucket_30_39 0
+CLASS source=softclip set=all bucket_40_49 0
+CLASS source=softclip set=all bucket_50_59 0
+CLASS source=softclip set=all bucket_60_69 0
+CLASS source=softclip set=all bucket_70_79 0
+CLASS source=softclip set=all bucket_80_89 0
+CLASS source=softclip set=all bucket_ge90 9636150
+CLASS source=softclip set=with_a_junction_line reads 5940358
+CLASS source=softclip set=with_a_junction_line sum_clipped_len 888729397
+CLASS source=softclip set=with_a_junction_line clipped_by_adapter 1799014
+CLASS source=softclip set=with_a_junction_line clipped_len_0 0
+CLASS source=softclip set=with_a_junction_line clipped_len_lt_2x(minseg+2) 0
+CLASS source=softclip set=with_a_junction_line clipped_len_lt_2xminseg 0
+CLASS source=softclip set=with_a_junction_line mono_A_ge90pct 1237
+CLASS source=softclip set=with_a_junction_line mono_C_ge90pct 4
+CLASS source=softclip set=with_a_junction_line mono_G_ge90pct 818
+CLASS source=softclip set=with_a_junction_line mono_T_ge90pct 72
+CLASS source=softclip set=with_a_junction_line tandem_period2_6_ge90pct_not_mono 431
+CLASS source=softclip set=with_a_junction_line entropy_lt1.0_len_ge12 3000
+CLASS source=softclip set=with_a_junction_line entropy_lt1.5_len_ge12 3583
+CLASS source=softclip set=with_a_junction_line N_any 14677
+CLASS source=softclip set=with_a_junction_line N_ge10pct 1
+CLASS source=softclip set=with_a_junction_line tso_5p_kit_TTTCTTATATGGG 22583
+CLASS source=softclip set=with_a_junction_line tso_5p_kit_revcomp 3079049
+CLASS source=softclip set=with_a_junction_line tso_3p_kit_core16 101
+CLASS source=softclip set=with_a_junction_line tso_3p_kit_core16_revcomp 63
+CLASS source=softclip set=with_a_junction_line tso_any_motif 3101772
+CLASS source=softclip set=with_a_junction_line tso_ge2_hits 5270
+CLASS source=softclip set=with_a_junction_line bucket_lt12 0
+CLASS source=softclip set=with_a_junction_line bucket_12_19 0
+CLASS source=softclip set=with_a_junction_line bucket_20_23 0
+CLASS source=softclip set=with_a_junction_line bucket_24_29 0
+CLASS source=softclip set=with_a_junction_line bucket_30_39 0
+CLASS source=softclip set=with_a_junction_line bucket_40_49 0
+CLASS source=softclip set=with_a_junction_line bucket_50_59 0
+CLASS source=softclip set=with_a_junction_line bucket_60_69 0
+CLASS source=softclip set=with_a_junction_line bucket_70_79 0
+CLASS source=softclip set=with_a_junction_line bucket_80_89 0
+CLASS source=softclip set=with_a_junction_line bucket_ge90 5940358
+CLASS source=softclip set=with_a_best_canonical_line reads 756806
+CLASS source=softclip set=with_a_best_canonical_line sum_clipped_len 113207867
+CLASS source=softclip set=with_a_best_canonical_line clipped_by_adapter 299950
+CLASS source=softclip set=with_a_best_canonical_line clipped_len_0 0
+CLASS source=softclip set=with_a_best_canonical_line clipped_len_lt_2x(minseg+2) 0
+CLASS source=softclip set=with_a_best_canonical_line clipped_len_lt_2xminseg 0
+CLASS source=softclip set=with_a_best_canonical_line mono_A_ge90pct 1
+CLASS source=softclip set=with_a_best_canonical_line mono_C_ge90pct 0
+CLASS source=softclip set=with_a_best_canonical_line mono_G_ge90pct 4
+CLASS source=softclip set=with_a_best_canonical_line mono_T_ge90pct 0
+CLASS source=softclip set=with_a_best_canonical_line tandem_period2_6_ge90pct_not_mono 3
+CLASS source=softclip set=with_a_best_canonical_line entropy_lt1.0_len_ge12 10
+CLASS source=softclip set=with_a_best_canonical_line entropy_lt1.5_len_ge12 18
+CLASS source=softclip set=with_a_best_canonical_line N_any 1861
+CLASS source=softclip set=with_a_best_canonical_line N_ge10pct 0
+CLASS source=softclip set=with_a_best_canonical_line tso_5p_kit_TTTCTTATATGGG 346
+CLASS source=softclip set=with_a_best_canonical_line tso_5p_kit_revcomp 33733
+CLASS source=softclip set=with_a_best_canonical_line tso_3p_kit_core16 0
+CLASS source=softclip set=with_a_best_canonical_line tso_3p_kit_core16_revcomp 0
+CLASS source=softclip set=with_a_best_canonical_line tso_any_motif 34079
+CLASS source=softclip set=with_a_best_canonical_line tso_ge2_hits 18
+CLASS source=softclip set=with_a_best_canonical_line bucket_lt12 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_12_19 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_20_23 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_24_29 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_30_39 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_40_49 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_50_59 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_60_69 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_70_79 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_80_89 0
+CLASS source=softclip set=with_a_best_canonical_line bucket_ge90 756806
+DISTINCT unmapped reads 41132142 distinct 13735577
+DISTINCT softclip reads 9636150 distinct 3900547
+DISTINCT all reads 50768292 distinct 17636124
+MULTIPLICITY 1 distinct_sequences 15114737 reads 15114737
+MULTIPLICITY 2 distinct_sequences 1341059 reads 2682118
+MULTIPLICITY 3_5 distinct_sequences 843464 reads 3011276
+MULTIPLICITY 6_10 distinct_sequences 192347 reads 1402013
+MULTIPLICITY 11_100 distinct_sequences 120478 reads 3063122
+MULTIPLICITY 101_1000 distinct_sequences 19333 reads 6170853
+MULTIPLICITY 1001_10000 distinct_sequences 4544 reads 10688222
+MULTIPLICITY gt10000 distinct_sequences 162 reads 8635951
+MULTIPLICITY top1_count 1858007
+MULTIPLICITY top2_count 990279
+MULTIPLICITY top3_count 429819
+MULTIPLICITY top4_count 275574
+MULTIPLICITY top5_count 212027
+MULTIPLICITY top6_count 182239
+MULTIPLICITY top7_count 163793
+MULTIPLICITY top8_count 145516
+MULTIPLICITY top9_count 145224
+MULTIPLICITY top10_count 138762
+DISTINCT reads_with_a_junction_line 11359390 distinct 3237917
+DISTINCT reads_with_a_best_canonical_line 4621263 distinct 168769
+DISTINCT sequences_with_a_best_canonical_line_in_some_read 168769 of_which_other_reads_of_the_same_sequence_have_none 0

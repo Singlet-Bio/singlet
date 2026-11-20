@@ -1,0 +1,47 @@
+node=g051.clipper.gvsu.edu job=819009 tag=gate-mix bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-hostcut5/singlet-gpu sras='' items='pbmc5p_v1 d300_5p' runs='8' extra='--chimeric' 2026-11-19T20:42:42-05:00
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          12         327           0         415         737
+/dev/sda1       1.8T   56K  1.7T   1% /tmp
+nproc 27 CLK_TCK 100 cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_819009 memory.max 322122547200 cpu.max max 100000
+node at start: MemFree: 327 GB; Cached: 412 GB; Shmem: 0 GB; ; squeue on node: 819009/t2-chimpass/debruinz/300G
+input copy to node-local disk: 8 s
+RUN pbmc5p_v1 threads 8 keep=0 start 2026-11-19T20:42:54-05:00 node memory: MemFree: 317 GB; Cached: 422 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1 pool wall 207 s
+RUN pbmc5p_v1 samples: item	wall_s	pairs
+RUN pbmc5p_v1 samples: 0	196.55	60000000
+RUN pbmc5p_v1 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN pbmc5p_v1 STAR: clip3pAdapterMMp              0.1        ~RE-DEFINED
+RUN pbmc5p_v1 STAR: runThreadN                    8     ~RE-DEFINED
+RUN pbmc5p_v1 STAR: runThreadN                        8
+RUN pbmc5p_v1 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN pbmc5p_v1 STAR: clip3pAdapterMMp                  0.1   
+RUN pbmc5p_v1 STAR: engine_gpu: 60000000 reads, 18506454 distinct (149482 with N), mapped on the GPU 18483036, host lane 23417 (0.14 s), not mapped 0; upload 17.99 s, dedup 0.21 s, GPU mapping 7.69 s
+RUN pbmc5p_v1 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN pbmc5p_v1 LOG: 1795139043 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1 LOG: 1795139174 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1 LOG: 1795139174 [singlet] Total: 2e+02s
+RUN pbmc5p_v1 table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1 table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1 raw junction file: 507143866 bytes, 3926697 lines, md5 a70a2b0a109397bd475d629c98d30a88
+RUN pbmc5p_v1 raw junction file sorted (LC_ALL=C) md5 a3c90fbd05e23338bb3cbbf0d0caff9f
+RUN d300_5p threads 8 keep=0 start 2026-11-19T20:46:28-05:00 node memory: MemFree: 318 GB; Cached: 422 GB; Shmem: 0 GB; 
+RUN d300_5p pool wall 722 s
+RUN d300_5p samples: item	wall_s	pairs
+RUN d300_5p samples: 0	711.00	299628383
+RUN d300_5p STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN d300_5p STAR: clip3pAdapterMMp              0.1        ~RE-DEFINED
+RUN d300_5p STAR: runThreadN                    8     ~RE-DEFINED
+RUN d300_5p STAR: runThreadN                        8
+RUN d300_5p STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN d300_5p STAR: clip3pAdapterMMp                  0.1   
+RUN d300_5p STAR: engine_gpu: 299628383 reads, 69946895 distinct (182171 with N), mapped on the GPU 69858733, host lane 88161 (0.02 s), not mapped 0; upload 4.47 s, dedup 2.80 s, GPU mapping 35.32 s
+RUN d300_5p STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN d300_5p LOG: 1795139341 [singlet] chimeric: 22372925 reads into the second pass (21477879 unmapped, 895046 mapped with >= 15 unaligned bases)
+RUN d300_5p LOG: 1795139901 [singlet] chimeric: second pass 6e+02 s; 16886797 junction lines, 145563 kept, 0 without barcode, 60831 unmatched, 1369 ambiguous, 12840905 non-canonical, 131869 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 102846 rows in 12775 cells, 0 flagged recurrent, 0 in the catalogue
+RUN d300_5p LOG: 1795139902 [singlet] Total: 7e+02s
+RUN d300_5p table md5 (decompressed) 1763c9dca0013d9bb3e68d7bfc419efe rows 102847
+RUN d300_5p table md5 (decompressed, sorted lines) 0b0e43a48860fd745bc8d4bc2fddca9b
+RUN d300_5p raw junction file: 2184939042 bytes, 16886800 lines, md5 c52987d58c503f70233d95205c1797ca
+RUN d300_5p raw junction file sorted (LC_ALL=C) md5 fe99e856e3e89c84dfe435b35ca3b4a1
+done 2026-11-19T20:58:48-05:00
