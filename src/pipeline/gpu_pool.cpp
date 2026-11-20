@@ -360,6 +360,7 @@ struct Run {
     mutable double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
     bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
     // cggate (SINGLET_POOL_PEAKADMIT=1): the item's peak figure (GiB above the job's idle baseline) and what the engine printed
+    bool pkChim = false;                        // the item's own argument list has --chimeric: the second pass' floor on every figure
     bool pk = false, pkZone = false;            // the figure comes from the peak model (else the old estimate), the item is in the zone of a possible fallback
     double pkN = 0, pkBases = 0;                // M reads, G bases (from the .1fq headers and their first blocks)
     double pkP = 0, pkFig = 0, pkFloor = 0;     // P now (no margin), the figure now (with margin), a raise of the figure that holds for pkFloorPhase
@@ -853,7 +854,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
     std::vector<char> taken(items.size(), 0);
     std::vector<double> itemEst(items.size(), 0);
-    std::vector<char> itemPk(items.size(), 0);   // cggate: the peak model applies to the item
+    std::vector<char> itemPk(items.size(), 0), itemPkChim(items.size(), 0);   // cggate: the peak model applies to the item
     std::vector<double> itemFig0(items.size(), 0), itemPkN(items.size(), 0), itemPkBases(items.size(), 0), itemPkP(items.size(), 0);
     for (const Item& it : items) {
         struct stat st{};
@@ -909,8 +910,9 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             if (why.empty()) {
                 const double nM = reads / 1e6, bG = bases / 1e9, P = poolpeak::peakP(nM, bG, pkK);
-                itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = P + pkK.margin;
-                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", P + pkK.margin, pkK.margin, itemEst[it.idx]);
+                { std::vector<std::string> allArgs = base; allArgs.insert(allArgs.end(), it.extra.begin(), it.extra.end()); itemPkChim[it.idx] = has_flag(allArgs, "--chimeric") ? 1 : 0; }   // the item's own arguments (pool --args and the queue line), not the environment
+                itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = poolpeak::phaseFigure(P, 0, pkK, itemPkChim[it.idx] != 0);
+                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", itemFig0[it.idx], pkK.margin, itemPkChim[it.idx] ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + pkK.chimGb).c_str() : "", itemEst[it.idx]);
             } else {
                 itemFig0[it.idx] = itemEst[it.idx];
                 plog("item %d: peak model not used (%s): the old estimate, %.0f GB, is the figure", it.idx, why.c_str(), itemEst[it.idx]);
@@ -920,7 +922,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     if (peakMode)
         for (size_t i = 0; i < items.size(); ++i) {
             Run& r = runs[i];
-            r.pk = itemPk[i] != 0; r.pkN = itemPkN[i]; r.pkBases = itemPkBases[i]; r.pkP = itemPkP[i]; r.pkFig = itemFig0[i]; r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
+            r.pk = itemPk[i] != 0; r.pkN = itemPkN[i]; r.pkBases = itemPkBases[i]; r.pkP = itemPkP[i]; r.pkFig = itemFig0[i]; r.pkChim = itemPkChim[i] != 0; r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
         }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
@@ -1111,13 +1113,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         }
         r.pkP = P;
         if (phase != r.pkPhase) { why += phase == 2 ? ", after the waited line" : phase == 1 ? ", after the level line" : ""; r.pkPhase = phase; }
-        double f = poolpeak::phaseFigure(P, phase, pkK);
+        double f = poolpeak::phaseFigure(P, phase, pkK, r.pkChim);
         if (r.pm3 && r.pm1 && r.pm2 && !r.pm3Done) {   // third line: the ledger; raise only
             r.pm3Done = true;
             const double L = poolpeak::ledgerL(nE, bE, r.pmRegion, r.pmKeep, r.pmLate, pkK);
             if (L + pkK.margin > f) { r.pkFloor = L + pkK.margin; r.pkFloorPhase = phase; r.pkP = P = std::max(P, L); why += fmt(", ledger %.1f GiB raises the figure", L); }
             else why += fmt(", ledger %.1f GiB (not above)", L);
-            f = poolpeak::phaseFigure(P, phase, pkK);
+            f = poolpeak::phaseFigure(P, phase, pkK, r.pkChim);
         }
         if (r.pkFloorPhase == phase) f = std::max(f, r.pkFloor);
         if (std::fabs(f - r.pkFig) > 0.05 || !why.empty()) plog("peak figure: item %d %.1f -> %.1f GiB (P %.1f%s)", r.idx, r.pkFig, f, r.pkP, why.c_str());

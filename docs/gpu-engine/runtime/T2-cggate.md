@@ -85,3 +85,55 @@ stagger 40 s, node cache share 0.25, job cache share 0.5: **equal**. Differences
 the replay re-times every wait with the bound after 1800 s whatever the term, the C++ does not force the start when the job term refuses; the replay has no first-start wait, no figure changes from the engine's lines (zone drop, ledger raise), and a fixed worker count 3.
 `t2-admit-replay2.py` could not be re-run end to end here: its inputs (`pool*.marks`, `mem2.tsv`, `mon.tsv`, `items.tsv`, `samples.all` derived from the recordings of 818763 / 818882) are not on Clipper under results/ (only the raw `rt-node-*` directories) and not in the repository; it was copied to
 `$W/jobs/gpu-runtime/t2-admit-replay2.py` with the json and fails at `pool0.marks`. The hand-computed cases above stand in for it.
+
+## 3. Build and identity gate (test 3)
+
+Build `t2-cggate-2` = job 818973 (`BASE=b21de2cf`, patch `patches/t2-cggate-2.diff` sha256 fdcd2999...): `ctest exit 0`, "100% tests passed out of 188" (`test_gpu_pool_peak` among them), sm_70 sm_75 sm_90.
+(`t2-cggate` = job 818972 failed to compile: `poolpeak::` is `singlet::poolpeak::`; a namespace alias was added; nothing else was wrong; its `bin/t2-cggate/` has no binary.)
+Identity gate, RTX 8000 (g005 / g008, started at once; the command of the brief, `BINDIR=bin/t2-cggate-2`):
+
+| job | switches | result |
+|---|---|---|
+| 818978 | all default (off) | 8 lines `VERDICT <sample> cpu:gpu IDENTICAL (except E11's run-dependent files; out_equiv 91-92/5-7/4)` (pbmc2m, pbmc10m, pbmc1k_v3, pbmc1k_v2, pbmc1k_cite_v3, pbmc5p_v1, neuron1k_v3, nuclei2k_v2); no fallback line in any fallbacks.txt; no `peakmodel` line anywhere |
+| 818980 | `SINGLET_ENGINE_GPU_PEAKMODEL=1` added to `--export` | the same 8 verdict lines; fallbacks.txt without a fallback line; `engine_lines.txt` of every sample carries the three peakmodel lines |
+
+(The wording "except E11's run-dependent files" is the gate's standing text for all gate jobs.) On RTX 8000 the gate has no `SINGLET_ENGINE_GPU_MEM_GB`, the budget is 42.30 GiB, nuclei2k_v2 does not fall back. The engine's first line for it said `fb=1` (need_est 43.94 against 42.30); the
+records were then built (the real need is below the estimate by more than 1.6 GiB here): the two-point fit errs towards the fallback, i.e. conservative (the pool would have charged the fallback figure for an item that did not fall back). The lines of the other samples:
+neuron1k_v3 `n=92902231 D=34691779 rc=0 budget_gib=42.30 need_est_gib=21.74 fb=0`, pbmc1k_v3 `D=31741646 ... need_est_gib=20.29 fb=0`.
+
+## 4. Limit jobs, mode 1, one H100 (test 4; `t2-cggate-cg.sbatch`, three `d300_3p`, 3 workers, `SINGLET_POOL_PEAKADMIT=1`, `MEMSAMPLE=2`, 1 Hz sampler; node g051; mode 0 for reference: 818937 200G all fitted, peak 157.1; 818940 150G, two of three killed)
+
+| | 818979 (`--mem=200G`) | 818981 (`--mem=150G`) |
+|---|---|---|
+| oom_kill / memory.events | 0 / `low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0` | the same |
+| memory.peak | 131,971,911,680 B (122.9 GiB) | 131,910,066,176 B (122.9 GiB) |
+| pool wall | 407 s | 409 s |
+| idle baseline B | 42.43 GiB at +18 s (job anon+shmem 42.07-42.43 over 10 s, 1 pool, server resident); the first start waited for it | the same, 42.43 GiB |
+| start of item 0 / 1 / 2 (s after the pool's first line) | +18 / +156 / +280 (item 1 started when item 0 ended: 138.6 s wall; item 2 when item 1 ended: 123.7 s) | +18 / +157 / +280 |
+| waits | 2 (items 1, 2), 182 s waited in all; both refused by the **job term** | the same, 182 s |
+| wait lines | `item 1 waits (figure 72 GiB; free: node term 352, job term 103 GiB; the items in flight can still allocate 26 GiB (figures 72, job anon+shmem 88, baseline 42.4) ...; projected node 254, job 5; refused by the job term)` | `item 1 waits (figure 72 GiB; free: node term 353, job term 55 GiB; ... can still allocate 28 GiB ...; projected node 254, job -45; refused by the job term)` |
+| figure changes of an item | 71.9 (F0) -> 71.9 after the level line (ledger 56.9 GiB, not above) -> 44.6 after the waited line | the same |
+| model exceeded | `peak admission: model exceeded in 0 s of the refreshes (largest excess 0.0 GiB)` | the same |
+
+Engine lines (item 0 of 818979, the same in all items): `n=300223349 nw=2 D=59480329 rc=1 bases=27164540368 budget_gib=31.00 need_est_gib=33.93 fb=0` / `records=59480328 aln=58101322 ops=84507716 seqbytes=2577968087 region_bytes=18123335351 hostrecs_bytes=10754202009` / `unmapped=12128581 late_bytes=1787643871 solokeep_bytes=6480309604`.
+The ledger for d300_3p is L = 56.9 GiB against P_B = 59.9 (measured solo peak 54.1).
+Replay prediction of T2-peakmodel.md 3b (starts about +5, +129, +243 s for 200 G; +4, +128, +159 s for 150 G, counterfactual from the solo profile): measured +18, +156, +280 s (200G); +18, +157, +280 s (150G). Item 1 and item 2 start 27 and 37 s later than predicted: 13 s of that is the
+first-start wait for the baseline, the rest is item wall (138.6 s for the first item against 124 s in the solo profile). For 150G the replay admitted item 2 at +159 s (overlapping item 1); the pool did not: at that moment the job term was 46 GiB free with 21 GiB still to allocate by item 1, 72 for the new one (projected -47).
+The three items ran one after the other in both jobs; the mode-0 200G job had them all in flight (peak 157.1 GiB above zero) and the three fitted.
+
+## 5. 365 GiB lane, one H100, three workers (test 5; 818982, node g051, three `d500s_3p`, `--mem=365G`, mode 1)
+
+| | |
+|---|---|
+| oom_kill / memory.events | 0 / `low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0` |
+| memory.peak | 328,990,703,616 B (306.4 GiB) of 365 |
+| pool wall | 1159 s; items 673.5 / 653.5 / 463.6 s wall, all exit 0 |
+| B | 42.43 GiB (+12 s, window 42.07-42.43) |
+| starts (s after item 0's start) | item 0 +0, item 1 +40 (the old stagger), item 2 +674: admitted when item 0 ended (waited 593 s) |
+| the wait | `item 2 waits (figure 138 GiB; free: node term 234, job term 152 GiB; the items in flight can still allocate 115 GiB (figures 277, job anon+shmem 204, baseline 42.4) ...; projected node -20, job -102; refused by the node and job term)`, later `... node term 285, job term 208 GiB; ... 62 GiB (figures 156 ...); projected node 85, job 7; refused by the job term`; after item 0 ended `admitted after 593 s (projected node 161 GiB, job 85 GiB)` |
+| figures | F0 138.5 (P 126.5 + 12) -> 132.9 after the level line (ledger 120.5, not above) -> 77.9 after the waited line |
+| model exceeded | 0 s, largest excess 0.0 GiB |
+
+Three d500s_3p solo peaks plus the baseline are 3 x 126.3 + 42.5 = 421 GiB, over 365. The pool kept two in flight (peak 306.4) and started the third when the first ended.
+**Mode 0 on the same triple: not run.** The probe job 818983 (`t2-cggate-probe.sbatch`, two minutes on g051 after the mode-1 run, nothing else of mine on the node): MemFree 341-343, Cached 399, Shmem 0 GiB, so today's `free` = MemFree + 0.25 x (Cached - Shmem) = 441-442 GiB (cache share 1.0: 740-742),
+against the 505-510 the doc says today's gate needs to admit all three; skipped as the brief says. (The mode-1 run itself, 20 min earlier on the same node, started from MemFree 342 / Cached 399.) No kill in mode 0 was therefore observed and none is claimed.
