@@ -64,7 +64,11 @@ def _feature_gene_resolver(gene_ids: list[str]):
 
 def load_singlet(out: Path) -> ad.AnnData | None:
     """Singlet --output-format mtx: exon_counts / intron_counts (feature level, all barcodes
-    passed to the pileup), ambiguous_counts (gene level, fixed engine only), cell_calls.tsv."""
+    passed to the pileup; the STARsolo Gene / GeneFull split), cell_calls.tsv.
+
+    Layers: from 1.3.5 on the alevin-fry-style USA labels are read directly from spliced_counts /
+    unspliced_counts / ambiguous_counts (gene level, every molecule in exactly one). Older runs lack
+    the spliced and unspliced files; for them spliced = exon - ambiguous and unspliced = intron_counts."""
     if not (out / "exon_counts.mtx.gz").exists():
         return None
     raw_dir = out / "raw_feature_bc_matrix"
@@ -92,18 +96,30 @@ def load_singlet(out: Path) -> ad.AnnData | None:
         return sp.csr_matrix((c.data, (rows[c.row], c.col)), shape=(len(all_genes), m.shape[1]))
 
     exon = to_full(genes_e, ge)
-    intron = sp.csr_matrix(exon.shape)
-    if (out / "intron_counts.mtx.gz").exists():
-        f, m, b = part("intron_counts")
-        assert b == eb, "intron and exon barcodes differ"
-        gi, mi = _collapse(f, m, gene_of)
-        intron = to_full(gi, mi)
-    amb = sp.csr_matrix(exon.shape)
-    if (out / "ambiguous_counts.mtx.gz").exists():
-        f, m, b = part("ambiguous_counts")
-        ga = [gene_of(x) for x in f]  # '<gene_id>_<gene_name>'
-        amb = to_full(ga, m)
-    spliced = exon - amb
+    usa = all((out / f"{n}.mtx.gz").exists() for n in ("spliced_counts", "unspliced_counts", "ambiguous_counts"))
+    if usa:
+        def usa_layer(prefix: str):
+            f, m, b = part(prefix)
+            assert b == eb, f"{prefix} and exon barcodes differ"
+            g, mm = _collapse(f, m, gene_of)
+            return to_full(g, mm)
+
+        spliced = usa_layer("spliced_counts")
+        intron = usa_layer("unspliced_counts")
+        amb = usa_layer("ambiguous_counts")
+    else:
+        intron = sp.csr_matrix(exon.shape)
+        if (out / "intron_counts.mtx.gz").exists():
+            f, m, b = part("intron_counts")
+            assert b == eb, "intron and exon barcodes differ"
+            gi, mi = _collapse(f, m, gene_of)
+            intron = to_full(gi, mi)
+        amb = sp.csr_matrix(exon.shape)
+        if (out / "ambiguous_counts.mtx.gz").exists():
+            f, m, b = part("ambiguous_counts")
+            ga = [gene_of(x) for x in f]  # '<gene_id>_<gene_name>'
+            amb = to_full(ga, m)
+        spliced = exon - amb
     a = ad.AnnData(
         X=sp.csr_matrix((exon + intron).T),
         obs=pd.DataFrame(index=[_bare(x) for x in eb]),
