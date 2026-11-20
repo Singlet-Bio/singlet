@@ -173,7 +173,13 @@ int star_main_impl(int argInN, char *argIn[])
     ////////////////////////////////////////////////////////////////////////
     ///////////////////////////////// Genome
     Genome genomeMain(P, P.pGe);
-    genomeMain.genomeLoad();
+    {
+        const auto gl0 = std::chrono::steady_clock::now();
+        genomeMain.genomeLoad();
+        char glb[96];
+        snprintf(glb, sizeof glb, "Genome load seconds: %.2f", std::chrono::duration<double>(std::chrono::steady_clock::now() - gl0).count());
+        P.inOut->logMain << glb << "\n" << std::flush;   // T2 chimshare: the load time in Log.out (singlet prints the chimeric pass's)
+    }
 
     if (P.pGe.transform.outYes) {
         genomeMain.Var = new Variation(P, genomeMain.chrStart, genomeMain.chrNameIndex, false);//no variation for mapGen, only for genOut

@@ -31,6 +31,11 @@ struct Consts {
     // --chimeric: after the engine the item forks a CPU STAR that loads the genome index privately (+16.6..17.1 GiB at 8 threads, 18.0 at 16, 19.3 at 27: T2-chimpass.md); every phase figure is
     // raised to wtU P + wtV + chimGb + margin (= 0.50 P + 22.1 + margin). Basis: three samples, one thread count each for two of them.
     double chimGb = 19.5;
+    // T2 chimshare: with SINGLET_CHIM_SHARE_GENOME not 0 (the default) the pool's items hand the pool's resident genome to the pass, which then adds chimSharedGb instead of chimGb
+    // (SINGLET_POOL_PEAK_CHIM_SHARED_GB; chimShare is false when SINGLET_CHIM_SHARE_GENOME=0, set by fromEnv). Placeholder 19.5 until measured.
+    double chimSharedGb = 19.5;
+    bool chimShare = true;
+    double chimEff() const { return chimShare ? chimSharedGb : chimGb; }
     // the fitted range and regime
     double nMaxM = 1400.0;                           // above: not fitted
     double fitMemGb = 31.0, fitMemTolGb = 1.0;       // SINGLET_ENGINE_GPU_MEM_GB the fit was made at, and how far from it the pool still trusts the figures
@@ -56,7 +61,7 @@ inline double peakP(double nM, double basesG, const Consts& k) {
 }
 // the figure (GiB above the baseline) an item at phase 0 (before the level line), 1 (after it), 2 (after the waited line) can still reach
 inline double phaseFigure(double P, int phase, const Consts& k, bool chimeric = false) {
-    const double chim = chimeric ? k.wtU * P + k.wtV + k.chimGb + k.margin : 0.0;   // the second pass' floor, every phase
+    const double chim = chimeric ? k.wtU * P + k.wtV + k.chimEff() + k.margin : 0.0;   // the second pass' floor, every phase
     const double f0 = std::max(P + k.margin, chim);
     const double f1 = std::max(std::min(P + k.margin, k.lvlU * P + k.lvlV + k.margin), chim);
     const double f2 = std::max(std::min(std::min(P + k.margin, k.lvlU * P + k.lvlV + k.margin), k.wtU * P + k.wtV + k.margin), chim);
@@ -93,6 +98,8 @@ inline Consts fromEnv() {
     k.wtU = envd("SINGLET_POOL_PEAK_WAITED_U", k.wtU); k.wtV = envd("SINGLET_POOL_PEAK_WAITED_V", k.wtV);
     k.ledA = envd("SINGLET_POOL_PEAK_LEDGER_A", k.ledA); k.ledB = envd("SINGLET_POOL_PEAK_LEDGER_B", k.ledB); k.ledKeep = envd("SINGLET_POOL_PEAK_LEDGER_KEEP", k.ledKeep);
     k.nMaxM = envd("SINGLET_POOL_PEAK_NMAX_M", k.nMaxM); k.chimGb = envd("SINGLET_POOL_PEAK_CHIM_GB", k.chimGb);
+    k.chimSharedGb = envd("SINGLET_POOL_PEAK_CHIM_SHARED_GB", k.chimSharedGb);
+    { const char* cs = std::getenv("SINGLET_CHIM_SHARE_GENOME"); k.chimShare = !(cs && cs[0] == '0'); }
     k.fitMemGb = envd("SINGLET_POOL_PEAK_FIT_MEM_GB", k.fitMemGb); k.fitMemTolGb = envd("SINGLET_POOL_PEAK_FIT_MEM_TOL_GB", k.fitMemTolGb);
     k.fitSlots = envd("SINGLET_POOL_PEAK_FIT_SLOTS", k.fitSlots); k.fitSlotsTol = envd("SINGLET_POOL_PEAK_FIT_SLOTS_TOL", k.fitSlotsTol);
     return k;

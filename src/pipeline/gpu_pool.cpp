@@ -912,7 +912,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 const double nM = reads / 1e6, bG = bases / 1e9, P = poolpeak::peakP(nM, bG, pkK);
                 { std::vector<std::string> allArgs = base; allArgs.insert(allArgs.end(), it.extra.begin(), it.extra.end()); itemPkChim[it.idx] = has_flag(allArgs, "--chimeric") ? 1 : 0; }   // the item's own arguments (pool --args and the queue line), not the environment
                 itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = poolpeak::phaseFigure(P, 0, pkK, itemPkChim[it.idx] != 0);
-                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", itemFig0[it.idx], pkK.margin, itemPkChim[it.idx] ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + pkK.chimGb).c_str() : "", itemEst[it.idx]);
+                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", itemFig0[it.idx], pkK.margin, itemPkChim[it.idx] ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + pkK.chimEff()).c_str() : "", itemEst[it.idx]);
             } else {
                 itemFig0[it.idx] = itemEst[it.idx];
                 plog("item %d: peak model not used (%s): the old estimate, %.0f GB, is the figure", it.idx, why.c_str(), itemEst[it.idx]);

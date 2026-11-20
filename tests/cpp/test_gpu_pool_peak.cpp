@@ -59,7 +59,13 @@ int main() {
         CHECK(near(phaseFigure(P5, 2, k, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4) && near(phaseFigure(P5, 2, k, true), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
         CHECK(near(phaseFigure(Pc, 2, k, true), 64.1, 0.1), "chimeric d300_5p F2");
         CHECK(near(phaseFigure(PgLin, 2, k, true), 52.0, 0.1) && near(phaseFigure(Pg, 2, k, true), 72.5, 0.1), "chimeric GSM6250953 F2 (after the first engine line, and at the start in the zone)");
-        Consts z; z.chimGb = 0.0;
+        // T2 chimshare: the floor adds chimSharedGb when sharing is in effect (the default), chimGb when SINGLET_CHIM_SHARE_GENOME=0
+        Consts sh; sh.chimSharedGb = 30.0;
+        CHECK(near(phaseFigure(P5, 2, sh, true), 0.5 * P5 + 2.6432 + 30.0 + 12.0, 1e-4), "chimeric shared: floor uses chimSharedGb");
+        sh.chimShare = false;
+        CHECK(near(phaseFigure(P5, 2, sh, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4), "chimeric not shared: floor uses chimGb");
+        CHECK(Consts().chimShare && near(Consts().chimEff(), Consts().chimSharedGb, 1e-12), "sharing is the default");
+        Consts z; z.chimGb = 0.0; z.chimSharedGb = 0.0;
         CHECK(near(phaseFigure(P5, 2, z, true), phaseFigure(P5, 2, z), 1e-9), "chimGb 0: the floor equals F2");
     }
     // zone: the four classes the doc over-predicts (fallback possible) are above the linear predictor
