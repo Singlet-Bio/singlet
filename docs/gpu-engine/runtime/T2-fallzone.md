@@ -290,3 +290,95 @@ Not possible today. `worker.py` computes one `mem_gb` per pool launch (`gpu_mem_
 - The cause of "E8 does not run" for 5'/other protocols was not traced (1.4).
 - The all-files comparison of the 14 run-dependent files is by file name and md5 only.
 - No implementation, no gate, no build in this task. Four jobs were used (818968, 818969, 818970, 818977).
+
+## 5. Follow-up: the "E8 does not run" level-0 runs (10 of 99 GPU runs of dry run 2)
+
+Analysis only again. Added scripts: `bench/gpu-runtime/t2-fallzone-e8params.py` (STAR parameter block and campaign arguments per GPU run), `t2-fallzone-assays.py` (corpus per assay label), `jobs/t2-fallzone-e8.sbatch` (one staged SRA run, two encodes, one pool). Data: `data/t2-fallzone-e8params-dryrun2.tsv`, `data/t2-fallzone-assays.txt`, `data/t2-fallzone-census-dryrun-other.tsv` (the earlier `dryrun` campaign and the duplicates), `data/t2-fallzone-results/t2-fallzone-818988-e8.results.txt`. One job was used (818988).
+
+### 5.1 Which condition fails, per run
+
+The test (`SeqCacheGpuPrefill.cpp:1617-1619`) needs: the E2E region (`e2eRegion().fd >= 0`), `SINGLET_ENGINE_GPU_HANDOFF`, `..._HANDOFF_MINQ`, `SINGLET_GPU_PILEUP=on`, the hand-off summary not off, `ReadAlign::seqCacheHandoffConfig(P)`, `(tr != nullptr || !quant.gene.yes)`, Solo type CB_UMI_Simple, CB and UMI length <= 21.
+`seqCacheHandoffConfig` (`ReadAlign_seqCache.cpp:361`) needs: `soloType == CB_UMI_Simple`, one Solo feature and it is Gene, `readNmates == 1`, no BySJout, no genome transform (SAM, out, quant), `chimSegmentMin == 0`, no WASP, no transcriptome SAM, no GeneCounts, no GeneFull / GeneFull_Ex50pAS / GeneFull_ExonOverIntron, `gType != 101`.
+The region and the hand-off variable exist only on the unsorted stream path: `singlet.cpp:6866-6890` unsets the hand-off variable when `stream_unsorted != 1`, and creates the region only inside the `stream_unsorted == 1` block. The stream path is refused (`singlet.cpp:6777-6800`) for: an existing BAM, not `.1fq` mode, `--parallel-pileup`, ATAC, Smart-seq/bulk, **`detected_soloType != CB_UMI_Simple`**, **no whitelist file (STAR then runs CB_samTagOut)**, `--tagged-bam`, `SINGLET_KEEP_STAR_BAM`; and it can be left later by **`restart_on_sorted_path`** (`singlet.cpp:3392`, called at 10040 after the first N reads when `strand_early_abort`, and at 10101 at the end of a pass), which strips the `star_*` files and re-executes the command with `--sorted-bam`.
+The STAR parameter blocks of the ten runs (`out/star_Log.out`; `t2-fallzone-e8params.py`) show which applies. Group A is the only one with `soloType CB_UMI_Simple`:
+
+| group | runs (lane, read pairs M) | label / preflight / engine protocol | STAR: soloType, CB, UMI, whitelist; BAM mode | condition that is false | cause |
+|---|---|---|---|---|---|
+| A: 10x 5' called 3' | GSM5682562 (V100S 68.9), GSM5231122 (V100S 16.3), GSM7662904 (V100S 9.3), GSM6250953 (H100 121.4), GSM7658834 (H100 130.6), GSM7232636 (H100 255.2), GSM9535813 (H100 253.6) | label `10x_5p`; preflight `chemistry_call` **10x-3p-v2** (six `medium` with flag `end_ambiguous:10x-3p-v2\|10x-5p-v2`, GSM9535813 `high` with no flag); `encode_args --protocol 10x-3p-v2`; engine protocol 10xv2-5p | CB_UMI_Simple, 16, 10, 737K-august-2016.txt; **BAM SortedByCoordinate** | region and hand-off variable (the run is on the sorted path); everything else true | the .1fq is encoded with the 3' orientation, the library is 5', the stream's end-of-pass strand check restarts the run on the sorted path (see 5.2) |
+| B: microwell-seq | GSM1241178 (RTX 2.8), SRS3702682 (RTX 4.4) | corpus labels 10x_3p_v3 / 10x_3p_v2 (not microwell); engine protocol microwell-seq | **CB_samTagOut**, 18, 6, `/tmp/singlet_combwl_filtered_*.txt` (a concatenated whitelist); BAM SortedByCoordinate | `detected_soloType != CB_UMI_Simple` (`singlet.cpp:6784`), `seqCacheHandoffConfig` (soloType), the Solo-type line of 1618-1619 | complex barcode: the engine builds a concatenated barcode and runs CB_samTagOut (`singlet.cpp:5069-5520`, `7421-7502`), which the stream and E8 do not support |
+| C: dropseq | GSM5361253 (V100S 15.3) | label seqwell; engine protocol dropseq | **CB_samTagOut**, 12, 8, whitelist **None**; BAM SortedByCoordinate | `whitelist_file == none` (`singlet.cpp:6788-6791`: "no barcode whitelist file (STAR runs CB_samTagOut)"), and the same Solo-type conditions | no barcode whitelist (barcode discovery) |
+
+HLA is not a cause: all 99 GPU runs of dry run 2, including every level-5 one, passed `--hla-t1k`; E8's test does not read it. Chimeric is not a cause either: the campaign's `--chimeric` is the engine's second pass on the unmapped reads (`singlet.cpp:10561`), not STAR's `chimSegmentMin`, and the one 10x_5p run that reached level 5 had it. Length limits are not a cause (CB 12-18, UMI 6-10).
+**Group A against the 5' runs that reach level 5.** In dry run 2 the eight `10x_5p`-labelled GPU runs split 7 / 1: the one at level 5 (GSM6504592, 516 M pairs, H100) had `chemistry_call` **10x-5p-v2**, `high`, `--protocol 10x-5p-v2`, `BAM Unsorted`. Sixteen further GPU runs with a 3'-label and engine protocol 10xv2-5p (no preflight record, no `--protocol`) are all level 5 on the unsorted stream: the engine's own encode-time detection calls them 5' (5.2). So what separates the seven from the others is the `--protocol 10x-3p-v2` the preflight hook passed on a 5' library; paired-end cDNA, clip, barcode mate and HLA are the same. The gate sample pbmc5p_v1 and the mix sample d300_5p are benchmark `.1fq` files whose encode command I did not read; they are consistent with the "no `--protocol`" case.
+Evidence that group A is restarted, from the kept data: the final STAR command line has `--outSAMtype BAM SortedByCoordinate` and the campaign's `pipeline_args` do not contain `--sorted-bam`, no stream-exclusion reason of the list above applies (whitelist present, CB_UMI_Simple, `.1fq` mode), and item wall minus the engine's own wall is 252-1,072 s for the seven against a mean of 34 s (RTX 8000) and 107 s (H100) for the level-5 runs:
+
+| run | lane | item wall (s) | engine wall (s) | difference (s) |
+|---|---|---|---|---|
+| GSM7662904 | V100S | 350 | 98 | 252 |
+| GSM7232636 | H100 | 2886 | 2461 | 425 |
+| GSM7658834 | H100 | 2263 | 1471 | 793 |
+| GSM5231122 | V100S | 1107 | 298 | 809 |
+| GSM9535813 | H100 | 2641 | 1670 | 971 |
+| GSM5682562 | V100S | 2075 | 1016 | 1059 |
+| GSM6250953 | H100 | 2301 | 1230 | 1072 |
+
+The kept logs of dry run 2 hold no `[singlet] STREAM STRAND` line (run.log is one line), so the restart is shown by job 818988 (5.2), not by those runs' own logs.
+
+### 5.2 Is it still so with today's settings and build
+
+`config.py` today: `pipeline_args` = `--ref-base --pipeline --output-format 1pz --no-hla --engine gpu` (+ `--genome-shared off` on the private-index lanes) plus `sample_output_args(assay)` = `--chimeric` for `10x_5p` (VREGION_ASSAYS, D-133); HLA is off for every library (D-169). The protocol reaches the command line only through the `--hooks` class (`worker.py:917-921`, `dec.encode_args`): the preflight hook (`preflight/hook.py:63-71`) turns a high or medium `chemistry_call` into `--protocol <tag>`. **The live pilots ran with no hooks** (`settings.hooks` is empty in all 7 samples of sched-live8; their `protocol_decision.encode_args` is `[]`), and their labels are all `10x_3p_v3`: none of them exercises a 5' library, so the pilots neither show nor exclude group A.
+Job 818988 (H100, g051, `bin/t2-hostcut5`, budget 31 / 2 slots, `--no-hla --chimeric`; the staged run SRR25434921 of GSM7662904, 1,989,132 pairs; the `.1fq` of the dry run no longer exists, the `.sra` does) settles the 5' cause:
+
+| arm | encode's own line | level | BAM mode | pipeline lines | item wall (s) |
+|---|---|---|---|---|---|
+| `auto` (no `--protocol`, as without the preflight hook) | `[protocol_detect] 10x-3p-v2 -> 10x-5p-v2 (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A))` | **5** ("E19: level 5 reached (requested 5)") | Unsorted | `5' protocol detected -> using reverse strand`; `BAM: unsorted STAR stream into the pileup` | 65.6 |
+| `p3` (`--protocol 10x-3p-v2`, as the hook passed) | the same detect line, then `[1fq-encode] Protocol: 10x-3p-v2` (the flag wins) | **0** ("E10 (level 5) not used: E8 does not run"; "E19: level 0 reached (requested 5)") | SortedByCoordinate | **`STREAM STRAND: 92% of 687804 strand-informative nuclear reads are antisense to the protocol orientation (at the end of the pass); restarting on the sorted path (--sorted-bam)`**; later `Protocol relabeled by strand: id 2 -> 5` | 80.8 |
+
+So: with the flag, today's code and arguments reproduce the level 0; without it, the engine's own detection labels the library 5' at encode and the run is level 5 on the stream. At 2 M pairs the restart costs 15 s (23 %); at 121-255 M it cost 425-1,072 s (table above). Whether today's campaign passes `--protocol` for 5' samples depends only on whether the preflight hook is on in the real run; this was not settled from the code (`campaign.py` default `--hooks` is empty). The other two causes do not depend on settings or build: B and C are decided by the protocol the engine detects (complex barcode, no whitelist) and by the conditions quoted in 5.1, which are the same in `d141971c` (the source read) as in the dry run's logs ("E8 does not run" and CB_samTagOut).
+
+### 5.3 How much of the corpus is affected
+
+Corpus table (eligible, not mux-skipped, 94,740 samples, 25.65 T pairs; `data/t2-fallzone-assays.txt`):
+
+| class | assay labels | samples | share of samples | pairs (G) | share of pairs | basis |
+|---|---|---|---|---|---|---|
+| A, upper bound | `10x_5p` | 11,579 | 12.22 % | 3,582.7 | 13.97 % | the deciding property (the preflight call) is **not in the corpus table**: the class as a whole is the bound. Dry-run set: 22 `10x_5p` samples, 14 called 3p-v2, 3 called 5p-v2, 1 called 3p-v3, 1 arc-gex, 2 no call (single read, no barcode read); of the 8 on GPU lanes 7 were called 3p-v2. Applying 14 / 22 to the class would give about 7,400 samples and 2.3 T pairs (estimate from 22 samples; wide interval) **if the hook is on** |
+| B and C, shown by a run | `microwell_seq`, `seqwell`, `dropseq` (in dry run a `seqwell`-labelled sample ran as the dropseq protocol; two `10x_3p_*`-labelled samples ran as microwell-seq, so labels are not reliable here) | 393 + 625 + 4,359 = 5,377 | 5.68 % | 24.1 + 53.6 + 553.0 = 630.7 | 2.46 % | one to three samples per label seen in the logs |
+| B and C, same cause expected but not shown | `bd_rhapsody` 929, `singleron` 468, `hive` 27, `indrop` 414, `dnbelab_c4` 489, `pipseq` 161, `mobidrop` 10, `barcoded_unspecified` 2,681 | 5,179 | 5.47 % | 1,300.6 | 5.07 % | bound only: not traced for these protocols (complex or whitelist-less barcodes are the likely property; no run seen) |
+| not affected by these causes | 10x 3' v1-v4, `10x_multiome`, visium and the other spatial labels | the rest | | | | `10x_unspecified` (8,154 samples, 2,056.9 G pairs) is a label "whose chemistry only the engine knows": its 5' share is unknown here |
+
+### 5.4 What the planner does with them today
+
+- **Nothing keeps such a sample off a GPU lane, and nothing learns it.** `costmodel.estimate` refuses a kind only for `disabled_assays` (no prior row sets any), `disabled_genomes`, the GPU depth limit, the depth caps and host memory (`costmodel.py:224-243`); `planner.py`, `placement.py`, `routing.py` have no fall-back or protocol rule.
+- **Class key** (`class_keys`, `costmodel.py:88`): `assay_group|human or other|plain or mux|short or long`, with `assay_group` = 3p / 5p / other (`telemetry.assay_group`: `THREE_PRIME_ASSAYS`, `five_prime`, else other); the coarse level drops assay and genome. So `10x_5p` is a class of its own (`5p|human|plain|short`), group A is **not** separated inside it (the preflight call is not a feature), and microwell-seq, dropseq and every other label share `other|...`.
+- **Fall-back learning:** `telemetry.fell_back_of` (`telemetry.py:167`) is true only if the sample's `run.log` / provenance engine log holds `FELL BACK` or `level 0 (requested`, or `found.fallbacks` has `solo_host`. The kept `run.log` is the pool's lines that name the sample (`logs.excerpt`, `logs.py:101-109`: engine lines do not name it, `LOG_NAMES` does not include `star_Log.out`). In my census **0 of the 99 dry-run-2 GPU runs and 0 of the 37 live GPU runs are marked** although 14 and 1 were level 0. So `p_fallback` stays at its prior (`p_fb` 0.05, `p_fb_nonhuman` 0.5 for the H100; `costmodel.py:45-59`) and the multiplier is the prior 6.5 (`MULT["fallback"]`, "26/4").
+- **What it would do to the 5' class's wall fit:** the five dry-run-2 H100 records of `10x_5p` (4 level 0, 1 level 5) reach `MIN_N = 5`, so the class's own line would be fitted on them as ordinary walls: 10-19 s per M pairs for the four restarted runs against the H100 prior of 0.47 s per M pairs (a 22-40x gap, against the prior fall-back factor 6.5; estimate from the rates: 2301 s / 121.4 M = 19.0, 2263 / 130.6 = 17.3, 2641 / 253.6 = 10.4, 2886 / 255.2 = 11.3 s per M pairs).
+- **GPU lane against CPU lane, measured, same samples** (the earlier `dryrun` campaign ran them on CPU lanes: 12 runs per node at `--threads 3`, `--hla` inline, build bc2d8d92; dry run 2: H100 3 in flight or V100S 1 in flight, build b7ff2406; so the lanes differ in shape, HLA and build, and each sample has one run per lane):
+
+| sample | pairs (M) | GPU lane wall (s), level 0 | CPU lane wall (s) |
+|---|---|---|---|
+| GSM6250953 | 121.4 | 2301 (H100) | 3409 |
+| GSM7658834 | 130.6 | 2263 (H100) | 2527 |
+| GSM9535813 | 253.6 | 2641 (H100) | 4267 |
+| GSM7232636 | 255.2 | 2886 (H100) | 3517 |
+| GSM5682562 | 68.9 | 2075 (V100S) | 2090 |
+| GSM5231122 | 16.3 | 1107 (V100S) | 1210 |
+| GSM7662904 | 9.3 | 350 (V100S) | 356 |
+| GSM1241178 (B) | 2.8 | 40 (RTX 8000) | 55 (bigmem) |
+| SRS3702682 (B) | 4.4 | 87 (RTX 8000) | 126 (bigmem) |
+| GSM5361253 (C) | 15.3 | 195 (V100S) | 148 (V100S, level 0, in `dryrun`) |
+
+A level-0 run on a GPU lane is not slower per sample than the same sample on a CPU lane in these data (nine of ten faster or equal); keeping such samples off GPU lanes would not by itself buy time, the gain is in making them run at level 5.
+
+### 5.5 Options (nothing implemented)
+
+(i) **Static rule on what is known before the run.** For group A: label `10x_5p` with a preflight call of 3p-v2 (or flag `end_ambiguous:*`): do not pass `--protocol` (the `auto` arm above is level 5), or pass the 5' twin. Place: `preflight/hook.py:63-71` (`protocol`), a few lines; evidence: job 818988, 7 of 8 GPU runs. For B and C: label-based routing is possible through `costmodel.estimate`'s `disabled_assays` (an existing switch, `costmodel.py:224`) but the comparison above says a CPU lane is no faster for these samples, and the labels do not match the engine's protocol (two `10x_3p_*` labels ran as microwell-seq), so a label rule would miss them; the detected protocol is known only after the encode. Work: small for A, not worth it for B and C.
+(ii) **Make E8 run.** A: nothing is missing in the engine for the 5' protocol (the `auto` arm); what is wasted is the whole first pass, because the early abort is off whenever the GPU pileup is on (`singlet.cpp:6897`: `strand_early_abort = ... && !getenv("SINGLET_GPU_PILEUP")`) and the only check left is the end of the pass (10101). Options: enable the early check in the GPU path (the restart already removes the hand-off files, 3400-3405), or run the strand probe before STAR (the CellRanger4 probe reads 200 k reads) and set the protocol before encode. Work: moderate, needs a gate with a 5' sample; not tested. B and C: the engine lacks E8 for CB_samTagOut: the stream takes CB from CR and needs a whitelist-exact CB_UMI_Simple (`singlet.cpp:6784-6791`), the hand-off summary is defined for CB_UMI_Simple (`seqCacheHandoffConfig`), and the Solo-type and CB-length test at 1618-1619 assumes the simple layout; the complex path concatenates segments before STAR (`singlet.cpp:5516-5520`, `7502`). Work: large (a stream and hand-off for concatenated barcodes and for barcode discovery), estimate only.
+(iii) **Telemetry so the planner learns it.** Read the item's `out/star_Log.out` (it is kept): `E19: level N reached (requested M)` and `E10 (level 5) not used: <reason>` into `engine_log.found` (in `logs.parse_log` / `worker.py:1485-1490`, where `found` is built), and have `telemetry.fell_back_of` (`telemetry.py:167`) also test that level; add the strand-restart line of the item's pool log (it names no sample, so `logs.excerpt` drops it; the pool log plus the item index is the way to attribute it). With that the 5' class's `p_fb` and its fitted line would stop mixing restarted and normal runs; a per-sample feature (label 5' and preflight call 3p) would separate group A in the class key. Work: small (a parser and a field).
+
+### 5.6 Not traced, uncertain
+
+- The restart of the seven dry-run-2 runs is inferred (sorted command line, no other exclusion reason, the wall differences) and reproduced on one run of one sample (1.99 M pairs) in job 818988; their own logs do not hold the line.
+- Whether the real campaign uses the preflight hook (and so `--protocol`) is not settled; the pilots ran without it and had no 5' sample.
+- Groups B and C are settled from the code and the STAR parameter blocks; no run was made for them. The "same cause expected" labels of 5.3 are a bound, not a finding.
+- The GPU/CPU comparison mixes lane shapes, builds and HLA settings (5.4) and has one run per lane per sample.
