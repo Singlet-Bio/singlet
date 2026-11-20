@@ -74,6 +74,24 @@ The stagger (`SINGLET_POOL_STAGGER_S`) still uses the old estimate of the item l
 With `SINGLET_POOL_MEMSAMPLE` set, `memsamp-cg.tsv` (beside `memsamp.tsv`) gets, each period: `t AS B figures can_still_allocate node_free job_free items_job B_valid`. Whenever AS - B exceeds the sum of all figures
 the pool logs (at most every 30 s) `model exceeded: job anon+shmem a - baseline b = c GiB held by the items, above the sum of their figures d by e GiB ...` and the run ends with `peak admission: model exceeded in X s of the refreshes (largest excess Y GiB)`.
 
+**F. `--chimeric` items (orchestrator's addendum, mode 1 only).** The peakmodel recordings had no `--chimeric`; after the engine such an item forks a CPU STAR that loads the genome index privately (T2-chimpass.md, jobs 819008 / 819009: the job
+cgroup's anon+shmem rises by 16.6 / 16.7 / 17.1 GiB at 8 threads over the level at the pass's start for GSM6250953 / pbmc5p_v1 / d300_5p, 18.0 at 16 threads, 19.3 at 27). If the item's own argument list (the pool's `--args` plus the queue line's extra arguments, token `--chimeric`;
+never the environment) contains it, every phase figure is `max(F, 0.50 P + 2.6432 + chimGb + margin)` = `max(F, 0.50 P + 22.1 + margin)` with `SINGLET_POOL_PEAK_CHIM_GB` (default 19.5, the largest measured rise 19.3 plus 0.2), also at admission (F0). `phaseFigure(P, phase, k, chimeric)`; the pool logs `--chimeric: floor 0.5 P + 22.1 + margin` on the item's line.
+**The basis is three samples, one thread count (8) each for two of them (pbmc5p_v1, d300_5p; GSM6250953 was measured at 8, 16 and 27).** Mode 0 does not know the term.
+The three recordings with their real n and cDNA bases (the `[1fq-ingest] Scanned` lines of the jobs: pbmc5p_v1 60.000 M reads / 5.460 G bases, GSM6250953 121.366 M / 18.205 G, d300_5p 299.628 M / 27.266 G); level = item level above the 42.5 GiB one-pool baseline during the pass (T2-chimpass.md); margin 12:
+
+| sample | P (start) | P after the engine's line 1 (no fallback) | F2 without the term | floor / F2 with the term (P after line 1) | measured level in the pass |
+|---|---|---|---|---|---|
+| pbmc5p_v1 | 17.3 | 17.3 | 23.3 | 42.8 | 25.8 |
+| GSM6250953 | 76.7 (zone, fallback figure) | 35.8 | 53.0 (from P 76.7) / 32.5 (from 35.8) | 72.5 (from P 76.7) / 52.0 (from 35.8) | 28.0 |
+| d300_5p | 59.9 | 59.9 | 44.6 | 64.1 | 33.7 |
+
+(the orchestrator's guessed 31.6 / 40 / 56.4 came from guessed bases.) The figure includes the 12 GiB margin: without it the floors are 30.8 / 40.0 (from 35.8) / 52.1 against 25.8 / 28.0 / 33.7 measured: above the measurement by 5.0 / 12.0 / 18.4. For pbmc5p_v1 F2 without the term (23.3) was below
+the measured 25.8 (the pass, not the engine, is its peak); with it 42.8. GSM6250953 is in the zone: with the first line saying no fallback (it ran the engine path) the pool charges 52.0 after the waited line; before that line the zone's fallback figure applies (F0 88.7).
+
+Results that predate the term: everything in sections 3-6 below ran on `bin/t2-cggate-2` (jobs 818978 ... 819016), none of whose items carried `--chimeric` (the harness's PROD=1 does not add it): the term changes none of those figures. The build with the term is `t2-cggate-4` (jobs 819024 for -3: its ctest failed only on
+a 1e-6 tolerance in the new test, fixed; 819029 for -4).
+
 ## 2. Offline replay and the C++ (test 2)
 
 Test 1 (`tests/cpp/test_gpu_pool_peak.cpp`, ctest `test_gpu_pool_peak`, passed in the build log of bin/t2-cggate-2: "100% tests passed out of 188", `ctest exit 0`): the 18 classes of `t2-peakmodel-predictor.json` (n, bases of the doc's table, one decimal), P_B and the zone
@@ -137,3 +155,5 @@ The three items ran one after the other in both jobs; the mode-0 200G job had th
 Three d500s_3p solo peaks plus the baseline are 3 x 126.3 + 42.5 = 421 GiB, over 365. The pool kept two in flight (peak 306.4) and started the third when the first ended.
 **Mode 0 on the same triple: not run.** The probe job 818983 (`t2-cggate-probe.sbatch`, two minutes on g051 after the mode-1 run, nothing else of mine on the node): MemFree 341-343, Cached 399, Shmem 0 GiB, so today's `free` = MemFree + 0.25 x (Cached - Shmem) = 441-442 GiB (cache share 1.0: 740-742),
 against the 505-510 the doc says today's gate needs to admit all three; skipped as the brief says. (The mode-1 run itself, 20 min earlier on the same node, started from MemFree 342 / Cached 399.) No kill in mode 0 was therefore observed and none is claimed.
+
+Gate of the build with the chimeric term (`t2-cggate-4`, job 819029: `ctest exit 0`, 188 of 188), switches default, RTX 8000: job 819033, 8 lines `VERDICT <sample> cpu:gpu IDENTICAL (except E11's run-dependent files ...)`, no fallback line.
