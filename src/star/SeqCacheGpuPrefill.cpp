@@ -2330,6 +2330,10 @@ void seqCacheGpuPrefill(Parameters &P, Genome &G, SeqCache *&cache, Transcriptom
                 for (int im = 0; im < 2; im++) for (auto &x : so[im]) P.inOut->outSoftclipStream[im].write(x.data(), x.size());
                 P.inOut->logMain << "ENGINE_GPU: --chimeric soft-clip route: " << sc.size() << " reads with a record\n";
             }
+            if (const char *pmE = getenv("SINGLET_ENGINE_GPU_PEAKMODEL")) if (pmE[0] == '1') {   // cggate: the third line of T2-peakmodel.md 1.6 (the pool's ledger figure)
+                const e9::SoloKeep &pmK = e9::soloKeep();
+                std::cerr << "[engine_gpu] peakmodel: unmapped=" << S.unmappedAll << " late_bytes=" << late.bytes() << " solokeep_bytes=" << (pmK.reads && pmK.recs ? pmK.n * 20 + pmK.nRec * 8 : 0ull) << std::endl;
+            }
             P.inOut->logMain << "ENGINE_GPU: E10 level " << g_e10Level << ": " << S.readN << " reads with a record (" << S.mappedReadsU << " unique, " << S.mappedReadsM
                              << " multi, " << S.unmappedAll << " unmapped: " << nUnmappedRec << " Unmapped.out records" << (e16bg.on ? ", written after STAR's loop" : " written") << "), " << e10nSJ
                              << " junctions from the device; " << (g_e10Level >= 4 ? std::to_string(e10src.iRead.size()) + " reads without a record go to STAR's loop" : "STAR's loop keeps readLoad, the barcode and the Solo record of these reads")

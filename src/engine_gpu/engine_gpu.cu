@@ -905,6 +905,16 @@ static TAlloc g_talloc;
 #define TP thrust::cuda::par(g_talloc)
 static inline u64 gb2b(double g) { return (u64)(g * (double)(1ull << 30)); }
 static inline double b2gb(u64 b) { return (double)b / (double)(1ull << 30); }
+// cggate (SINGLET_ENGINE_GPU_PEAKMODEL=1, set by the gpu-pool in SINGLET_POOL_PEAKADMIT=1): the sizes the pool's peak model reads, on stderr, GiB-free (bytes and counts only)
+static inline bool peakModelOn() { static const bool on = [] { const char* e = std::getenv("SINGLET_ENGINE_GPU_PEAKMODEL"); return e != nullptr && e[0] == '1'; }(); return on; }
+static inline void peakModelRecords(u64 n, u64 nw, u64 nRec, u64 nAln, u64 nOps, u64 nSeq, u64 hostrecs) {
+    if (!peakModelOn()) return;
+    // the E2E region's bytes by the rule of T2-peakmodel.md 1.3: (28 + 8 nw) n + 16 records + 18 alignments + 4 ops + seq bytes
+    const u64 region = (28 + 8 * nw) * n + 16 * nRec + 18 * nAln + 4 * nOps + nSeq;
+    fprintf(stderr, "[engine_gpu] peakmodel: records=%llu aln=%llu ops=%llu seqbytes=%llu region_bytes=%llu hostrecs_bytes=%llu\n", (unsigned long long) nRec, (unsigned long long) nAln,
+            (unsigned long long) nOps, (unsigned long long) nSeq, (unsigned long long) region, (unsigned long long) hostrecs);
+    fflush(stderr);
+}
 // E12 (docs/gpu-engine/fable/E12-prefill.md): wall time of each step of mapDistinct (s, host clock; a device step ends where the code
 // synchronises), summed over chunks and logged as one line "engine_gpu: steps (s): ..." in the order the steps first ran
 static std::vector<std::pair<std::string, double>> g_steps;
@@ -2833,6 +2843,13 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
     }
     step("index.wait");
     memMark("index+distinct");
+    if (peakModelOn()) {   // cggate: the first line of T2-peakmodel.md 1.6, right after the dedup (both paths): the fallback expectation is the E17 records-phase need estimated from D (a two-point fit, see gpu_pool_peak.h)
+        const double dM = (double) out.nDistinct / 1e6, needEst = 4.67 + 0.492 * dM, budGib = (double) cap / (double) (1ull << 30);
+        const int fbExp = !RC && cap > 0 && needEst > budGib ? 1 : 0;
+        fprintf(stderr, "[engine_gpu] peakmodel: n=%llu nw=%u D=%llu rc=%d bases=%llu budget_gib=%.2f need_est_gib=%.2f fb=%d\n", (unsigned long long) n0, (unsigned) in.e10.nw,
+                (unsigned long long) out.nDistinct, RC ? 1 : 0, (unsigned long long) S0, budGib, needEst, fbExp);
+        fflush(stderr);
+    }
     std::vector<uint32_t> recOfPos(rep.size(), NONE);   // rep position -> output record (NONE: not mapped, STAR maps it)
     // ---- map in chunks of distinct sequences (device memory for the lanes' outputs is per chunk)
     nvch.next("mapDistinct: map chunks");
@@ -3607,6 +3624,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                  gatherDev ? "gather" : "E17: the host-assembled records uploaded", E2H.msGather, gatherDev ? "host lane upload" : "staged", hostBytes / 1e6, E2H.msBuild,
                  R6.msCount, R6.msScan, R6.msFill, E2H.msD2H, g_d2h ? "staged" : pinned ? "page-locked" : "pageable");
         out.log += l;
+        peakModelRecords(n, (u64) in.e10.nw, R6.nRec, R6.nAln, R6.nOps, R6.nSeq, out.seq.size() + out.blob.size() + (out.seqOff.size() + out.blobOff.size()) * 8);
         out.e2eOk = true;
         return true;
     };
@@ -3889,6 +3907,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                  (unsigned long long) nSeqT, (unsigned long long) nMapped, (unsigned long long) nNoExon, (unsigned long long) nBadBest, tUp * 1e3, upMsg, tBuild * 1e3,
                  tCopy * 1e3, tProd * 1e3);
         out.log += l;
+        peakModelRecords(n, (u64) in.e10.nw, nRec, nAln, nOps, nSeqT, out.seq.size() + out.blob.size() + (out.seqOff.size() + out.blobOff.size()) * 8);
         out.e2eOk = true;
         return true;
     };
@@ -3972,7 +3991,7 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
                 for (auto& cr : chunks) { std::vector<uint8_t>().swap(cr.hBlob); std::vector<u64>().swap(cr.hOff); }   // the host lane's results: e2eBuild frees them the same way
             }
         }
-        if (!(recChunks ? e2eBuildRC(e2eWhy) : e2eBuild(e2eWhy))) { out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
+        if (!(recChunks ? e2eBuildRC(e2eWhy) : e2eBuild(e2eWhy))) { if (peakModelOn()) { fprintf(stderr, "[engine_gpu] peakmodel: fallback=1 D=%llu\n", (unsigned long long) out.nDistinct); fflush(stderr); } out.log += "engine_gpu: E8 records not built on the device (" + e2eWhy + "); the hand-off file path is used\n"; e10Off("no E8 records"); }
         step("e2e.build");
         { const bool ok10 = out.e10.ok; e10 = false; e10Off(""); out.e10.ok = ok10; }   // frees the device entries
         for (auto& cr : chunks) for (Lane* L : {&cr.A, &cr.M, &cr.B}) { dfree(L->dOut); dfree(L->dOff); L->dOut = nullptr; L->dOff = nullptr; }
