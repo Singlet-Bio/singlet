@@ -1,0 +1,119 @@
+node=g051.clipper.gvsu.edu job=819082 tag=items bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprune/singlet-gpu sras='' items='pbmc5p_v1 d300_5p' arms='pp1:SINGLET_CHIM_PAIRPRUNE=1 pp0:SINGLET_CHIM_PAIRPRUNE=0' T=8 extra='--chimeric' 2026-11-20T02:41:51-05:00
+binary sha256 576fa903cadc272b commit b21de2cfb748f257385f4d4973e88f5639acc054
+node at start: MemFree: 319 GB; Cached: 422 GB; Shmem: 0 GB; ; squeue on node: 819082/t2-chimprune-items/debruinz/300G
+RUN pbmc5p_v1_pp1 env 'SINGLET_CHIM_PAIRPRUNE=1' threads 8 start 2026-11-20T02:41:59-05:00 node memory: MemFree: 311 GB; Cached: 429 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_pp1 pool wall 167 s
+RUN pbmc5p_v1_pp1 samples: item	wall_s	pairs
+RUN pbmc5p_v1_pp1 samples: 0	155.92	60000000
+RUN pbmc5p_v1_pp1 LOG: 1795160594 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.1 s
+RUN pbmc5p_v1_pp1 LOG: 1795160594 [singlet] chimeric: dedup memory: parent VmRSS 7798 MiB before, 7857 MiB at the peak of stage A, 7813 MiB during the pass
+RUN pbmc5p_v1_pp1 LOG: 1795160594 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_pp1 LOG: 1795160678 [singlet] chimeric: second pass 9e+01 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_pp1 LOG: 1795160679 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_pp1 table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_pp1 table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN pbmc5p_v1_pp0 env 'SINGLET_CHIM_PAIRPRUNE=0' threads 8 start 2026-11-20T02:44:49-05:00 node memory: MemFree: 311 GB; Cached: 429 GB; Shmem: 0 GB; 
+RUN pbmc5p_v1_pp0 pool wall 175 s
+RUN pbmc5p_v1_pp0 samples: item	wall_s	pairs
+RUN pbmc5p_v1_pp0 samples: 0	164.87	60000000
+RUN pbmc5p_v1_pp0 LOG: 1795160746 [singlet] chimeric: dedup: 4944371 reads, 4535057 distinct sequences (91.7 %), 3.1 s
+RUN pbmc5p_v1_pp0 LOG: 1795160746 [singlet] chimeric: dedup memory: parent VmRSS 7642 MiB before, 7713 MiB at the peak of stage A, 7667 MiB during the pass
+RUN pbmc5p_v1_pp0 LOG: 1795160746 [singlet] chimeric: 4944371 reads into the second pass (4818388 unmapped, 125983 mapped with >= 15 unaligned bases)
+RUN pbmc5p_v1_pp0 LOG: 1795160857 [singlet] chimeric: second pass 1e+02 s; 3926694 junction lines, 27130 kept, 0 without barcode, 3483 unmatched, 64 ambiguous, 2928198 non-canonical, 21701 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 24140 rows in 7464 cells, 0 flagged recurrent, 0 in the catalogue
+RUN pbmc5p_v1_pp0 LOG: 1795160857 [singlet] Total: 2e+02s
+RUN pbmc5p_v1_pp0 table md5 (decompressed) a5d71eb6a8b45889fe667bf57f17dce3 rows 24141
+RUN pbmc5p_v1_pp0 table md5 (decompressed, sorted lines) 7903ba0b397fb83e94ce82ec8e14d91d
+RUN d300_5p_pp1 env 'SINGLET_CHIM_PAIRPRUNE=1' threads 8 start 2026-11-20T02:47:48-05:00 node memory: MemFree: 310 GB; Cached: 430 GB; Shmem: 0 GB; 
+RUN d300_5p_pp1 pool wall 511 s
+RUN d300_5p_pp1 samples: item	wall_s	pairs
+RUN d300_5p_pp1 samples: 0	500.43	299628383
+RUN d300_5p_pp1 LOG: 1795161031 [singlet] chimeric: dedup: 22372925 reads, 19286025 distinct sequences (86.2 %), 14.5 s
+RUN d300_5p_pp1 LOG: 1795161031 [singlet] chimeric: dedup memory: parent VmRSS 11644 MiB before, 12752 MiB at the peak of stage A, 11925 MiB during the pass
+RUN d300_5p_pp1 LOG: 1795161031 [singlet] chimeric: 22372925 reads into the second pass (21477879 unmapped, 895046 mapped with >= 15 unaligned bases)
+RUN d300_5p_pp1 LOG: 1795161369 [singlet] chimeric: second pass 4e+02 s; 16886797 junction lines, 145563 kept, 0 without barcode, 60831 unmatched, 1369 ambiguous, 12840905 non-canonical, 131869 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 102846 rows in 12775 cells, 0 flagged recurrent, 0 in the catalogue
+RUN d300_5p_pp1 LOG: 1795161371 [singlet] Total: 5e+02s
+RUN d300_5p_pp1 table md5 (decompressed) 1763c9dca0013d9bb3e68d7bfc419efe rows 102847
+RUN d300_5p_pp1 table md5 (decompressed, sorted lines) 0b0e43a48860fd745bc8d4bc2fddca9b
+RUN d300_5p_pp0 env 'SINGLET_CHIM_PAIRPRUNE=0' threads 8 start 2026-11-20T02:56:23-05:00 node memory: MemFree: 316 GB; Cached: 425 GB; Shmem: 0 GB; 
+RUN d300_5p_pp0 pool wall 608 s
+RUN d300_5p_pp0 samples: item	wall_s	pairs
+RUN d300_5p_pp0 samples: 0	597.06	299628383
+RUN d300_5p_pp0 LOG: 1795161546 [singlet] chimeric: dedup: 22372925 reads, 19286025 distinct sequences (86.2 %), 14.5 s
+RUN d300_5p_pp0 LOG: 1795161546 [singlet] chimeric: dedup memory: parent VmRSS 11820 MiB before, 12963 MiB at the peak of stage A, 12200 MiB during the pass
+RUN d300_5p_pp0 LOG: 1795161546 [singlet] chimeric: 22372925 reads into the second pass (21477879 unmapped, 895046 mapped with >= 15 unaligned bases)
+RUN d300_5p_pp0 LOG: 1795161982 [singlet] chimeric: second pass 5e+02 s; 16886797 junction lines, 145563 kept, 0 without barcode, 60831 unmatched, 1369 ambiguous, 12840905 non-canonical, 131869 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 102846 rows in 12775 cells, 0 flagged recurrent, 0 in the catalogue
+RUN d300_5p_pp0 LOG: 1795161983 [singlet] Total: 6e+02s
+RUN d300_5p_pp0 table md5 (decompressed) 1763c9dca0013d9bb3e68d7bfc419efe rows 102847
+RUN d300_5p_pp0 table md5 (decompressed, sorted lines) 0b0e43a48860fd745bc8d4bc2fddca9b
+== pbmc5p_v1_pp1
+   item_wall_s: 155.92
+   pairs: 60000000
+   dedup: reads 4944371 distinct 4535057 (91.7 %) stageA_s 3.1
+   parent_mem: parent VmRSS 7798 MiB before, 7857 MiB at the peak of stage A, 7813 MiB during the pass
+   t_in: 1795160594
+   reads_in: 4944371
+   t_out: 1795160678
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 84
+   cg_anon_shmem_first_GiB: 50.7
+   cg_anon_shmem_pass_start_GiB: 51.1
+   cg_anon_shmem_peak_GiB: 68.2
+   child_cpu_s: 529.5
+   child_vmhwm_GiB: 24.3
+   cg_anon_shmem_stageA_peak_GiB: 50.7
+== pbmc5p_v1_pp0
+   item_wall_s: 164.87
+   pairs: 60000000
+   dedup: reads 4944371 distinct 4535057 (91.7 %) stageA_s 3.1
+   parent_mem: parent VmRSS 7642 MiB before, 7713 MiB at the peak of stage A, 7667 MiB during the pass
+   t_in: 1795160746
+   reads_in: 4944371
+   t_out: 1795160857
+   counters: lines 3926694 kept 27130 nobc 0 unmatched 3483 ambiguous 64 noncanon 2928198 turned 21701
+   table_md5: a5d71eb6a8b45889fe667bf57f17dce3
+   table_lines: 24141
+   pass_wall_s: 111
+   cg_anon_shmem_first_GiB: 50.5
+   cg_anon_shmem_pass_start_GiB: 51.5
+   cg_anon_shmem_peak_GiB: 68.0
+   child_cpu_s: 699.1
+   child_vmhwm_GiB: 24.2
+   cg_anon_shmem_stageA_peak_GiB: 50.6
+== d300_5p_pp1
+   item_wall_s: 500.43
+   pairs: 299628383
+   dedup: reads 22372925 distinct 19286025 (86.2 %) stageA_s 14.5
+   parent_mem: parent VmRSS 11644 MiB before, 12752 MiB at the peak of stage A, 11925 MiB during the pass
+   t_in: 1795161031
+   reads_in: 22372925
+   t_out: 1795161369
+   counters: lines 16886797 kept 145563 nobc 0 unmatched 60831 ambiguous 1369 noncanon 12840905 turned 131869
+   table_md5: 1763c9dca0013d9bb3e68d7bfc419efe
+   table_lines: 102847
+   pass_wall_s: 338
+   cg_anon_shmem_first_GiB: 58.7
+   cg_anon_shmem_pass_start_GiB: 60.7
+   cg_anon_shmem_peak_GiB: 76.6
+   child_cpu_s: 2384.4
+   child_vmhwm_GiB: 28.6
+   cg_anon_shmem_stageA_peak_GiB: 59.7
+== d300_5p_pp0
+   item_wall_s: 597.06
+   pairs: 299628383
+   dedup: reads 22372925 distinct 19286025 (86.2 %) stageA_s 14.5
+   parent_mem: parent VmRSS 11820 MiB before, 12963 MiB at the peak of stage A, 12200 MiB during the pass
+   t_in: 1795161546
+   reads_in: 22372925
+   t_out: 1795161982
+   counters: lines 16886797 kept 145563 nobc 0 unmatched 60831 ambiguous 1369 noncanon 12840905 turned 131869
+   table_md5: 1763c9dca0013d9bb3e68d7bfc419efe
+   table_lines: 102847
+   pass_wall_s: 436
+   cg_anon_shmem_first_GiB: 58.8
+   cg_anon_shmem_pass_start_GiB: 59.2
+   cg_anon_shmem_peak_GiB: 76.8
+   child_cpu_s: 3157.4
+   child_vmhwm_GiB: 28.7
+   cg_anon_shmem_stageA_peak_GiB: 59.9
