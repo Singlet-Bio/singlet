@@ -1,0 +1,28 @@
+node=g051.clipper.gvsu.edu job=818970 tag=l0 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-hostcut5/singlet-gpu items='d100s_3p nuclei2k_v2' workers=1 T=8 slots=2 memgb=31 xenv='' mem=307200 2026-11-19T17:53:26-05:00
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          11         342           0         402         739
+node at start: MemFree: 342 GB; Cached: 399 GB; Shmem: 0 GB; ; squeue on node: 818970/t2-fz-item/debruinz/300G
+cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_818970 memory.max 322122547200
+input copy to node-local disk: 3 s
+pool wall 710 s
+item	slot	sample	out	start	end	wall_s	user_s	sys_s	core_s	maxrss_gb	exit	signal	pairs	pid
+0	0	/tmp/debruinz-fz-818970/data/d100s_3p.1fq	/tmp/debruinz-fz-818970/run/c0.0/out/	1795128818.092	1795129176.495	358.40	2222.14	240.15	2462.30	76.30	0	0	100002652	660394
+1	0	/tmp/debruinz-fz-818970/data/nuclei2k_v2.1fq	/tmp/debruinz-fz-818970/run/c0.1/out/	1795129176.515	1795129517.494	340.98	1433.02	246.24	1679.26	79.51	0	0	118742315	711543
+ITEM 0 d100s_3p wall 358.40 s; device peak nvidia-smi 66.9 GiB (whole card, 1 s); host peak cgroup anon+shmem 101.4 GiB; files 71, core files 18, core set hash 2601bbe3170102c8c3b83764cce0b4e3, all-files list hash 9d7fc5402906fb9a91c2793d3036afac
+ITEM 0 LINE: engine_gpu: E17 budget 31.0 GB (SINGLET_ENGINE_GPU_MEM_GB; device 93.1 GB, 18.0 GB in use at the start): mode lean (index after the dedup, entries to the region at once, keep at the records); context 1.00 GB, index 0.00 GB, tables 0.04 GB, reads 14.64 GB, E10 aux 3.73 GB, entries+masks 4.47 GB, E11 keep 1.49 GB, clip 0.00 GB; estimates: normal 38.0 GB, lean 27.5 GB (the smallest lanes 0.54 GB, slack 1.0 GB)
+ITEM 0 LINE: engine_gpu: E8 records not built on the device (E17 budget: the records' phase needs about 35.07 GB of device memory, more than the budget of 31.00 GB (SINGLET_ENGINE_GPU_MEM_GB)); the hand-off file path is used
+ITEM 0 LINE: engine_gpu: device memory (GB in use): start 1.1, reads+clip 32.6, dedup 18.0, index(shared) 18.0, index+distinct 18.0, before-laneA 18.0, before-laneA 18.1, before-laneA 18.1, before-laneA 18.1, released 18.1, relocked 18.1, peak (lanes, records) 47.322266
+ITEM 0 LINE: engine_gpu: 100002652 reads, 61828260 distinct (22500044 with N), mapped on the GPU 61694886, host lane 133374 (0.03 s), not mapped 0; upload 21.81 s, dedup 0.67 s, GPU mapping 73.10 s
+ITEM 0 LINE: ENGINE_GPU: E19: level 0 reached (requested 5)
+ITEM 1 nuclei2k_v2 wall 340.98 s; device peak nvidia-smi 47.2 GiB (whole card, 1 s); host peak cgroup anon+shmem 104.7 GiB; files 71, core files 18, core set hash 762a1a32a9e986aaf96bf20f58f0bf30, all-files list hash f462038310b37b827f496fd7808bc487
+ITEM 1 LINE: engine_gpu: E17 budget 31.0 GB (SINGLET_ENGINE_GPU_MEM_GB; device 93.1 GB, 18.0 GB in use at the start): mode lean (index after the dedup, entries to the region at once, keep at the records); context 1.00 GB, index 0.00 GB, tables 0.04 GB, reads 11.67 GB, E10 aux 3.54 GB, entries+masks 4.42 GB, E11 keep 1.77 GB, clip 13.99 GB; estimates: normal 33.9 GB, lean 27.7 GB (the smallest lanes 0.54 GB, slack 1.0 GB)
+ITEM 1 LINE: engine_gpu: E8 records not built on the device (E17 budget: the records' phase needs about 43.93 GB of device memory, more than the budget of 31.00 GB (SINGLET_ENGINE_GPU_MEM_GB)); the hand-off file path is used
+ITEM 1 LINE: engine_gpu: device memory (GB in use): start 18.0, reads+clip 29.0, dedup 18.0, index(shared) 18.0, index+distinct 18.0, before-laneA 18.0, before-laneA 18.2, before-laneA 18.2, before-laneA 18.2, before-laneA 18.2, released 18.1, relocked 18.1, peak (lanes, records) 47.160156
+ITEM 1 LINE: engine_gpu: 118742315 reads, 79810824 distinct (1641489 with N), mapped on the GPU 79676592, host lane 134231 (0.06 s), not mapped 0; upload 4.62 s, dedup 1.00 s, GPU mapping 114.10 s
+ITEM 1 LINE: ENGINE_GPU: E19: level 0 reached (requested 5)
+idle floor of the run (min cgroup anon+shmem): 0.1 GiB
+cgroup memory.events: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0
+cgroup memory.peak: 207530717184
+cgroup memory.max: 322122547200
+done 2026-11-19T18:06:53-05:00

@@ -173,7 +173,13 @@ int star_main_impl(int argInN, char *argIn[])
     ////////////////////////////////////////////////////////////////////////
     ///////////////////////////////// Genome
     Genome genomeMain(P, P.pGe);
-    genomeMain.genomeLoad();
+    {
+        const auto gl0 = std::chrono::steady_clock::now();
+        genomeMain.genomeLoad();
+        char glb[96];
+        snprintf(glb, sizeof glb, "Genome load seconds: %.2f", std::chrono::duration<double>(std::chrono::steady_clock::now() - gl0).count());
+        P.inOut->logMain << glb << "\n" << std::flush;   // T2 chimshare: the load time in Log.out (singlet prints the chimeric pass's)
+    }
 
     if (P.pGe.transform.outYes) {
         genomeMain.Var = new Variation(P, genomeMain.chrStart, genomeMain.chrNameIndex, false);//no variation for mapGen, only for genOut
@@ -402,7 +408,8 @@ int star_main_impl(int argInN, char *argIn[])
     // solo counts
     Solo soloMain(RAchunk, P, *RAchunk[0]->chunkTr);
     E16_MARK("STAR: Solo constructed");
-    if (!g_e11SoloDone) //singlet E11 (SINGLET_ENGINE_GPU_E2E=5): counted on the device
+    //singlet --chimeric second pass (SINGLET_CHIM_SKIP_SOLO=1, set for the child only): its Solo output is deleted unread, so the post-mapping count is skipped
+    if (!g_e11SoloDone && getenv("SINGLET_CHIM_PASS_NOSOLO") == nullptr) //singlet E11 (SINGLET_ENGINE_GPU_E2E=5): counted on the device
     soloMain.processAndOutput();
 
     if (P.quant.geCount.yes)

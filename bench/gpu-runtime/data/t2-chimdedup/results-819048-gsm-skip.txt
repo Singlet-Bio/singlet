@@ -1,0 +1,123 @@
+node=g051.clipper.gvsu.edu job=819048 tag=gsm-skip bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimdedup/singlet-gpu sras='/mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR19716870/SRR19716870.sra /mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR19716869/SRR19716869.sra' items='' arms='skipsolo:SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_SKIP_SOLO=1 on:SINGLET_CHIM_DEDUP=1 skipsolo2:SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_SKIP_SOLO=1' T=8 extra='--chimeric' 2026-11-19T23:30:29-05:00
+binary sha256 c7dde135e8cad2d8 commit b21de2cfb748f257385f4d4973e88f5639acc054
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          11         326           0         418         738
+nproc 27 CLK_TCK 100 cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_819048 memory.max 322122547200 cpu.max max 100000
+node at start: MemFree: 326 GB; Cached: 414 GB; Shmem: 0 GB; ; squeue on node: 819048/t2-chimdedup/debruinz/300G
+encode of 2 runs without --protocol: 90 s
+encode r0: rc=0
+encode r1: rc=0
+RUN gsm_skipsolo env 'SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_SKIP_SOLO=1' threads 8 start 2026-11-19T23:32:03-05:00 node memory: MemFree: 323 GB; Cached: 417 GB; Shmem: 0 GB; 
+RUN gsm_skipsolo pool wall 800 s
+RUN gsm_skipsolo samples: item	wall_s	pairs
+RUN gsm_skipsolo samples: 0	789.40	121366072
+RUN gsm_skipsolo STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_skipsolo STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_skipsolo STAR: runThreadN                        8
+RUN gsm_skipsolo STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_skipsolo STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_skipsolo STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.13 s, dedup 1.36 s, GPU mapping 60.55 s
+RUN gsm_skipsolo STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_skipsolo STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_skipsolo LOG: 1795149324 [singlet] chimeric: dedup: 50768292 reads, 17636124 distinct sequences (34.7 %), 38.5 s
+RUN gsm_skipsolo LOG: 1795149324 [singlet] chimeric: dedup memory: parent VmRSS 7252 MiB before, 9363 MiB at the peak of stage A, 8269 MiB during the pass
+RUN gsm_skipsolo LOG: 1795149324 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_skipsolo LOG: 1795149913 [singlet] chimeric: second pass 6e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_skipsolo LOG: 1795149915 [singlet] Total: 8e+02s
+RUN gsm_skipsolo table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_skipsolo table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN gsm_on env 'SINGLET_CHIM_DEDUP=1' threads 8 start 2026-11-19T23:45:29-05:00 node memory: MemFree: 324 GB; Cached: 417 GB; Shmem: 0 GB; 
+RUN gsm_on pool wall 800 s
+RUN gsm_on samples: item	wall_s	pairs
+RUN gsm_on samples: 0	789.28	121366072
+RUN gsm_on STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_on STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_on STAR: runThreadN                        8
+RUN gsm_on STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_on STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_on STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.02 s), not mapped 0; upload 2.09 s, dedup 1.38 s, GPU mapping 60.73 s
+RUN gsm_on STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_on STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_on LOG: 1795150115 [singlet] chimeric: dedup: 50768292 reads, 17636124 distinct sequences (34.7 %), 37.9 s
+RUN gsm_on LOG: 1795150115 [singlet] chimeric: dedup memory: parent VmRSS 7939 MiB before, 9783 MiB at the peak of stage A, 8657 MiB during the pass
+RUN gsm_on LOG: 1795150115 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_on LOG: 1795150719 [singlet] chimeric: second pass 6e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_on LOG: 1795150721 [singlet] Total: 8e+02s
+RUN gsm_on table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_on table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN gsm_skipsolo2 env 'SINGLET_CHIM_DEDUP=1,SINGLET_CHIM_SKIP_SOLO=1' threads 8 start 2026-11-19T23:58:55-05:00 node memory: MemFree: 323 GB; Cached: 417 GB; Shmem: 0 GB; 
+RUN gsm_skipsolo2 pool wall 793 s
+RUN gsm_skipsolo2 samples: item	wall_s	pairs
+RUN gsm_skipsolo2 samples: 0	782.07	121366072
+RUN gsm_skipsolo2 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN gsm_skipsolo2 STAR: runThreadN                    8     ~RE-DEFINED
+RUN gsm_skipsolo2 STAR: runThreadN                        8
+RUN gsm_skipsolo2 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN gsm_skipsolo2 STAR: SEQCACHE: on, 4096 MB in 64 shards
+RUN gsm_skipsolo2 STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.15 s, dedup 1.37 s, GPU mapping 60.78 s
+RUN gsm_skipsolo2 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN gsm_skipsolo2 STAR: SEQCACHE: lookups=0 hits=0 hit_rate=0 inserts=0 refreshes=0 uncacheable=23
+RUN gsm_skipsolo2 LOG: 1795150923 [singlet] chimeric: dedup: 50768292 reads, 17636124 distinct sequences (34.7 %), 39.2 s
+RUN gsm_skipsolo2 LOG: 1795150923 [singlet] chimeric: dedup memory: parent VmRSS 7241 MiB before, 9403 MiB at the peak of stage A, 8443 MiB during the pass
+RUN gsm_skipsolo2 LOG: 1795150923 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN gsm_skipsolo2 LOG: 1795151518 [singlet] chimeric: second pass 6e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN gsm_skipsolo2 LOG: 1795151520 [singlet] Total: 8e+02s
+RUN gsm_skipsolo2 table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN gsm_skipsolo2 table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+done 2026-11-20T00:12:14-05:00
+===SUMMARY
+== gsm_skipsolo
+   item_wall_s: 789.40
+   pairs: 121366072
+   dedup: reads 50768292 distinct 17636124 (34.7 %) stageA_s 38.5
+   parent_mem: parent VmRSS 7252 MiB before, 9363 MiB at the peak of stage A, 8269 MiB during the pass
+   t_in: 1795149324
+   reads_in: 50768292
+   t_out: 1795149913
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   pass_wall_s: 589
+   cg_anon_shmem_first_GiB: 52.7
+   cg_anon_shmem_pass_start_GiB: 55.0
+   cg_anon_shmem_peak_GiB: 71.2
+   child_cpu_s: 4503.1
+   child_vmhwm_GiB: 24.5
+   cg_anon_shmem_stageA_peak_GiB: 54.6
+== gsm_on
+   item_wall_s: 789.28
+   pairs: 121366072
+   dedup: reads 50768292 distinct 17636124 (34.7 %) stageA_s 37.9
+   parent_mem: parent VmRSS 7939 MiB before, 9783 MiB at the peak of stage A, 8657 MiB during the pass
+   t_in: 1795150115
+   reads_in: 50768292
+   t_out: 1795150719
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   pass_wall_s: 604
+   cg_anon_shmem_first_GiB: 53.0
+   cg_anon_shmem_pass_start_GiB: 54.0
+   cg_anon_shmem_peak_GiB: 71.6
+   child_cpu_s: 4530.3
+   child_vmhwm_GiB: 25.1
+   cg_anon_shmem_stageA_peak_GiB: 55.1
+== gsm_skipsolo2
+   item_wall_s: 782.07
+   pairs: 121366072
+   dedup: reads 50768292 distinct 17636124 (34.7 %) stageA_s 39.2
+   parent_mem: parent VmRSS 7241 MiB before, 9403 MiB at the peak of stage A, 8443 MiB during the pass
+   t_in: 1795150923
+   reads_in: 50768292
+   t_out: 1795151518
+   counters: lines 17188238 kept 4498881 nobc 0 unmatched 123105 ambiguous 14517 noncanon 9749577 turned 4589683
+   table_md5: 3573f1645c4fc6e920d37c70a0033df7
+   table_lines: 59632
+   pass_wall_s: 595
+   cg_anon_shmem_first_GiB: 52.6
+   cg_anon_shmem_pass_start_GiB: 53.8
+   cg_anon_shmem_peak_GiB: 71.4
+   child_cpu_s: 4513.8
+   child_vmhwm_GiB: 24.8
+   cg_anon_shmem_stageA_peak_GiB: 54.7

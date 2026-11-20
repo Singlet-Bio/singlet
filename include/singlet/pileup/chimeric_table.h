@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <set>
@@ -36,7 +37,44 @@
 namespace singlet {
 namespace chimeric {
 
+/// Member table of the deduplicated second pass (SINGLET_CHIM_DEDUP): the pass maps each distinct read sequence once, under the read name
+/// "<id>" (0-based index of the distinct sequence in order of first appearance); this table lists, for every id, its member reads in input
+/// order (the representative, the first read of the sequence, is member 0) with the cell barcode and UMI that STAR's junction line prints for
+/// that read (SoloReadBarcode::getCBandUMI for CB_UMI_Simple: substrings of the barcode mate's sequence, nothing else). Bases are packed
+/// 3 bits each (A 0, C 1, G 2, T 3, N 4), first base in the highest bits.
+struct MemberTable {
+    uint32_t cb_len = 0, umi_len = 0;       ///< bases of the cell barcode and of the UMI (each at most 21)
+    std::vector<uint64_t> start;            ///< n_ids + 1 offsets into cb / umi
+    std::vector<uint64_t> cb, umi;          ///< packed barcodes, members grouped by id, input order inside an id
+
+    uint64_t n_ids() const { return start.empty() ? 0 : start.size() - 1; }
+    uint64_t count(uint64_t id) const { return start[id + 1] - start[id]; }
+    static int code_of(char c) {
+        switch (c) { case 'A': return 0; case 'C': return 1; case 'G': return 2; case 'T': return 3; case 'N': return 4; default: return -1; }
+    }
+    /// packs s (all of ACGTN, at most 21 bases); false otherwise
+    static bool pack(const char* s, size_t n, uint64_t& out) {
+        if (n == 0 || n > 21) return false;
+        uint64_t v = 0;
+        for (size_t i = 0; i < n; i++) {
+            const int c = code_of(s[i]);
+            if (c < 0) return false;
+            v = (v << 3) | (uint64_t)c;
+        }
+        out = v;
+        return true;
+    }
+    static std::string unpack(uint64_t v, uint32_t n) {
+        static const char kB[8] = {'A', 'C', 'G', 'T', 'N', 'N', 'N', 'N'};
+        std::string s(n, 'N');
+        for (uint32_t i = 0; i < n; i++) s[n - 1 - i] = kB[(v >> (3 * i)) & 7];
+        return s;
+    }
+};
+
 struct Config {
+    const MemberTable* members = nullptr;  ///< deduplicated pass: junction lines carry the sequence id as read name (null = every read was mapped)
+    std::string expanded_dump_path;        ///< with members: write every junction data line once per member (read name ".", the member's CB and UMI)
     std::string junction_path;  ///< STAR's Chimeric.out.junction (format 1, with CB/UMI as the last two columns)
     std::string gtf_path;       ///< gene annotation (gene features); empty = no gene names
     std::string catalog_path;   ///< fusion catalogue (.tsv or .tsv.gz); empty = no catalogue annotation
@@ -62,6 +100,7 @@ struct Stats {
     uint64_t blacklisted_rows = 0;       ///< rows (cell x junction) dropped by the blacklist
     uint64_t recurrent_rows = 0;         ///< rows flagged `recurrent`
     uint64_t blacklist_entries = 0;      ///< blacklist lines read
+    std::string dedup_refusal;           ///< deduplicated pass: why the member table could not be used (empty = used; the rows are then not valid)
     bool ok = false;
 };
 
@@ -300,6 +339,84 @@ inline std::vector<Row> build_rows(const std::vector<std::string>& barcodes, con
         uint32_t cell;
     };
     std::vector<Line> lines;
+    if (cfg.members != nullptr) {
+        // Deduplicated pass: each junction line is for a distinct sequence (read name = its id); it is parsed once and applied to every member
+        // read with that member's CB and UMI, running the checks below in the same order as the per-read path, so every counter and row equal
+        // those of a pass that mapped every read.
+        const MemberTable& mt = *cfg.members;
+        std::unordered_map<uint64_t, int64_t> cb_memo;   // packed CB -> cell; -1 unmatched, -2 ambiguous
+        FILE* dump = cfg.expanded_dump_path.empty() ? nullptr : std::fopen(cfg.expanded_dump_path.c_str(), "wb");
+        bool refused = false;
+        auto refuse = [&](const char* why) { if (!refused) st.dedup_refusal = why; refused = true; };
+        detail::for_each_line(cfg.junction_path, [&](const std::string& ln) {
+            if (refused) return;
+            if (ln.empty() || ln[0] == '#' || ln.compare(0, 10, "chr_donorA") == 0) return;
+            auto f = detail::split(ln, '\t');
+            uint64_t id = 0;
+            bool idok = f.size() > 9 && !f[9].empty() && f[9].size() <= 18 && f[9].find_first_not_of("0123456789") == std::string::npos;
+            if (idok) { id = std::stoull(f[9]); idok = id < mt.n_ids(); }
+            if (!idok) { refuse("a junction line without a valid sequence id"); return; }
+            const uint64_t n = mt.count(id), m0 = mt.start[id];
+            if (f.size() >= 22) {   // self-check: what STAR printed for the representative is the member table's entry 0
+                uint64_t c0 = 0, u0 = 0;
+                const std::string& pcb = f[f.size() - 2];
+                const std::string& pumi = f[f.size() - 1];
+                if (pcb.size() != mt.cb_len || pumi.size() != mt.umi_len || !MemberTable::pack(pcb.data(), pcb.size(), c0) ||
+                    !MemberTable::pack(pumi.data(), pumi.size(), u0) || c0 != mt.cb[m0] || u0 != mt.umi[m0]) {
+                    refuse("the barcode STAR printed differs from the member table");
+                    return;
+                }
+            }
+            if (dump) {
+                std::string t;
+                for (uint64_t k = 0; k < n; k++) {
+                    f[9] = ".";
+                    if (f.size() >= 22) { f[f.size() - 2] = MemberTable::unpack(mt.cb[m0 + k], mt.cb_len); f[f.size() - 1] = MemberTable::unpack(mt.umi[m0 + k], mt.umi_len); }
+                    t.clear();
+                    for (size_t i = 0; i < f.size(); i++) { if (i) t += '\t'; t += f[i]; }
+                    t += '\n';
+                    std::fwrite(t.data(), 1, t.size(), dump);
+                }
+            }
+            st.lines += n;
+            if (f.size() < 22) { st.no_barcode += n; return; }
+            // the printed CB and UMI of every member are non-empty strings of ACGTN (MemberTable::pack), so the per-read check passes
+            Line l;
+            l.chr1 = f[0]; l.pos1 = std::stoll(f[1]); l.s1 = f[2].empty() ? '+' : f[2][0];
+            l.chr2 = f[3]; l.pos2 = std::stoll(f[4]); l.s2 = f[5].empty() ? '+' : f[5][0];
+            l.jtype = std::stoi(f[6]);
+            l.read = f[9];
+            l.n_aln = std::stoi(f[14]); l.score = std::stoi(f[17]); l.best = std::stoi(f[18]);
+            if (l.score < l.best) return;  // a worse alignment of a multimapping chimeric read
+            if (cfg.canonical_only && l.jtype < 1) { st.noncanonical += n; return; }
+            if (l.jtype == 2 || (l.jtype < 1 && cfg.reverse_strand)) {
+                std::swap(l.chr1, l.chr2);
+                std::swap(l.pos1, l.pos2);
+                const char a = l.s1;
+                l.s1 = detail::flip_strand(l.s2);
+                l.s2 = detail::flip_strand(a);
+                if (l.jtype == 2) l.jtype = 1;
+                st.reoriented += n;
+            }
+            for (uint64_t k = 0; k < n; k++) {
+                const uint64_t cbc = mt.cb[m0 + k];
+                auto it = cb_memo.find(cbc);
+                if (it == cb_memo.end()) {
+                    bool amb = false;
+                    const int64_t r = resolve(MemberTable::unpack(cbc, mt.cb_len), amb);
+                    it = cb_memo.emplace(cbc, r >= 0 ? r : (amb ? -2 : -1)).first;
+                }
+                const int64_t c = it->second;
+                if (c < 0) { (c == -2 ? st.ambiguous : st.unmatched)++; continue; }
+                Line lk = l;
+                lk.cell = (uint32_t)c;
+                lk.umi = MemberTable::unpack(mt.umi[m0 + k], mt.umi_len);
+                st.kept_lines++;
+                lines.push_back(std::move(lk));
+            }
+        });
+        if (dump) std::fclose(dump);
+    } else
     detail::for_each_line(cfg.junction_path, [&](const std::string& ln) {
         if (ln.empty() || ln[0] == '#' || ln.compare(0, 10, "chr_donorA") == 0) return;
         auto f = detail::split(ln, '\t');
@@ -499,6 +616,7 @@ inline std::string row_line(const Row& r) {
 inline Stats write_table(const std::vector<std::string>& barcodes, const Config& cfg) {
     Stats st;
     std::vector<Row> rows = build_rows(barcodes, cfg, st);
+    if (!st.dedup_refusal.empty()) return st;   // the caller runs the pass on all reads
     gzFile f = gzopen(cfg.out_path.c_str(), "wb6");
     if (!f) return st;
     const std::string h = header_line();

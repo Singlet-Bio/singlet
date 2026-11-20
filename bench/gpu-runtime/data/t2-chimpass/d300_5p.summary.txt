@@ -1,0 +1,21 @@
+== d300_5p: watch rows 539, first 1795139341.8
+  event logout: +0.0 s
+  event junction: +15.6 s
+  event finalout: +537.7 s
+  event childgone: +538.7 s
+  child pid 2340469, threads (max) 8, STAR child CPU (user+sys, last sample) 4109.3 s, samples 517 over 537 s; VmHWM max 27.9 GiB, VmRSS max 27.9 GiB
+  CPU cores in use per ~30 s window (offset s: cores): 0:4.4, 31:8.0, 62:8.0, 94:8.0, 125:8.0, 156:8.0, 187:8.0, 218:8.0, 250:8.0, 281:8.0, 312:8.0, 343:8.0, 374:8.0, 406:8.0, 437:8.0, 468:8.0, 499:7.2, 530:1.0
+  cgroup anon+shmem at the first sample 59.1 GiB; peak over the watch 76.2 GiB (increase 17.1); page cache (file) max 66.8 GiB
+  cgroup CPU over the watch: 4173.0 s
+  junction file: first seen +524 s, 2.18 GB at the end of the watch
+  STAR Log.out stage lines:
+    Nov 19 20:49:01 ... Finished reading, sorting and deduplicating CB whitelist sequences.
+ Started job on |	Nov 19 20:49:01
+ Started mapping on |	Nov 19 20:49:16
+ Finished on |	Nov 19 20:57:58
+ Number of input reads |	22372925
+ Average input read length |	90
+ Number of reads unmapped: too short |	19264381
+ % of reads unmapped: too short |	86.11%
+ Number of chimeric reads |	4160956
+ % of chimeric reads |	18.60%

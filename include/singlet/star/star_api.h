@@ -45,3 +45,5 @@ void star_genome_preload_release();
 // and the process then reads its own as before.
 bool star_genome_preload_resident(const std::string& dir, int threads, std::string& log);
 bool star_genome_preload_select(const std::string& dir, std::string& log);
+// T2 chimshare: true when this process's preload is a gpu-pool resident copy (select made it so): its pages are shared copy-on-write with the pool, so keeping it costs no memory.
+bool star_genome_preload_is_resident();

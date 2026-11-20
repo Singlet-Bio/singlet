@@ -1,0 +1,75 @@
+node=g051.clipper.gvsu.edu job=819008 tag=gsm6250953 bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-hostcut5/singlet-gpu sras='/mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR19716870/SRR19716870.sra /mnt/projects/debruinz_project/debruinz/singlet/campaign/dryrun2/stage/SRR19716869/SRR19716869.sra' items='' runs='8 16 27' extra='--chimeric' 2026-11-19T20:02:12-05:00
+0, NVIDIA H100 NVL, 95830 MiB, 0 MiB
+               total        used        free      shared  buff/cache   available
+Mem:             750          10         329           0         415         739
+/dev/sda1       1.8T   56K  1.7T   1% /tmp
+nproc 27 CLK_TCK 100 cgroup /sys/fs/cgroup/system.slice/slurmstepd.scope/job_819008 memory.max 322122547200 cpu.max max 100000
+node at start: MemFree: 329 GB; Cached: 412 GB; Shmem: 0 GB; ; squeue on node: 819008/t2-chimpass/debruinz/300G
+encode of 2 runs without --protocol: 91 s
+encode r0: rc=0
+encode r1: rc=0
+RUN T8 threads 8 keep=1 start 2026-11-19T20:03:46-05:00 node memory: MemFree: 326 GB; Cached: 415 GB; Shmem: 0 GB; 
+RUN T8 pool wall 1048 s
+RUN T8 samples: item	wall_s	pairs
+RUN T8 samples: 0	1036.96	121366072
+RUN T8 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN T8 STAR: clip3pAdapterMMp              0.1        ~RE-DEFINED
+RUN T8 STAR: runThreadN                    8     ~RE-DEFINED
+RUN T8 STAR: runThreadN                        8
+RUN T8 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN T8 STAR: clip3pAdapterMMp                  0.1   
+RUN T8 STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.11 s, dedup 1.37 s, GPU mapping 60.62 s
+RUN T8 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN T8 LOG: 1795136800 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN T8 LOG: 1795137666 [singlet] chimeric: second pass 9e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN T8 LOG: 1795137666 [singlet] Total: 1e+03s
+RUN T8 table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN T8 table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN T8 raw junction file: 2339252964 bytes, 17188241 lines, md5 5ba315a7fd90f2989f5a11d05c7d5cff
+RUN T8 raw junction file sorted (LC_ALL=C) md5 d7501e09da5e6953cc159d8e77740448
+RUN T16 threads 16 keep=0 start 2026-11-19T20:21:31-05:00 node memory: MemFree: 304 GB; Cached: 435 GB; Shmem: 0 GB; 
+RUN T16 pool wall 640 s
+RUN T16 samples: item	wall_s	pairs
+RUN T16 samples: 0	629.54	121366072
+RUN T16 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN T16 STAR: clip3pAdapterMMp              0.1        ~RE-DEFINED
+RUN T16 STAR: runThreadN                    16     ~RE-DEFINED
+RUN T16 STAR: runThreadN                        16
+RUN T16 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN T16 STAR: clip3pAdapterMMp                  0.1   
+RUN T16 STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 2.48 s, dedup 1.18 s, GPU mapping 60.30 s
+RUN T16 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN T16 LOG: 1795137857 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN T16 LOG: 1795138323 [singlet] chimeric: second pass 5e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN T16 LOG: 1795138323 [singlet] Total: 6e+02s
+RUN T16 table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN T16 table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN T16 raw junction file: 2339252970 bytes, 17188241 lines, md5 4e78ae973a9cee16470b99f8badf5ff5
+RUN T16 raw junction file sorted (LC_ALL=C) md5 990fd7d2e93e45bc267e93fa425380a4
+RUN T27 threads 27 keep=0 start 2026-11-19T20:32:31-05:00 node memory: MemFree: 304 GB; Cached: 436 GB; Shmem: 0 GB; 
+RUN T27 pool wall 492 s
+RUN T27 samples: item	wall_s	pairs
+RUN T27 samples: 0	481.38	121366072
+RUN T27 STAR: clip3pAdapterSeq              AAGCAGTGGTATCAACGCAGAGTACATGGG        ~RE-DEFINED
+RUN T27 STAR: clip3pAdapterMMp              0.1        ~RE-DEFINED
+RUN T27 STAR: runThreadN                    27     ~RE-DEFINED
+RUN T27 STAR: runThreadN                        27
+RUN T27 STAR: clip3pAdapterSeq                  AAGCAGTGGTATCAACGCAGAGTACATGGG   
+RUN T27 STAR: clip3pAdapterMMp                  0.1   
+RUN T27 STAR: engine_gpu: 121366072 reads, 36270543 distinct (235964 with N), mapped on the GPU 36182758, host lane 87784 (0.03 s), not mapped 0; upload 3.72 s, dedup 1.15 s, GPU mapping 60.51 s
+RUN T27 STAR: ENGINE_GPU: E19: level 5 reached (requested 5)
+RUN T27 LOG: 1795138503 [singlet] chimeric: 50768292 reads into the second pass (41132142 unmapped, 9636150 mapped with >= 15 unaligned bases)
+RUN T27 LOG: 1795138835 [singlet] chimeric: second pass 3e+02 s; 17188238 junction lines, 4498881 kept, 0 without barcode, 123105 unmatched, 14517 ambiguous, 9749577 non-canonical, 4589683 turned to transcript orientation (library antisense); blacklist none: 0 junctions, 0 rows dropped; 59631 rows in 22116 cells, 0 flagged recurrent, 0 in the catalogue
+RUN T27 LOG: 1795138836 [singlet] Total: 5e+02s
+RUN T27 table md5 (decompressed) 3573f1645c4fc6e920d37c70a0033df7 rows 59632
+RUN T27 table md5 (decompressed, sorted lines) 6d7713248f81821a19272012c5098e49
+RUN T27 raw junction file: 2339252970 bytes, 17188241 lines, md5 7d3dd5e4fa3c06926115cda5cfc61868
+RUN T27 raw junction file sorted (LC_ALL=C) md5 5af86ca76f36f486d0b7bca2e02a5691
+total 19542608
+-rw-r--r-- 1 debruinz domain users  3093986053 Nov 19 20:05 star_Softclip.out.mate1
+-rw-r--r-- 1 debruinz domain users   704220853 Nov 19 20:05 star_Softclip.out.mate2
+-rw-r--r-- 2 debruinz domain users 13207085548 Nov 19 20:05 star_Unmapped.out.mate1
+-rw-r--r-- 2 debruinz domain users  3006314332 Nov 19 20:05 star_Unmapped.out.mate2
+reads analysis: adapter AAGCAGTGGTATCAACGCAGAGTACATGGG mmp 0.1
+reads analysis: 78 s, 247 lines -> reads-analysis.txt
+done 2026-11-19T20:42:25-05:00

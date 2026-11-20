@@ -37,14 +37,33 @@ public:
     static uint64 hashSeq(const char *seq, uint64 L); //seq: numeric bases 0..3
 
     //on a hit, copies the stored result into out and returns true
-    bool lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &out);
-    void insert(uint64 h, const char *seq, uint64 L, const uint8 *blob, uint64 blobLen);
+    //N = code 4 only; any other code above 3 is not cached, as before.
+    //A read with N bases (singlet T2 cpucache, SINGLET_STAR_SEQCACHE_NKEY=0 turns it off): seq holds code 4 for N, the 2-bit packed
+    //bases have 0 there, and the positions of the N are part of the key: nmask (bit i of byte i/8 set when base i is N, (L+7)/8 bytes) is
+    //stored after the packed bases and compared on lookup; the entry's length field carries a flag bit. A read without N has nmask==nullptr
+    //and the entry layout it always had.
+    bool lookup(uint64 h, const char *seq, uint64 L, std::vector<uint8> &out, const uint8 *nmask = nullptr);
+    void insert(uint64 h, const char *seq, uint64 L, const uint8 *blob, uint64 blobLen, const uint8 *nmask = nullptr);
+    static bool nKeyOn(); //reads with N are cached (default)
 
     std::string stats() const;
 
     bool verify;
     bool prefilled = false; //the GPU engine filled the cache with every distinct sequence, or with hand-off summaries every unmapped one (SeqCacheGpuPrefill.cpp)
     std::atomic<uint64> nLookup{0}, nHit{0}, nInsert{0}, nUncacheable{0}, nVerified{0}, nVerifyFail{0}, nRefresh{0};
+
+    //singlet T2 cpucache, SINGLET_STAR_SEQCACHE_SPLIT=1 (counting only, no effect on any result): the reads that are not looked up or whose
+    //result is not stored, by reason x clip class (0 none, 1 5' clipped, 2 3' clipped, 3 both) x unmapType+1, and how many of them repeat
+    //an earlier uncacheable read: repA by the clipped bases alone, repB by the bases plus both clip lengths and the original length.
+    //Reasons: 0 zero length, 1 longer than DEF_readSeqLengthMax, 2 non-ACGT among the bases STAR maps (not cached only with SINGLET_STAR_SEQCACHE_NKEY=0), 3 (informational, a read that IS
+    //looked up) non-ACGT only inside the clipped regions, 4 chimRecord, 5 mate overlap, 6 nTr>255, 7 nW==0 with trBest!=trInit,
+    //8 trBest not in trMult, 9 a transcript with cigar/variation/gene fields set, 10 nExons>MAX_N_EXONS
+    bool splitOn = false;
+    enum {UNC_N = 11};
+    std::atomic<uint64> uncCnt[UNC_N][4][5];
+    std::atomic<uint64> uncRepA[UNC_N], uncRepB[UNC_N];
+    void uncNote(int reason, int clipCls, int unmapType, uint64 hA, uint64 hB);
+    static uint64 hashRead(const char *seq, uint64 L); //any byte codes (N included)
 
 private:
     struct Slot {uint64 hash, pos;}; //pos = absolute ring position + 1, 0 = empty
@@ -55,10 +74,13 @@ private:
         Slot *index;
     };
     uint64 nShards, ringBytes, indexMask, ways;
+    std::atomic<uint64> *shadowA = nullptr, *shadowB = nullptr; //SINGLET_STAR_SEQCACHE_SPLIT: hash sets of the uncacheable reads seen
+    uint64 shadowMask = 0;
     Shard *shards;
 
     SeqCache(uint64 totalBytes, uint64 ways);
-    bool entryMatches(Shard &s, uint64 pos, uint64 h, const char *seq, uint64 L, uint64 &blobOff, uint64 &blobLen, uint64 &entLen);
+    bool entryMatches(Shard &s, uint64 pos, uint64 h, const char *seq, uint64 L, uint64 &blobOff, uint64 &blobLen, uint64 &entLen,
+                      const uint8 *nmask);
     uint64 append(Shard &s, const char *ent, uint64 entLen); //returns absolute position
 };
 

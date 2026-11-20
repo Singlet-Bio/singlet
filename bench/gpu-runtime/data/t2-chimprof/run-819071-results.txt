@@ -1,0 +1,95 @@
+node=g008.clipper.gvsu.edu job=819071 tag=final bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprof-2/singlet-gpu samples='pbmc5p_v1 gsm' arms='base prof samp-auto' modes='fp bt pc' T=8 2026-11-20T01:31:42-05:00
+binary sha256 1955809cf90d82e7
+nproc 14 cpus-per-task 14 perf_event_paranoid 4 perf /usr/bin/perf ptrace_scope 1 ulimit-s 8192
+node at start: MemFree: 167 GB; Cached: 199 GB; ; squeue on node: 819071/t2-chimprof-run/debruinz/160G
+CPU(s):                                  40
+Model name:                              Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz
+Thread(s) per core:                      1
+CPU(s) scaling MHz:                      36%
+L3 cache:                                55 MiB (2 instances)
+perf probe: ok=0: Error: Access to performance monitoring and observability operations is limited. Consider adjusting /proc/sys/kernel/perf_event_paranoid setting to open access to performance monitoring and observabil
+RUN pbmc5p_v1 input copy to node-local disk: 2 s; reads 4535057
+RUN pbmc5p_v1 base args: --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloCellReadStats Standard --soloUMIlen 10 --clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1 --outFilterScoreMin 10 --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN 8 --genomeLoad NoSharedMemory --readFilesIn /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/chim_dedup.mate1 /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/chim_dedup.mate2 --soloFeatures Gene --outSAMtype None --outFileNamePrefix /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/base/chim_ --chimSegmentMin 10 --chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1 --alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50 --chimOutType Junctions --chimOutJunctionFormat 1
+RUN pbmc5p_v1 base TIME: wall 108.310 user 748.699 sys 10.621 rc=0
+RUN pbmc5p_v1 base mapping: Nov 20 01:33:30 ..... finished mapping Nov 20 01:33:32 ..... finished Solo counting 
+RUN pbmc5p_v1 base FINAL: Mapping speed, Million of reads per hour |	164.91
+RUN pbmc5p_v1 base FINAL: Number of input reads |	4535057
+RUN pbmc5p_v1 base FINAL: Average input read length |	90
+RUN pbmc5p_v1 base FINAL: Uniquely mapped reads number |	114684
+RUN pbmc5p_v1 base FINAL: Number of reads unmapped: too short |	4275567
+RUN pbmc5p_v1 base FINAL: Number of chimeric reads |	799963
+RUN pbmc5p_v1 base RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 prof args: --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloCellReadStats Standard --soloUMIlen 10 --clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1 --outFilterScoreMin 10 --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN 8 --genomeLoad NoSharedMemory --readFilesIn /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/chim_dedup.mate1 /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/chim_dedup.mate2 --soloFeatures Gene --outSAMtype None --outFileNamePrefix /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/prof/chim_ --chimSegmentMin 10 --chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1 --alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50 --chimOutType Junctions --chimOutJunctionFormat 1
+RUN pbmc5p_v1 prof TIME: wall 110.072 user 761.645 sys 11.141 rc=0
+RUN pbmc5p_v1 prof mapping: Nov 20 01:35:24 ..... finished mapping Nov 20 01:35:26 ..... finished Solo counting 
+RUN pbmc5p_v1 prof FINAL: Mapping speed, Million of reads per hour |	161.65
+RUN pbmc5p_v1 prof FINAL: Number of input reads |	4535057
+RUN pbmc5p_v1 prof FINAL: Average input read length |	90
+RUN pbmc5p_v1 prof FINAL: Uniquely mapped reads number |	114684
+RUN pbmc5p_v1 prof FINAL: Number of reads unmapped: too short |	4275567
+RUN pbmc5p_v1 prof FINAL: Number of chimeric reads |	799963
+RUN pbmc5p_v1 prof RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 prof analysis rc=0 lines 264
+RUN pbmc5p_v1 reads records gz bytes 258093363
+RUN pbmc5p_v1 samp-fp args: --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloCellReadStats Standard --soloUMIlen 10 --clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1 --outFilterScoreMin 10 --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN 8 --genomeLoad NoSharedMemory --readFilesIn /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/chim_dedup.mate1 /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/chim_dedup.mate2 --soloFeatures Gene --outSAMtype None --outFileNamePrefix /tmp/debruinz-chimprof-run-819071/pbmc5p_v1/samp-fp/chim_ --chimSegmentMin 10 --chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1 --alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50 --chimOutType Junctions --chimOutJunctionFormat 1
+RUN pbmc5p_v1 samp-fp TIME: wall 108.503 user 749.031 sys 11.640 rc=0
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 4: 8424 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 7: 8981 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 2: 9258 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 6: 9488 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 5: 9498 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 1: 9517 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 0: 9526 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp STDERR: [chimprof] thread 3: 9531 samples (0 dropped)
+RUN pbmc5p_v1 samp-fp mapping: Nov 20 01:37:57 ..... finished mapping Nov 20 01:37:59 ..... finished Solo counting 
+RUN pbmc5p_v1 samp-fp FINAL: Mapping speed, Million of reads per hour |	164.91
+RUN pbmc5p_v1 samp-fp FINAL: Number of input reads |	4535057
+RUN pbmc5p_v1 samp-fp FINAL: Average input read length |	90
+RUN pbmc5p_v1 samp-fp FINAL: Uniquely mapped reads number |	114684
+RUN pbmc5p_v1 samp-fp FINAL: Number of reads unmapped: too short |	4275567
+RUN pbmc5p_v1 samp-fp FINAL: Number of chimeric reads |	799963
+RUN pbmc5p_v1 samp-fp RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 samp-fp analysis rc=0 lines 159
+RUN gsm input copy to node-local disk: 7 s; reads 17636124
+RUN gsm base args: --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloCellReadStats Standard --soloUMIlen 10 --clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1 --outFilterScoreMin 10 --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN 8 --genomeLoad NoSharedMemory --readFilesIn /tmp/debruinz-chimprof-run-819071/gsm/chim_dedup.mate1 /tmp/debruinz-chimprof-run-819071/gsm/chim_dedup.mate2 --soloFeatures Gene --outSAMtype None --outFileNamePrefix /tmp/debruinz-chimprof-run-819071/gsm/base/chim_ --chimSegmentMin 10 --chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1 --alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50 --chimOutType Junctions --chimOutJunctionFormat 1
+RUN gsm base TIME: wall 637.765 user 4930.624 sys 14.718 rc=0
+RUN gsm base mapping: Nov 20 01:48:46 ..... finished mapping Nov 20 01:48:55 ..... finished Solo counting 
+RUN gsm base FINAL: Mapping speed, Million of reads per hour |	101.10
+RUN gsm base FINAL: Number of input reads |	17636124
+RUN gsm base FINAL: Average input read length |	149
+RUN gsm base FINAL: Uniquely mapped reads number |	4732909
+RUN gsm base FINAL: Number of reads unmapped: too short |	12241451
+RUN gsm base FINAL: Number of chimeric reads |	3237917
+RUN gsm base RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm prof args: --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloCellReadStats Standard --soloUMIlen 10 --clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1 --outFilterScoreMin 10 --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN 8 --genomeLoad NoSharedMemory --readFilesIn /tmp/debruinz-chimprof-run-819071/gsm/chim_dedup.mate1 /tmp/debruinz-chimprof-run-819071/gsm/chim_dedup.mate2 --soloFeatures Gene --outSAMtype None --outFileNamePrefix /tmp/debruinz-chimprof-run-819071/gsm/prof/chim_ --chimSegmentMin 10 --chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1 --alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50 --chimOutType Junctions --chimOutJunctionFormat 1
+RUN gsm prof TIME: wall 649.565 user 5027.452 sys 16.494 rc=0
+RUN gsm prof mapping: Nov 20 01:59:45 ..... finished mapping Nov 20 01:59:54 ..... finished Solo counting 
+RUN gsm prof FINAL: Mapping speed, Million of reads per hour |	99.05
+RUN gsm prof FINAL: Number of input reads |	17636124
+RUN gsm prof FINAL: Average input read length |	149
+RUN gsm prof FINAL: Uniquely mapped reads number |	4732909
+RUN gsm prof FINAL: Number of reads unmapped: too short |	12241451
+RUN gsm prof FINAL: Number of chimeric reads |	3237917
+RUN gsm prof RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm prof analysis rc=0 lines 266
+RUN gsm reads records gz bytes 1029115308
+RUN gsm samp-fp args: --runMode alignReads --genomeDir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --soloType CB_UMI_Simple --soloCBwhitelist /mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists/737K-august-2016.txt --soloCBlen 16 --soloCBstart 1 --soloUMIstart 17 --soloBarcodeReadLength 0 --soloCellReadStats Standard --soloUMIlen 10 --clip3pAdapterSeq AAGCAGTGGTATCAACGCAGAGTACATGGG --clip3pAdapterMMp 0.1 --outFilterScoreMin 10 --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --runThreadN 8 --genomeLoad NoSharedMemory --readFilesIn /tmp/debruinz-chimprof-run-819071/gsm/chim_dedup.mate1 /tmp/debruinz-chimprof-run-819071/gsm/chim_dedup.mate2 --soloFeatures Gene --outSAMtype None --outFileNamePrefix /tmp/debruinz-chimprof-run-819071/gsm/samp-fp/chim_ --chimSegmentMin 10 --chimJunctionOverhangMin 10 --chimScoreMin 1 --chimScoreDropMax 30 --chimScoreJunctionNonGTAG 0 --chimScoreSeparation 1 --alignSJstitchMismatchNmax 5 -1 5 5 --chimSegmentReadGapMax 3 --chimMultimapNmax 50 --chimOutType Junctions --chimOutJunctionFormat 1
+RUN gsm samp-fp TIME: wall 639.089 user 4939.284 sys 20.377 rc=0
+RUN gsm samp-fp STDERR: [chimprof] thread 2: 60945 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 0: 60965 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 6: 60978 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 5: 61101 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 3: 61255 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 4: 61271 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 1: 61282 samples (0 dropped)
+RUN gsm samp-fp STDERR: [chimprof] thread 7: 61445 samples (0 dropped)
+RUN gsm samp-fp mapping: Nov 20 02:12:54 ..... finished mapping Nov 20 02:13:03 ..... finished Solo counting 
+RUN gsm samp-fp FINAL: Mapping speed, Million of reads per hour |	100.78
+RUN gsm samp-fp FINAL: Number of input reads |	17636124
+RUN gsm samp-fp FINAL: Average input read length |	149
+RUN gsm samp-fp FINAL: Uniquely mapped reads number |	4732909
+RUN gsm samp-fp FINAL: Number of reads unmapped: too short |	12241451
+RUN gsm samp-fp FINAL: Number of chimeric reads |	3237917
+RUN gsm samp-fp RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm samp-fp analysis rc=0 lines 165
+done 2026-11-20T02:13:39-05:00

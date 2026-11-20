@@ -203,6 +203,8 @@ bool star_genome_preload_select(const std::string& dir, std::string& log) {
     return false;
 }
 
+bool star_genome_preload_is_resident() { return g_genomePreload != nullptr && g_genomePreload->resident; }
+
 void star_genome_preload_release() {
     if (g_genomePreload == nullptr) return;
     delete[] g_genomePreload->G1;

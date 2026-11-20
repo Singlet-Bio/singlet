@@ -1,0 +1,39 @@
+date 2026-11-20T00:56:02-05:00 item pbmc5p_v1
+ipcs -m (segments): 0
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+
+PID 3258438 comm slurmstepd fds-on-chim_Log.out 0 args: slurmstepd: [819065.extern] 
+grep: /proc/3258438/smaps_rollup: Permission denied
+
+PID 3258457 comm slurmstepd fds-on-chim_Log.out 0 args: slurmstepd: [819065.batch] 
+grep: /proc/3258457/smaps_rollup: Permission denied
+
+PID 3258468 comm slurm_script fds-on-chim_Log.out 0 args: /bin/bash /var/spool/slurm/d/job819065/slurm_script 
+Rss: 4248 kB Pss: 1122 kB Shared_Clean: 3000 kB Shared_Dirty: 760 kB Private_Clean: 312 kB Private_Dirty: 176 kB Anonymous: 936 kB AnonHugePages: 0 kB Swap: 0 kB 
+PID 3259968 comm slurm_script fds-on-chim_Log.out 0 args: /bin/bash /var/spool/slurm/d/job819065/slurm_script 
+Rss: 3036 kB Pss: 793 kB Shared_Clean: 2100 kB Shared_Dirty: 720 kB Private_Clean: 0 kB Private_Dirty: 216 kB Anonymous: 936 kB AnonHugePages: 0 kB Swap: 0 kB 
+PID 3259969 comm slurm_script fds-on-chim_Log.out 0 args: /bin/bash /var/spool/slurm/d/job819065/slurm_script 
+Rss: 2820 kB Pss: 780 kB Shared_Clean: 1884 kB Shared_Dirty: 716 kB Private_Clean: 0 kB Private_Dirty: 220 kB Anonymous: 936 kB AnonHugePages: 0 kB Swap: 0 kB 
+PID 3259971 comm singlet-gpu fds-on-chim_Log.out 0 args: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprof/singlet-gpu gpu-pool --device
+Rss: 18613916 kB Pss: 17986222 kB Shared_Clean: 11992 kB Shared_Dirty: 928900 kB Private_Clean: 88 kB Private_Dirty: 17672936 kB Anonymous: 18601836 kB AnonHugePages: 17152000 kB Swap: 0 kB 
+  map 7d24a0abb000-7d24fe00f000 Size_kB 1529168 Rss 1529168 Pss 1529168 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 1529168 Anon 1529168 AnonHuge 1527808 
+  map 7d24fe011000-7d27f84e9000 Size_kB 12489568 Rss 12489568 Pss 12489568 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 12489568 Anon 12489568 AnonHuge 12486656 
+  map 7d27f84eb000-7d28b7fff000 Size_kB 3140688 Rss 3140688 Pss 3140688 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 3140688 Anon 3140688 AnonHuge 3137536 
+PID 3259972 comm singlet-gpu fds-on-chim_Log.out 0 args: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprof/singlet-gpu gpu-pool --device
+Rss: 25964832 kB Pss: 25951940 kB Shared_Clean: 15504 kB Shared_Dirty: 1464 kB Private_Clean: 72060 kB Private_Dirty: 25875804 kB Anonymous: 20160 kB AnonHugePages: 0 kB Swap: 0 kB 
+  map 7d206ba7d000-7d249fd5a000 Size_kB 17632116 Rss 17632116 Pss 17632116 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 17632116 Anon 0 AnonHuge 0 /memfd:singlet-nhidx
+  map 7d249fd5a000-7d2628000000 Size_kB 6425240 Rss 6425240 Pss 6425240 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 6425240 Anon 0 AnonHuge 0 /memfd:singlet-nhidx
+  map 7d262ddf8000-7d2684000000 Size_kB 1411104 Rss 1411104 Pss 1411104 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 1411104 Anon 0 AnonHuge 0 /memfd:singlet-nhidx
+PID 3260031 comm sg-export fds-on-chim_Log.out 0 args: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprof/singlet-gpu gpu-pool --device
+Rss: 7683888 kB Pss: 4137474 kB Shared_Clean: 20444 kB Shared_Dirty: 6753196 kB Private_Clean: 9328 kB Private_Dirty: 900920 kB Anonymous: 7654116 kB AnonHugePages: 0 kB Swap: 0 kB 
+  map 60ff17931000-60ff5fab1000 Size_kB 1181184 Rss 1060420 Pss 651770 Shared_Clean 0 Shared_Dirty 817300 Private_Dirty 243120 Anon 1060420 AnonHuge 0 [heap]
+PID 3260111 comm singlet-gpu fds-on-chim_Log.out 0 args: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprof/singlet-gpu gpu-holder --geno
+Rss: 119252 kB Pss: 105160 kB Shared_Clean: 19544 kB Shared_Dirty: 0 kB Private_Clean: 71680 kB Private_Dirty: 28028 kB Anonymous: 17356 kB AnonHugePages: 0 kB Swap: 0 kB 
+PID 3296715 comm sg-export fds-on-chim_Log.out 1 args: /mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprof/singlet-gpu gpu-pool --device
+Rss: 25108676 kB Pss: 21572458 kB Shared_Clean: 5752 kB Shared_Dirty: 6753188 kB Private_Clean: 1216 kB Private_Dirty: 18348520 kB Anonymous: 25101708 kB AnonHugePages: 17152000 kB Swap: 0 kB 
+  map 60ff17931000-60ff5fab1000 Size_kB 1181184 Rss 1071804 Pss 663154 Shared_Clean 0 Shared_Dirty 817300 Private_Dirty 254504 Anon 1071804 AnonHuge 0 [heap]
+  map 7d1d80abb000-7d1dde00f000 Size_kB 1529168 Rss 1529168 Pss 1529168 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 1529168 Anon 1529168 AnonHuge 1527808 
+  map 7d1dde011000-7d20d84e9000 Size_kB 12489568 Rss 12489568 Pss 12489568 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 12489568 Anon 12489568 AnonHuge 12486656 
+  map 7d20d84eb000-7d2197fff000 Size_kB 3140688 Rss 3140688 Pss 3140688 Shared_Clean 0 Shared_Dirty 0 Private_Dirty 3140688 Anon 3140688 AnonHuge 3137536 

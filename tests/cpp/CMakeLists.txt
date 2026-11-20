@@ -44,6 +44,7 @@ endmacro()
 
 # Core codec tests
 add_pileup_test(test_pz_reader)
+add_pileup_test(test_gpu_pool_peak)   # cggate: the gpu-pool peak-model figures (include/singlet/gpu_pool_peak.h) against the 18-class table
 add_pileup_test(test_pz_hardening)
 add_pileup_test(test_pz_metadata_bound)   # names block over the old 256 MiB reader cap (editing tables of 13 M sites)
 set_tests_properties(test_pz_metadata_bound PROPERTIES TIMEOUT 600)
@@ -95,6 +96,7 @@ add_pileup_test(test_multimap_record)   # the multi-mapping record: two-gene rea
 add_pileup_test(test_molecule_labels)
 add_pileup_test(test_rna_editing)      # D-101: REDIportal editing rows ride the SNP pileup and split off before every SNP consumer
 add_pileup_test(test_chimeric_table)
+add_pileup_test(test_chimeric_dedup)   # the deduplicated --chimeric pass: stage A, the member table, junction expansion = per-read rows and counters
 add_pileup_test(test_csc_add_signed)   # the uint16 cap of the pre-USA exon / intron split (csc_add_signed, mixed molecules past 65535)
 add_pileup_test(test_umi_store_scale)
 add_pileup_test(test_umi_deep_roots)

@@ -1,0 +1,26 @@
+== T16: watch rows 447, first 1795137858.5
+  event logout: +0.0 s
+  event junction: +9.4 s
+  event finalout: +438.1 s
+  event childgone: +439.2 s
+  child pid 2163103, threads (max) 17, STAR child CPU (user+sys, last sample) 6495.4 s, samples 421 over 437 s; VmHWM max 25.0 GiB, VmRSS max 25.0 GiB
+  CPU cores in use per ~30 s window (offset s: cores): 0:11.2, 31:16.0, 62:16.0, 94:16.0, 125:16.0, 156:16.0, 187:16.0, 219:16.0, 250:16.0, 281:16.0, 312:16.0, 343:16.0, 375:16.0, 406:4.8
+  cgroup anon+shmem at the first sample 54.0 GiB; peak over the watch 72.0 GiB (increase 18.0); page cache (file) max 93.4 GiB
+  cgroup CPU over the watch: 6576.3 s
+  junction file: first seen +412 s, 2.34 GB at the end of the watch
+  STAR Log.out stage lines:
+    Nov 19 20:24:18 ... Finished reading, sorting and deduplicating CB whitelist sequences.
+    SEQCACHE: off (chimeric detection)
+    Nov 19 20:31:13 ..... finished mapping
+    Nov 19 20:31:14 ..... started Solo counting
+    Nov 19 20:31:14 ... Starting Solo post-map for Gene
+    Nov 19 20:31:14 ... Finished allocating arrays for Solo 0.00259266 GiB
+    Nov 19 20:31:35 ... Finished reading reads from Solo files nCB=43970, nReadPerCBmax=1943, yesWLmatch=0
+    Nov 19 20:31:36 ... Finished collapsing UMIs
+    Nov 19 20:31:36 ... Solo: writing raw matrix
+    Nov 19 20:31:36 ... Solo: cell filtering
+    Nov 19 20:31:36 ..... finished Solo counting
+    ALL DONE!
+  Log.final.out:
+                                     Started job on |	Nov 19 20:24:17
+                                 Started mapping on |	Nov 19 20:24:27
