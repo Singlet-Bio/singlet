@@ -32,8 +32,8 @@ struct Consts {
     // raised to wtU P + wtV + chimGb + margin (= 0.50 P + 22.1 + margin). Basis: three samples, one thread count each for two of them.
     double chimGb = 19.5;
     // T2 chimshare: with SINGLET_CHIM_SHARE_GENOME not 0 (the default) the pool's items hand the pool's resident genome to the pass, which then adds chimSharedGb instead of chimGb
-    // (SINGLET_POOL_PEAK_CHIM_SHARED_GB; chimShare is false when SINGLET_CHIM_SHARE_GENOME=0, set by fromEnv). Placeholder 19.5 until measured.
-    double chimSharedGb = 19.5;
+    // (SINGLET_POOL_PEAK_CHIM_SHARED_GB; chimShare is false when SINGLET_CHIM_SHARE_GENOME=0, set by fromEnv). Measured (T2-chimshare.md): largest rise of the job cgroup anon+shmem during the pass over three samples at 8 threads and GSM6250953 at 16 and 27 threads = 3.61 GiB, rounded up to 4.0.
+    double chimSharedGb = 4.0;
     bool chimShare = true;
     double chimEff() const { return chimShare ? chimSharedGb : chimGb; }
     // the fitted range and regime

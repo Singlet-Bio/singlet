@@ -50,21 +50,23 @@ int main() {
         CHECK(phaseFigure(r.P, 1, k) <= phaseFigure(r.P, 0, k) + 1e-12 && phaseFigure(r.P, 2, k) <= phaseFigure(r.P, 1, k) + 1e-12, (nm + ": figures never grow with the phase").c_str());
         CHECK(inZone(r.n, k) == (r.n >= 70.0 && r.n < 160.0), (nm + ": zone").c_str());
     }
+    Consts kp = k; kp.chimShare = false;   // the private-index constant (SINGLET_CHIM_SHARE_GENOME=0): chimGb 19.5
     // --chimeric (T2-chimpass.md): every phase figure is at least 0.5 P + 2.6432 + 19.5 + 12; never lower than without it; chimGb 0 gives the floor 0.5 P + 2.6 + margin = F2
     for (const Row& r : kRows)
-        for (int ph = 0; ph < 3; ++ph) CHECK(phaseFigure(r.P, ph, k, true) >= phaseFigure(r.P, ph, k) - 1e-12 && phaseFigure(r.P, ph, k, true) >= 0.5 * r.P + 22.1432 + 12.0 - 1e-6, (std::string(r.s) + ": chimeric figure is a floor").c_str());
+        for (int ph = 0; ph < 3; ++ph) CHECK(phaseFigure(r.P, ph, kp, true) >= phaseFigure(r.P, ph, k) - 1e-12 && phaseFigure(r.P, ph, kp, true) >= 0.5 * r.P + 22.1432 + 12.0 - 1e-6, (std::string(r.s) + ": chimeric figure is a floor").c_str());
     {
         // the three recordings of T2-chimpass.md with their real n and cDNA bases (the "[1fq-ingest] Scanned" lines): pbmc5p_v1 60.000 M / 5.460 G, GSM6250953 121.366 M / 18.205 G, d300_5p 299.628 M / 27.266 G
         const double P5 = peakP(60.0, 5.46, k), Pc = peakP(299.628383, 27.266182853, k), Pg = peakP(121.366072, 18.2049108, k), PgLin = pLinear(121.366072, 18.2049108, k);
-        CHECK(near(phaseFigure(P5, 2, k, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4) && near(phaseFigure(P5, 2, k, true), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
-        CHECK(near(phaseFigure(Pc, 2, k, true), 64.1, 0.1), "chimeric d300_5p F2");
-        CHECK(near(phaseFigure(PgLin, 2, k, true), 52.0, 0.1) && near(phaseFigure(Pg, 2, k, true), 72.5, 0.1), "chimeric GSM6250953 F2 (after the first engine line, and at the start in the zone)");
+        CHECK(near(phaseFigure(P5, 2, kp, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4) && near(phaseFigure(P5, 2, kp, true), 42.8, 0.1), "chimeric pbmc5p_v1 F2");
+        CHECK(near(phaseFigure(Pc, 2, kp, true), 64.1, 0.1), "chimeric d300_5p F2");
+        CHECK(near(phaseFigure(PgLin, 2, kp, true), 52.0, 0.1) && near(phaseFigure(Pg, 2, kp, true), 72.5, 0.1), "chimeric GSM6250953 F2 (after the first engine line, and at the start in the zone)");
         // T2 chimshare: the floor adds chimSharedGb when sharing is in effect (the default), chimGb when SINGLET_CHIM_SHARE_GENOME=0
         Consts sh; sh.chimSharedGb = 30.0;
         CHECK(near(phaseFigure(P5, 2, sh, true), 0.5 * P5 + 2.6432 + 30.0 + 12.0, 1e-4), "chimeric shared: floor uses chimSharedGb");
         sh.chimShare = false;
         CHECK(near(phaseFigure(P5, 2, sh, true), 0.5 * P5 + 22.1432 + 12.0, 1e-4), "chimeric not shared: floor uses chimGb");
         CHECK(Consts().chimShare && near(Consts().chimEff(), Consts().chimSharedGb, 1e-12), "sharing is the default");
+        for (const Row& r : kRows) CHECK(phaseFigure(r.P, 2, k, true) >= 0.5 * r.P + 2.6432 + 4.0 + 12.0 - 1e-6 && phaseFigure(r.P, 2, k, true) >= phaseFigure(r.P, 2, k) - 1e-12, (std::string(r.s) + ": shared chimeric floor (chimSharedGb 4.0)").c_str());
         Consts z; z.chimGb = 0.0; z.chimSharedGb = 0.0;
         CHECK(near(phaseFigure(P5, 2, z, true), phaseFigure(P5, 2, z), 1e-9), "chimGb 0: the floor equals F2");
     }
