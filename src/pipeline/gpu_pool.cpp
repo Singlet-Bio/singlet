@@ -361,6 +361,11 @@ struct Run {
     bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
     // cggate (SINGLET_POOL_PEAKADMIT=1): the item's peak figure (GiB above the job's idle baseline) and what the engine printed
     bool pkChim = false;                        // the item's own argument list has --chimeric: the second pass' floor on every figure
+    // T2 chimshare: pkChimShared = the pool established that the item's pass takes the pool's resident genome (floor chimSharedGb, else chimGb); keptGenome = the item's parent keeps its mapping of
+    // that genome from the first STAR fork ("[singlet] chimeric: genome kept for the pass") until the pass's fork or release (its group then maps it twice); keptSeen: the kept line came;
+    // demoted: the item reached its engine level line without the kept line, so its floor is chimGb from then on
+    bool pkChimShared = false, keptGenome = false, keptSeen = false, demoted = false, demotedLogged = false;
+    mutable double heldPeak = 0, heldPeakStar = 0;   // the gate's held figure (GiB): the maximum over the item, and after its engine level line
     bool pk = false, pkZone = false;            // the figure comes from the peak model (else the old estimate), the item is in the zone of a possible fallback
     double pkN = 0, pkBases = 0;                // M reads, G bases (from the .1fq headers and their first blocks)
     double pkP = 0, pkFig = 0, pkFloor = 0;     // P now (no margin), the figure now (with margin), a raise of the figure that holds for pkFloorPhase
@@ -407,7 +412,9 @@ void pump(Run& r, bool eof) {
         const long t = (long) time(nullptr);
         while ((e = r.partial.find('\n', s)) != std::string::npos) {
             if (r.log) fprintf(r.log, "%ld %.*s\n", t, (int) (e - s), r.partial.data() + s);
-            if (r.front && r.partial.compare(s, 19, "[engine_gpu] level ") == 0) r.front = false;
+            if (r.front && r.partial.compare(s, 19, "[engine_gpu] level ") == 0) { r.front = false; if (r.pkChim && r.pkChimShared && !r.keptSeen) { r.pkChimShared = false; r.demoted = true; } }
+            if (r.partial.compare(s, 45, "[singlet] chimeric: genome kept for the pass ") == 0) { r.keptGenome = true; r.keptSeen = true; }
+            else if (r.keptGenome && (r.partial.compare(s, 49, "[singlet] chimeric: genome shared with the pool (") == 0 || r.partial.compare(s, 45, "[singlet] chimeric: genome released (pass not") == 0)) r.keptGenome = false;
             if (!r.plateau && r.partial.compare(s, 24, "[allsite] async: waited ") == 0) r.plateau = true;
             if (!r.decoded) { const size_t dp = r.partial.find("decoded into the packed buffers", s); if (dp != std::string::npos && dp < e) r.decoded = true; }
             if (g_peakParse && r.partial.compare(s, sizeof kPeakTag - 1, kPeakTag) == 0) peak_parse_line(r, r.partial.substr(s + sizeof kPeakTag - 1, e - s - (sizeof kPeakTag - 1)));
@@ -679,6 +686,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     }
 
     // ---- the genomes, once
+    std::vector<std::pair<dev_t, ino_t>> residentDirs;   // device and inode of every index directory whose resident load succeeded
     const char* gpe = std::getenv("SINGLET_GENOME_PRELOAD");
     const std::string gload = arg_value(base, "--genome-load");
     if (preload && !(gpe && gpe[0] == '0') && (gload.empty() || gload == "NoSharedMemory")) {
@@ -691,6 +699,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             std::string lg;
             const bool ok = star_genome_preload_resident(it.genome, preloadThreads, lg);
             plog("genome %s: %s%s", it.genome.c_str(), ok ? "resident, " : "not preloaded: ", lg.c_str());
+            if (ok) residentDirs.emplace_back(st.st_dev, st.st_ino);   // T2 chimshare: the directories this pool holds resident
         }
     } else plog("genome preload off: every sample reads its own");
     if (refsTh.joinable()) {
@@ -795,6 +804,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         byPid.erase(f);
         r.t1 = wall_now();
         r.done = true;
+        r.keptGenome = false;
+        if (r.heldPeak > 0) plog("item %d: held peak %.1f GiB (the gate's figure: process group RssAnon + RssShmem minus the pool's genome once per mapping process), %.1f GiB after the engine level line", r.idx, r.heldPeak, r.heldPeakStar);
         --active;
         if (peakMode) pkLastEvt = wall_now();
         freeSlots.push_back(r.slot);
@@ -854,6 +865,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
     std::vector<char> taken(items.size(), 0);
     std::vector<double> itemEst(items.size(), 0);
+    std::vector<char> itemChimShared(items.size(), 0);   // T2 chimshare: the pool established that this --chimeric item's pass takes the pool's resident genome
     std::vector<char> itemPk(items.size(), 0), itemPkChim(items.size(), 0);   // cggate: the peak model applies to the item
     std::vector<double> itemFig0(items.size(), 0), itemPkN(items.size(), 0), itemPkBases(items.size(), 0), itemPkP(items.size(), 0);
     for (const Item& it : items) {
@@ -910,9 +922,19 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             if (why.empty()) {
                 const double nM = reads / 1e6, bG = bases / 1e9, P = poolpeak::peakP(nM, bG, pkK);
-                { std::vector<std::string> allArgs = base; allArgs.insert(allArgs.end(), it.extra.begin(), it.extra.end()); itemPkChim[it.idx] = has_flag(allArgs, "--chimeric") ? 1 : 0; }   // the item's own arguments (pool --args and the queue line), not the environment
-                itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = poolpeak::phaseFigure(P, 0, pkK, itemPkChim[it.idx] != 0);
-                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", itemFig0[it.idx], pkK.margin, itemPkChim[it.idx] ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + pkK.chimEff()).c_str() : "", itemEst[it.idx]);
+                { std::vector<std::string> allArgs = base; allArgs.insert(allArgs.end(), it.extra.begin(), it.extra.end()); itemPkChim[it.idx] = has_flag(allArgs, "--chimeric") ? 1 : 0;
+                  // T2 chimshare: the pass shares the genome only when the item's preload is this pool's resident copy. The pool establishes that when: the switch is not 0, the preload is not off, the
+                  // genome load is NoSharedMemory, no sjdb insertion or two-pass mode is requested, and the item's --genome-dir (device and inode) is a directory whose resident load succeeded.
+                  // Anything else, and whenever it cannot tell: the pass is budgeted with its private index (chimGb). A --chimeric item that reaches its engine level line without printing
+                  // "genome kept for the pass" is switched to chimGb from then on (pump).
+                  const char* cse = std::getenv("SINGLET_CHIM_SHARE_GENOME");
+                  struct stat gs{};
+                  bool sh = itemPkChim[it.idx] != 0 && !(cse && cse[0] == '0') && preload && !(gpe && gpe[0] == '0') && (gload.empty() || gload == "NoSharedMemory") && !it.genome.empty()
+                            && !has_flag(allArgs, "--sjdbGTFfile") && !has_flag(allArgs, "--sjdbFileChrStartEnd") && !has_flag(allArgs, "--twopassMode") && stat(it.genome.c_str(), &gs) == 0
+                            && std::find(residentDirs.begin(), residentDirs.end(), std::make_pair(gs.st_dev, gs.st_ino)) != residentDirs.end();
+                  itemChimShared[it.idx] = sh ? 1 : 0; }   // the item's own arguments (pool --args and the queue line), not the environment
+                itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = poolpeak::phaseFigure(P, 0, pkK, itemPkChim[it.idx] == 0 ? poolpeak::Chim::None : itemChimShared[it.idx] ? poolpeak::Chim::Shared : poolpeak::Chim::Private);
+                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", itemFig0[it.idx], pkK.margin, itemPkChim[it.idx] ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + (itemChimShared[it.idx] ? pkK.chimSharedGb : pkK.chimGb)).c_str() : "", itemEst[it.idx]);
             } else {
                 itemFig0[it.idx] = itemEst[it.idx];
                 plog("item %d: peak model not used (%s): the old estimate, %.0f GB, is the figure", it.idx, why.c_str(), itemEst[it.idx]);
@@ -922,13 +944,15 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     if (peakMode)
         for (size_t i = 0; i < items.size(); ++i) {
             Run& r = runs[i];
-            r.pk = itemPk[i] != 0; r.pkN = itemPkN[i]; r.pkBases = itemPkBases[i]; r.pkP = itemPkP[i]; r.pkFig = itemFig0[i]; r.pkChim = itemPkChim[i] != 0; r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
+            r.pk = itemPk[i] != 0; r.pkN = itemPkN[i]; r.pkBases = itemPkBases[i]; r.pkP = itemPkP[i]; r.pkFig = itemFig0[i]; r.pkChim = itemPkChim[i] != 0; r.pkChimShared = r.pkChim && itemChimShared[i] != 0; r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
         }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
         for (const Item& it : items) if (std::find(fqs.begin(), fqs.end(), it.fq) == fqs.end()) fqs.push_back(it.fq);
         std::thread([fqs]() { for (const std::string& p : fqs) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { fdatasync(fd); posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } } }).detach();
     }
+    FILE* heldF = sampPeriod > 0 ? fopen((report + "/memsamp-held.tsv").c_str(), "a") : nullptr;   // t item held_new held_old(sum - shared once) nprocs m kept front
+    if (heldF != nullptr) fprintf(heldF, "# t\titem\theld_GiB\theld_old_formula_GiB\tprocs\tm\tkept\tfront\n");
     double sharedGb = 0;   // what a STAR child maps of the pool's resident genome: counted in its RSS, not in the item's own growth
     { std::ifstream f("/proc/self/status"); std::string l; while (std::getline(f, l)) if (l.rfind("RssAnon:", 0) == 0) sharedGb = std::atof(l.c_str() + 8) / 1048576.0; }
     if (memAdmit) mkdir(gateDir.c_str(), 0700);   // gateDir, gateMine: defined with the peak-admission decision above
@@ -971,7 +995,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         const double now = wall_now();
         if (!force && now - gateLastScan < 1.0) return;
         gateLastScan = now;
-        std::map<int, double> cur;
+        std::map<int, std::vector<poolpeak::ProcRss>> cur;
         if (DIR* d = opendir("/proc")) {
             while (struct dirent* e = readdir(d)) {
                 if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
@@ -987,7 +1011,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 std::string l;
                 double an = 0, sh = 0;
                 while (std::getline(g, l)) { if (l.rfind("RssAnon:", 0) == 0) an = std::atof(l.c_str() + 8); else if (l.rfind("RssShmem:", 0) == 0) sh = std::atof(l.c_str() + 9); }
-                cur[it->second] += (an + sh) / 1048576.0;
+                poolpeak::ProcRss pr; pr.anonShmem = (an + sh) / 1048576.0; pr.anon = an / 1048576.0;
+                cur[it->second].push_back(pr);
             }
             closedir(d);
         }
@@ -996,7 +1021,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         for (const Run& r : runs) {
             if (r.pid <= 0 || r.done) continue;
             ++act;
-            const double held = std::max(0.0, cur[r.idx] - sharedGb);
+            // T2 chimshare: the single place a group sum becomes an item figure (poolpeak::heldGib: the pool's genome comes off once per process that maps it; twice while the
+            // item's parent keeps its mapping beside the STAR child)
+            int nMap = 1;
+            const double held = poolpeak::heldGib(cur[r.idx], sharedGb, r.keptGenome, &nMap);
+            r.heldPeak = std::max(r.heldPeak, held);
+            if (!r.front) r.heldPeakStar = std::max(r.heldPeakStar, held);
+            if (heldF != nullptr) { double sum = 0; for (const poolpeak::ProcRss& p : cur[r.idx]) sum += p.anonShmem; fprintf(heldF, "%.0f\t%d\t%.3f\t%.3f\t%zu\t%d\t%d\t%d\n", now, r.idx, held, sum - sharedGb, cur[r.idx].size(), nMap, r.keptGenome ? 1 : 0, r.front ? 1 : 0); }
             double want = itemEst[r.idx] * (r.front ? 1.0 : 0.4);
             if (phaseAdmit && r.plateau) want = std::min(want, tailGb);
             if (phaseAdmit && r.charge > 0 && want < r.charge - 0.5) plog("phase drop: item %d charge %.0f -> %.0f GB (holds %.0f GB)", r.idx, r.charge, want, held);
@@ -1113,13 +1144,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         }
         r.pkP = P;
         if (phase != r.pkPhase) { why += phase == 2 ? ", after the waited line" : phase == 1 ? ", after the level line" : ""; r.pkPhase = phase; }
-        double f = poolpeak::phaseFigure(P, phase, pkK, r.pkChim);
+        double f = poolpeak::phaseFigure(P, phase, pkK, chimMode(r));
         if (r.pm3 && r.pm1 && r.pm2 && !r.pm3Done) {   // third line: the ledger; raise only
             r.pm3Done = true;
             const double L = poolpeak::ledgerL(nE, bE, r.pmRegion, r.pmKeep, r.pmLate, pkK);
             if (L + pkK.margin > f) { r.pkFloor = L + pkK.margin; r.pkFloorPhase = phase; r.pkP = P = std::max(P, L); why += fmt(", ledger %.1f GiB raises the figure", L); }
             else why += fmt(", ledger %.1f GiB (not above)", L);
-            f = poolpeak::phaseFigure(P, phase, pkK, r.pkChim);
+            f = poolpeak::phaseFigure(P, phase, pkK, chimMode(r));
         }
         if (r.pkFloorPhase == phase) f = std::max(f, r.pkFloor);
         if (std::fabs(f - r.pkFig) > 0.05 || !why.empty()) plog("peak figure: item %d %.1f -> %.1f GiB (P %.1f%s)", r.idx, r.pkFig, f, r.pkP, why.c_str());
@@ -1156,6 +1187,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         if (lk >= 0) { flock(lk, LOCK_UN); close(lk); }
     };
     // once a second (or forced): the job cgroup into the ring, the figures of the pool's items, the baseline, the model-exceeded check
+    auto chimMode = [](const Run& r) { return !r.pkChim ? poolpeak::Chim::None : r.pkChimShared ? poolpeak::Chim::Shared : poolpeak::Chim::Private; };
     auto pkRefresh = [&](bool force) {
         const double now = wall_now();
         if (!force && now - pkLastScan < 1.0) return;
@@ -1370,6 +1402,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             finish(p, st, ru);
         }
+        for (Run& r : runs) if (r.demoted && !r.demotedLogged) { r.demotedLogged = true; plog("item %d: --chimeric item reached its engine level line without 'genome kept for the pass': its floor is the private index (chimGb %.1f GiB) from now on", r.idx, pkK.chimGb); }
         if (memAdmit && peakMode) {   // cggate
             if (wall_now() - pkLastScan >= 1.0) { pkRefresh(true); pkPublish(memWaitSince > 0 && next < items.size() ? itemFig0[items[next].idx] : 0, memWaitSince); }
         } else
