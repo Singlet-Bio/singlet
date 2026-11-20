@@ -1,0 +1,46 @@
+node=g005.clipper.gvsu.edu job=819081 tag=run bin=/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/bin/t2-chimprune/singlet-gpu samples='pbmc5p_v1 gsm' arms='pp0a ppa ppb pp0b ver' T=8 2026-11-20T02:41:51-05:00
+binary sha256 576fa903cadc272b
+node at start: MemFree: 159 GB; Cached: 198 GB; ; squeue on node: 819079/t2-gate/debruinz/170G 819081/t2-chimprune-run/debruinz/160G
+Model name:                              Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz
+RUN pbmc5p_v1 input copy to node-local disk: 1 s; reads 4535057
+RUN pbmc5p_v1 pp0a env: env SINGLET_CHIM_PAIRPRUNE=0 2026-11-20T02:41:53-05:00
+RUN pbmc5p_v1 pp0a TIME: wall 106.600 user 725.050 sys 12.142 rc=0
+RUN pbmc5p_v1 pp0a RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 ppa env: env 2026-11-20T02:43:44-05:00
+RUN pbmc5p_v1 ppa TIME: wall 83.318 user 549.442 sys 11.613 rc=0
+RUN pbmc5p_v1 ppa RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 ppb env: env 2026-11-20T02:45:11-05:00
+RUN pbmc5p_v1 ppb TIME: wall 83.227 user 548.174 sys 11.676 rc=0
+RUN pbmc5p_v1 ppb RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 pp0b env: env SINGLET_CHIM_PAIRPRUNE=0 2026-11-20T02:46:38-05:00
+RUN pbmc5p_v1 pp0b TIME: wall 105.670 user 726.185 sys 11.059 rc=0
+RUN pbmc5p_v1 pp0b RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN pbmc5p_v1 ver env: env SINGLET_CHIM_PAIRPRUNE=verify 2026-11-20T02:48:28-05:00
+RUN pbmc5p_v1 ver TIME: wall 109.669 user 753.980 sys 11.734 rc=0
+RUN pbmc5p_v1 ver RAWNORM 643f187626f6ffaa67d0fe9acf324d42 2832142
+RUN gsm input copy to node-local disk: 8 s; reads 17636124
+RUN gsm pp0a env: env SINGLET_CHIM_PAIRPRUNE=0 2026-11-20T02:50:30-05:00
+RUN gsm pp0a TIME: wall 611.134 user 4710.822 sys 15.848 rc=0
+RUN gsm pp0a RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm ppa env: env 2026-11-20T03:00:51-05:00
+RUN gsm ppa TIME: wall 419.588 user 3197.176 sys 15.070 rc=0
+RUN gsm ppa RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm ppb env: env 2026-11-20T03:08:00-05:00
+RUN gsm ppb TIME: wall 420.185 user 3202.966 sys 14.952 rc=0
+RUN gsm ppb RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm pp0b env: env SINGLET_CHIM_PAIRPRUNE=0 2026-11-20T03:15:09-05:00
+RUN gsm pp0b TIME: wall 610.871 user 4716.842 sys 15.048 rc=0
+RUN gsm pp0b RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+RUN gsm ver env: env SINGLET_CHIM_PAIRPRUNE=verify 2026-11-20T03:25:29-05:00
+RUN gsm ver TIME: wall 620.935 user 4795.029 sys 14.969 rc=0
+RUN gsm ver RAWNORM c2a0f02ef3d48de17e89fab98b17c1ac 6706877
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/gsm.pp0a.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/gsm.pp0b.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/gsm.ppa.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/gsm.ppb.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/gsm.ver.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/pbmc5p_v1.pp0a.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/pbmc5p_v1.pp0b.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/pbmc5p_v1.ppa.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/pbmc5p_v1.ppb.stderr.txt:0
+/mnt/projects/debruinz_project/debruinz/singlet/jobs/gpu-runtime/results/t2-chimprune-819081-run/pbmc5p_v1.ver.stderr.txt:0
