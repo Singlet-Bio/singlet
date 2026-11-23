@@ -78,6 +78,8 @@ constexpr uint16_t kShortBarcodeReadMinUmi = 8;
 // Below this rate the reads are not this chemistry (or the whitelist is missing) and counts from them would be garbage: an inDrop
 // library hit the 3' v1 list in 8% of reads (SRR10046401).
 constexpr double kProtocolWlRateFloor = 0.10;
+// A 10x list holding this share of barcode reads exactly overrides a non-10x winner (10x whitelist guard in detect_protocol).
+constexpr double kTenxGuardRate = 0.40;
 
 inline const std::vector<CandidateSpec>& known_protocols() {
     // Protocol specs: tag, id, r1_len, bc_off, bc_len, umi_off, umi_len,
@@ -1121,6 +1123,60 @@ ProtocolCandidate detect_protocol(
         else if (new_score >= 0.60) best.confidence = Confidence::MEDIUM;
         else if (new_score >= 0.40) best.confidence = Confidence::LOW;
         else                        best.confidence = Confidence::NONE;
+    }
+
+    // ── 10x whitelist guard (v1.4.3) ───────────────────────────────────────────
+    // A non-10x winner never stands against a 10x list that holds at least kTenxGuardRate of the barcode reads exactly at the
+    // list's own offset. The length filter above drops a 10x list when the barcode read is 5-9 nt longer than the kit's (a 33 nt
+    // v2 Read 1 went to Drop-seq), and short-word protocols can outscore a 10x list on a long Read 1 (a 150 nt v2 Read 1 at 49 %
+    // went to Microwell-seq). Both were wrong-protocol rejects in the Beta campaign (protocol-detect panel, 2026-11-23). Random
+    // reads hit even the 3.7 M lists exactly in well under 1 % of reads, so 40 % is only reached by a real 10x library. A sample
+    // whose winner is already a 10x protocol is not touched, so its output stays byte-identical.
+    if (best.tag.rfind("10x-", 0) != 0 && !concat_mode) {
+        static const char* kGuardTags[] = {"10x-3p-v3", "10x-3p-v2", "10x-3p-v4", "10x-5p-v4", "10x-3p-v1"};
+        const bool bc_in_r2 = inverted;
+        const uint32_t n_g = std::min<uint32_t>(5000, static_cast<uint32_t>(probe_spots.size()));
+        double g_rate = 0.0;
+        const CandidateSpec* g_spec = nullptr;
+        for (const char* t : kGuardTags) {
+            const CandidateSpec* sp = find_protocol_spec(t);
+            if (!sp || sp->whitelist_file.empty() || n_g == 0) continue;
+            const std::string key = sp->whitelist_file + ":" + std::to_string(sp->bc_len);
+            auto it = wl_cache.find(key);
+            if (it == wl_cache.end()) {
+                std::unordered_set<uint64_t> h;
+                for (const auto& dir : whitelist_dirs) {
+                    h = load_whitelist_hashes(dir + "/" + sp->whitelist_file, sp->bc_len);
+                    if (!h.empty()) break;
+                }
+                it = wl_cache.emplace(key, std::move(h)).first;
+            }
+            if (it->second.empty()) continue;
+            uint32_t m = 0;
+            for (uint32_t i = 0; i < n_g; ++i) {
+                const auto& s = probe_spots[i];
+                const uint16_t rl = bc_in_r2 ? s.r2_len : s.r1_len;
+                if (rl < sp->bc_offset + sp->bc_len) continue;
+                const uint8_t* rd = bc_in_r2 ? s.r2_seq.data() : s.r1_seq.data();
+                if (it->second.count(hash_barcode(rd + sp->bc_offset, sp->bc_len))) ++m;
+            }
+            const double r = static_cast<double>(m) / n_g;
+            if (r > g_rate) { g_rate = r; g_spec = sp; }
+        }
+        if (g_spec && g_rate >= kTenxGuardRate) {
+            std::cerr << "[protocol_detect] 10x guard: " << best.tag << " -> " << g_spec->tag << " (" << g_spec->whitelist_file
+                      << " exact in " << g_rate << " of barcode reads)\n";
+            best.tag = g_spec->tag;
+            best.protocol_id = g_spec->protocol_id;
+            best.r1_length = g_spec->r1_len;
+            best.bc_offset = g_spec->bc_offset;
+            best.bc_length = g_spec->bc_len;
+            best.umi_offset = g_spec->umi_offset;
+            best.umi_length = g_spec->umi_len;
+            best.wl_match_rate = g_rate;
+            best.score = std::max(best.score, g_rate);
+            best.confidence = g_rate >= 0.60 ? Confidence::HIGH : Confidence::MEDIUM;
+        }
     }
 
     // If detection succeeded through the inverted R2 barcode path, record
