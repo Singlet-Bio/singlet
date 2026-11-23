@@ -566,6 +566,8 @@ inline std::vector<EndpointRec> survey_endpoints(const std::string& acc, size_t 
 
 inline bool& want_endpoints() { static bool b = false; return b; }
 inline std::string& dump_dir() { static std::string d; return d; }   // --dump DIR: the first 40 spots of each source, for layout diagnosis
+inline size_t& dump_spots() { static size_t n = 0; return n; }       // --dump-spots N: also write the first N spots as one FASTQ per segment
+inline bool& dump_only() { static bool b = false; return b; }        // --dump-only: write the dump and skip the evidence layers
 
 inline Report identify_source(const std::string& source, const std::string& hint_in, const std::string& route, size_t n_reads,
                               std::vector<ScreenWhitelist>& lists, Options opt, const std::string& genome_dir, size_t map_reads, int threads) {
@@ -626,6 +628,29 @@ inline Report identify_source(const std::string& source, const std::string& hint
             d << std::endl;
         }
     }
+    if (!dump_dir().empty() && dump_spots() > 0) {
+        // Head spots as FASTQ, one file per segment slot (index and technical reads included), for the campaign's Python detector and
+        // trial mapping. Qualities are not kept by the head reader, so every base gets 'F'. Spots with fewer segments than the widest
+        // spot write an empty record in the missing slots so the files stay in step.
+        std::string id = source.substr(0, 40);
+        for (auto& c : id) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
+        size_t nseg = 0;
+        const size_t n = std::min(spots.size(), dump_spots());
+        for (size_t i = 0; i < n; ++i) nseg = std::max(nseg, spots[i].seg.size());
+        std::vector<std::unique_ptr<std::ofstream>> fq;
+        for (size_t k = 0; k < nseg; ++k)
+            fq.emplace_back(std::make_unique<std::ofstream>(dump_dir() + "/" + id + ".seg" + std::to_string(k + 1) + ".fq"));
+        for (size_t i = 0; i < n; ++i)
+            for (size_t k = 0; k < nseg; ++k) {
+                const std::string& b = k < spots[i].seg.size() ? spots[i].seg[k] : std::string();
+                *fq[k] << '@' << id << '.' << (i + 1) << '
+' << b << "
++
+" << std::string(b.size(), 'F') << '
+';
+            }
+        if (dump_only()) { R.verdict = "dump_only"; return R; }
+    }
     measure(spots, opt, lists, R.ev);
     if (!genome_dir.empty()) map_head(spots, R.ev.cdna_seg, R.ev.mate_seg, map_reads, genome_dir, threads, self_exe_path(), R.ev.map);
     rank(R, opt);
@@ -659,6 +684,8 @@ inline int identify_main(int argc, char** argv) {
         else if (a == "--route") route = next();
         else if (a == "--list") list_path = next();
         else if (a == "--dump") dump_dir() = next();
+        else if (a == "--dump-spots") dump_spots() = std::strtoull(next().c_str(), nullptr, 10);
+        else if (a == "--dump-only") dump_only() = true;
         else if (a == "--endpoints") want_endpoints() = true;
         else if (a == "--out-dir") out_dir = next();
         else if (a == "--route-status") route_status_path = next();
