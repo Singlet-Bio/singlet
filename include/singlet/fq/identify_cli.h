@@ -643,11 +643,7 @@ inline Report identify_source(const std::string& source, const std::string& hint
         for (size_t i = 0; i < n; ++i)
             for (size_t k = 0; k < nseg; ++k) {
                 const std::string& b = k < spots[i].seg.size() ? spots[i].seg[k] : std::string();
-                *fq[k] << '@' << id << '.' << (i + 1) << '
-' << b << "
-+
-" << std::string(b.size(), 'F') << '
-';
+                *fq[k] << '@' << id << '.' << (i + 1) << '\n' << b << "\n+\n" << std::string(b.size(), 'F') << '\n';
             }
         if (dump_only()) { R.verdict = "dump_only"; return R; }
     }
