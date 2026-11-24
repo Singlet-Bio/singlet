@@ -1,0 +1,115 @@
+id	family_truth	version_truth	family_call	version_call	how	status	trial_tags
+GSM4593584	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+GSM5704176	no_cell_barcode		no_cell_barcode		detector	unsupported	
+GSM5765328	10x_arc_gex	10x-arc-gex	10x_arc_gex	10x-arc-gex	detector	clear	
+GSM5769275	no_cell_barcode		no_cell_barcode		detector	unsupported	
+GSM6430151	10x_arc_gex	10x-arc-gex	10x_arc_gex	10x-arc-gex	detector	clear	
+GSM6564300	10x_3p	10x-3p-v4	10x_3p	10x-3p-v4	detector	clear	
+GSM6564302	10x_3p	10x-3p-v4	10x_3p	10x-3p-v4	detector	unsupported	
+GSM6564303	10x_3p	10x-3p-v4	10x_3p	10x-3p-v4	detector	unsupported	
+GSM6564304	10x_3p	10x-3p-v4	10x_3p	10x-3p-v4	detector	unsupported	
+GSM7336426	10x_5p		10x_5p	10x-5p-v2	detector	clear	
+GSM8754140	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRS5091285	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRS5091328	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRS5091333	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRS5091482	no_cell_barcode		no_cell_barcode		detector	unsupported	
+mereu_CELseq2_HCAP1_4	other_barcoded		other_barcoded		detector	unsupported	
+mereu_CELseq2_HCAP3_1	other_barcoded		other_barcoded		detector	unsupported	
+mereu_ICELL8_SP021_022	other_barcoded		other_barcoded		detector	unsupported	
+mereu_MARSseq_5569AA	other_barcoded		other_barcoded		detector	unsupported	
+mereu_MARSseq_5923AA	other_barcoded		other_barcoded		detector	unsupported	
+mereu_QUARTZseq_P2S5	other_barcoded		other_barcoded		detector	unsupported	
+mereu_QUARTZseq_P5S8	other_barcoded		other_barcoded		detector	unsupported	
+mereu_SMARTseq2_allLanes	no_cell_barcode		no_cell_barcode		detector	unsupported	
+mereu_inDrop_SP021_024015	other_barcoded		other_barcoded		detector	unsupported	
+ding_Mixture2.SM2_103117p3_B8	no_cell_barcode		no_cell_barcode		detector	unsupported	
+ding_Mixture2.SM2_103117p3_C1	no_cell_barcode		no_cell_barcode		detector	unsupported	
+ding_Cortex1.SM2_well	no_cell_barcode		no_cell_barcode		detector	unsupported	
+ding_Cortex2_bulk	no_cell_barcode		no_cell_barcode		detector	unsupported	
+ding_Mixture2.SeqWell_BC9	other_barcoded		other_barcoded		detector	unsupported	
+ding_PBMC1.011719V2_10X_B	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding_PBMC1.011719V2_10X_D	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding_Cortex2.DroNcSeq_3A	other_barcoded		other_barcoded		detector	unsupported	
+feat_SRR8281307	feature_barcode		feature_barcode		detector	unsupported	
+feat_SRR8281308	feature_barcode		feature_barcode		detector	unsupported	
+feat_SRR9159911	feature_barcode		feature_barcode		detector	unsupported	
+visium_SRR22816622	visium	10x-visium	visium	10x-visium	detector	clear	
+visium_V1_Mouse_Brain_Sagittal_Anterior	visium	10x-visium	visium	10x-visium	detector	clear	
+visium_FFPE_Human_Breast_Cancer	visium	10x-visium	visium	10x-visium	detector	clear	
+multiome_atac_pbmc_3k	atac		atac		detector	unsupported	
+SRR13450126	atac		atac		detector	unsupported	
+SRR18116784	visium	10x-visium	visium	10x-visium	detector	clear	
+SRR27536879	visium_probe		other_barcoded		detector	unsupported	
+SRR4340391	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRR23979322	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRR36176795	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRR7827205	other_barcoded		other_barcoded		detector	unsupported	
+SRR19100747	other_barcoded		other_barcoded		detector	unsupported	
+SRR18070426	10x_arc_gex	10x-arc-gex	no_cell_barcode		detector	unsupported	
+SRR18070427	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRR18070428	no_cell_barcode		no_cell_barcode		detector	unsupported	
+SRR18070627	atac		no_cell_barcode		detector	unsupported	
+SRR18070626	atac		no_cell_barcode		detector	unsupported	
+SRR18070625	atac		no_cell_barcode		detector	unsupported	
+SRR7722018	10x_3p	10x-3p-v2	no_cell_barcode		detector	unsupported	
+SRR7788880	10x_3p	10x-3p-v2	no_cell_barcode		detector	unsupported	
+SRR9004325	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+SRR8088290	10x_5p		10x_5p	10x-5p-v2	detector	clear	
+SRR11067221	10x_5p		10x_5p	10x-5p-v2	detector	clear	
+SRR22031356	feature_barcode		feature_barcode		detector	unsupported	
+SRR18214206	feature_barcode		feature_barcode		detector	unsupported	
+SRR15178151	10x_5p		10x_5p	10x-5p-v2	trial	trial	10x-3p-v2,10x-5p-v2
+SRR31116722	10x_flex		10x_3p	10x-3p-v4	detector	clear	
+ding2020_pbmc_SRR9169218	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169204	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169175	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169189	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169216	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169219	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169173	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169185	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169203	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169172	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_pbmc_SRR9169184	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9169235	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9169230	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9169234	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9169236	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9170691	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9170693	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9169231	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9169233	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9170886	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_cortex_SRR9170687	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9170959	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9170960	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9170961	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9170962	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9171224	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9171225	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9171227	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+ding2020_mixture_SRR9171228	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+king_tonsil_gex	10x_5p	10x-5p-v2	10x_5p	10x-5p-v2	detector	clear	
+king_tonsil_bcr	vdj		10x_5p	10x-5p-v2	trial	trial	10x-3p-v2,10x-5p-v2
+dlpfc_151673	visium	10x-visium	visium	10x-visium	detector	clear	
+GSM5091461	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM8423542	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	trial	trial	10x-3p-v3,10x-5p-v3
+GSM8679384	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM6336776	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM4695772	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM4810693	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM5821141	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM5194356	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM9244213	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM5968657	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM4006844	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+GSM7810554	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM8693600	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	trial	trial	10x-3p-v3,10x-5p-v3
+GSM5621947	10x_3p	10x-3p-v3	10x_3p	10x-3p-v3	detector	clear	
+GSM9636541	10x_3p	10x-3p-v4	10x_3p	10x-3p-v4	detector	clear	
+GSM4120180	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+GSM4263710	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+GSM3732871	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+GSM6058632	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
+GSM5127848	10x_3p	10x-3p-v2	10x_3p	10x-3p-v2	detector	clear	
