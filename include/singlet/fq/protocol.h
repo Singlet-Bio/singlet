@@ -1200,9 +1200,17 @@ ProtocolCandidate detect_protocol(
             if (inverted && best.tag.rfind("10x-3p-v", 0) == 0) {
                 const CandidateSpec* fp = find_protocol_spec("10x-5p-" + best.tag.substr(7));
                 if (fp && fp->whitelist_file == g_spec->whitelist_file) {
-                    std::vector<SpotT> sw(probe_spots.begin(),
-                                          probe_spots.begin() + std::min<size_t>(20000, probe_spots.size()));
-                    for (auto& s : sw) { std::swap(s.r1_seq, s.r2_seq); std::swap(s.r1_len, s.r2_len); }
+                    // Plain copies: some callers' spot types hold references to their reads.
+                    struct SwSpot { std::vector<uint8_t> r1_seq, r2_seq; uint16_t r1_len = 0, r2_len = 0; };
+                    const size_t n_sw = std::min<size_t>(20000, probe_spots.size());
+                    std::vector<SwSpot> sw(n_sw);
+                    for (size_t i = 0; i < n_sw; ++i) {
+                        const auto& s = probe_spots[i];
+                        sw[i].r1_seq.assign(s.r2_seq.begin(), s.r2_seq.begin() + s.r2_len);
+                        sw[i].r2_seq.assign(s.r1_seq.begin(), s.r1_seq.begin() + s.r1_len);
+                        sw[i].r1_len = s.r2_len;
+                        sw[i].r2_len = s.r1_len;
+                    }
                     auto ev = five_prime_evidence(sw, static_cast<uint16_t>(best.umi_offset + best.umi_length));
                     std::cerr << "[protocol_detect] 3'/5' check (barcode in R2): R1 5'-TSO " << ev.r1_tso << " / polyT "
                               << ev.r1_polyt << "; R2 3'-TSO " << ev.r2_smart << ", polyA " << ev.r2_polya

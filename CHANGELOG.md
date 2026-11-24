@@ -2,12 +2,13 @@
 
 All notable changes to the singlet project.
 
-## [1.4.4] — 10x guard reads both reads and single-segment layouts
+## [1.4.5] — 10x guard reads both reads and single-segment layouts
 
 **Fix.** The 1.4.3 guard looked only at the read detection treated as the barcode read, and skipped single-segment layouts, so
 both campaign rejects it was written for were still rejected. It now checks both reads (a barcode in R2 of a 150/150 pair sets
 the swap flag the encoders honour, and the 3'/5' check runs on the swapped reads) and runs in concat mode (a 33 nt barcode read
 with a variable cDNA read). List loading has a 30 s wall-clock budget. Samples already detected as 10x are unchanged.
+(1.4.4 was tagged with this change but did not compile and was never built or released.)
 
 ## [1.4.3] — 10x whitelist guard in protocol detection
 
