@@ -128,6 +128,39 @@ int main() {
         CHECK(!(r.tag == "10x-3p-v2" && r.wl_match_rate < 0.4 && r.wl_match_rate > 0.0 && r.score == r.wl_match_rate),
               "the guard does not fire under its rate");
     }
+    std::fprintf(stderr, "[guard] single 33-nt segment with a variable cDNA read (concat mode)\n");
+    {
+        auto spots = make_spots(v2, 33, 10, true);
+        for (size_t i = 0; i < spots.size(); ++i) {   // cDNA read of 50-89 nt: the archive reports no constant R2 length
+            spots[i].r2_len = static_cast<uint16_t>(50 + i % 40);
+            spots[i].r2_seq.resize(spots[i].r2_len);
+        }
+        auto r = singlet::fq::detect_protocol(spots, 33, 0, dirs); show("33/0", r);
+        CHECK(r.tag == "10x-3p-v2", "33-nt R1 with no constant R2 length is 10x-3p-v2");
+    }
+    std::fprintf(stderr, "[guard] two 150-nt reads, v2 barcodes in R2 in half the reads\n");
+    {
+        auto spots = make_spots(v2, 150, 10, true, 600, 0.5);
+        std::mt19937_64 rng(5);
+        for (auto& s : spots) {   // R1 becomes a 150-nt cDNA read, R2 the barcode read
+            std::vector<uint8_t> cdna(150);
+            for (auto& b : cdna) b = static_cast<uint8_t>(rng() % 4);
+            s.r2_seq = s.r1_seq;
+            s.r1_seq = cdna;
+            s.r2_len = 150;
+        }
+        auto r = singlet::fq::detect_protocol(spots, 150, 150, dirs); show("150/150 R2", r);
+        CHECK(r.tag == "10x-3p-v2" || r.tag == "10x-5p-v2", "barcodes in R2 of a 150/150 pair give a 10x v2 protocol");
+        CHECK(r.reads_swapped, "and set the swap flag so the encoder reads the barcode from R2");
+    }
+    std::fprintf(stderr, "[guard] two random 150-nt reads\n");
+    {
+        auto spots = make_spots(v2, 150, 10, false);
+        for (auto& s : spots) { s.r2_seq.resize(150); s.r2_len = 150; }
+        auto r = singlet::fq::detect_protocol(spots, 150, 150, dirs); show("150/150 random", r);
+        CHECK(!is10x(r.tag) || r.wl_match_rate < 0.4, "two random 150-nt reads are not rescued as 10x");
+        CHECK(!r.reads_swapped, "and are not swapped");
+    }
     std::fprintf(stderr, "[guard] %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }
