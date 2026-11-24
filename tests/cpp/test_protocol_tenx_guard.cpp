@@ -93,30 +93,26 @@ int main() {
     const std::vector<std::string> dirs{dir};
     auto is10x = [](const std::string& t) { return t.rfind("10x-", 0) == 0; };
 
-    std::fprintf(stderr, "[guard] 33-nt v2 R1
-");
+    std::fprintf(stderr, "[guard] 33-nt v2 R1\n");
     {
         auto spots = make_spots(v2, 33, 10, true);
         auto r = singlet::fq::detect_protocol(spots, 33, 90, dirs); show("33", r);
         CHECK(r.tag == "10x-3p-v2", "33-nt R1 with v2 barcodes is 10x-3p-v2");
         CHECK(r.confidence >= singlet::fq::Confidence::MEDIUM, "with at least medium confidence (the pre-gate passes it)");
     }
-    std::fprintf(stderr, "[guard] 150-nt R1, v2 barcodes in half the reads
-");
+    std::fprintf(stderr, "[guard] 150-nt R1, v2 barcodes in half the reads\n");
     {
         auto spots = make_spots(v2, 150, 10, true, 600, 0.5);
         auto r = singlet::fq::detect_protocol(spots, 150, 90, dirs); show("150", r);
         CHECK(r.tag == "10x-3p-v2" || r.tag == "10x-5p-v2", "150-nt R1 with v2 barcodes in half the reads is a 10x v2 protocol");
     }
-    std::fprintf(stderr, "[guard] 26-nt v2 R1 (control)
-");
+    std::fprintf(stderr, "[guard] 26-nt v2 R1 (control)\n");
     {
         auto spots = make_spots(v2, 26, 10, true);
         auto r = singlet::fq::detect_protocol(spots, 26, 90, dirs); show("26", r);
         CHECK(r.tag == "10x-3p-v2", "26-nt v2 R1 is still 10x-3p-v2");
     }
-    std::fprintf(stderr, "[guard] random 20-nt and 12-nt R1
-");
+    std::fprintf(stderr, "[guard] random 20-nt and 12-nt R1\n");
     {
         auto s20 = make_spots(v3, 20, 8, false);
         auto r20 = singlet::fq::detect_protocol(s20, 20, 90, dirs); show("20", r20);
@@ -125,15 +121,13 @@ int main() {
         auto r12 = singlet::fq::detect_protocol(s12, 12, 90, dirs); show("12", r12);
         CHECK(!is10x(r12.tag), "random 12-nt R1 is not a 10x protocol");
     }
-    std::fprintf(stderr, "[guard] 33-nt R1, listed barcodes in 20 %% of reads
-");
+    std::fprintf(stderr, "[guard] 33-nt R1, listed barcodes in 20 %% of reads\n");
     {
         auto spots = make_spots(v2, 33, 10, true, 600, 0.2);
         auto r = singlet::fq::detect_protocol(spots, 33, 90, dirs); show("33@20%", r);
         CHECK(!(r.tag == "10x-3p-v2" && r.wl_match_rate < 0.4 && r.wl_match_rate > 0.0 && r.score == r.wl_match_rate),
               "the guard does not fire under its rate");
     }
-    std::fprintf(stderr, "[guard] %d passed, %d failed
-", g_pass, g_fail);
+    std::fprintf(stderr, "[guard] %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }
