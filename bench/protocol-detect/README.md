@@ -33,4 +33,6 @@ in `include/singlet/fq/`, in this order, each with its panel rows as tests:
    amplicon) is reported for exclusion instead of being pooled.
 7. Visium end to end (D-154): the `10x-visium` route encodes and counts, but without the slide's tissue positions every spot fails
    QC. Fetch the spatial files (tissue_positions, scale factors) from the GEO supplement with the reads, and route Visium from
-   detection. GSM8675021 (fetal Visium, two runs, one called 10x v3) waits in quarantine on this item.
+   detection. A GSM can hold several capture areas, one run each, on the same spot list: split it into one output per area and
+   never pool across areas. GSM8675021 (four capture areas A17 to A20) waits in quarantine on this item. The campaign side is
+   specified in singlet-agents `docs/VISIUM_CAMPAIGN_SPEC.md`.
