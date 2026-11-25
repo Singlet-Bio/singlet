@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
+#include <vector>
 
 #include "spot_source.h"   // FASTQ and BAM inputs read as spots ("fastq:" / "bam:" specs)
 
@@ -164,6 +165,29 @@ public:
                                    &boff, &row_len);
         if (rc) return false;
 
+        return true;
+    }
+
+    // Segment layout (READ_LEN + READ_START) of the spot that the last read_next_spot_fast returned. The fast path calls
+    // it only for a spot whose length differs from the probe layout, so a run with one layout pays nothing.
+    bool read_segments_of_last(RawSpot& spot) {
+        if (src_) return spot.seg_len != nullptr;
+        int64_t row = current_row_ - 1;
+        uint32_t elem_bits, boff, row_len;
+        if (VCursorCellDataDirect(cursor_, row, col_read_len_, &elem_bits, (const void**)&spot.seg_len, &boff, &spot.n_segments))
+            return false;
+        if (VCursorCellDataDirect(cursor_, row, col_read_start_, &elem_bits, (const void**)&spot.seg_start, &boff, &row_len))
+            return false;
+        return true;
+    }
+
+    // READ_LEN of one row (the layout sampler: READ_LEN is a small column, so this is cheap at random rows).
+    bool read_len_at(int64_t row, std::vector<uint32_t>& out) {
+        out.clear();
+        if (src_) return false;
+        const uint32_t* lens = nullptr; uint32_t elem_bits, boff, n = 0;
+        if (VCursorCellDataDirect(cursor_, row, col_read_len_, &elem_bits, (const void**)&lens, &boff, &n)) return false;
+        out.assign(lens, lens + n);
         return true;
     }
 

@@ -2371,6 +2371,9 @@ inline ExportStats export_results(const PileupEngine& engine,
                 summary.intergenic_fraction = std::max(0.0,
                     1.0 - genic / static_cast<double>(ps.mapped_reads));
             }
+            summary.strand_informative_reads = ps.strand_sense + ps.strand_antisense;
+            if (summary.strand_informative_reads > 0)
+                summary.strand_sense_fraction_3p = static_cast<double>(ps.strand_sense) / static_cast<double>(summary.strand_informative_reads);
         }
         // Override total_reads / mapped_reads / mapping_rate from STAR's Log.final.out.
         // STAR does not write unmapped reads to the BAM by default, so the pileup BAM

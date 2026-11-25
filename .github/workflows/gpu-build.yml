@@ -1,0 +1,43 @@
+name: GPU build
+
+# Compile-only check of the campaign binary with the GPU engine (singlet --engine gpu). Release builds happen on the cluster, so a
+# change that breaks the CUDA target (v1.4.7 -> main: #277 removed a header src/engine_gpu still included) used to surface only
+# there. No GPU is needed to compile; tests that need a device run on the cluster.
+
+# Manual until it builds in CI: the container build reaches src/star/bam_cat.c, which fails on an htslib API mismatch
+# ('sam_hdr_destroy' not declared: an older htslib header wins the include order). Re-enable the push/pull_request
+# triggers once that is fixed.
+on:
+  workflow_dispatch:
+
+jobs:
+  gpu-build:
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:12.4.1-devel-ubuntu22.04
+    timeout-minutes: 90
+    env:
+      MAMBA_ROOT_PREFIX: /opt/mamba
+      CONDA_PREFIX: /opt/mamba/envs/deps
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: System packages
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git cmake g++ make pkg-config curl bzip2 ca-certificates
+
+      - name: Libraries (ncbi-vdb, htslib, hdf5, zstd)
+        run: |
+          curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/2.0.5 | tar -xj -C /usr/local bin/micromamba
+          micromamba create -y -p $CONDA_PREFIX -c conda-forge -c bioconda ncbi-vdb htslib hdf5 zstd zlib xz bzip2 libdeflate libcurl
+
+      - name: Configure
+        run: |
+          export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_ENGINE_GPU=ON \
+                -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_CUDA_ARCHITECTURES=90 -DSINGLET_GIT_COMMIT=${{ github.sha }}
+
+      - name: Build singlet with the GPU engine
+        run: |
+          export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+          cmake --build build --target singlet -j$(nproc)

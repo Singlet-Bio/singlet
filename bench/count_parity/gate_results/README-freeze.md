@@ -6,3 +6,6 @@ The excess chrY UMIs sit at one locus, ENSG00000291032, and follow from dropping
 
 ## v1.3.7 (record 99f03cb79a05811c.json, commit f84a90a0)
 The rel137 gate run on the CPU engine reproduces the same four misses (hgmm1k_v3 barnyard.X, barnyard.exon, chrY; hgmm1k_v2 chrY) and passes the rest. They stay owner-accepted under D-136. The record lists them in its `accepted` field, and gate_check.py treats only those listed axes as accepted: any other FAIL axis still fails the check.
+
+## v1.4.8 (record c44f842ebfe086b9.json, commit d5bcf119)
+The 1.4.8 gate run on the CPU engine gives values identical to the 1.4.x records: the same four misses, still owner-accepted under D-136, listed in the record's `accepted` field.

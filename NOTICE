@@ -38,3 +38,7 @@ one-gene rule (src/star/SoloReadFeature_record.cpp).
 python/singlet/features/doublet_scrub.py ports the method of Scrublet (Wolock SL, Lopez R, Klein AM, Cell Systems 8:281-291, 2019;
 github.com/swolock/scrublet), MIT License, Copyright (c) 2018 Samuel L Wolock: observed-cell normalisation, the v-score gene filter, simulated doublets,
 PCA, the nearest-neighbour doublet score. It feeds the doublet stacker (doublet/score_v2).
+
+include/singlet/fq/parse_bc1.h holds the Parse Biosciences Evercode WT v2 round-1 well table (random-hexamer barcode to the
+oligo-dT barcode of the same well) from pachterlab/SBP_2025 (mouse/wells/barcodes/r1_R.txt, r1_T.txt, r1_RT_replace.txt),
+BSD 2-Clause License, Copyright (c) 2025, Pachter Lab; the license text is reproduced in the header. No Parse split-pipe code is used.

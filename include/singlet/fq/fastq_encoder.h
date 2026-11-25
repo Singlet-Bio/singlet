@@ -258,6 +258,7 @@ class FastqEncoder {
         wcfg.r2_length = r2_fixed ? first_r2_len : 0;
         wcfg.protocol_id = detected.protocol_id;
         wcfg.confidence = detected.confidence;
+        wcfg.parse_bc1_merge = (detected.tag == "splitseq");   // Parse WT v2 round-1 well merge (parse_bc1.h)
         wcfg.assay_type = protocol_tag_to_assay_type(detected.tag);
 
         // Wire BC dict + polyA from auto-detection (Phase 2)
