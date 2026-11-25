@@ -1212,8 +1212,11 @@ class SraEncoder {
         }
 
         // Also handle over-sequenced R1 with existing R2 (e.g. [150, 150])
+        // Not for a SPLiT-seq/Parse barcode read: its rounds sit at fixed offsets past the table's r1_len (Rd1 at 78-85), so a
+        // trim to r1_len drops a barcode round and no read gets a cell (GSE246624, 1.4.8). Other multi-segment chemistries keep
+        // the old behaviour until each is checked.
         if ((confidence >= Confidence::MEDIUM || metadata_protocol_known) &&
-            split_r1 > 0 && split_r1 < r1_len && r2_len > 0) {
+            split_r1 > 0 && split_r1 < r1_len && r2_len > 0 && protocol_tag != "splitseq") {
             std::cerr << "[1fq-encode] Trimming over-sequenced R1: "
                       << r1_len << " → " << split_r1 << "\n";
             for (auto& sd : probe_spots) {
