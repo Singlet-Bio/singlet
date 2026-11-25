@@ -2,6 +2,21 @@
 
 All notable changes to the singlet project.
 
+## [1.4.5] — 10x guard reads both reads and single-segment layouts
+
+**Fix.** The 1.4.3 guard looked only at the read detection treated as the barcode read, and skipped single-segment layouts, so
+both campaign rejects it was written for were still rejected. It now checks both reads (a barcode in R2 of a 150/150 pair sets
+the swap flag the encoders honour, and the 3'/5' check runs on the swapped reads) and runs in concat mode (a 33 nt barcode read
+with a variable cDNA read). List loading has a 30 s wall-clock budget. Samples already detected as 10x are unchanged.
+(1.4.4 was tagged with this change but did not compile and was never built or released.)
+
+## [1.4.3] — 10x whitelist guard in protocol detection
+
+**Fix.** Auto-detection no longer sends a 10x library to a non-10x chemistry when a 10x whitelist holds at least 40 % of its
+barcode reads exactly. A 33 nt v2 Read 1 went to Drop-seq and a 150 nt v2 Read 1 went to Microwell-seq, so the pre-gate rejected
+both (Beta campaign protocol-detect panel, 2026-11-23). The guard runs only when the detected protocol is not a 10x protocol, so a
+sample already detected as 10x is unchanged; outputs are byte-identical to 1.4.2 on the identity gate.
+
 ## [1.4.2] — host memory and chimeric throughput
 
 **Speed and memory.** Each change has a switch that restores the old behavior (`=0`).

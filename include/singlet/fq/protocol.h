@@ -10,6 +10,7 @@
 #include "writer.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -78,6 +79,10 @@ constexpr uint16_t kShortBarcodeReadMinUmi = 8;
 // Below this rate the reads are not this chemistry (or the whitelist is missing) and counts from them would be garbage: an inDrop
 // library hit the 3' v1 list in 8% of reads (SRR10046401).
 constexpr double kProtocolWlRateFloor = 0.10;
+// A 10x list holding this share of barcode reads exactly overrides a non-10x winner (10x whitelist guard in detect_protocol).
+constexpr double kTenxGuardRate = 0.40;
+// Wall-clock budget for the guard's list loads: lists after this are skipped, so detection always ends in seconds.
+constexpr double kTenxGuardBudgetS = 30.0;
 
 inline const std::vector<CandidateSpec>& known_protocols() {
     // Protocol specs: tag, id, r1_len, bc_off, bc_len, umi_off, umi_len,
@@ -1121,6 +1126,103 @@ ProtocolCandidate detect_protocol(
         else if (new_score >= 0.60) best.confidence = Confidence::MEDIUM;
         else if (new_score >= 0.40) best.confidence = Confidence::LOW;
         else                        best.confidence = Confidence::NONE;
+    }
+
+    // ── 10x whitelist guard (v1.4.3) ───────────────────────────────────────────
+    // A non-10x winner never stands against a 10x list that holds at least kTenxGuardRate of the barcode reads exactly at the
+    // list's own offset. The length filter above drops a 10x list when the barcode read is 5-9 nt longer than the kit's (a 33 nt
+    // v2 Read 1 went to Drop-seq), and short-word protocols can outscore a 10x list on a long Read 1 (a 150 nt v2 Read 1 at 49 %
+    // went to Microwell-seq). Both were wrong-protocol rejects in the Beta campaign (protocol-detect panel, 2026-11-23). Random
+    // reads hit even the 3.7 M lists exactly in well under 1 % of reads, so 40 % is only reached by a real 10x library. A sample
+    // whose winner is already a 10x protocol is not touched, so its output stays byte-identical.
+    // Both reads are checked: a deposit whose two long reads come in the other order (an 8 nt index, a 150 nt cDNA read, then a
+    // 150 nt barcode read) carries the barcode in R2 at a length the inverted test above does not catch; the guard then sets the
+    // swap flag, which the encoders honour. A single-segment layout (concat mode, a 33 nt barcode read with a variable cDNA read)
+    // is checked in R1. The guard reads at most five lists against 5000 spots and stops loading lists after kTenxGuardBudgetS.
+    if (best.tag.rfind("10x-", 0) != 0) {
+        static const char* kGuardTags[] = {"10x-3p-v3", "10x-3p-v2", "10x-3p-v4", "10x-5p-v4", "10x-3p-v1"};
+        const auto g_t0 = std::chrono::steady_clock::now();
+        const uint32_t n_g = std::min<uint32_t>(5000, static_cast<uint32_t>(probe_spots.size()));
+        double g_rate = 0.0;
+        bool g_other = false;   // the winning list was found in the read detection did not treat as the barcode read
+        const CandidateSpec* g_spec = nullptr;
+        for (const char* t : kGuardTags) {
+            const double spent = std::chrono::duration<double>(std::chrono::steady_clock::now() - g_t0).count();
+            if (spent > kTenxGuardBudgetS) {
+                std::cerr << "[protocol_detect] 10x guard: time budget reached after " << spent << " s; remaining lists skipped\n";
+                break;
+            }
+            const CandidateSpec* sp = find_protocol_spec(t);
+            if (!sp || sp->whitelist_file.empty() || n_g == 0) continue;
+            const std::string key = sp->whitelist_file + ":" + std::to_string(sp->bc_len);
+            auto it = wl_cache.find(key);
+            if (it == wl_cache.end()) {
+                std::unordered_set<uint64_t> h;
+                for (const auto& dir : whitelist_dirs) {
+                    h = load_whitelist_hashes(dir + "/" + sp->whitelist_file, sp->bc_len);
+                    if (!h.empty()) break;
+                }
+                it = wl_cache.emplace(key, std::move(h)).first;
+            }
+            if (it->second.empty()) continue;
+            for (int side = 0; side < 2; ++side) {
+                const bool use_r2 = (side == 0) ? inverted : !inverted;
+                uint32_t m = 0;
+                for (uint32_t i = 0; i < n_g; ++i) {
+                    const auto& s = probe_spots[i];
+                    const uint16_t rl = use_r2 ? s.r2_len : s.r1_len;
+                    if (rl < sp->bc_offset + sp->bc_len) continue;
+                    const uint8_t* rd = use_r2 ? s.r2_seq.data() : s.r1_seq.data();
+                    if (it->second.count(hash_barcode(rd + sp->bc_offset, sp->bc_len))) ++m;
+                }
+                const double r = static_cast<double>(m) / n_g;
+                if (r > g_rate) { g_rate = r; g_spec = sp; g_other = (side == 1); }
+            }
+        }
+        if (g_spec && g_rate >= kTenxGuardRate) {
+            if (g_other) {
+                inverted = !inverted;
+                concat_mode = false;
+            }
+            std::cerr << "[protocol_detect] 10x guard: " << best.tag << " -> " << g_spec->tag << " (" << g_spec->whitelist_file
+                      << " exact in " << g_rate << " of barcode reads, barcode in " << (inverted ? "R2" : "R1") << ")\n";
+            best.tag = g_spec->tag;
+            best.protocol_id = g_spec->protocol_id;
+            best.r1_length = g_spec->r1_len;
+            best.bc_offset = g_spec->bc_offset;
+            best.bc_length = g_spec->bc_len;
+            best.umi_offset = g_spec->umi_offset;
+            best.umi_length = g_spec->umi_len;
+            best.wl_match_rate = g_rate;
+            best.score = std::max(best.score, g_rate);
+            best.confidence = g_rate >= 0.60 ? Confidence::HIGH : Confidence::MEDIUM;
+            // The 3'/5' check below reads the barcode read as R1; with the barcode in R2 it runs here on swapped copies.
+            if (inverted && best.tag.rfind("10x-3p-v", 0) == 0) {
+                const CandidateSpec* fp = find_protocol_spec("10x-5p-" + best.tag.substr(7));
+                if (fp && fp->whitelist_file == g_spec->whitelist_file) {
+                    // Plain copies: some callers' spot types hold references to their reads.
+                    struct SwSpot { std::vector<uint8_t> r1_seq, r2_seq; uint16_t r1_len = 0, r2_len = 0; };
+                    const size_t n_sw = std::min<size_t>(20000, probe_spots.size());
+                    std::vector<SwSpot> sw(n_sw);
+                    for (size_t i = 0; i < n_sw; ++i) {
+                        const auto& s = probe_spots[i];
+                        sw[i].r1_seq.assign(s.r2_seq.begin(), s.r2_seq.begin() + s.r2_len);
+                        sw[i].r2_seq.assign(s.r1_seq.begin(), s.r1_seq.begin() + s.r1_len);
+                        sw[i].r1_len = s.r2_len;
+                        sw[i].r2_len = s.r1_len;
+                    }
+                    auto ev = five_prime_evidence(sw, static_cast<uint16_t>(best.umi_offset + best.umi_length));
+                    std::cerr << "[protocol_detect] 3'/5' check (barcode in R2): R1 5'-TSO " << ev.r1_tso << " / polyT "
+                              << ev.r1_polyt << "; R2 3'-TSO " << ev.r2_smart << ", polyA " << ev.r2_polya
+                              << ", polyT " << ev.r2_polyt << " of " << ev.n << " spots\n";
+                    if (ev.is_5prime()) {
+                        std::cerr << "[protocol_detect] " << best.tag << " -> " << fp->tag << " (cDNA read looks 5')\n";
+                        best.tag = fp->tag;
+                        best.protocol_id = fp->protocol_id;
+                    }
+                }
+            }
+        }
     }
 
     // If detection succeeded through the inverted R2 barcode path, record
