@@ -4,7 +4,7 @@
 // Regression (v1.4.3, protocol-detect panel 2026-11-23): two 10x libraries were rejected by the pre-gate as non-10x chemistries.
 // A 33 nt v2 Read 1 (barcode read 7 nt longer than the kit's) was never a 10x candidate and went to Drop-seq (GSM4953093), and a
 // 150 nt v2 Read 1 with the list in about half the reads went to Microwell-seq (GSM8548562). The 10x whitelist guard in
-// detect_protocol replaces a non-10x winner when a 10x list holds at least 40 % of barcode reads exactly.
+// detect_protocol replaces a non-10x winner when a 10x list holds at least 25 % of barcode reads exactly (40 % before 1.4.7).
 //
 //  1. 33 nt R1, v2 barcodes in every read: 10x-3p-v2
 //  2. 150 nt R1, v2 barcodes in half the reads: a 10x v2 protocol
@@ -125,7 +125,7 @@ int main() {
     {
         auto spots = make_spots(v2, 33, 10, true, 600, 0.2);
         auto r = singlet::fq::detect_protocol(spots, 33, 90, dirs); show("33@20%", r);
-        CHECK(!(r.tag == "10x-3p-v2" && r.wl_match_rate < 0.4 && r.wl_match_rate > 0.0 && r.score == r.wl_match_rate),
+        CHECK(!(r.tag == "10x-3p-v2" && r.wl_match_rate < 0.25 && r.wl_match_rate > 0.0 && r.score == r.wl_match_rate),
               "the guard does not fire under its rate");
     }
     std::fprintf(stderr, "[guard] single 33-nt segment with a variable cDNA read (concat mode)\n");
@@ -152,6 +152,20 @@ int main() {
         auto r = singlet::fq::detect_protocol(spots, 150, 150, dirs); show("150/150 R2", r);
         CHECK(r.tag == "10x-3p-v2" || r.tag == "10x-5p-v2", "barcodes in R2 of a 150/150 pair give a 10x v2 protocol");
         CHECK(r.reads_swapped, "and set the swap flag so the encoder reads the barcode from R2");
+    }
+    std::fprintf(stderr, "[guard] two 150-nt reads, v2 barcodes in R2 in 38 %% of reads (SRR30855730)\n");
+    {
+        auto spots = make_spots(v2, 150, 10, true, 1000, 0.38);
+        std::mt19937_64 rng(9);
+        for (auto& s : spots) {   // R1 becomes a 150-nt cDNA read, R2 the barcode read
+            std::vector<uint8_t> cdna(150);
+            for (auto& b : cdna) b = static_cast<uint8_t>(rng() % 4);
+            s.r2_seq = s.r1_seq;
+            s.r1_seq = cdna;
+            s.r2_len = 150;
+        }
+        auto r = singlet::fq::detect_protocol(spots, 150, 150, dirs); show("150/150 R2 38%", r);
+        CHECK(r.tag == "10x-3p-v2" || r.tag == "10x-5p-v2", "v2 barcodes in 38 % of R2 reads give a 10x v2 protocol");
     }
     std::fprintf(stderr, "[guard] two random 150-nt reads\n");
     {
