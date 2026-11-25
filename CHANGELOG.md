@@ -2,6 +2,27 @@
 
 All notable changes to the singlet project.
 
+## [1.4.8] — Parse WT v2, no silent read loss, strand fraction
+
+**Parse WT v2.** A Parse barcode read is no longer trimmed to 66 nt, which dropped barcode round 1 (bases 78-85) and left no
+cells. Round-1 random-hexamer barcodes merge into the oligo-dT barcode of the same well (table from pachterlab/SBP_2025,
+BSD-2; see NOTICE). On GSM7873661 (GSE246624) singlet calls 1,293 cells against split-pipe's 1,310 for that sublibrary
+(1,290 shared, median UMIs per shared cell within 2 %, log-UMI r 0.996).
+
+**Encoder.** The generic two-read path now applies every R1/R2 swap the probe decided, not only the whitelist one; it
+had left cDNA in R1 for a run that the detection-score swap fixed but that missed the fast path. A run whose read layout
+changes partway (a second flow cell with fewer cDNA cycles) no longer loses its off-layout spots: 1,024 sampled rows flag
+such runs, which write R2 as variable length and read each off-layout spot from its own segments (GSM4955614 136.6 M →
+211.7 M spots, GSM5672477 68.2 M → 253.3 M). Every spot is written or counted under a named discard, logged as
+`[1fq-encode] accounting:` and written to `<output>.accounting.json`. Runs with one layout keep the old path and bytes.
+
+**Outputs.** `summary.json` gains `strand_sense_fraction_3p` (sense share of strand-informative reads, relative to 3'
+orientation: about 0.9 for 3', 0.1 for 5') and `strand_informative_reads`.
+
+**Build.** The GPU target builds again (`stitch.cuh` moved into `src/engine_gpu` after #277), and CI builds it.
+
+Outputs are byte-identical to 1.4.7 on the 3' and 5' identity fixtures.
+
 ## [1.4.7] — 10x guard bar at 25 %
 
 **Fix.** The 10x whitelist guard now overrides a non-10x call when a 10x list holds 25 % of barcode reads exactly (was 40 %).
