@@ -1156,6 +1156,11 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         { std::ifstream mi("/proc/meminfo"); std::string k, u; while (mi >> k >> v >> u) { if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v; } }
         freeNode = (mfree + cacheShare * std::max(0.0, cached - shm)) / 1048576.0;
         freeJob = cg.ok ? cg.lim - cg.cur + cgShare * std::max(0.0, cg.file - cg.shmem) : freeNode;
+        if (inactiveShare > 0) {   // h100fill: the same cold-cache rule in the peak gate (node and job terms; the job term keeps its own cgroup)
+            const FillFree ff = fill_free_gb(inactiveShare, cacheShare, jobCg);
+            freeNode = ff.node;
+            if (cg.ok && ff.job >= 0) freeJob = ff.job;
+        }
     };
     // an item's figure now: the phase (before the "level" line, after it, after the "waited" line), then what the engine printed. Logs each change.
     auto pkFigure = [&](Run& r) -> double {
