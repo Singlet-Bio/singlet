@@ -31,7 +31,7 @@ jobs:
       - name: Libraries (ncbi-vdb, htslib, hdf5, zstd)
         run: |
           curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/2.0.5 | tar -xj -C /usr/local bin/micromamba
-          micromamba create -y -p $CONDA_PREFIX -c conda-forge -c bioconda ncbi-vdb htslib hdf5 zstd zlib
+          micromamba create -y -p $CONDA_PREFIX -c conda-forge -c bioconda ncbi-vdb htslib hdf5 zstd zlib xz bzip2 libdeflate libcurl
 
       - name: Configure
         run: |
