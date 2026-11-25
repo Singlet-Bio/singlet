@@ -370,6 +370,7 @@ class SraEncoder {
         SraReader::RawSpot raw;
         // Track segment offsets for fast VDB path
         int32_t probe_r1_offset = -1, probe_r2_offset = -1;
+        bool pair_swapped = false;   // every probe R1<->R2 swap toggles it; the generic 2-segment path reads it (1.4.8)
         bool probe_offsets_consistent = true;
         // Track whether any probe spot had ≥3 segments (orientation is ambiguous)
         bool had_multi_segment_spots = false;
@@ -593,6 +594,7 @@ class SraEncoder {
                     if (swap_score.score > orig_score.score) {
                         // Swapped orientation scores better — keep swap
                         std::swap(probe_r1_offset, probe_r2_offset);
+                        pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
                         if (had_multi_segment_spots) three_seg_swapped = true;
                         std::cerr << "[1fq-encode] R1\u2194R2 orientation swap for "
                                   << spec->tag << " (score "
@@ -643,6 +645,7 @@ class SraEncoder {
                 }
                 std::swap(r1_len, r2_len);
                 std::swap(probe_r1_offset, probe_r2_offset);
+                pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
                 geometry_swap_fired = true;
                 // Re-detect with corrected orientation; keep result even if confidence
                 // is still low — the physical swap is committed.
@@ -701,6 +704,7 @@ class SraEncoder {
                             }
                             std::swap(r1_len, r2_len);
                             std::swap(probe_r1_offset, probe_r2_offset);
+                            pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
                             geometry_swap_fired = true;  // prevent Pass 2 from undoing
                             auto mp = detect_protocol(probe_spots, r1_len, r2_len,
                                                       cfg.whitelist_dirs);
@@ -732,6 +736,7 @@ class SraEncoder {
                               << " (R1\u2194R2)\n";
                     // Also swap fast-VDB offsets to match the new R1/R2 assignment
                     std::swap(probe_r1_offset, probe_r2_offset);
+                    pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
                     if (had_multi_segment_spots) three_seg_swapped = true;
                 } else {
                     // Swap back
@@ -1093,6 +1098,7 @@ class SraEncoder {
                     if (maj1 > 0 && mc1 >= n_r / 2) r1_len = maj1;
                 }
                 std::swap(probe_r1_offset, probe_r2_offset);
+                pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
                 three_seg_swapped = !three_seg_swapped;
                 detected_proto.reads_swapped = false;  // consumed
                 vdb_swap_fired = true;  // B-G2-1: mark for header flag
@@ -1386,6 +1392,7 @@ class SraEncoder {
                                 }
                                 std::swap(r1_len, r2_len);
                                 std::swap(probe_r1_offset, probe_r2_offset);
+                                pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
                                 // Force variable R2: streaming gives full cDNA length
                                 if (r2_len > r1_len) r2_len = 0;
                             }
@@ -1443,6 +1450,7 @@ class SraEncoder {
             }
             std::swap(r1_len, r2_len);
             std::swap(probe_r1_offset, probe_r2_offset);
+            pair_swapped = !pair_swapped;   // net R1<->R2 swap vs the raw segment order (generic path)
             three_seg_swapped = !three_seg_swapped;
         }
 
@@ -1800,7 +1808,7 @@ class SraEncoder {
         // cannot extract the 3rd barcode segment needed for the I2 stream.
         bool use_fast_vdb = (confidence >= Confidence::MEDIUM &&
                              r1_len > 0 && r2_len > 0 && !resegment &&
-                             (split_r1 == 0 || split_r1 >= r1_len) &&
+                             (split_r1 == 0 || split_r1 >= r1_len || protocol_tag == "splitseq") &&   // splitseq keeps its full R1
                              probe_offsets_consistent &&
                              probe_r1_offset >= 0 && probe_r2_offset >= 0 &&
                              !atac_3seg_i2);  // ATAC 3-read must use generic path
@@ -2080,9 +2088,11 @@ class SraEncoder {
                     r2_off = raw.seg_start[b1];
                 } else if (raw.n_segments >= 2 && raw.seg_len[0] > 0 &&
                            raw.seg_len[1] > 0) {
-                    // Normal paired-end (swap if WL validation found R1=cDNA, R2=barcode)
-                    uint32_t s0 = wl_orientation_swap ? 1u : 0u;
-                    uint32_t s1 = wl_orientation_swap ? 0u : 1u;
+                    // Normal paired-end. pair_swapped is the net of every probe swap (detection score, geometry, WL
+                    // validation, VDB read-swap, safety): this path used only the WL one, so a run that a detection
+                    // swap fixed but that missed the fast path kept cDNA in R1 (Parse 150+150, 1.4.8).
+                    uint32_t s0 = pair_swapped ? 1u : 0u;
+                    uint32_t s1 = pair_swapped ? 0u : 1u;
                     r1l = static_cast<uint16_t>(raw.seg_len[s0]);
                     r2l = static_cast<uint16_t>(raw.seg_len[s1]);
                     r1_off = raw.seg_start[s0];
@@ -2156,7 +2166,7 @@ class SraEncoder {
                 }
 
                 // Apply over-sequenced R1 trim (e.g. 150bp → 28bp)
-                if (split_r1 > 0 && r1l > split_r1 && r2l > 0) {
+                if (split_r1 > 0 && r1l > split_r1 && r2l > 0 && protocol_tag != "splitseq") {   // see the probe trim
                     r1l = split_r1;
                 }
 
