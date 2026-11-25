@@ -2,4 +2,4 @@
 // runs exactly the code the m5 identity gate checks (E5 compact paths, E7 phase 1; docs/gpu-engine/fable/E12-prefill.md). Before E12
 // this file was a copy of m5 811cbe88.
 #pragma once
-#include "../../bench/gpu/m5/stitch.cuh"
+#include "stitch_m5.cuh"   // the m5 harness's stitch.cuh, moved here unchanged when bench/gpu/m5 was removed (#277)
