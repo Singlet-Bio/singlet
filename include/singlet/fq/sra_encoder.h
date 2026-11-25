@@ -1680,6 +1680,7 @@ class SraEncoder {
         wcfg.protocol_id = protocol_id;
         wcfg.confidence = confidence;
         wcfg.assay_type = assay;
+        wcfg.parse_bc1_merge = (protocol_tag == "splitseq");   // Parse WT v2 round-1 well merge (parse_bc1.h)
 
         // ATAC 3-read: enable I2 barcode stream so barcodes survive into the .1fq
         // and are injected into QNAMEs during singlet process fragment extraction.
@@ -2284,6 +2285,10 @@ class SraEncoder {
                          static_cast<unsigned long long>(writer.bc_whitelist_exact()),
                          static_cast<unsigned long long>(writer.bc_raw()),
                          100.0 * writer.bc_whitelist_exact() / (writer.bc_whitelist_exact() + writer.bc_raw()));
+        if (writer.parse_bc1_merged() > 0)
+            std::fprintf(stderr, "[1fq-encode] Parse round 1: %llu of %llu reads moved from a random-hexamer to the oligo-dT barcode of the same well
+",
+                         static_cast<unsigned long long>(writer.parse_bc1_merged()), static_cast<unsigned long long>(count));
         // B-G2-1: persist swap flag in Header::reserved[1] so downstream processing
         // can verify that R1↔R2 orientation was corrected during encoding.
         // All three swap paths must be covered:

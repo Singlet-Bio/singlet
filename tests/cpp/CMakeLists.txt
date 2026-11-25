@@ -335,6 +335,7 @@ target_compile_definitions(test_whitelist_integrity PRIVATE
 add_pileup_test(test_ws2_protocol_hardening)
 add_pileup_test(test_protocol_short_barcode_read)
 add_pileup_test(test_protocol_tenx_guard)
+add_pileup_test(test_parse_bc1)
 add_pileup_test(test_protocol_forced_only)
 add_pileup_test(test_protocol_untrimmed_r1)
 add_pileup_test(test_ws4_crash_diagnostics)

@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "compress.h"
+#include "parse_bc1.h"
 #include "packing.h"
 #include "types.h"
 
@@ -89,6 +90,8 @@ struct WriterConfig {
     uint16_t r2_length = 0;   // Fixed R2 length (0=variable)
     uint16_t r2_maxlen = 0;   // Max R2 length after trim (0=unlimited)
     uint8_t protocol_id = 0;  // 0 = UNKNOWN
+    // SPLiT-seq/Parse WT v2: rewrite a random-hexamer round-1 barcode (R1 78-85) to its well's oligo-dT barcode (parse_bc1.h)
+    bool parse_bc1_merge = false;
     Confidence confidence = Confidence::NONE;
     AssayType assay_type = AssayType::UNKNOWN;
 
@@ -272,6 +275,10 @@ class Writer {
                   const uint8_t* r1_seq, uint16_t r1_len,
                   const uint8_t* r1_qual,
                   uint32_t dup_count = 1) {
+        if (cfg_.parse_bc1_merge && r1_seq && r1_len >= kParseBc1Offset + 8) {
+            bc1_buf_.assign(r1_seq, r1_seq + r1_len);
+            if (merge_parse_bc1(bc1_buf_.data(), r1_len)) { r1_seq = bc1_buf_.data(); ++bc1_merged_; }
+        }
         // PolyA trimming on R2 3' end
         uint16_t trim_len = 0;
         uint16_t effective_r2_len = r2_len;
@@ -459,6 +466,7 @@ class Writer {
     // not, stored raw (STAR corrects those; reader.h restores them as read).
     uint64_t bc_whitelist_exact() const { return bc_exact_; }
     uint64_t bc_raw() const { return bc_raw_; }
+    uint64_t parse_bc1_merged() const { return bc1_merged_; }
     uint32_t blocks_written() const {
         return static_cast<uint32_t>(block_offsets_.size());
     }
@@ -1052,6 +1060,8 @@ class Writer {
     uint64_t file_offset_ = 0;
     uint64_t total_reads_ = 0;
     uint64_t bc_exact_ = 0, bc_raw_ = 0;
+    std::vector<uint8_t> bc1_buf_;   // Parse round-1 merge scratch copy of R1
+    uint64_t bc1_merged_ = 0;        // reads whose random-hexamer round-1 barcode was rewritten
     uint32_t file_crc32_ = 0;
     std::vector<uint64_t> block_offsets_;
     std::vector<uint32_t> block_comp_sizes_;
