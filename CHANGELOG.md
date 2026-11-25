@@ -2,6 +2,14 @@
 
 All notable changes to the singlet project.
 
+## [1.4.7] — 10x guard bar at 25 %
+
+**Fix.** The 10x whitelist guard now overrides a non-10x call when a 10x list holds 25 % of barcode reads exactly (was 40 %).
+A 10x 5' v2 library whose 150 nt barcode read hits the v2 list in about 40 % of reads (SRR30855730) stayed rejected as Microwell-seq
+at the old bar. The highest non-10x hit seen is 8 % (inDrop). When the guard does not fire but a 10x list reaches 5 %, the best
+rate is logged. Samples already detected as 10x are unchanged. (1.4.6 was tagged with this change but did not compile and was
+never built or released.)
+
 ## [1.4.5] — 10x guard reads both reads and single-segment layouts
 
 **Fix.** The 1.4.3 guard looked only at the read detection treated as the barcode read, and skipped single-segment layouts, so

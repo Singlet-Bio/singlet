@@ -80,7 +80,9 @@ constexpr uint16_t kShortBarcodeReadMinUmi = 8;
 // library hit the 3' v1 list in 8% of reads (SRR10046401).
 constexpr double kProtocolWlRateFloor = 0.10;
 // A 10x list holding this share of barcode reads exactly overrides a non-10x winner (10x whitelist guard in detect_protocol).
-constexpr double kTenxGuardRate = 0.40;
+// 0.25 keeps three times the margin over the highest non-10x hit seen (inDrop at 8 %) and catches a 10x 5' v2 library whose
+// first 5000 spots hit the v2 list at 39-41 % (SRR30855730, rejected as Microwell-seq at the 1.4.5 bar of 0.40). Lowered in 1.4.7.
+constexpr double kTenxGuardRate = 0.25;
 // Wall-clock budget for the guard's list loads: lists after this are skipped, so detection always ends in seconds.
 constexpr double kTenxGuardBudgetS = 30.0;
 
@@ -1178,6 +1180,10 @@ ProtocolCandidate detect_protocol(
                 const double r = static_cast<double>(m) / n_g;
                 if (r > g_rate) { g_rate = r; g_spec = sp; g_other = (side == 1); }
             }
+        }
+        if (g_spec && g_rate < kTenxGuardRate && g_rate >= 0.05) {
+            std::cerr << "[protocol_detect] 10x guard: " << best.tag << " kept; best 10x list " << g_spec->whitelist_file << " exact in "
+                      << g_rate << " of barcode reads (bar " << kTenxGuardRate << ")\n";
         }
         if (g_spec && g_rate >= kTenxGuardRate) {
             if (g_other) {
