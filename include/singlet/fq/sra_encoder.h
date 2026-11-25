@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -134,6 +135,7 @@ class SraEncoder {
     struct BufferedRead {
         uint16_t r1_len;
         uint16_t r2_len;
+        uint32_t off;   // start in the flat buffer (reads may differ in length in a mixed-layout run)
         // r1_seq, r2_seq, r1_qual, r2_qual stored contiguously in a flat buffer
     };
 
@@ -164,7 +166,7 @@ class SraEncoder {
         void add(const uint8_t* r1_seq, uint16_t r1l,
                  const uint8_t* r2_seq, uint16_t r2l,
                  const uint8_t* r1_qual, const uint8_t* r2_qual) {
-            reads.push_back({r1l, r2l});
+            reads.push_back({r1l, r2l, static_cast<uint32_t>(data.size())});
             data.insert(data.end(), r1_seq, r1_seq + r1l);
             data.insert(data.end(), r2_seq, r2_seq + r2l);
             if (has_qual) {
@@ -180,7 +182,8 @@ class SraEncoder {
             uint16_t r2l = reads[i].r2_len;
             uint32_t stride = r1l + r2l;
             if (has_qual) stride *= 2;
-            uint32_t off = i * stride;  // only works for fixed-length
+            (void)stride;
+            uint32_t off = reads[i].off;
             r1s = data.data() + off;
             r2s = r1s + r1l;
             if (has_qual) {
@@ -1675,6 +1678,32 @@ class SraEncoder {
             }
         }
 
+        // ── Phase 2z: layout sampler (1.4.9) ──
+        // The probe sees only the first 100,000 spots. A run can change layout later (a second flow cell with fewer cDNA
+        // cycles: GSM4955614 8,28,98 then 8,28,91; GSM5672477 100+100 then 28+91), and the fast path used to drop every
+        // spot shorter than the probe layout without a count. READ_LEN at 1,024 evenly spaced rows finds such blocks; a run
+        // with one layout keeps the exact old path and bytes. A mixed run writes R2 as variable length and resolves each
+        // off-layout spot from its own segments.
+        bool layout_mixed = false;
+        std::vector<uint32_t> layout_ref;
+        if (reader.random_access() && r2_len > 0 && total_spots > static_cast<uint64_t>(probe_count) + 1000) {
+            SraReader lr;
+            lr.open(sra_path.c_str());
+            const int64_t f0 = reader.first_row();
+            lr.read_len_at(f0 + probe_count / 2, layout_ref);
+            std::vector<uint32_t> cur;
+            const uint64_t rest = total_spots - probe_count;
+            uint32_t n_diff = 0;
+            for (uint32_t k = 0; k < 1024; ++k) {
+                int64_t row = f0 + static_cast<int64_t>(probe_count + rest * k / 1024);
+                if (lr.read_len_at(row, cur) && cur != layout_ref) ++n_diff;
+            }
+            layout_mixed = n_diff > 0 && !layout_ref.empty();
+            if (layout_mixed)
+                std::cerr << "[1fq-encode] Mixed read layout: " << n_diff << " of 1024 sampled rows differ from the probe's;"
+                             " R2 written as variable length, off-layout spots read from their own segments\n";
+        }
+
         // ── Phase 3: Initialize writer ──
         WriterConfig wcfg;
         wcfg.codec = cfg.codec;
@@ -1684,7 +1713,7 @@ class SraEncoder {
         wcfg.block_size = cfg.block_size;
         wcfg.n_streams = 2;
         wcfg.r1_length = r1_len;
-        wcfg.r2_length = r2_len;
+        wcfg.r2_length = layout_mixed ? 0 : r2_len;
         wcfg.protocol_id = protocol_id;
         wcfg.confidence = confidence;
         wcfg.assay_type = assay;
@@ -1819,6 +1848,37 @@ class SraEncoder {
         uint32_t fast_min_bases = static_cast<uint32_t>(
             std::max(fast_r1_off + fast_r1l, fast_r2_off + fast_r2l));
 
+        // Spot accounting (1.4.9): every spot after the probe is written or lands in one named discard.
+        std::atomic<uint64_t> acc_read_error{0}, acc_layout_short{0}, acc_layout_unusable{0}, acc_layout_resolved{0};
+        uint64_t acc_generic_skip = 0, acc_zero_r2 = 0;
+        uint32_t layout_total = 0;
+        for (uint32_t v : layout_ref) layout_total += v;
+        // Resolve a spot from its own segments, as the generic path does (two longest of 3+, or the pair, with the probe's
+        // orientation and R1 trim). Returns false when the spot cannot be written in this .1fq's layout.
+        auto resolve_spot = [&](const SraReader::RawSpot& s, uint16_t& r1l, int32_t& r1o, uint16_t& r2l, int32_t& r2o) {
+            if (!s.seg_len || s.n_segments < 2) return false;
+            uint32_t a, b;
+            if (s.n_segments >= 3) {
+                uint32_t idx[16]; uint32_t ns = std::min<uint32_t>(s.n_segments, 16);
+                for (uint32_t k = 0; k < ns; ++k) idx[k] = k;
+                std::sort(idx, idx + ns, [&](uint32_t x, uint32_t y) { return s.seg_len[x] > s.seg_len[y]; });
+                uint32_t lo = std::min(idx[0], idx[1]), hi = std::max(idx[0], idx[1]);
+                a = three_seg_swapped ? hi : lo; b = three_seg_swapped ? lo : hi;
+            } else {
+                a = pair_swapped ? 1u : 0u; b = pair_swapped ? 0u : 1u;
+            }
+            if (s.seg_len[a] == 0 || s.seg_len[b] == 0) return false;
+            uint32_t l1 = s.seg_len[a], l2 = s.seg_len[b];
+            if (split_r1 > 0 && l1 > split_r1 && protocol_tag != "splitseq") l1 = split_r1;
+            if (l1 != fast_r1l) return false;                                   // R1 is fixed length in the .1fq
+            if (layout_mixed ? (l2 > 1024) : (l2 != fast_r2l)) return false;   // R2 is variable only in a mixed run
+            r1l = static_cast<uint16_t>(l1); r2l = static_cast<uint16_t>(l2);
+            r1o = s.seg_start[a]; r2o = s.seg_start[b];
+            return true;
+        };
+        // true: read at the probe's fixed offsets; false: resolve from segments
+        auto on_layout = [&](uint32_t total) { return layout_mixed ? total == layout_total : total >= fast_min_bases; };
+
         if (use_fast_vdb) {
             if (cfg.verbose)
                 std::cerr << "[1fq-encode] Fast VDB path: 2 calls/spot"
@@ -1854,24 +1914,26 @@ class SraEncoder {
                     batch.reserve(n, fast_r1l, fast_r2l, need_qual);
 
                     SraReader::RawSpot raw_local;
-                    std::vector<uint8_t> r1(fast_r1l), r2(fast_r2l);
+                    std::vector<uint8_t> r1(fast_r1l), r2(std::max<uint32_t>(fast_r2l, 1024));
                     while (!rdr.done_range()) {
-                        if (!rdr.read_next_spot_fast(raw_local)) continue;
-                        if (raw_local.total_bases < fast_min_bases) continue;
-                        for (uint16_t j = 0; j < fast_r1l; ++j)
-                            r1[j] = nuc::ascii_to_num(
-                                raw_local.read[fast_r1_off + j]);
-                        for (uint16_t j = 0; j < fast_r2l; ++j)
-                            r2[j] = nuc::ascii_to_num(
-                                raw_local.read[fast_r2_off + j]);
-                        const uint8_t* q1 = need_qual
-                                                ? raw_local.qual + fast_r1_off
-                                                : nullptr;
-                        const uint8_t* q2 = need_qual
-                                                ? raw_local.qual + fast_r2_off
-                                                : nullptr;
-                        batch.add(r1.data(), fast_r1l,
-                                  r2.data(), fast_r2l, q1, q2);
+                        if (!rdr.read_next_spot_fast(raw_local)) { ++acc_read_error; continue; }
+                        uint16_t l1 = fast_r1l, l2 = fast_r2l;
+                        int32_t o1 = fast_r1_off, o2 = fast_r2_off;
+                        if (!on_layout(raw_local.total_bases)) {
+                            if (!rdr.read_segments_of_last(raw_local)) { ++acc_read_error; continue; }
+                            if (!resolve_spot(raw_local, l1, o1, l2, o2)) {
+                                if (raw_local.total_bases < fast_min_bases) ++acc_layout_short; else ++acc_layout_unusable;
+                                continue;
+                            }
+                            ++acc_layout_resolved;
+                        }
+                        for (uint16_t j = 0; j < l1; ++j)
+                            r1[j] = nuc::ascii_to_num(raw_local.read[o1 + j]);
+                        for (uint16_t j = 0; j < l2; ++j)
+                            r2[j] = nuc::ascii_to_num(raw_local.read[o2 + j]);
+                        const uint8_t* q1 = need_qual ? raw_local.qual + o1 : nullptr;
+                        const uint8_t* q2 = need_qual ? raw_local.qual + o2 : nullptr;
+                        batch.add(r1.data(), l1, r2.data(), l2, q1, q2);
                     }
                 };
 
@@ -1927,9 +1989,10 @@ class SraEncoder {
                         for (uint32_t i = 0; i < b.reads.size(); ++i) {
                             const uint8_t *r1s, *r2s, *r1q, *r2q;
                             b.get(i, r1s, r2s, r1q, r2q);
-                            prof.vdb_bytes += (fast_r1l + fast_r2l) * 2;
-                            writer.add_read(r2s, fast_r2l, r2q,
-                                            r1s, fast_r1l, r1q);
+                            const uint16_t bl1 = b.reads[i].r1_len, bl2 = b.reads[i].r2_len;
+                            prof.vdb_bytes += (bl1 + bl2) * 2;
+                            writer.add_read(r2s, bl2, r2q,
+                                            r1s, bl1, r1q);
                             ++count;
                             if (cfg.max_reads > 0 && count >= cfg.max_reads) break;
                         }
@@ -1954,25 +2017,32 @@ class SraEncoder {
                 // Serial fast VDB path
                 while (!reader.done()) {
                     if (cfg.max_reads > 0 && count >= cfg.max_reads) break;
-                    if (!reader.read_next_spot_fast(raw)) continue;
-                    if (raw.total_bases < fast_min_bases) continue;
+                    if (!reader.read_next_spot_fast(raw)) { ++acc_read_error; continue; }
+                    uint16_t l1 = fast_r1l, l2 = fast_r2l;
+                    int32_t o1 = fast_r1_off, o2 = fast_r2_off;
+                    if (!on_layout(raw.total_bases)) {
+                        if (!reader.read_segments_of_last(raw)) { ++acc_read_error; continue; }
+                        if (!resolve_spot(raw, l1, o1, l2, o2)) {
+                            if (raw.total_bases < fast_min_bases) ++acc_layout_short; else ++acc_layout_unusable;
+                            continue;
+                        }
+                        ++acc_layout_resolved;
+                    }
 
-                    ascii_to_numeric(raw.read + fast_r1_off, fast_r1l,
-                                     r1_buf_);
-                    ascii_to_numeric(raw.read + fast_r2_off, fast_r2l,
-                                     r2_buf_);
+                    ascii_to_numeric(raw.read + o1, l1, r1_buf_);
+                    ascii_to_numeric(raw.read + o2, l2, r2_buf_);
 
                     const uint8_t* r1q = nullptr;
                     const uint8_t* r2q = nullptr;
                     if (need_qual) {
-                        r1q = raw.qual + fast_r1_off;
-                        r2q = raw.qual + fast_r2_off;
+                        r1q = raw.qual + o1;
+                        r2q = raw.qual + o2;
                     }
-                    prof.vdb_bytes += (fast_r1l + fast_r2l) * 2;
+                    prof.vdb_bytes += (l1 + l2) * 2;
 
                     writer.add_read(
-                        r2_buf_.data(), fast_r2l, r2q,
-                        r1_buf_.data(), fast_r1l, r1q);
+                        r2_buf_.data(), l2, r2q,
+                        r1_buf_.data(), l1, r1q);
 
                     ++count;
                     if (cfg.progress_cb &&
@@ -2063,7 +2133,7 @@ class SraEncoder {
             // ── Regular generic path ──
             while (!reader.done()) {
                 if (cfg.max_reads > 0 && count >= cfg.max_reads) break;
-                if (!reader.read_next_spot(raw)) continue;
+                if (!reader.read_next_spot(raw)) { ++acc_read_error; continue; }
 
                 uint16_t r1l = 0, r2l = 0;
                 int32_t r1_off = 0, r2_off = 0;
@@ -2152,16 +2222,18 @@ class SraEncoder {
                     r1l = static_cast<uint16_t>(raw.seg_len[0]);
                     r1_off = raw.seg_start[0];
                 } else {
+                    ++acc_generic_skip;
                     continue;
                 }
 
-                if (r1l == 0) continue;
+                if (r1l == 0) { ++acc_generic_skip; continue; }
 
                 // Filter zero-R2 reads when median probe R2 was non-zero
                 // (variable-length R2 with stray empty gaps in VDB delivery).
                 // Prevents sparsely-empty R2 reads from entering the .1fq,
                 // which would reduce cell-calling quality downstream.
                 if (r2l == 0 && wcfg.r2_length == 0 && median_probe_r2 > 0) {
+                    ++acc_zero_r2;
                     continue;
                 }
 
@@ -2298,6 +2370,29 @@ class SraEncoder {
         if (writer.parse_bc1_merged() > 0)
             std::fprintf(stderr, "[1fq-encode] Parse round 1: %llu of %llu reads moved from a random-hexamer to the oligo-dT barcode of the same well\n",
                          static_cast<unsigned long long>(writer.parse_bc1_merged()), static_cast<unsigned long long>(count));
+        // Spot accounting (1.4.9): spots in = written + named discards (+ the rows a --max-reads cap left unread). Goes to
+        // stderr and <output>.accounting.json, outside the .1fq so its bytes stay the same.
+        {
+            const unsigned long long a_in = total_spots, a_written = count, a_rerr = acc_read_error.load(),
+                a_short = acc_layout_short.load(), a_unus = acc_layout_unusable.load(), a_res = acc_layout_resolved.load(),
+                a_gen = acc_generic_skip, a_z2 = acc_zero_r2;
+            const unsigned long long a_disc = a_rerr + a_short + a_unus + a_gen + a_z2;
+            const bool capped = cfg.max_reads > 0 && count >= cfg.max_reads;
+            const unsigned long long a_cap = capped && a_in > a_written + a_disc ? a_in - a_written - a_disc : 0;
+            const long long a_unacc = static_cast<long long>(a_in) - static_cast<long long>(a_written + a_disc + a_cap);
+            std::fprintf(stderr, "[1fq-encode] accounting: spots_in=%llu written=%llu read_error=%llu layout_short=%llu "
+                                 "layout_unusable=%llu generic_unusable=%llu zero_r2=%llu max_reads_unread=%llu unaccounted=%lld "
+                                 "(off-layout spots resolved: %llu; layout %s)\n",
+                         a_in, a_written, a_rerr, a_short, a_unus, a_gen, a_z2, a_cap, a_unacc, a_res, layout_mixed ? "mixed" : "single");
+            if (FILE* af = std::fopen((cfg.output_path + ".accounting.json").c_str(), "w")) {
+                std::fprintf(af, "{\"spots_in\": %llu, \"written\": %llu, \"discards\": {\"read_error\": %llu, \"layout_short\": %llu, "
+                                 "\"layout_unusable\": %llu, \"generic_unusable\": %llu, \"zero_r2\": %llu}, \"max_reads_unread\": %llu, "
+                                 "\"unaccounted\": %lld, \"off_layout_resolved\": %llu, \"layout\": \"%s\", \"split_row\": %s}\n",
+                             a_in, a_written, a_rerr, a_short, a_unus, a_gen, a_z2, a_cap, a_unacc, a_res,
+                             layout_mixed ? "mixed" : "single", split_row_format ? "true" : "false");
+                std::fclose(af);
+            }
+        }
         // B-G2-1: persist swap flag in Header::reserved[1] so downstream processing
         // can verify that R1↔R2 orientation was corrected during encoding.
         // All three swap paths must be covered:
