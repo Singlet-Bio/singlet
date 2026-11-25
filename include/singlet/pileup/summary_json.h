@@ -52,6 +52,11 @@ struct PipelineSummary {
     double   exonic_fraction = 0.0;
     double   intronic_fraction = 0.0;
     double   intergenic_fraction = 0.0;
+    // Strand evidence (v1.4.8): share of strand-informative nuclear exonic reads in the 10x 3' orientation (cDNA read sense to the
+    // gene), whatever orientation was counted, and the reads it rests on. A 3' library sits near 0.9, a 5' library near 0.1 (campaign
+    // strand test, 2026-11-25); -1 when no read was informative.
+    double   strand_sense_fraction_3p = -1.0;
+    uint64_t strand_informative_reads = 0;
 
     // Cell metrics
     uint64_t estimated_cells = 0;
@@ -220,6 +225,8 @@ inline bool write_summary_json(const PipelineSummary& s, const std::string& file
     f << "  \"exonic_fraction\": "      << jd(s.exonic_fraction)     << ",\n";
     f << "  \"intronic_fraction\": "    << jd(s.intronic_fraction)   << ",\n";
     f << "  \"intergenic_fraction\": "  << jd(s.intergenic_fraction) << ",\n";
+    f << "  \"strand_sense_fraction_3p\": " << jd(s.strand_sense_fraction_3p) << ",\n";
+    f << "  \"strand_informative_reads\": " << s.strand_informative_reads << ",\n";
     f << "  \"estimated_cells\": "      << s.estimated_cells        << ",\n";
     f << "  \"median_umis_per_cell\": " << jd(s.median_umis_per_cell)   << ",\n";
     f << "  \"mean_reads_per_cell\": "  << jd(s.mean_reads_per_cell)    << ",\n";
