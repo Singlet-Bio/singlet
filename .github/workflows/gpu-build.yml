@@ -37,7 +37,7 @@ jobs:
         run: |
           export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig LD_LIBRARY_PATH=$CONDA_PREFIX/lib
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSINGLET_BUILD_PIPELINE=ON -DSINGLET_ENGINE_GPU=ON \
-                -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_CUDA_ARCHITECTURES=90
+                -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_CUDA_ARCHITECTURES=90 -DSINGLET_GIT_COMMIT=${{ github.sha }}
 
       - name: Build singlet with the GPU engine
         run: |
