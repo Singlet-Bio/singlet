@@ -3316,6 +3316,16 @@ static bool mapDistinctBody(const Params& P, const GenomeView& H, uint64_t saByt
             out.seq.reserve(recS + sAll.load()); out.seqOff.reserve(recR + nRep + 1); out.blobOff.reserve(recR + nRep + 1);
             out.blob.reserve(recB + nRep * bpr + nRep / 4 * bpr + (64u << 20));
             if (e2e) { recSrc.reserve(recR + nRep); recRead.reserve(recR + nRep); }
+            // reclaim (SINGLET_ENGINE_GPU_REC_PREFAULT, default on): the reserved records arrays are populated by PF's threads now, while the device
+            // still maps the later chunks. On a job near its memory limit each first touch of these pages reclaims cache, and the copies of the last
+            // chunks (which the lanes wait for, records.wait) ran at ~50 MB/s holding the card. MADV_POPULATE_WRITE maps pages without writing them,
+            // so it runs beside the copies and the bytes are the same. =0: the copies fault their pages in as before
+            if (const char* pe = std::getenv("SINGLET_ENGINE_GPU_REC_PREFAULT"); !(pe && pe[0] == '0')) {
+                auto pre = [&](auto& v) { using T = typename std::decay_t<decltype(v)>::value_type;
+                                          if (v.capacity() > v.size()) PF.add((uint8_t*) (v.data() + v.size()), (u64) (v.capacity() - v.size()) * sizeof(T)); };
+                pre(out.blob); pre(out.seq); pre(out.seqOff); pre(out.blobOff);
+                if (e2e) { pre(recSrc); pre(recRead); }
+            }
             const double tP0 = now();
             {   // readRecord's first half (it depends on the dedup and rep's order only)
                 singlet_engine_gpu::NoInitVector<uint32_t> posOf(n);
