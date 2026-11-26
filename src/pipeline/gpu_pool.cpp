@@ -1314,6 +1314,11 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         if (pkReadOthers().pools == 0) unlink((gateDir + "/baseline").c_str());   // no other pool: a baseline left by an earlier run in this job is not trusted
         pkPublish(0, 0);
     }
+    // heartbeat (SINGLET_POOL_HEARTBEAT_S, default 30, 0 = off): each item's phase (main thread name, +star while its STAR child lives),
+    // wall, CPU share over the interval and RSS of its process group, one pool-log line per period, for the campaign's telemetry.
+    const double hbPeriod = env_num("SINGLET_POOL_HEARTBEAT_S", 30);
+    double hbLast = 0;
+    std::map<int, double> hbCpu;
     double memWaitSince = 0, memWaitedTotal = 0;
     bool memWaitNoted = false;
     unsigned memWaits = 0;
@@ -1461,6 +1466,41 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             std::vector<std::string> drop{items[r.idx].fq};   // h100fill: every run of a multi-run sample (the first alone left the others' pages cached)
             if (inactiveShare > 0) for (const std::string& p : itemInputs[r.idx]) if (p != drop[0]) drop.push_back(p);
             for (const std::string& p : drop) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } }
+        }
+        if (hbPeriod > 0 && !byPid.empty() && wall_now() - hbLast >= hbPeriod) {   // heartbeat: one line, every item in flight with its phase
+            const double tnow = wall_now(), dt = hbLast > 0 ? tnow - hbLast : 0;
+            hbLast = tnow;
+            std::map<int, double> cpuNow, rssNow; std::map<int, std::string> phase; std::map<int, bool> star;
+            const long hz = sysconf(_SC_CLK_TCK);
+            if (DIR* d = opendir("/proc")) {
+                while (struct dirent* e = readdir(d)) {
+                    if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+                    std::ifstream f(std::string("/proc/") + e->d_name + "/stat"); std::string st; std::getline(f, st);
+                    const size_t a = st.find('('), b = st.rfind(')');
+                    if (a == std::string::npos || b == std::string::npos) continue;
+                    std::istringstream rest(st.substr(b + 2)); std::vector<std::string> fl; std::string x;
+                    while (rest >> x) fl.push_back(x);
+                    if (fl.size() < 22) continue;
+                    const int pg = std::atoi(fl[2].c_str()), pid = std::atoi(e->d_name);
+                    if (byPid.find(pg) == byPid.end()) continue;   // items lead their own process group
+                    cpuNow[pg] += (std::atof(fl[11].c_str()) + std::atof(fl[12].c_str())) / hz;
+                    rssNow[pg] += std::atof(fl[21].c_str()) * 4096.0 / 1073741824.0;
+                    const std::string comm = st.substr(a + 1, b - a - 1);
+                    if (pid == pg) phase[pg] = comm;
+                    if (comm == "star-main") star[pg] = true;
+                }
+                closedir(d);
+            }
+            std::string line;
+            for (auto& kv : byPid) {
+                const Run& r = runs[kv.second];
+                const double c = cpuNow[kv.first], pc = hbCpu.count(kv.first) ? hbCpu[kv.first] : c;
+                hbCpu[kv.first] = c;
+                line += fmt("%sitem %d %s%s wall %.0f s cpu %.0f%% rss %.1f GB", line.empty() ? "" : "; ", r.idx,
+                            phase.count(kv.first) ? phase[kv.first].c_str() : "?", star[kv.first] ? "+star" : "", tnow - r.t0,
+                            dt > 0 ? 100.0 * (c - pc) / dt : 0.0, rssNow[kv.first]);
+            }
+            plog("heartbeat: %zu in flight, %zu queued: %s", byPid.size(), items.size() - next, line.c_str());
         }
         if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); if (peakMode) pkSampleWrite(); }
         if (timeout > 0) {
