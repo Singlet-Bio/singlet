@@ -2,6 +2,14 @@
 
 All notable changes to the singlet project.
 
+## [1.4.9] — H100 fill: the pool's memory gate counts cold page cache
+
+**gpu-pool admission.** The host-memory gate now counts free memory as the smaller of the node and the job cgroup, each as
+free pages plus 0.9 of the clean inactive file cache plus the cache share of the active file cache, so a node whose memory is
+mostly cold page cache no longer holds samples back. The job term bounds admission by the job's own memory limit. The same rule
+applies in the peak-model gate (`SINGLET_POOL_PEAKADMIT=1`). Every run of a multi-run sample has its input page cache dropped
+after decode, not only the first. `SINGLET_POOL_INACTIVE_SHARE=0` restores the 1.4.8 gate. Sample outputs are unchanged.
+
 ## [1.4.8] â€” Parse WT v2, no silent read loss, strand fraction
 
 **Parse WT v2.** A Parse barcode read is no longer trimmed to 66 nt, which dropped barcode round 1 (bases 78-85) and left no
