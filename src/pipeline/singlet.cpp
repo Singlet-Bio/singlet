@@ -11013,11 +11013,14 @@ static int singlet_main(int argc, char* argv[]) {
         singlet::log_visium_summary(qc_summary);
         std::cerr << "[visium] Per-spot QC written: " << out_prefix << "/visium_qc.tsv\n";
 
-        // ── Spot coordinates and tissue detection from counts (visium_tissue.h) ──
-        // Every column barcode is matched to the slide's spot list (exact, else unique Hamming-1). Tissue spots are
-        // detected from spot UMIs with spatial smoothing; the called set of a Visium sample is its tissue spots (the
-        // EmptyDrops call above is meaningless for spots). Outputs: spatial_positions.tsv (one row per column),
-        // spatial_summary.json (QC with thresholds), cell_calls.tsv rewritten with call_method visium_tissue.
+        // ── Spot coordinates, called spots and tissue estimate (visium_tissue.h) ──
+        // Every column barcode is matched to the slide's spot list (exact, else unique Hamming-1). The called set is the
+        // primary column of every measured spot: the authors' in_tissue spots when their Space Ranger positions file is
+        // given, else every slide spot with >= --visium-min-umi UMIs (default 100). Tissue is also estimated from spot UMIs
+        // with spatial smoothing (in_tissue_count, tissue_prob) so users can filter; it no longer sets the called set,
+        // because without the H&E image it splits slides that are all tissue. The EmptyDrops call above is meaningless for
+        // spots. Outputs: spatial_positions.tsv (one row per column), spatial_summary.json (QC with thresholds),
+        // cell_calls.tsv rewritten with call_method visium_spaceranger or visium_min_umis.
         if (visium_coordinates_path.empty()) {
             char exe_buf[PATH_MAX];
             ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
@@ -11051,9 +11054,28 @@ static int singlet_main(int argc, char* argv[]) {
                 if (primary[sp] < 0 || spot_umis[i] > spot_umis[static_cast<size_t>(primary[sp])]) primary[sp] = static_cast<int64_t>(i);
             }
             auto tc = singlet::detect_tissue(slide, umis_per_spot);
+            // Authors' tissue flag per slide spot (-1 = not in their positions file).
+            std::vector<int8_t> sr_flag(ns, -1);
+            uint32_t sr_listed = 0, sr_in = 0;
+            if (positions_loaded)
+                for (size_t u = 0; u < ns; ++u) {
+                    const auto* c = spatial_parser.get_coordinate(slide.barcode[u] + "-1");
+                    if (!c) c = spatial_parser.get_coordinate(slide.barcode[u]);
+                    if (!c) continue;
+                    sr_flag[u] = c->in_tissue ? 1 : 0;
+                    ++sr_listed;
+                    sr_in += c->in_tissue != 0;
+                }
+            const bool use_sr = sr_listed > 0 && sr_in > 0;
+            const char* call_method = use_sr ? "visium_spaceranger" : "visium_min_umis";
+            std::vector<uint8_t> spot_called(ns, 0), in_tissue(ns, 0);
+            for (size_t u = 0; u < ns; ++u) {
+                spot_called[u] = use_sr ? uint8_t(sr_flag[u] == 1) : uint8_t(umis_per_spot[u] >= visium_min_umi);
+                in_tissue[u] = use_sr ? uint8_t(sr_flag[u] == 1) : uint8_t(tc.in_tissue[u] ? 1 : 0);
+            }
             {
                 std::ofstream sp(out_prefix + "/spatial_positions.tsv");
-                sp << "barcode\tspot\tarray_row\tarray_col\tin_tissue\ttissue_prob\tprimary\tumis";
+                sp << "barcode\tspot\tarray_row\tarray_col\tin_tissue\ttissue_prob\tprimary\tumis\tin_tissue_count\tcalled";
                 if (positions_loaded) sp << "\tin_tissue_spaceranger\tpxl_row_in_fullres\tpxl_col_in_fullres";
                 sp << "\n";
                 for (size_t i = 0; i < barcodes.size(); ++i) {
@@ -11062,11 +11084,17 @@ static int singlet_main(int argc, char* argv[]) {
                     if (k >= 0) {
                         const size_t u = static_cast<size_t>(k);
                         sp << slide.barcode[u] << '\t' << slide.row[u] << '\t' << slide.col[u] << '\t'
-                           << int(tc.in_tissue[u]) << '\t' << tc.prob[u] << '\t' << int(primary[u] == int64_t(i));
+                           << int(in_tissue[u]) << '\t' << tc.prob[u] << '\t' << int(primary[u] == int64_t(i));
                     } else {
                         sp << "\tNA\tNA\t0\t0\t0";
                     }
                     sp << '\t' << spot_umis[i];
+                    if (k >= 0) {
+                        const size_t u = static_cast<size_t>(k);
+                        sp << '\t' << int(tc.in_tissue[u]) << '\t' << int(spot_called[u] && primary[u] == int64_t(i));
+                    } else {
+                        sp << "\t0\t0";
+                    }
                     if (positions_loaded) {
                         const auto* c = spatial_parser.get_coordinate(barcodes[i]);
                         if (!c) c = spatial_parser.get_coordinate(barcodes[i] + "-1");
@@ -11076,21 +11104,22 @@ static int singlet_main(int argc, char* argv[]) {
                     sp << '\n';
                 }
             }
-            // Called set = primary column of each tissue spot.
+            // Called set = primary column of each called spot; tissue statistics over the tissue spots (in_tissue).
             std::unordered_set<std::string> called;
             std::vector<double> tissue_umis, tissue_genes;
             uint64_t umi_tissue = 0;
             for (size_t u = 0; u < ns; ++u) {
-                if (!tc.in_tissue[u]) continue;
+                if (spot_called[u] && primary[u] >= 0) called.insert(barcodes[static_cast<size_t>(primary[u])]);
+                if (!in_tissue[u]) continue;
                 umi_tissue += umis_per_spot[u];
                 if (primary[u] >= 0) {
-                    called.insert(barcodes[static_cast<size_t>(primary[u])]);
                     tissue_umis.push_back(static_cast<double>(spot_umis[static_cast<size_t>(primary[u])]));
                     tissue_genes.push_back(static_cast<double>(spot_genes[static_cast<size_t>(primary[u])]));
                 }
             }
+            const uint32_t n_tissue = static_cast<uint32_t>(std::count(in_tissue.begin(), in_tissue.end(), uint8_t(1)));
             {
-                // Rewrite cell_calls.tsv: is_cell / called / called_v2 = tissue spot, call_method = visium_tissue.
+                // Rewrite cell_calls.tsv: is_cell / called / called_v2 = called spot, call_method as chosen above.
                 const std::string cc = out_prefix + "/cell_calls.tsv";
                 std::ifstream in(cc);
                 std::string line, outbuf;
@@ -11106,7 +11135,7 @@ static int singlet_main(int argc, char* argv[]) {
                             if (h[k] == "is_cell") f[k] = c ? "TRUE" : "FALSE";
                             else if (h[k] == "called" || h[k] == "called_v2") f[k] = c ? "1" : "0";
                             else if (h[k] == "called_lowrna") f[k] = "0";
-                            else if (h[k] == "call_method") f[k] = "visium_tissue";
+                            else if (h[k] == "call_method") f[k] = call_method;
                         }
                         for (size_t k = 0; k < f.size(); ++k) outbuf += (k ? "\t" : "") + f[k];
                         outbuf += "\n";
@@ -11114,14 +11143,14 @@ static int singlet_main(int argc, char* argv[]) {
                     in.close();
                     std::ofstream(cc) << outbuf;
                 }
-                // The editing tables were summarized at export time over the call made then; a Visium run's called set is the tissue
+                // The editing tables were summarized at export time over the call made then; a Visium run's called set is the called
                 // spots, so editing_sites, editing_cells and editing_summary are recomputed over it (they must agree with cell_calls.tsv).
                 {
                     std::string ee;
                     if (!singlet::editing::resummarize(out_prefix, config.edit_path, engine_ptr ? engine_ptr->n_edit_sites() : 0u, called, &ee))
-                        std::cerr << "[editing] ERROR: tables not recomputed over the tissue spots: " << ee << "\n";
+                        std::cerr << "[editing] ERROR: tables not recomputed over the called spots: " << ee << "\n";
                     else if (!config.edit_path.empty())
-                        std::cerr << "[editing] tables recomputed over the " << called.size() << " tissue spots\n";
+                        std::cerr << "[editing] tables recomputed over the " << called.size() << " called spots\n";
                 }
             }
             auto med = [](std::vector<double> v) {
@@ -11132,31 +11161,31 @@ static int singlet_main(int argc, char* argv[]) {
             const double frac_on_slide = umi_all ? double(umi_matched) / umi_all : 0;
             const double frac_in_tissue = umi_all ? double(umi_tissue) / umi_all : 0;
             const double med_umi = med(tissue_umis), med_genes = med(tissue_genes);
-            uint32_t sr_agree = 0, sr_n = 0, sr_tissue = 0, both = 0;
-            if (positions_loaded)
-                for (size_t u = 0; u < ns; ++u) {
-                    const auto* c = spatial_parser.get_coordinate(slide.barcode[u] + "-1");
-                    if (!c) c = spatial_parser.get_coordinate(slide.barcode[u]);
-                    if (!c) continue;
-                    ++sr_n;
-                    sr_tissue += c->in_tissue;
-                    both += c->in_tissue && tc.in_tissue[u];
-                    sr_agree += (c->in_tissue != 0) == (tc.in_tissue[u] != 0);
-                }
+            uint32_t sr_agree = 0, sr_n = 0, sr_tissue = 0, both = 0;   // authors' in_tissue vs the count estimate
+            for (size_t u = 0; u < ns; ++u) {
+                if (sr_flag[u] < 0) continue;
+                ++sr_n;
+                sr_tissue += static_cast<uint32_t>(sr_flag[u]);
+                both += sr_flag[u] && tc.in_tissue[u];
+                sr_agree += (sr_flag[u] != 0) == (tc.in_tissue[u] != 0);
+            }
             struct Rule { const char* name; double v, thr; bool ge; };
             std::vector<Rule> rules = {
                 {"fraction_umis_on_slide_spots", frac_on_slide, 0.80, true},
-                {"tissue_spots", double(tc.n_tissue), 50, true},
+                {"tissue_spots", double(n_tissue), 50, true},
                 {"fraction_umis_in_tissue", frac_in_tissue, 0.50, true},
                 {"median_umis_per_tissue_spot", med_umi, 500, true},
-                {"tissue_background_separated", tc.separated ? 1.0 : 0.0, 1, true},
             };
+            if (!use_sr) rules.push_back({"tissue_background_separated", tc.separated ? 1.0 : 0.0, 1, true});
             bool pass = true;
             std::ofstream js(out_prefix + "/spatial_summary.json");
             js << "{\n  \"schema\": \"singlet-spatial-summary/1\",\n  \"slide_spots\": " << ns
                << ",\n  \"slide_list\": \"" << visium_coordinates_path << "\",\n  \"columns\": " << barcodes.size()
                << ",\n  \"spots_with_reads\": " << std::count_if(primary.begin(), primary.end(), [](int64_t v) { return v >= 0; })
-               << ",\n  \"tissue_spots\": " << tc.n_tissue << ",\n  \"tissue_method\": \"count-mixture-hex-smoothing-v1\""
+               << ",\n  \"called_spots\": " << called.size() << ",\n  \"call_method\": \"" << call_method << "\""
+               << ",\n  \"min_umis\": " << visium_min_umi << ",\n  \"tissue_spots\": " << n_tissue
+               << ",\n  \"tissue_method\": \"" << (use_sr ? "spaceranger-in-tissue" : "count-mixture-hex-smoothing-v1") << "\""
+               << ",\n  \"tissue_spots_count\": " << tc.n_tissue
                << ",\n  \"mixture\": {\"mean_log10_low\": " << tc.mean_low << ", \"mean_log10_high\": " << tc.mean_high
                << ", \"sd_low\": " << tc.sd_low << ", \"sd_high\": " << tc.sd_high << ", \"weight_high\": " << tc.weight_high
                << "},\n  \"median_genes_per_tissue_spot\": " << med_genes;
@@ -11172,7 +11201,8 @@ static int singlet_main(int argc, char* argv[]) {
                    << (r.ge ? ">=" : "<=") << "\", \"pass\": " << (ok ? "true" : "false") << "},\n";
             }
             js << "    \"pass\": " << (pass ? "true" : "false") << "\n  }\n}\n";
-            std::cerr << "[visium] tissue spots " << tc.n_tissue << " of " << ns << " (UMIs on slide "
+            std::cerr << "[visium] called spots " << called.size() << " (" << call_method << "), tissue spots " << n_tissue
+                      << " (count estimate " << tc.n_tissue << ") of " << ns << " (UMIs on slide "
                       << frac_on_slide << ", in tissue " << frac_in_tissue << "); QC " << (pass ? "PASS" : "FAIL") << "\n";
         }
     }

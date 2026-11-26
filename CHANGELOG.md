@@ -2,6 +2,19 @@
 
 All notable changes to the singlet project.
 
+## [1.4.10] — Visium calls every measured spot
+
+**Visium called set.** A Visium sample's called spots no longer come from the count-based tissue estimate. That estimate
+splits a slide in two when the whole capture area is tissue (GSM6210840: authors 4,992 spots, singlet 2,023). The called
+set is now the authors' `in_tissue` spots when their Space Ranger positions file is given, else every slide spot with at
+least `--visium-min-umi` UMIs (default 100). Recall of author spots is at least 0.98 on all six Visium samples with author
+matrices. The count estimate stays as `in_tissue_count` and `tissue_prob` in `spatial_positions.tsv`, which also gains a
+`called` column; `in_tissue` is the authors' flag when given, else the count estimate. `call_method` is
+`visium_spaceranger` or `visium_min_umis`, and `spatial_summary.json` gains `called_spots`, `call_method`, `min_umis` and
+`tissue_spots_count`.
+
+Non-Visium outputs are byte-identical to 1.4.8. (1.4.9 is the GPU pool memory gate on its own branch.)
+
 ## [1.4.8] — Parse WT v2, no silent read loss, strand fraction
 
 **Parse WT v2.** A Parse barcode read is no longer trimmed to 66 nt, which dropped barcode round 1 (bases 78-85) and left no
