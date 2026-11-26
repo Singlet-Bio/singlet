@@ -13,7 +13,20 @@ matrices. The count estimate stays as `in_tissue_count` and `tissue_prob` in `sp
 `visium_spaceranger` or `visium_min_umis`, and `spatial_summary.json` gains `called_spots`, `call_method`, `min_umis` and
 `tissue_spots_count`.
 
-Non-Visium outputs are byte-identical to 1.4.8. (1.4.9 is the GPU pool memory gate on its own branch.)
+Non-Visium outputs are byte-identical to 1.4.8 and 1.4.9.
+
+## [1.4.9] — H100 fill: the pool's memory gate counts cold page cache
+
+**gpu-pool admission.** The host-memory gate now counts free memory as the smaller of the node and the job cgroup, each as
+free pages plus 0.9 of the clean inactive file cache plus the cache share of the active file cache, so a node whose memory is
+mostly cold page cache no longer holds samples back. The job term bounds admission by the job's own memory limit. The same rule
+applies in the peak-model gate (`SINGLET_POOL_PEAKADMIT=1`). Every run of a multi-run sample has its input page cache dropped
+after decode, not only the first. `SINGLET_POOL_INACTIVE_SHARE=0` restores the 1.4.8 gate. Sample outputs are unchanged: through gpu-pool, 1.4.9 and
+1.4.8 gave identical outputs on pbmc2m, pbmc10m, pbmc1k_v3, pbmc1k_cite_v3, pbmc5p_v1, neuron1k_v3 and nuclei2k_v2.
+
+**Peak-model gate back-off.** `SINGLET_POOL_PEAKADMIT=1` admits on measured held peaks, so it packs a node closer to its
+limit. Unset it (the default gate above takes over) at the first sign of memory pressure: an `oom` or `oom_kill` increment
+in the job cgroup's `memory.events`, an item ending on signal 9 (exit 137), or node free memory under 10 GiB for over 60 s.
 
 ## [1.4.8] — Parse WT v2, no silent read loss, strand fraction
 

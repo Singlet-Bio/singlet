@@ -319,6 +319,34 @@ CgNow read_job_cgroup(const JobCg& j) {
     r.ok = true;
     return r;
 }
+// h100fill (SINGLET_POOL_INACTIVE_SHARE, default 0.9; 0 restores the old gate exactly): the memory gate's free figure counts the cold page cache
+// as free. The old figure, MemFree + SINGLET_POOL_CACHE_SHARE (0.25) x (Cached - Shmem), treats three quarters of every cached page as taken. On a
+// campaign node the cache is mostly the job's own inputs and outputs, read or written once and left on the inactive list, which the kernel reclaims
+// first and fast: 2026-11-25, h100x2 lane g052, job cgroup 683 of 730 GiB used of which 529 GiB inactive file pages and only 115 GiB anon + shmem,
+// MemFree 48 GiB; the gate saw 191 GB free and held items for up to 342 s while one card ran a single sample. New figure (GiB):
+//   node: MemFree + share x max(0, Inactive(file) - Dirty - Writeback) + SINGLET_POOL_CACHE_SHARE x Active(file)
+//   job (when the job cgroup has a limit): memory.max - memory.current + share x max(0, inactive_file - file_dirty - file_writeback) + CACHE_SHARE x active_file
+// and the gate takes the smaller of the two, so it is now also bounded by the job's own limit (T2-pooladmit.md loss A). Shmem lives on the anon lists,
+// so neither inactive figure contains it.
+struct FillFree { double node = 0, job = -1, inactive = 0, active = 0; double eff() const { return job >= 0 ? std::min(node, job) : node; } };
+FillFree fill_free_gb(double share, double activeShare, const JobCg& jc) {
+    FillFree r;
+    const double K = 1048576.0, G = 1073741824.0;
+    double mfree = 0, inact = 0, act = 0, dirty = 0, wb = 0, v = 0;
+    { std::ifstream mi("/proc/meminfo"); std::string k, u; while (mi >> k >> v >> u) { if (k == "MemFree:") mfree = v; else if (k == "Inactive(file):") inact = v; else if (k == "Active(file):") act = v; else if (k == "Dirty:") dirty = v; else if (k == "Writeback:") wb = v; } }
+    r.inactive = inact / K; r.active = act / K;
+    r.node = (mfree + share * std::max(0.0, inact - dirty - wb) + activeShare * act) / K;
+    if (jc.ok) {
+        std::ifstream cu(jc.dir + "/memory.current"), stf(jc.dir + "/memory.stat");
+        double cur = 0, sv = 0, ci = 0, ca = 0, cd = 0, cw = 0;
+        std::string sk;
+        if (cu >> cur) {
+            while (stf >> sk >> sv) { if (sk == "inactive_file") ci = sv; else if (sk == "active_file") ca = sv; else if (sk == "file_dirty") cd = sv; else if (sk == "file_writeback") cw = sv; }
+            r.job = (jc.lim - cur + share * std::max(0.0, ci - cd - cw) + activeShare * ca) / G;
+        }
+    }
+    return r;
+}
 // the first block's cDNA bases per read of a .1fq (the pipeline's head scan on block 0); cached per path
 struct FqBpr { double bpr = -1; std::string why; };
 FqBpr fq_first_block_bpr(const std::string& path) {
@@ -853,6 +881,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double itemGbEnv = env_num("SINGLET_POOL_ITEM_GB", 0), cacheShare = env_num("SINGLET_POOL_CACHE_SHARE", 0.25),
                  memReserve = env_num("SINGLET_POOL_MEM_RESERVE_GB", 40), maxWait = env_num("SINGLET_POOL_MEMADMIT_MAXWAIT_S", 1800);
     const bool dropInput = env_num("SINGLET_POOL_DROP_INPUT_CACHE", 1) != 0;
+    const double inactiveShare = env_num("SINGLET_POOL_INACTIVE_SHARE", 0.9);   // h100fill: see fill_free_gb; 0 = the old figure (MemFree + cache share x (Cached - Shmem)), no job term
+    const JobCg fillCg = inactiveShare > 0 ? find_job_cgroup() : JobCg();
+    if (memAdmit && inactiveShare > 0) {
+        const FillFree ff = fill_free_gb(inactiveShare, 0.25, fillCg);
+        plog("memory gate (h100fill): free = min(node, job) with inactive file pages at %.2f, active at the cache share; now node %.0f GiB (inactive file %.0f, active %.0f), job %s",
+             inactiveShare, ff.node, ff.inactive, ff.active, fillCg.ok ? (std::to_string((int) ff.job) + " GiB of a " + std::to_string((int) (fillCg.lim / 1073741824.0)) + " GiB limit").c_str() : "no limit");
+    }
     // rt/phaseadmit SINGLET_POOL_PHASE_ADMIT (default on, =0 restores the admission above exactly): an item whose all-site pass is joined (the "[allsite] async: waited" line;
     // the STAR child has exited, the planes and the hand-off pass are long gone) sits on a tail plateau that does not grow with depth: its charge drops from 40 % of its
     // estimate to min(that, SINGLET_POOL_TAIL_GB). Fitted on memsamp of mix4 817054 (anon+shmem of the item's process group, 10 s after the line): d2600 38, d1000 65,
@@ -865,6 +900,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
     std::vector<char> taken(items.size(), 0);
     std::vector<double> itemEst(items.size(), 0);
+    std::vector<std::vector<std::string>> itemInputs(items.size());   // h100fill: every input of the item (all runs), for the page-cache drop after decode
     auto chimMode = [](const Run& r) { return !r.pkChim ? poolpeak::Chim::None : r.pkChimShared ? poolpeak::Chim::Shared : poolpeak::Chim::Private; };
     std::vector<char> itemChimShared(items.size(), 0);   // T2 chimshare: the pool established that this --chimeric item's pass takes the pool's resident genome
     std::vector<char> itemPk(items.size(), 0), itemPkChim(items.size(), 0);   // cggate: the peak model applies to the item
@@ -894,6 +930,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             double r = 0;
             if (FILE* hf = fopen(p.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) r = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
             inList.emplace_back(p, r);
+            itemInputs[it.idx].push_back(p);
             if (r > 0) reads += r;
             else unheadedGb += stat(p.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0;
         }
@@ -949,7 +986,10 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         }
     if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
         std::vector<std::string> fqs;
-        for (const Item& it : items) if (std::find(fqs.begin(), fqs.end(), it.fq) == fqs.end()) fqs.push_back(it.fq);
+        for (const Item& it : items) {   // h100fill: every run of the item, not only the queue line's first file
+            if (std::find(fqs.begin(), fqs.end(), it.fq) == fqs.end()) fqs.push_back(it.fq);
+            if (inactiveShare > 0) for (const std::string& p : itemInputs[it.idx]) if (std::find(fqs.begin(), fqs.end(), p) == fqs.end()) fqs.push_back(p);
+        }
         std::thread([fqs]() { for (const std::string& p : fqs) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { fdatasync(fd); posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } } }).detach();
     }
     FILE* heldF = sampPeriod > 0 ? fopen((report + "/memsamp-held.tsv").c_str(), "a") : nullptr;   // t item held_new held_old(sum - shared once) nprocs m kept front
@@ -1046,6 +1086,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         double mfree = 0, cached = 0, shm = 0, v = 0;
         { std::ifstream mi("/proc/meminfo"); std::string k, u; while (mi >> k >> v >> u) { if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v; } }
         freeEff = (mfree + cacheShare * std::max(0.0, cached - shm)) / 1048576.0;
+        if (inactiveShare > 0) freeEff = fill_free_gb(inactiveShare, cacheShare, fillCg).eff();   // h100fill
         othRem = o.rem;
         othWait = (o.waitEst > 0 && wall_now() - o.waitSince > prioAfter && o.waitSince <= mySince) ? o.waitEst : 0;   // a waiting item of another pool that waited longer goes first
         proj = freeEff - gateOwnRem - o.rem - est - othWait;
@@ -1115,6 +1156,11 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         { std::ifstream mi("/proc/meminfo"); std::string k, u; while (mi >> k >> v >> u) { if (k == "MemFree:") mfree = v; else if (k == "Cached:") cached = v; else if (k == "Shmem:") shm = v; } }
         freeNode = (mfree + cacheShare * std::max(0.0, cached - shm)) / 1048576.0;
         freeJob = cg.ok ? cg.lim - cg.cur + cgShare * std::max(0.0, cg.file - cg.shmem) : freeNode;
+        if (inactiveShare > 0) {   // h100fill: the same cold-cache rule in the peak gate (node and job terms; the job term keeps its own cgroup)
+            const FillFree ff = fill_free_gb(inactiveShare, cacheShare, jobCg);
+            freeNode = ff.node;
+            if (cg.ok && ff.job >= 0) freeJob = ff.job;
+        }
     };
     // an item's figure now: the phase (before the "level" line, after it, after the "waited" line), then what the engine printed. Logs each change.
     auto pkFigure = [&](Run& r) -> double {
@@ -1412,8 +1458,9 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         }
         if (dropInput) for (Run& r : runs) if (r.decoded && !r.dropped) {   // the item read its input once: its page cache is of no use to it
             r.dropped = true;
-            const int fd = open(items[r.idx].fq.c_str(), O_RDONLY);
-            if (fd >= 0) { posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); }
+            std::vector<std::string> drop{items[r.idx].fq};   // h100fill: every run of a multi-run sample (the first alone left the others' pages cached)
+            if (inactiveShare > 0) for (const std::string& p : itemInputs[r.idx]) if (p != drop[0]) drop.push_back(p);
+            for (const std::string& p : drop) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } }
         }
         if (msf != nullptr && wall_now() - lastSample >= sampPeriod) { lastSample = wall_now(); memsample_write(msf, self, srvPid, byPid); if (peakMode) pkSampleWrite(); }
         if (timeout > 0) {
