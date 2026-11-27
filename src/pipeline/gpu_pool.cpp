@@ -44,10 +44,12 @@
 #include <poll.h>
 #include <sstream>
 #include <string>
+#include <ftw.h>
 #include <sys/file.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <thread>
@@ -73,6 +75,20 @@ double wall_now() {
 double env_num(const char* name, double dflt) {
     const char* e = std::getenv(name);
     return (e != nullptr && e[0] != 0) ? std::atof(e) : dflt;
+}
+// scratch (SINGLET_POOL_SCRATCHADMIT): the local disk an item's out/ holds (allocated blocks) and the free space of the filesystem under a path
+static thread_local unsigned long long g_duBytes = 0;
+static int du_cb(const char*, const struct stat* st, int type, struct FTW*) { if (type == FTW_F) g_duBytes += (unsigned long long) st->st_blocks * 512ull; return 0; }
+static double dir_gb(const std::string& p) { g_duBytes = 0; nftw(p.c_str(), du_cb, 16, FTW_PHYS | FTW_MOUNT); return g_duBytes / 1073741824.0; }
+static double fs_free_gb(std::string p) {   // the nearest existing directory (an item's out/ may not exist before it starts)
+    struct statvfs v{};
+    for (int k = 0; k < 64 && !p.empty(); ++k) {
+        if (statvfs(p.c_str(), &v) == 0) return (double) v.f_bavail * (double) v.f_frsize / 1073741824.0;
+        const size_t q = p.find_last_of('/', p.size() > 1 && p.back() == '/' ? p.size() - 2 : std::string::npos);
+        if (q == std::string::npos) break;
+        p = q == 0 ? "/" : p.substr(0, q);
+    }
+    return -1;
 }
 // GB the node (and this job's cgroup, when it has a limit) can still hand out without evicting anything but page cache
 double avail_gb() {
@@ -386,6 +402,7 @@ struct Run {
     bool front = true;   // rt/hostmem: in the front half (from the start until the engine's "[engine_gpu] level" line: the packed planes and aux are freed by then)
     bool plateau = false;   // rt/phaseadmit: the all-site pass has been joined ("[allsite] async: waited"): host memory is on its tail plateau and no longer grows with depth
     mutable double charge = 0;      // rt/phaseadmit: the charge (GB, whole item) last computed for this item, for the phase-drop log line
+    double disk = 0, diskPeak = 0, diskAt = 0;   // scratch: GB its out/ holds (last read, at diskAt) and the most seen
     bool decoded = false, dropped = false;   // rt/hostmem: the engine decoded the .1fq into the packed buffers (its page cache can go)
     // cggate (SINGLET_POOL_PEAKADMIT=1): the item's peak figure (GiB above the job's idle baseline) and what the engine printed
     bool pkChim = false;                        // the item's own argument list has --chimeric: the second pass' floor on every figure
@@ -824,6 +841,15 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         pid_line(pid, "c" + std::to_string(it.idx));
         plog("start item %d (slot %d, pid %d): %s -> %s", it.idx, r.slot, (int) pid, it.fq.c_str(), it.out.c_str());
     };
+    // scratch (SINGLET_POOL_SCRATCHADMIT=1; default 0: the disk is only measured and logged): the local disk under the items' out/ directories. A start waits while
+    // the filesystem's free space, less what the items in flight may still write (each item's need, SINGLET_POOL_SCRATCH_BASE_GB + SINGLET_POOL_SCRATCH_GB_PER_MPAIR
+    // x its M pairs, minus what its out/ holds now), cannot hold the next item's need plus SINGLET_POOL_SCRATCH_RESERVE_GB. With nothing in flight the item
+    // starts (the disk cannot get freer by waiting). Every item's scratch peak (out/ sampled every SINGLET_POOL_SCRATCH_SAMPLE_S) is logged at its end.
+    const bool scratchAdmit = env_num("SINGLET_POOL_SCRATCHADMIT", 0) != 0;
+    const double scratchPeriod = env_num("SINGLET_POOL_SCRATCH_SAMPLE_S", 30);
+    const bool scratchOn = scratchAdmit || scratchPeriod > 0;
+    const double scrBase = env_num("SINGLET_POOL_SCRATCH_BASE_GB", 5), scrPerMp = env_num("SINGLET_POOL_SCRATCH_GB_PER_MPAIR", 0.08),
+                 scrReserve = env_num("SINGLET_POOL_SCRATCH_RESERVE_GB", 50);
     auto finish = [&](pid_t pid, int st, const struct rusage& ru) {
         auto f = byPid.find(pid);
         if (f == byPid.end()) return;
@@ -857,9 +883,12 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                     sg ? fmt("\tCommand terminated by signal %d\n", sg).c_str() : "");
             fclose(tf);
         }
+        if (scratchOn) { const double g = dir_gb(it.out); if (g > r.diskPeak) r.diskPeak = g; }
         plog("end item %d (pid %d): %s, wall %.1f s, core-s %.1f, peak RSS %.1f GB, %.2f M pairs%s", r.idx, (int) pid,
              sg ? fmt("killed by signal %d (%s)", sg, strsignal(sg)).c_str() : fmt("exit %d", ex).c_str(), r.t1 - r.t0, us + ss,
              ru.ru_maxrss / 1048576.0, pairs / 1e6, r.killed ? " (timed out)" : "");
+        if (scratchOn) plog("item %d: scratch peak %.1f GB (out/ at the end %.1f GB; sampled every %.0f s), %.2f M pairs: %.3f GB per M pairs",
+                            r.idx, r.diskPeak, dir_gb(it.out), scratchPeriod, pairs / 1e6, pairs > 0 ? r.diskPeak / (pairs / 1e6) : 0.0);
     };
     double lastStartAt = 0, lastSample = 0, lastStartEst = 0;   // lastStartEst: the estimate (GB) of the item started last: the stagger is for items of 50 GB and more
     bool admitNoted = false;
@@ -900,6 +929,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     const double skipAhead = env_num("SINGLET_POOL_SKIP_AHEAD", 16), skipGrace = env_num("SINGLET_POOL_SKIP_GRACE_S", 900), prioAfter = skipAhead > 0 ? skipGrace : 0;
     std::vector<char> taken(items.size(), 0);
     std::vector<double> itemEst(items.size(), 0);
+    std::vector<double> itemMp(items.size(), 0);   // scratch: M pairs in the inputs' headers (0: unheaded)
     std::vector<std::vector<std::string>> itemInputs(items.size());   // h100fill: every input of the item (all runs), for the page-cache drop after decode
     auto chimMode = [](const Run& r) { return !r.pkChim ? poolpeak::Chim::None : r.pkChimShared ? poolpeak::Chim::Shared : poolpeak::Chim::Private; };
     std::vector<char> itemChimShared(items.size(), 0);   // T2 chimshare: the pool established that this --chimeric item's pass takes the pool's resident genome
@@ -934,6 +964,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             if (r > 0) reads += r;
             else unheadedGb += stat(p.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0;
         }
+        itemMp[it.idx] = reads / 1e6 + unheadedGb * 50.0;
         const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
         itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 + unheadedGb * 11.6 : unheadedGb * 11.6 + 43.6;
         if (ins.size() > 1) plog("item %d: %zu inputs, %.1f M pairs in their headers, estimate %.0f GB", it.idx, ins.size(), reads / 1e6, itemEst[it.idx]);
@@ -1320,6 +1351,8 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     double hbLast = 0;
     std::map<int, double> hbCpu;
     double memWaitSince = 0, memWaitedTotal = 0;
+    double scratchWaitSince = 0, scratchWaited = 0; unsigned scratchWaits = 0;
+    auto scrNeed = [&](int idx) { return scrBase + scrPerMp * itemMp[idx]; };
     bool memWaitNoted = false;
     unsigned memWaits = 0;
     while (next < items.size() || active > 0) {
@@ -1339,6 +1372,24 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             if (active > 0 && ((stagger > 0 && lastStartEst >= 100 && wall_now() - lastStartAt < stagger) || (memFloor > 0 && avail_gb() < memFloor) || (frontMax > 0 && front >= (size_t) frontMax))) {
                 if (!admitNoted) { plog("admission: the next item waits (%zu in the front half of at most %.0f, stagger %.0f s, memory floor %.0f GB, available %.0f GB)", front, frontMax, stagger, memFloor, avail_gb()); admitNoted = true; }
                 break;
+            }
+            if (scratchAdmit) {
+                const double freeG = fs_free_gb(items[next].out), needN = scrNeed(items[next].idx);
+                double owed = 0;
+                for (const Run& r : runs) if (r.pid > 0 && !r.done) owed += std::max(0.0, scrNeed(r.idx) - r.disk);
+                if (freeG >= 0 && active > 0 && freeG - owed - needN < scrReserve) {
+                    if (scratchWaitSince == 0) {
+                        scratchWaitSince = wall_now(); ++scratchWaits;
+                        plog("scratch admission: item %d waits (need %.0f GB for %.1f M pairs; free %.0f GB, the items in flight may still write %.0f GB, reserve %.0f GB)",
+                             items[next].idx, needN, itemMp[items[next].idx], freeG, owed, scrReserve);
+                    }
+                    break;
+                }
+                if (scratchWaitSince > 0) {
+                    scratchWaited += wall_now() - scratchWaitSince;
+                    plog("scratch admission: item %d admitted after %.0f s (free %.0f GB, owed %.0f GB, need %.0f GB)", items[next].idx, wall_now() - scratchWaitSince, freeG, owed, needN);
+                    scratchWaitSince = 0;
+                }
             }
             if (memAdmit && !peakMode) {
                 const double now = wall_now(), est = itemEst[items[next].idx];
@@ -1467,6 +1518,10 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             if (inactiveShare > 0) for (const std::string& p : itemInputs[r.idx]) if (p != drop[0]) drop.push_back(p);
             for (const std::string& p : drop) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } }
         }
+        if (scratchOn && scratchPeriod > 0) {   // scratch: each item's out/ (a few hundred files: cheap)
+            const double tnow = wall_now();
+            for (Run& r : runs) if (r.pid > 0 && !r.done && tnow - r.diskAt >= scratchPeriod) { r.disk = dir_gb(items[r.idx].out); r.diskAt = tnow; r.diskPeak = std::max(r.diskPeak, r.disk); }
+        }
         if (hbPeriod > 0 && !byPid.empty() && wall_now() - hbLast >= hbPeriod) {   // heartbeat: one line, every item in flight with its phase
             const double tnow = wall_now(), dt = hbLast > 0 ? tnow - hbLast : 0;
             hbLast = tnow;
@@ -1496,9 +1551,9 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
                 const Run& r = runs[kv.second];
                 const double c = cpuNow[kv.first], pc = hbCpu.count(kv.first) ? hbCpu[kv.first] : c;
                 hbCpu[kv.first] = c;
-                line += fmt("%sitem %d %s%s wall %.0f s cpu %.0f%% rss %.1f GB", line.empty() ? "" : "; ", r.idx,
+                line += fmt("%sitem %d %s%s wall %.0f s cpu %.0f%% rss %.1f GB disk %.1f GB", line.empty() ? "" : "; ", r.idx,
                             phase.count(kv.first) ? phase[kv.first].c_str() : "?", star[kv.first] ? "+star" : "", tnow - r.t0,
-                            dt > 0 ? 100.0 * (c - pc) / dt : 0.0, rssNow[kv.first]);
+                            dt > 0 ? 100.0 * (c - pc) / dt : 0.0, rssNow[kv.first], r.disk);
             }
             plog("heartbeat: %zu in flight, %zu queued: %s", byPid.size(), items.size() - next, line.c_str());
         }
@@ -1530,6 +1585,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
          items.size(), failed, span, pairsAll / 1e6, span > 0 ? pairsAll / 1e6 / span : 0.0, tReady - tStart);
     if (peakMode) plog("peak admission: model exceeded in %.0f s of the refreshes (largest excess %.1f GiB)", pkExcSecs, pkExcMax);
     if (memAdmit) { plog("memory admission: %u waits, %.0f s waited in all (SINGLET_POOL_MEMADMIT)", memWaits, memWaitedTotal); unlink(gateMine.c_str()); }
+    if (scratchAdmit) plog("scratch admission: %u waits, %.0f s waited in all (SINGLET_POOL_SCRATCHADMIT)", scratchWaits, scratchWaited);
     if (msf != nullptr) fclose(msf);
     if (msf2 != nullptr) fclose(msf2);
     fclose(stsv);
