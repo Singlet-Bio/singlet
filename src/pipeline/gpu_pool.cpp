@@ -42,6 +42,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <poll.h>
 #include <sstream>
 #include <string>
@@ -352,8 +353,12 @@ FillFree fill_free_gb(double share, double activeShare, const JobCg& jc) {
 struct FqBpr { double bpr = -1; std::string why; };
 FqBpr fq_first_block_bpr(const std::string& path) {
     static std::map<std::string, FqBpr> cache;
-    auto f = cache.find(path);
-    if (f != cache.end()) return f->second;
+    static std::mutex cacheMu;   // perf/wave-feed: the follow mode's prepare threads call this at once
+    {
+        std::lock_guard<std::mutex> g(cacheMu);
+        auto f = cache.find(path);
+        if (f != cache.end()) return f->second;
+    }
     FqBpr r;
     try {
         singlet::fq::RunSet rs;
@@ -368,7 +373,7 @@ FqBpr fq_first_block_bpr(const std::string& path) {
             if (h.n_out > 0 && h.bases_out > 0) r.bpr = (double) h.bases_out / (double) h.n_out; else r.why = "the first block has no reads for the mapper";
         }
     } catch (const std::exception& e) { r.why = std::string("the first block could not be read: ") + e.what(); }
-    cache[path] = r;
+    { std::lock_guard<std::mutex> g(cacheMu); cache[path] = r; }
     return r;
 }
 
