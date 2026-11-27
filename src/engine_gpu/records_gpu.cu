@@ -804,7 +804,19 @@ void* e2ePreRegister(const E2ERegion& R, int device, bool split) {
     cudaFree(0);
     PreReg* P = new PreReg;
     P->device = device;
+    // SINGLET_PREREG_TOUCH (default on; =0: the old order): this process's mapping of the region (a memfd the STAR child filled) is first
+    // read on several threads, so that cudaHostRegister does not fault its ~10 M tmpfs pages one by one on one thread (about 1.2 GB/s)
+    double tTouch = 0;
+    if (const char* pt = std::getenv("SINGLET_PREREG_TOUCH"); !(pt && pt[0] == '0')) {
+        const double a = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        e16Touch(R.base, std::min<u64>(R.cap, R.hdr()->used), false);
+        tTouch = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count() - a;
+    }
     P->pinned = P->RP.pin(R, *R.hdr(), split);
+    if (std::getenv("SINGLET_PREREG_LOG"))
+        fprintf(stderr, "[gpu_pileup] region pre-registration: %.1f GB, touch %.3f s, total %.3f s
+", (double) R.hdr()->used / 1073741824.0, tTouch,
+                std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count() - t0);
     P->sec = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count() - t0;
     return P;
 }
