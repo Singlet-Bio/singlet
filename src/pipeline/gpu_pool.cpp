@@ -41,6 +41,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <poll.h>
 #include <sstream>
 #include <string>
@@ -374,7 +375,9 @@ FqBpr fq_first_block_bpr(const std::string& path) {
 volatile sig_atomic_t g_stop = 0;
 void on_stop(int) { g_stop = 1; }
 
-struct Item { int idx = 0; std::string fq, out, genome; std::vector<std::string> extra; };
+struct Item { int idx = 0; std::string fq, out, genome; std::vector<std::string> extra; bool bad = false; };
+// perf/wave-feed: what the pool works out about an item before it can start (the old estimate, every input, the peak model's figure)
+struct Prep { double est = 0; std::vector<std::string> inputs; bool pk = false, pkChim = false, chimShared = false; double fig0 = 0, pkN = 0, pkBases = 0, pkP = 0; };
 struct Run {
     int idx = 0, slot = 0;
     pid_t pid = -1;
@@ -524,7 +527,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     int device = -1, slots = 2, workers = 8, threads = 7, preloadThreads = 8;
     double timeout = 0;
     std::string queue, args, report;
-    bool server = true, preload = true, sharedIdx = true;
+    bool server = true, preload = true, sharedIdx = true, followFlag = false;
     for (int i = 0; i < argc; ++i) {
         const std::string a = argv[i];
         auto val = [&]() -> std::string {
@@ -543,10 +546,12 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         else if (a == "--nonhost-server") server = val() != "off";
         else if (a == "--genome-preload") preload = val() != "off";
         else if (a == "--shared-index") sharedIdx = val() != "off";
+        else if (a == "--follow") followFlag = true;
         else if (a == "-h" || a == "--help") {
             std::cout << "singlet gpu-pool --device D --queue FILE [--slots 2] [--workers 8] [--threads 7] [--args \"<pipeline arguments>\"]\n"
                          "                 [--report DIR] [--nonhost-server on|off] [--genome-preload on|off] [--shared-index on|off]\n"
-                         "                 [--timeout S] [--preload-threads 8]\n"
+                         "                 [--timeout S] [--preload-threads 8] [--follow]\n"
+                         "--follow (or SINGLET_POOL_FOLLOW=1): keep reading the queue file for appended lines; `#END` closes it (or a file <queue>.stop, or SINGLET_POOL_FOLLOW_IDLE_S (1800) idle).\n"
                          "Queue lines: <sample.1fq> <out dir> [extra pipeline arguments]. docs/gpu-engine/fable/GPU-PATH.md, E21-pool.md.\n";
             return 0;
         } else { std::cerr << "gpu-pool: unknown option " << a << " (--help)\n"; return 2; }
@@ -556,29 +561,52 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
         return 2;
     }
     const std::vector<std::string> base = split_args(args);
+    const bool follow = followFlag || env_num("SINGLET_POOL_FOLLOW", 0) != 0;
     std::vector<Item> items;
-    {
-        std::ifstream q(queue);
-        if (!q) { std::cerr << "gpu-pool: cannot read the queue " << queue << "\n"; return 2; }
-        std::string line;
-        int ln = 0;
-        while (std::getline(q, line)) {
-            ++ln;
+    // The queue file is read from byte offset qOff on. Without --follow it is read once, whole (a last line without a newline counts). With --follow only complete
+    // lines are taken (the writer appends whole lines), a line `#END` closes the queue (qEnd), and a malformed appended line becomes a failed item so that the
+    // item numbers stay the queue's line order.
+    size_t qOff = 0;
+    int qLn = 0;
+    bool qEnd = false;
+    std::string qErr;
+    auto readQueue = [&](bool final, std::vector<Item>& out, size_t firstIdx) {
+        std::ifstream q(queue, std::ios::binary);
+        if (!q) { qErr = "cannot read the queue " + queue; return; }
+        q.seekg((std::streamoff) qOff);
+        const std::string text((std::istreambuf_iterator<char>(q)), std::istreambuf_iterator<char>());
+        size_t pos = 0;
+        while (pos < text.size() && !qEnd) {
+            size_t nl = text.find('\n', pos);
+            if (nl == std::string::npos) { if (!final) break; nl = text.size(); }
+            std::string line = text.substr(pos, nl - pos);
+            pos = std::min(text.size(), nl + 1);
+            ++qLn;
             const size_t h = line.find_first_not_of(" \t\r");
-            if (h == std::string::npos || line[h] == '#') continue;
+            if (h == std::string::npos) continue;
+            if (follow && line.compare(h, 4, "#END") == 0 && line.find_first_not_of(" \t\r", h + 4) == std::string::npos) { qEnd = true; break; }
+            if (line[h] == '#') continue;
             while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
             std::vector<std::string> w = split_args(line);
-            if (w.size() < 2) { std::cerr << "gpu-pool: queue line " << ln << ": needs <sample.1fq> <out dir>\n"; return 2; }
             Item it;
-            it.idx = (int) items.size();
+            it.idx = (int) (firstIdx + out.size());
+            if (w.size() < 2) {
+                qErr = "queue line " + std::to_string(qLn) + ": needs <sample.1fq> <out dir>";
+                it.bad = true;
+                out.push_back(it);
+                continue;
+            }
             it.fq = absolute(w[0]); it.out = absolute(w[1]);
             it.extra.assign(w.begin() + 2, w.end());
             std::vector<std::string> all = base;
             all.insert(all.end(), it.extra.begin(), it.extra.end());
             it.genome = arg_value(all, "--genome-dir");
-            items.push_back(it);
+            out.push_back(it);
         }
-    }
+        qOff += pos;
+    };
+    readQueue(!follow, items, 0);
+    if (!qErr.empty() && (qErr.rfind("cannot read", 0) == 0 || !follow)) { std::cerr << "gpu-pool: " << qErr << "\n"; return 2; }
     const pid_t self = getpid();
     if (report.empty()) report = "gpu-pool-d" + std::to_string(device) + "-" + std::to_string(self);
     mkdir_p(report);
@@ -905,7 +933,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     std::vector<char> itemChimShared(items.size(), 0);   // T2 chimshare: the pool established that this --chimeric item's pass takes the pool's resident genome
     std::vector<char> itemPk(items.size(), 0), itemPkChim(items.size(), 0);   // cggate: the peak model applies to the item
     std::vector<double> itemFig0(items.size(), 0), itemPkN(items.size(), 0), itemPkBases(items.size(), 0), itemPkP(items.size(), 0);
-    for (const Item& it : items) {
+    auto growTo = [&](size_t n) {
+        taken.resize(n, 0); itemEst.resize(n, 0); itemInputs.resize(n); itemChimShared.resize(n, 0); itemPk.resize(n, 0); itemPkChim.resize(n, 0);
+        itemFig0.resize(n, 0); itemPkN.resize(n, 0); itemPkBases.resize(n, 0); itemPkP.resize(n, 0); runs.resize(n);
+    };
+    auto prepOne = [&](const Item& it) -> Prep {
+        Prep pr;
+        if (it.bad) return pr;
         struct stat st{};
         // rt/hostmem2: the item's host peak (GB of its process group's RssAnon + RssShmem, minus the pool's genome that its STAR child maps), fitted on the 110 items
         // of mix3 816788 (peak of the per-item sum in memsamp.tsv against the reads in the .1fq header): peak = a + b x reads (M). Least squares gave
@@ -930,13 +964,13 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             double r = 0;
             if (FILE* hf = fopen(p.c_str(), "rb")) { unsigned char h[24]; if (fread(h, 1, 24, hf) == 24 && h[0] == '1' && h[1] == 'F' && h[2] == 'Q' && h[3] == 0) r = (double) (h[20] | (h[21] << 8) | (h[22] << 16) | ((unsigned) h[23] << 24)); fclose(hf); }
             inList.emplace_back(p, r);
-            itemInputs[it.idx].push_back(p);
+            pr.inputs.push_back(p);
             if (r > 0) reads += r;
             else unheadedGb += stat(p.c_str(), &st) == 0 ? (double) st.st_size / 1073741824.0 : 6.0;
         }
         const double estA = env_num("SINGLET_POOL_EST_BASE_GB", 61.8), estB = env_num("SINGLET_POOL_EST_GB_PER_MPAIR", 0.2235);
-        itemEst[it.idx] = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 + unheadedGb * 11.6 : unheadedGb * 11.6 + 43.6;
-        if (ins.size() > 1) plog("item %d: %zu inputs, %.1f M pairs in their headers, estimate %.0f GB", it.idx, ins.size(), reads / 1e6, itemEst[it.idx]);
+        pr.est = itemGbEnv > 0 ? itemGbEnv : reads > 0 ? estA + estB * reads / 1e6 + unheadedGb * 11.6 : unheadedGb * 11.6 + 43.6;
+        if (ins.size() > 1) plog("item %d: %zu inputs, %.1f M pairs in their headers, estimate %.0f GB", it.idx, ins.size(), reads / 1e6, pr.est);
         if (peakMode) {   // cggate: the item's figure from the peak model, or the old estimate with the reason
             std::string why;
             double bases = 0;
@@ -960,38 +994,108 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
             if (why.empty()) {
                 const double nM = reads / 1e6, bG = bases / 1e9, P = poolpeak::peakP(nM, bG, pkK);
-                { std::vector<std::string> allArgs = base; allArgs.insert(allArgs.end(), it.extra.begin(), it.extra.end()); itemPkChim[it.idx] = has_flag(allArgs, "--chimeric") ? 1 : 0;
+                { std::vector<std::string> allArgs = base; allArgs.insert(allArgs.end(), it.extra.begin(), it.extra.end()); pr.pkChim = has_flag(allArgs, "--chimeric");
                   // T2 chimshare: the pass shares the genome only when the item's preload is this pool's resident copy. The pool establishes that when: the switch is not 0, the preload is not off, the
                   // genome load is NoSharedMemory, no sjdb insertion or two-pass mode is requested, and the item's --genome-dir (device and inode) is a directory whose resident load succeeded.
                   // Anything else, and whenever it cannot tell: the pass is budgeted with its private index (chimGb). A --chimeric item that reaches its engine level line without printing
                   // "genome kept for the pass" is switched to chimGb from then on (pump).
                   const char* cse = std::getenv("SINGLET_CHIM_SHARE_GENOME");
                   struct stat gs{};
-                  bool sh = itemPkChim[it.idx] != 0 && !(cse && cse[0] == '0') && preload && !(gpe && gpe[0] == '0') && (gload.empty() || gload == "NoSharedMemory") && !it.genome.empty()
+                  bool sh = pr.pkChim && !(cse && cse[0] == '0') && preload && !(gpe && gpe[0] == '0') && (gload.empty() || gload == "NoSharedMemory") && !it.genome.empty()
                             && !has_flag(allArgs, "--sjdbGTFfile") && !has_flag(allArgs, "--sjdbFileChrStartEnd") && !has_flag(allArgs, "--twopassMode") && stat(it.genome.c_str(), &gs) == 0
                             && std::find(residentDirs.begin(), residentDirs.end(), std::make_pair(gs.st_dev, gs.st_ino)) != residentDirs.end();
-                  itemChimShared[it.idx] = sh ? 1 : 0; }   // the item's own arguments (pool --args and the queue line), not the environment
-                itemPk[it.idx] = 1; itemPkN[it.idx] = nM; itemPkBases[it.idx] = bG; itemPkP[it.idx] = P; itemFig0[it.idx] = poolpeak::phaseFigure(P, 0, pkK, itemPkChim[it.idx] == 0 ? poolpeak::Chim::None : itemChimShared[it.idx] ? poolpeak::Chim::Shared : poolpeak::Chim::Private);
-                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", itemFig0[it.idx], pkK.margin, itemPkChim[it.idx] ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + (itemChimShared[it.idx] ? pkK.chimSharedGb : pkK.chimGb)).c_str() : "", itemEst[it.idx]);
+                  pr.chimShared = sh; }   // the item's own arguments (pool --args and the queue line), not the environment
+                pr.pk = true; pr.pkN = nM; pr.pkBases = bG; pr.pkP = P; pr.fig0 = poolpeak::phaseFigure(P, 0, pkK, !pr.pkChim ? poolpeak::Chim::None : pr.chimShared ? poolpeak::Chim::Shared : poolpeak::Chim::Private);
+                plog("item %d: peak model: %.1f M reads, %.2f G bases, P %.1f GiB%s, figure %.1f GiB (margin %.0f%s); the old estimate is %.0f GB", it.idx, nM, bG, P, poolpeak::inZone(nM, pkK) ? " (zone of a possible fallback)" : "", pr.fig0, pkK.margin, pr.pkChim ? fmt(", --chimeric: floor 0.5 P + %.1f + margin", pkK.wtV + (pr.chimShared ? pkK.chimSharedGb : pkK.chimGb)).c_str() : "", pr.est);
             } else {
-                itemFig0[it.idx] = itemEst[it.idx];
-                plog("item %d: peak model not used (%s): the old estimate, %.0f GB, is the figure", it.idx, why.c_str(), itemEst[it.idx]);
+                pr.fig0 = pr.est;
+                plog("item %d: peak model not used (%s): the old estimate, %.0f GB, is the figure", it.idx, why.c_str(), pr.est);
             }
         }
-    }
-    if (peakMode)
-        for (size_t i = 0; i < items.size(); ++i) {
+        return pr;
+    };
+    auto commitPrep = [&](const Item& it, const Prep& pr) {
+        const size_t i = (size_t) it.idx;
+        if (it.bad) { taken[i] = 1; runs[i].done = true; ++failed; plog("item %d: the queue line is malformed: counted as failed", it.idx); return; }
+        itemEst[i] = pr.est; itemInputs[i] = pr.inputs; itemPk[i] = pr.pk; itemPkChim[i] = pr.pkChim; itemChimShared[i] = pr.chimShared;
+        itemFig0[i] = pr.fig0; itemPkN[i] = pr.pkN; itemPkBases[i] = pr.pkBases; itemPkP[i] = pr.pkP;
+        if (peakMode) {
             Run& r = runs[i];
-            r.pk = itemPk[i] != 0; r.pkN = itemPkN[i]; r.pkBases = itemPkBases[i]; r.pkP = itemPkP[i]; r.pkFig = itemFig0[i]; r.pkChim = itemPkChim[i] != 0; r.pkChimShared = r.pkChim && itemChimShared[i] != 0; r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
+            r.pk = pr.pk; r.pkN = pr.pkN; r.pkBases = pr.pkBases; r.pkP = pr.pkP; r.pkFig = pr.fig0; r.pkChim = pr.pkChim; r.pkChimShared = r.pkChim && pr.chimShared;
+            r.pkZone = r.pk && poolpeak::inZone(r.pkN, pkK);
         }
-    if (dropInput) {   // the harness's copy of the inputs left its pages in the cache (dirty at first): written out, then dropped, on a thread beside the start
+    };
+    for (const Item& it : items) commitPrep(it, prepOne(it));
+    // the page cache of the inputs the harness's copy left behind (dirty at first): written out, then dropped, on a thread beside the start
+    auto dropFor = [&](size_t from) {
         std::vector<std::string> fqs;
-        for (const Item& it : items) {   // h100fill: every run of the item, not only the queue line's first file
+        for (size_t k = from; k < items.size(); ++k) {   // h100fill: every run of the item, not only the queue line's first file
+            const Item& it = items[k];
+            if (it.bad) continue;
             if (std::find(fqs.begin(), fqs.end(), it.fq) == fqs.end()) fqs.push_back(it.fq);
             if (inactiveShare > 0) for (const std::string& p : itemInputs[it.idx]) if (std::find(fqs.begin(), fqs.end(), p) == fqs.end()) fqs.push_back(p);
         }
         std::thread([fqs]() { for (const std::string& p : fqs) { const int fd = open(p.c_str(), O_RDONLY); if (fd >= 0) { fdatasync(fd); posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED); close(fd); } } }).detach();
-    }
+    };
+    if (dropInput) dropFor(0);
+    // ---- perf/wave-feed, --follow (SINGLET_POOL_FOLLOW=1): the queue file stays open. Lines appended to it become items while the pool runs; the genome, the non-host
+    // server and the references loaded at the start serve them (an item of another genome reads its own). A new batch of lines is read in the loop, its items are
+    // prepared (headers, the peak model's first-block reads, on SINGLET_POOL_PEAK_PREP_THREADS (8) threads) off the loop, and the batch joins the queue when ready, so the
+    // stream never waits for a read. The queue ends at a line `#END`, at the file <queue>.stop, or after SINGLET_POOL_FOLLOW_IDLE_S (1800) with nothing in flight and nothing queued.
+    struct FollowBatch { std::vector<Item> its; std::vector<Prep> preps; std::atomic<bool> done{false}; std::thread th; };
+    std::unique_ptr<FollowBatch> fpend;
+    std::atomic<bool> fAbort{false};
+    const double followIdleS = env_num("SINGLET_POOL_FOLLOW_IDLE_S", 1800);
+    const int prepThreads = (int) std::max(1.0, env_num("SINGLET_POOL_PEAK_PREP_THREADS", 8));
+    double followIdleSince = 0;
+    bool stopped = false;
+    size_t followAppended = 0;
+    auto followTick = [&]() {
+        if (!follow) return;
+        const double now = wall_now();
+        if (fpend && fpend->done.load()) {
+            fpend->th.join();
+            if (!fAbort.load()) {
+                const size_t from = items.size();
+                for (const Item& it : fpend->its) items.push_back(it);
+                growTo(items.size());
+                for (size_t k = 0; k < fpend->its.size(); ++k) commitPrep(items[from + k], fpend->preps[k]);
+                if (dropInput) dropFor(from);
+                followAppended += fpend->its.size();
+                if (stopped) next = items.size();
+                plog("follow: %zu item(s) appended (items %zu to %zu), %zu waiting to start, %zu in flight", fpend->its.size(), from, items.size() - 1,
+                     (size_t) std::count(taken.begin(), taken.end(), (char) 0), active);
+            }
+            fpend.reset();
+        }
+        if (!fpend && !qEnd) {
+            struct stat qs{};
+            if (access((queue + ".stop").c_str(), F_OK) == 0) { qEnd = true; plog("follow: the stop file %s.stop is there: no more items are read", queue.c_str()); }
+            else if (stat(queue.c_str(), &qs) == 0 && (size_t) qs.st_size > qOff) {
+                auto fb = std::make_unique<FollowBatch>();
+                readQueue(false, fb->its, items.size());
+                if (qEnd) plog("follow: end marker read after %zu appended item(s)", followAppended + fb->its.size());
+                if (!fb->its.empty()) {
+                    fb->preps.resize(fb->its.size());
+                    FollowBatch* p = fb.get();
+                    p->th = std::thread([&, p]() {
+                        std::atomic<size_t> ix{0};
+                        const int nt = (int) std::max<size_t>(1, std::min<size_t>((size_t) prepThreads, p->its.size()));
+                        std::vector<std::thread> ws;
+                        for (int w = 0; w < nt; ++w)
+                            ws.emplace_back([&]() { for (size_t k; (k = ix++) < p->its.size() && !fAbort.load();) p->preps[k] = prepOne(p->its[k]); });
+                        for (std::thread& t : ws) t.join();
+                        p->done = true;
+                    });
+                    fpend = std::move(fb);
+                }
+            }
+        }
+        if (!fpend && !qEnd && next >= items.size() && active == 0) {
+            if (followIdleSince == 0) followIdleSince = now;
+            else if (followIdleS > 0 && now - followIdleSince > followIdleS) { plog("follow: nothing queued or running for %.0f s: the queue is closed", now - followIdleSince); qEnd = true; }
+        } else followIdleSince = 0;
+    };
     FILE* heldF = sampPeriod > 0 ? fopen((report + "/memsamp-held.tsv").c_str(), "a") : nullptr;   // t item held_new held_old(sum - shared once) nprocs m kept front
     if (heldF != nullptr) fprintf(heldF, "# t\titem\theld_GiB\theld_old_formula_GiB\tprocs\tm\tkept\tfront\n");
     double sharedGb = 0;   // what a STAR child maps of the pool's resident genome: counted in its RSS, not in the item's own growth
@@ -1317,13 +1421,15 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     double memWaitSince = 0, memWaitedTotal = 0;
     bool memWaitNoted = false;
     unsigned memWaits = 0;
-    while (next < items.size() || active > 0) {
+    while (next < items.size() || active > 0 || (follow && (!qEnd || fpend))) {
         if (g_stop) {
             plog("stopping: signal received; the samples in flight are killed");
             for (auto& kv : byPid) kill(-kv.first, SIGKILL);
             next = items.size();
             g_stop = 0;
+            stopped = true; qEnd = true; fAbort = true;
         }
+        followTick();
         while (active < (size_t) workers && next < items.size()) {
             // rt/hostmem admission: a start waits while another item of this pool started less than SINGLET_POOL_STAGGER_S ago (the items of a first
             // wave would otherwise all reach their memory-heavy phases together) or while the node's available memory is under SINGLET_POOL_MEM_FLOOR_GB
@@ -1472,6 +1578,7 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
             }
         }
     }
+    if (fpend) { fAbort = true; if (fpend->th.joinable()) fpend->th.join(); }
     // the last log lines (a sample's descendants may hold its pipe a moment longer)
     for (int w = 0; w < 50; ++w) {
         bool open = false;
