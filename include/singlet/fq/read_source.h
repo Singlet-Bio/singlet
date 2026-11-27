@@ -76,13 +76,32 @@ class RunSet {
             }
             if (f > 0) check_compatible(*readers_[0], *r, paths[f]);
             first_block_.push_back(nb);
-            for (uint32_t b = 0; b < r->block_count(); ++b) {
-                BlockHeader bh;
-                if (::pread(r->file_descriptor(), &bh, sizeof(bh), static_cast<off_t>(r->block_offset(b))) !=
-                    static_cast<ssize_t>(sizeof(bh)))
-                    throw std::runtime_error("RunSet: cannot read block header in " + paths[f]);
-                read_offsets_.push_back(cum);
-                cum += bh.n_reads;
+            {   // one block header per block: each read is a latency-bound pread (63 ms cold on NFS), so the reads of a file run on
+                // SINGLET_RUNSET_OPEN_THREADS threads (default 16; 1 = the serial loop); the offsets are summed in block order after
+                const uint32_t nbf = r->block_count();
+                const char* te = std::getenv("SINGLET_RUNSET_OPEN_THREADS");
+                const unsigned want = te ? static_cast<unsigned>(std::max(1, std::atoi(te))) : 16u;
+                const unsigned nt = std::max(1u, std::min<unsigned>(want, nbf / 4u));
+                std::vector<uint32_t> nr(nbf);
+                std::atomic<bool> bad{false};
+                auto work = [&](unsigned s) {
+                    for (uint32_t b = static_cast<uint32_t>(static_cast<uint64_t>(nbf) * s / nt),
+                                  e = static_cast<uint32_t>(static_cast<uint64_t>(nbf) * (s + 1) / nt); b < e && !bad.load(); ++b) {
+                        BlockHeader bh;
+                        if (::pread(r->file_descriptor(), &bh, sizeof(bh), static_cast<off_t>(r->block_offset(b))) !=
+                            static_cast<ssize_t>(sizeof(bh))) { bad.store(true); return; }
+                        nr[b] = bh.n_reads;
+                    }
+                };
+                if (nt <= 1) work(0);
+                else {
+                    std::vector<std::thread> th;
+                    for (unsigned s = 1; s < nt; ++s) th.emplace_back(work, s);
+                    work(0);
+                    for (auto& t : th) t.join();
+                }
+                if (bad.load()) throw std::runtime_error("RunSet: cannot read block header in " + paths[f]);
+                for (uint32_t b = 0; b < nbf; ++b) { read_offsets_.push_back(cum); cum += nr[b]; }
             }
             nb += r->block_count();
             readers_.push_back(std::move(r));
