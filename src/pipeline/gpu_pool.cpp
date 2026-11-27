@@ -41,6 +41,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <mutex>
 #include <poll.h>
 #include <sstream>
 #include <string>
@@ -349,10 +350,10 @@ FillFree fill_free_gb(double share, double activeShare, const JobCg& jc) {
 }
 // the first block's cDNA bases per read of a .1fq (the pipeline's head scan on block 0); cached per path
 struct FqBpr { double bpr = -1; std::string why; };
+static std::mutex g_bprMu;   // peakprep: the cache is filled by several threads at once (fq_first_block_bpr_all)
 FqBpr fq_first_block_bpr(const std::string& path) {
     static std::map<std::string, FqBpr> cache;
-    auto f = cache.find(path);
-    if (f != cache.end()) return f->second;
+    { std::lock_guard<std::mutex> lk(g_bprMu); auto f = cache.find(path); if (f != cache.end()) return f->second; }
     FqBpr r;
     try {
         singlet::fq::RunSet rs;
@@ -367,8 +368,19 @@ FqBpr fq_first_block_bpr(const std::string& path) {
             if (h.n_out > 0 && h.bases_out > 0) r.bpr = (double) h.bases_out / (double) h.n_out; else r.why = "the first block has no reads for the mapper";
         }
     } catch (const std::exception& e) { r.why = std::string("the first block could not be read: ") + e.what(); }
-    cache[path] = r;
+    { std::lock_guard<std::mutex> lk(g_bprMu); cache[path] = r; }
     return r;
+}
+// peakprep (SINGLET_POOL_PEAK_PREP_THREADS, default 8; 1 = one file after another, as before): the peak model reads the first block of every input of every queued item
+// before the first start. One at a time over the shared filesystem that took ~50 s per item: 8.5 min with both cards idle at the start of every 10-item wave (x2, 2026-11-26).
+// The reads are independent; the same results land in the cache, and the figures and their log lines follow in queue order as before.
+void fq_first_block_bpr_all(const std::vector<std::string>& paths, int threads) {
+    if (threads <= 1 || paths.size() <= 1) return;
+    std::atomic<size_t> next{0};
+    std::vector<std::thread> th;
+    for (int t = 0; t < std::min<int>(threads, (int) paths.size()); ++t)
+        th.emplace_back([&]() { for (size_t i; (i = next.fetch_add(1)) < paths.size();) fq_first_block_bpr(paths[i]); });
+    for (auto& x : th) x.join();
 }
 
 volatile sig_atomic_t g_stop = 0;
@@ -905,6 +917,23 @@ int singlet_gpu_pool(int argc, char** argv, int (*pipeline)(int, char**),
     std::vector<char> itemChimShared(items.size(), 0);   // T2 chimshare: the pool established that this --chimeric item's pass takes the pool's resident genome
     std::vector<char> itemPk(items.size(), 0), itemPkChim(items.size(), 0);   // cggate: the peak model applies to the item
     std::vector<double> itemFig0(items.size(), 0), itemPkN(items.size(), 0), itemPkBases(items.size(), 0), itemPkP(items.size(), 0);
+    if (peakMode && env_num("SINGLET_POOL_ITEM_GB", 0) <= 0) {   // peakprep: every queued item's inputs (the first file and the other runs, as below), first blocks read in parallel
+        const double t0 = wall_now();
+        std::vector<std::string> all;
+        for (const Item& it : items) {
+            std::vector<std::string> ins{it.fq};
+            for (size_t k = 0; k < it.extra.size(); ++k) {
+                const std::string& w = it.extra[k];
+                auto ends = [&w](const char* x) { const size_t n = std::strlen(x); return w.size() > n && w.compare(w.size() - n, n, x) == 0; };
+                if (w == "--1fq" && k + 1 < it.extra.size()) { std::istringstream iss(it.extra[++k]); for (std::string f; std::getline(iss, f, ',');) if (!f.empty()) ins.push_back(f); }
+                else if (!w.empty() && w[0] != '-' && (ends(".1fq") || ends(".1fg2"))) ins.push_back(w);
+            }
+            for (std::string q : ins) { if (!q.empty() && q[0] != '/') q = parent_dir(it.out) + "/" + q; all.push_back(q); }
+        }
+        const int nt = (int) env_num("SINGLET_POOL_PEAK_PREP_THREADS", 8);
+        fq_first_block_bpr_all(all, nt);
+        if (nt > 1 && all.size() > 1) plog("peak model: first blocks of %zu inputs read in %.1f s (%d threads)", all.size(), wall_now() - t0, std::min<int>(nt, (int) all.size()));
+    }
     for (const Item& it : items) {
         struct stat st{};
         // rt/hostmem2: the item's host peak (GB of its process group's RssAnon + RssShmem, minus the pool's genome that its STAR child maps), fitted on the 110 items
