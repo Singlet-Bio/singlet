@@ -151,8 +151,10 @@ An audit of the ATAC and Visium paths (2026-10-25) found these problems.
    at a logit of ±4, so six concordant neighbours can fill a low-count spot inside tissue and remove a speck outside it.
    A slide with a single population is all tissue if its median is ≥ 500 UMIs, else empty. This needs no image.
    Space Ranger uses the H&E image, which GEO depositions often lack.
-3. **Called set** = tissue spots. `cell_calls.tsv` is rewritten (`call_method = visium_tissue`), so the cells table's
-   `called` flag means "spot under tissue".
+3. **Called set** (1.4.10 on) = every measured spot: the authors' `in_tissue` spots when their positions file is given,
+   else every slide spot with at least 100 UMIs (`call_method = visium_spaceranger` or `visium_min_umis`). The tissue
+   estimate above is shipped as `in_tissue_count` / `tissue_prob` for filtering. It no longer sets the called set because it
+   splits slides that are all tissue (GSM6210840: 2,023 of the authors' 4,992 spots).
 4. **Outputs**:
    * `spatial_positions.tsv`: one row per column, with spot, array row/col, `in_tissue`, `tissue_prob`, `primary` and UMIs,
      plus Space Ranger's `in_tissue` and pixel coordinates when the authors' positions file is given;

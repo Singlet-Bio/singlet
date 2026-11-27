@@ -579,14 +579,21 @@ file and its index (not loaded into memory; the client returns a path / byte-ran
 
 | member | kind | content |
 |---|---|---|
-| `spatial_positions.tsv` | 3 (stored, zstd) | one row per column of the cells table, in column order: `barcode, spot, array_row, array_col, in_tissue, tissue_prob, primary, umis` (+ `in_tissue_spaceranger, pxl_row_in_fullres, pxl_col_in_fullres` when the authors deposited Space Ranger positions) |
+| `spatial_positions.tsv` | 3 (stored, zstd) | one row per column of the cells table, in column order: `barcode, spot, array_row, array_col, in_tissue, tissue_prob, primary, umis, in_tissue_count, called` (+ `in_tissue_spaceranger, pxl_row_in_fullres, pxl_col_in_fullres` when the authors deposited Space Ranger positions). Written before 1.4.10 without the last two columns |
 | `spatial_summary.json` | 3 (stored, zstd) | `singlet-spatial-summary/1`: slide list, tissue method, mixture fit, agreement with Space Ranger when available, QC thresholds and pass/fail |
 | `spatial_image_lowres.png`, `spatial_scalefactors.json` | 3 (stored, as written) | optional, only when deposited by the authors (GEO supplementary); never generated |
 
 * Spot coordinates are a property of the slide, not a measurement: the slide spot list (`visium-v1_coordinates.tsv`, 4,992
   spots) maps each barcode to `(array_row, array_col)`. Pixel coordinates exist only when the authors deposited them.
-* The called set of a Visium sample is its tissue spots (`in_tissue` & `primary`); `cell_calls.tsv` is rewritten with
-  `call_method = visium_tissue` and the migration takes `called` from it as for any sample. A spot is not a cell: the
+* The called set of a Visium sample (1.4.10 on) is every measured spot (`called`, the spot's `primary` column): the
+  authors' `in_tissue` spots when their Space Ranger positions file was deposited, else every slide spot with at least 100
+  UMIs. `cell_calls.tsv` is rewritten with `call_method = visium_spaceranger` or `visium_min_umis`, and the migration takes
+  `called` from it as for any sample. Before 1.4.10 the called set was the count-based tissue estimate (`visium_tissue`).
+* Tissue: `in_tissue_count` and `tissue_prob` estimate tissue from spot UMIs (two-component mixture with hexagonal
+  smoothing, no image); `in_tissue_spaceranger` is the authors' image-based flag; `in_tissue` is the authors' flag when
+  present, else the count estimate. Filter on `in_tissue` to keep tissue spots only. Authors differ: some keep every spot
+  on the slide, others only spots under tissue in the H&E image, and no read-level signal reproduces the image mask, so
+  the called set keeps every measured spot and leaves the tissue choice to the user. A spot is not a cell: the
   sample-level `assay` is `Spatial` and cell counts of Visium samples are reported as spots.
 * Tier 1 gets sample-level spatial facts only (slide version, tissue spots, median UMIs per tissue spot, QC verdict).
 
